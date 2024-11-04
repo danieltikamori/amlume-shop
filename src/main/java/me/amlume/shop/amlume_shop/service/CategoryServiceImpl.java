@@ -11,7 +11,9 @@
 package me.amlume.shop.amlume_shop.service;
 
 import me.amlume.shop.amlume_shop.model.Category;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -37,11 +39,7 @@ public class CategoryServiceImpl implements CategoryService {
         Category category = categories.stream()
                 .filter(c -> c.getCategory_id().equals(category_id))
                 .findFirst()
-                .orElse(null);
-        if (category == null) {
-            return "Category not found.";
-//            return "Category with ID " + category_id + " not found";
-    }
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
         categories.remove(category);
         return "Category with ID " + category_id + " deleted successfully";
     }
