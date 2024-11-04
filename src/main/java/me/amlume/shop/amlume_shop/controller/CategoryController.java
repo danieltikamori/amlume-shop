@@ -12,7 +12,10 @@ package me.amlume.shop.amlume_shop.controller;
 
 import me.amlume.shop.amlume_shop.model.Category;
 import me.amlume.shop.amlume_shop.service.CategoryService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -38,10 +41,14 @@ public class CategoryController {
     }
 
     @DeleteMapping("/admin/categories/{category_id}")
-    public String deleteCategory(@PathVariable Long category_id) {
-        String status = categoryService.deleteCategory(category_id);
-        categoryService.deleteCategory(category_id);
-        return status;
+    public ResponseEntity<String> deleteCategory(@PathVariable Long category_id) {
+        try {
+            String status = categoryService.deleteCategory(category_id);
+
+            return new ResponseEntity<>(status, HttpStatus.OK);
+        } catch (ResponseStatusException e) {
+            return new ResponseEntity<>(e.getReason(), e.getStatusCode());
+        }
     }
 
 }
