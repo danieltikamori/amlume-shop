@@ -18,6 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Service
 public class CategoryServiceImpl implements CategoryService {
     private final CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>();
+    private Long nextId = 1L;
 
 
     @Override
@@ -27,6 +28,21 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public void createCategory(Category category) {
+        category.setCategory_id(nextId++);
         categories.add(category);
+    }
+
+    @Override
+    public String deleteCategory(Long category_id) {
+        Category category = categories.stream()
+                .filter(c -> c.getCategory_id().equals(category_id))
+                .findFirst()
+                .orElse(null);
+        if (category == null) {
+            return "Category not found.";
+//            return "Category with ID " + category_id + " not found";
+    }
+        categories.remove(category);
+        return "Category with ID " + category_id + " deleted successfully";
     }
 }
