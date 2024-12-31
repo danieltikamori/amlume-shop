@@ -15,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
@@ -42,5 +43,25 @@ public class CategoryServiceImpl implements CategoryService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
         categories.remove(category);
         return "Category with ID " + category_id + " deleted successfully";
+    }
+
+    @Override
+    public Category updateCategory(Long categoryId, Category category) {
+//        Optional<Category> existingCategory = Optional.ofNullable(categories.stream()
+//                .filter(c -> c.getCategory_id().equals(categoryId))
+//                .findFirst()
+//                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.")));
+        Optional<Category> optionalCategory = categories.stream()
+                .filter(c -> c.getCategory_id().equals(categoryId))
+                .findFirst();
+
+        if (optionalCategory.isPresent()) {
+            Category existingCategory = optionalCategory.get();
+            existingCategory.setCategoryName(category.getCategoryName());
+            return existingCategory;
+        } else {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.");
+        }
+
     }
 }
