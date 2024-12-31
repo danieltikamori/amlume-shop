@@ -10,8 +10,13 @@
 
 package me.amlume.shop.amlume_shop.model;
 
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+
+@Entity(name = "categories")
 public class Category {
 
+    @Id
     private Long category_id;
     private String categoryName;
 
