@@ -15,9 +15,7 @@ import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
 import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -25,7 +23,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Service
 public class CategoryServiceImpl implements CategoryService {
     private final CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>();
-    private Long nextId = 1L;
 
     private final CategoryRepository categoryRepository;
 
@@ -43,7 +40,10 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public void createCategory(Category category) {
-        category.setCategory_id(nextId++);
+        Optional<Category> savedCategory = categoryRepository.findByCategoryName(category.getCategoryName());
+        if (savedCategory.isPresent()) {
+            throw new APIException("Category with name " + category.getCategoryName() + " already exists");
+        }
         categoryRepository.save(category);
     }
 
