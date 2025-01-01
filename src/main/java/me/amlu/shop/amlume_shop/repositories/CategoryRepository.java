@@ -10,5 +10,8 @@
 
 package me.amlu.shop.amlume_shop.repositories;
 
-public interface CategoryRepository {
+import me.amlu.shop.amlume_shop.model.Category;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface CategoryRepository extends JpaRepository<Category, Long>{
 }

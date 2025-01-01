@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -23,25 +24,32 @@ public class CategoryServiceImpl implements CategoryService {
     private final CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>();
     private Long nextId = 1L;
 
+    private final CategoryRepository categoryRepository;
+
+    public CategoryServiceImpl(CategoryRepository categoryRepository) {
+        this.categoryRepository = categoryRepository;
+    }
 
     @Override
     public CopyOnWriteArrayList<Category> getAllCategories() {
-        return categories;
+        return new CopyOnWriteArrayList<>(categoryRepository.findAll());
     }
 
     @Override
     public void createCategory(Category category) {
         category.setCategory_id(nextId++);
-        categories.add(category);
+        categoryRepository.save(category);
     }
 
     @Override
     public String deleteCategory(Long category_id) {
+        CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>(categoryRepository.findAll());
+
         Category category = categories.stream()
                 .filter(c -> c.getCategory_id().equals(category_id))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
-        categories.remove(category);
+        categoryRepository.delete(category);
         return "Category with ID " + category_id + " deleted successfully";
     }
 
@@ -51,6 +59,8 @@ public class CategoryServiceImpl implements CategoryService {
 //                .filter(c -> c.getCategory_id().equals(categoryId))
 //                .findFirst()
 //                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.")));
+        CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>(categoryRepository.findAll());
+
         Optional<Category> optionalCategory = categories.stream()
                 .filter(c -> c.getCategory_id().equals(categoryId))
                 .findFirst();
@@ -58,6 +68,7 @@ public class CategoryServiceImpl implements CategoryService {
         if (optionalCategory.isPresent()) {
             Category existingCategory = optionalCategory.get();
             existingCategory.setCategoryName(category.getCategoryName());
+            Category savedCategory = categoryRepository.save(existingCategory);
             return existingCategory;
         } else {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.");
