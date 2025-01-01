@@ -14,41 +14,38 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import lombok.*;
+import org.hibernate.proxy.HibernateProxy;
+
+import java.util.Objects;
 
 @Entity(name = "categories")
+@Getter
+@Setter
+@ToString
+@RequiredArgsConstructor
+@NoArgsConstructor
+@AllArgsConstructor
 public class Category {
 
     @Id
-    // @GeneratedValue(strategy = GenerationType.AUTO) - Default
-    // @GeneratedValue(strategy = GenerationType.SEQUENCE) - For supported databases
-    // @GeneratedValue(strategy = GenerationType.TABLE) - For sequence unsupported databases. Creates a new table with sequence for each entity. Less efficient.
-    // @GeneratedValue(strategy = GenerationType.IDENTITY) - Most used for MySQL and PostgreSQL
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long category_id;
     private String categoryName;
 
-    public Category(Long category_id, String categoryName) {
-        this.category_id = category_id;
-        this.categoryName = categoryName;
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        if (thisEffectiveClass != oEffectiveClass) return false;
+        Category category = (Category) o;
+        return getCategory_id() != null && Objects.equals(getCategory_id(), category.getCategory_id());
     }
 
-    // Default constructor is encouraged for JPA entities
-    public Category() {
-    }
-
-    public String getCategoryName() {
-        return categoryName;
-    }
-
-    public void setCategoryName(String categoryName) {
-        this.categoryName = categoryName;
-    }
-
-    public Long getCategory_id() {
-        return category_id;
-    }
-
-    public void setCategory_id(Long category_id) {
-        this.category_id = category_id;
+    @Override
+    public final int hashCode() {
+        return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
     }
 }
