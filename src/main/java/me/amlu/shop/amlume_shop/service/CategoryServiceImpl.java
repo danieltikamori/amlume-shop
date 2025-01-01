@@ -10,6 +10,9 @@
 
 package me.amlu.shop.amlume_shop.service;
 
+import me.amlu.shop.amlume_shop.exceptions.APIException;
+import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
+import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
 import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
 import org.springframework.http.HttpStatus;
@@ -32,6 +35,9 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public CopyOnWriteArrayList<Category> getAllCategories() {
+        if (categoryRepository.findAll().isEmpty()) {
+            throw new NotFoundException("No categories created yet");
+        }
         return new CopyOnWriteArrayList<>(categoryRepository.findAll());
     }
 
@@ -43,7 +49,7 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public String deleteCategory(Long category_id) {
-        Category category = categoryRepository.findById(category_id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
+        Category category = categoryRepository.findById(category_id).orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", category_id));
 
         categoryRepository.delete(category);
         return "Category with ID " + category_id + " deleted successfully";
@@ -51,7 +57,7 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public Category updateCategory(Long categoryId, Category category) {
-        categoryRepository.findById(categoryId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
+        categoryRepository.findById(categoryId).orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
         Category savedCategory;
 
         category.setCategory_id(categoryId);
