@@ -8,9 +8,9 @@
  * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlume.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.service;
 
-import me.amlume.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.model.Category;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;

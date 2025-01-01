@@ -1,4 +1,4 @@
-package me.amlume.shop.amlume_shop;
+package me.amlu.shop.amlume_shop;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

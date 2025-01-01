@@ -8,20 +8,16 @@
  * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlume.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop;
 
-import me.amlume.shop.amlume_shop.model.Category;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+@SpringBootApplication
+public class AmlumeShopApplication {
 
-public interface CategoryService {
+	public static void main(String[] args) {
+		SpringApplication.run(AmlumeShopApplication.class, args);
+	}
 
-    CopyOnWriteArrayList<Category> getAllCategories();
-
-    void createCategory(Category category);
-
-
-    String deleteCategory(Long category_id);
-
-    Category updateCategory(Long categoryId, Category category);
 }
