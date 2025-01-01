@@ -14,6 +14,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
@@ -23,7 +25,6 @@ import java.util.Objects;
 @Getter
 @Setter
 @ToString
-@RequiredArgsConstructor
 @NoArgsConstructor
 @AllArgsConstructor
 public class Category {
@@ -31,6 +32,9 @@ public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long category_id;
+
+    @NotBlank
+    @Size(min = 2, max = 50, message = "Category name must be between 2 and 50 characters")
     private String categoryName;
 
     @Override
