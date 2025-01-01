@@ -20,7 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api/")
 public class CategoryController {
     private final CategoryService categoryService;
 
@@ -30,19 +30,19 @@ public class CategoryController {
     }
 
 //    @RequestMapping("/public/categories/{category_id}", method = RequestMethod.GET) // Alternative way to GetMapping
-    @GetMapping("/public/categories")
+    @GetMapping("v1/public/categories")
     public ResponseEntity<CopyOnWriteArrayList<Category>> getAllCategories() {
         CopyOnWriteArrayList<Category> categories = categoryService.getAllCategories();
         return new ResponseEntity<>(categories, HttpStatus.OK);
     }
 
-    @PostMapping("/public/categories")
+    @PostMapping("v1/public/categories")
     public ResponseEntity<String> CreateCategory(@RequestBody Category category) {
         categoryService.createCategory(category);
         return new ResponseEntity<String>("Category created successfully", HttpStatus.CREATED);
     }
 
-    @DeleteMapping("/admin/categories/{category_id}")
+    @DeleteMapping("v1/admin/categories/{category_id}")
     public ResponseEntity<String> deleteCategory(@PathVariable Long category_id) {
         try {
             String status = categoryService.deleteCategory(category_id);
@@ -55,7 +55,7 @@ public class CategoryController {
         }
     }
 
-    @PutMapping("/admin/categories/{category_id}")
+    @PutMapping("v1/admin/categories/{category_id}")
     public ResponseEntity<String> updateCategory(@PathVariable Long category_id, @RequestBody Category category) {
         try {
             Category savedCategory = categoryService.updateCategory(category_id, category);
