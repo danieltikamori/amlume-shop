@@ -8,10 +8,10 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlume.shop.amlume_shop.controller;
+package me.amlu.shop.amlume_shop.controller;
 
-import me.amlume.shop.amlume_shop.model.Category;
-import me.amlume.shop.amlume_shop.service.CategoryService;
+import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.service.CategoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

@@ -8,9 +8,9 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlume.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.service;
 
-import me.amlume.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.model.Category;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
