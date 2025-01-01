@@ -43,36 +43,20 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public String deleteCategory(Long category_id) {
-        CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>(categoryRepository.findAll());
+        Category category = categoryRepository.findById(category_id).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
 
-        Category category = categories.stream()
-                .filter(c -> c.getCategory_id().equals(category_id))
-                .findFirst()
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
         categoryRepository.delete(category);
         return "Category with ID " + category_id + " deleted successfully";
     }
 
     @Override
     public Category updateCategory(Long categoryId, Category category) {
-//        Optional<Category> existingCategory = Optional.ofNullable(categories.stream()
-//                .filter(c -> c.getCategory_id().equals(categoryId))
-//                .findFirst()
-//                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.")));
-        CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>(categoryRepository.findAll());
+        categoryRepository.findById(categoryId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found."));
+        Category savedCategory;
 
-        Optional<Category> optionalCategory = categories.stream()
-                .filter(c -> c.getCategory_id().equals(categoryId))
-                .findFirst();
-
-        if (optionalCategory.isPresent()) {
-            Category existingCategory = optionalCategory.get();
-            existingCategory.setCategoryName(category.getCategoryName());
-            Category savedCategory = categoryRepository.save(existingCategory);
-            return existingCategory;
-        } else {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Resource not found.");
-        }
+        category.setCategory_id(categoryId);
+        savedCategory = categoryRepository.save(category);
+        return savedCategory;
 
     }
 }
