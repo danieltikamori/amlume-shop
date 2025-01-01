@@ -11,18 +11,29 @@
 package me.amlume.shop.amlume_shop.model;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 
 @Entity(name = "categories")
 public class Category {
 
     @Id
+    // @GeneratedValue(strategy = GenerationType.AUTO) - Default
+    // @GeneratedValue(strategy = GenerationType.SEQUENCE) - For supported databases
+    // @GeneratedValue(strategy = GenerationType.TABLE) - For sequence unsupported databases. Creates a new table with sequence for each entity. Less efficient.
+    // @GeneratedValue(strategy = GenerationType.IDENTITY) - Most used for MySQL and PostgreSQL
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long category_id;
     private String categoryName;
 
     public Category(Long category_id, String categoryName) {
         this.category_id = category_id;
         this.categoryName = categoryName;
+    }
+
+    // Default constructor is encouraged for JPA entities
+    public Category() {
     }
 
     public String getCategoryName() {
