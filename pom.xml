@@ -87,6 +87,37 @@
 			<artifactId>h2</artifactId>
 			<scope>runtime</scope>
 		</dependency>
+
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awssdk</groupId>-->
+<!--			<artifactId>ec2</artifactId>-->
+<!--		</dependency>-->
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awssdk</groupId>-->
+<!--			<artifactId>s3</artifactId>-->
+<!--		</dependency>-->
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awssdk</groupId>-->
+<!--			<artifactId>dynamodb</artifactId>-->
+<!--		</dependency>-->
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awscdk</groupId>-->
+<!--			<artifactId>aws-cdk-lib</artifactId>-->
+<!--			<version>2.14.0</version>-->
+<!--		</dependency>-->
+
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awscdk</groupId>-->
+<!--			<artifactId>codestar-alpha</artifactId>-->
+<!--			<version>2.0.0-alpha.10</version>-->
+<!--		</dependency>-->
+
+<!--		<dependency>-->
+<!--			<groupId>software.amazon.awscdk</groupId>-->
+<!--			<artifactId>appsync-alpha</artifactId>-->
+<!--			<version>2.10.0-alpha.0</version>-->
+<!--		</dependency>-->
+
 	</dependencies>
 
 	<dependencyManagement>
@@ -98,6 +129,14 @@
 				<type>pom</type>
 				<scope>import</scope>
 			</dependency>
+
+<!--			<dependency>-->
+<!--				<groupId>software.amazon.awssdk</groupId>-->
+<!--				<artifactId>bom</artifactId>-->
+<!--				<version>2.29.43</version>-->
+<!--				<type>pom</type>-->
+<!--				<scope>import</scope>-->
+<!--			</dependency>-->
 		</dependencies>
 	</dependencyManagement>
 
