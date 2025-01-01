@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.service.CategoryService;
 import org.springframework.http.HttpStatus;
@@ -37,7 +38,7 @@ public class CategoryController {
     }
 
     @PostMapping("v1/public/categories")
-    public ResponseEntity<String> CreateCategory(@RequestBody Category category) {
+    public ResponseEntity<String> CreateCategory(@Valid @RequestBody Category category) {
         categoryService.createCategory(category);
         return new ResponseEntity<String>("Category created successfully", HttpStatus.CREATED);
     }

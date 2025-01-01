@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.repositories;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import me.amlu.shop.amlume_shop.model.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
 
