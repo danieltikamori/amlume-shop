@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.controller;
 
 import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.config.AppConstants;
 import me.amlu.shop.amlume_shop.payload.CategoryDTO;
 import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 import me.amlu.shop.amlume_shop.service.CategoryService;
@@ -29,12 +30,12 @@ public class CategoryController {
     }
 
     @GetMapping("v1/public/categories")
-    public ResponseEntity<CategoryResponse> getAllCategories(@RequestParam (name = "pageNumber", defaultValue = "0", required = false) Integer pageNumber,
-                                                             @RequestParam(name = "pageSize", defaultValue = "10", required = false) Integer pageSize
-//                                                             @RequestParam(name = "sortBy", defaultValue = "category_id", required = false) String sortBy,
-//                                                             @RequestParam(name = "sortDir", defaultValue = "asc", required = false) String sortDir
+    public ResponseEntity<CategoryResponse> getAllCategories(@RequestParam (name = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) Integer pageNumber,
+                                                             @RequestParam(name = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) Integer pageSize,
+                                                             @RequestParam(name = "sortBy", defaultValue = AppConstants.SORT_CATEGORIES_BY, required = false) String sortBy,
+                                                             @RequestParam(name = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir
                                                              ) {
-        CategoryResponse categoryResponse = categoryService.getAllCategories(pageNumber, pageSize);
+        CategoryResponse categoryResponse = categoryService.getAllCategories(pageNumber, pageSize, sortBy, sortDir);
 
         return new ResponseEntity<>(categoryResponse, HttpStatus.OK);
     }

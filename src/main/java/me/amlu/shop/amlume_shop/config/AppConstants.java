@@ -8,23 +8,12 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.payload;
+package me.amlu.shop.amlume_shop.config;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+public class AppConstants {
+    public static final String PAGE_NUMBER = "0";
+public static final String PAGE_SIZE = "50";
 
-import java.util.List;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CategoryResponse {
-private List<CategoryDTO> categories;
-private Integer pageNumber;
-private Integer pageSize;
-private Long totalElements;
-private Integer totalPages;
-private Boolean isLastPage;
-
+public static final String SORT_CATEGORIES_BY = "category_id";
+public static final String SORT_DIR = "asc";
 }
