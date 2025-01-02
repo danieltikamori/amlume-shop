@@ -11,66 +11,85 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.exceptions.APIException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.CompletableFuture;
 import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
 import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.payload.CategoryDTO;
+import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 @Service
 public class CategoryServiceImpl implements CategoryService {
-    private final CopyOnWriteArrayList<Category> categories = new CopyOnWriteArrayList<>();
 
     private final CategoryRepository categoryRepository;
+    private final ModelMapper modelMapper;
+    private final ExecutorService executorService;
 
-    public CategoryServiceImpl(CategoryRepository categoryRepository) {
+    public CategoryServiceImpl(CategoryRepository categoryRepository, ModelMapper modelMapper, ExecutorService executorService) {
         this.categoryRepository = categoryRepository;
+        this.modelMapper = modelMapper;
+        this.executorService = executorService;
     }
 
     @Override
-    public CopyOnWriteArrayList<Category> getAllCategories() {
-        if (categoryRepository.findAll().isEmpty()) {
-            throw new NotFoundException("No categories created yet");
-        }
-        return new CopyOnWriteArrayList<>(categoryRepository.findAll());
+    public CategoryResponse getAllCategories() {
+        List<Category> categories = categoryRepository.findAll();
+        if (categories.isEmpty())
+            throw new NotFoundException("No category found");
+
+        List<CategoryDTO> categoryDTOs = categories.parallelStream()
+                .map(category -> modelMapper.map(category, CategoryDTO.class))
+                .collect(Collectors.toList());
+
+        CategoryResponse categoryResponse = new CategoryResponse();
+        categoryResponse.setCategories(categoryDTOs);
+
+        return categoryResponse;
     }
 
     @Override
-    public void createCategory(Category category) {
-        Optional<Category> savedCategory = categoryRepository.findByCategoryName(category.getCategoryName());
-        if (savedCategory.isPresent()) {
-            throw new APIException("Category with name " + category.getCategoryName() + " already exists");
-        }
-        categoryRepository.save(category);
+    public CategoryDTO createCategory(CategoryDTO categoryDTO) {
         return CompletableFuture.supplyAsync(() -> {
+            Category category = modelMapper.map(categoryDTO, Category.class);
+            Optional<Category> categoryFromDB = categoryRepository.findByCategoryName(categoryDTO.getCategoryName());
+            if (categoryFromDB.isPresent()) {
+                throw new APIException("Category with name " + categoryDTO.getCategoryName() + " already exists");
+            }
+            Category savedCategory = categoryRepository.save(category);
+            return modelMapper.map(savedCategory, CategoryDTO.class);
         }, executorService).join();
     }
 
     @Override
-    public String deleteCategory(Long category_id) {
-        Category category = categoryRepository.findById(category_id).orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", category_id));
-
-        categoryRepository.delete(category);
-        return "Category with ID " + category_id + " deleted successfully";
+    public CategoryDTO deleteCategory(Long category_id) {
         return CompletableFuture.supplyAsync(() -> {
+            Category existingCategory = categoryRepository.findById(category_id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", category_id));
+
+            categoryRepository.delete(existingCategory);
+            return modelMapper.map(existingCategory, CategoryDTO.class);
         }, executorService).join();
     }
 
     @Override
-    public Category updateCategory(Long categoryId, Category category) {
-        categoryRepository.findById(categoryId).orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
-        Category savedCategory;
+    public CategoryDTO updateCategory(Long categoryId, CategoryDTO categoryDTO) {
         return CompletableFuture.supplyAsync(() -> {
+            Category savedCategory = categoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
 
-        category.setCategory_id(categoryId);
-        savedCategory = categoryRepository.save(category);
-        return savedCategory;
+            Category category = modelMapper.map(categoryDTO, Category.class);
+            category.setCategory_id(categoryId);
 
+            savedCategory = categoryRepository.save(category);
+            return modelMapper.map(savedCategory, CategoryDTO.class);
         }, executorService).join();
     }
 }
