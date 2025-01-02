@@ -11,6 +11,8 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.exceptions.APIException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.CompletableFuture;
 import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
 import me.amlu.shop.amlume_shop.model.Category;
@@ -45,6 +47,8 @@ public class CategoryServiceImpl implements CategoryService {
             throw new APIException("Category with name " + category.getCategoryName() + " already exists");
         }
         categoryRepository.save(category);
+        return CompletableFuture.supplyAsync(() -> {
+        }, executorService).join();
     }
 
     @Override
@@ -53,16 +57,20 @@ public class CategoryServiceImpl implements CategoryService {
 
         categoryRepository.delete(category);
         return "Category with ID " + category_id + " deleted successfully";
+        return CompletableFuture.supplyAsync(() -> {
+        }, executorService).join();
     }
 
     @Override
     public Category updateCategory(Long categoryId, Category category) {
         categoryRepository.findById(categoryId).orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
         Category savedCategory;
+        return CompletableFuture.supplyAsync(() -> {
 
         category.setCategory_id(categoryId);
         savedCategory = categoryRepository.save(category);
         return savedCategory;
 
+        }, executorService).join();
     }
 }
