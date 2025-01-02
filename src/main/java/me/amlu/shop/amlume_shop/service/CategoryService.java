@@ -10,18 +10,17 @@
 
 package me.amlu.shop.amlume_shop.service;
 
-import me.amlu.shop.amlume_shop.model.Category;
-
-import java.util.concurrent.CopyOnWriteArrayList;
+import me.amlu.shop.amlume_shop.payload.CategoryDTO;
+import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 
 public interface CategoryService {
 
-    CopyOnWriteArrayList<Category> getAllCategories();
+    CategoryResponse getAllCategories();
 
-    void createCategory(Category category);
+    CategoryDTO createCategory(CategoryDTO categoryDTO);
 
 
-    String deleteCategory(Long category_id);
+    CategoryDTO deleteCategory(Long category_id);
 
-    Category updateCategory(Long categoryId, Category category);
+    CategoryDTO updateCategory(Long categoryId, CategoryDTO category);
 }
