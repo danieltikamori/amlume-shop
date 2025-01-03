@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
+import me.amlu.shop.amlume_shop.payload.APIResponse;
+import org.apache.coyote.BadRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -45,21 +47,30 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler
-    public ResponseEntity<String> resourceNotFoundException(ResourceNotFoundException e) {
+    public ResponseEntity<APIResponse> resourceNotFoundException(ResourceNotFoundException e) {
         String message = e.getMessage();
-        return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
+        APIResponse apiResponse = new APIResponse(message, false);
+        return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<String> apiException(APIException e) {
+    public ResponseEntity<APIResponse> apiConflictException(APIException e) {
         String message = e.getMessage();
-        return new ResponseEntity<>(message, HttpStatus.CONFLICT);
+        APIResponse apiResponse = new APIResponse(message, false);
+        return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<String> notFoundException(NotFoundException e) {
+    public ResponseEntity<APIResponse> notFoundException(NotFoundException e) {
         String message = e.getMessage();
-        return new ResponseEntity<>(message, HttpStatus.NOT_FOUND);
+        APIResponse apiResponse = new APIResponse(message, false);
+        return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
+    @ExceptionHandler
+    public ResponseEntity<APIResponse> badRequestException(BadRequestException e) {
+        String message = e.getMessage();
+        APIResponse apiResponse = new APIResponse(message, false);
+        return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
+    }
 }
