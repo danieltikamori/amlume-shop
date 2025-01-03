@@ -10,14 +10,20 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import io.hypersistence.utils.spring.repository.BaseJpaRepositoryImpl;
 import org.modelmapper.ModelMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @Configuration
+@EnableJpaRepositories(
+        basePackages = {"me.amlu.shop.amlume_shop.repository", "io.hypersistence.utils.spring.repository"},
+        repositoryBaseClass = BaseJpaRepositoryImpl.class //BaseJpaRepository implementation as suggested by Hypersistence
+)
 public class AppConfig {
     @Bean
-    public ModelMapper modelMapper(){
+    public ModelMapper modelMapper() {
         return new ModelMapper();
     }
 }
