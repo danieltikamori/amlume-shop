@@ -18,7 +18,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @Configuration
 @EnableJpaRepositories(
-        basePackages = {"me.amlu.shop.amlume_shop.repository", "io.hypersistence.utils.spring.repository"},
+        basePackages = {"me.amlu.shop.amlume_shop.repositories", "io.hypersistence.utils.spring.repository"},
         repositoryBaseClass = BaseJpaRepositoryImpl.class //BaseJpaRepository implementation as suggested by Hypersistence
 )
 public class AppConfig {
