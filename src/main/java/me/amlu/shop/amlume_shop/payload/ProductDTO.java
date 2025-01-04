@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import io.hypersistence.tsid.TSID;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,13 +21,13 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ProductDTO {
 
-    private TSID product_id;
+    private Long product_id;
     private String productName;
     private String productImage;
+    private String productDescription;
     private Integer productQuantity;
     private BigDecimal productPrice;
     private BigDecimal productDiscountPercentage;
     private BigDecimal productSpecialPrice;
-
 
 }

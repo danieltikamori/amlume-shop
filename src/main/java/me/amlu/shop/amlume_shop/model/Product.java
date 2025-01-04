@@ -10,8 +10,6 @@
 
 package me.amlu.shop.amlume_shop.model;
 
-import io.hypersistence.tsid.TSID;
-import io.hypersistence.utils.hibernate.id.Tsid;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
@@ -27,10 +25,11 @@ import java.util.Objects;
 @AllArgsConstructor
 public class Product {
 
+//    @Tsid
+//    @GeneratedValue(generator = "tsid_generator")
     @Id
-    @Tsid
-    @GeneratedValue(generator = "tsid_generator")
-    private TSID product_id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long product_id;
     private String productName;
     private String productImage;
     private String productDescription;
