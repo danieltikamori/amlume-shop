@@ -18,8 +18,11 @@ import me.amlu.shop.amlume_shop.payload.ProductResponse;
 import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
 import me.amlu.shop.amlume_shop.repositories.ProductRepository;
 import org.modelmapper.ModelMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -30,12 +33,17 @@ public class ProductServiceImpl implements ProductService {
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final ModelMapper modelMapper;
+    private final FileService fileService;
+
+    @Value("${project.image}")
+    private String path;
 
 
-    public ProductServiceImpl(CategoryRepository categoryRepository, ProductRepository productRepository, ModelMapper modelMapper) {
+    public ProductServiceImpl(CategoryRepository categoryRepository, ProductRepository productRepository, ModelMapper modelMapper, FileService fileService) {
         this.categoryRepository = categoryRepository;
         this.productRepository = productRepository;
         this.modelMapper = modelMapper;
+        this.fileService = fileService;
     }
 
     @Override
@@ -119,4 +127,24 @@ public class ProductServiceImpl implements ProductService {
         productRepository.delete(product);
         return modelMapper.map(product, ProductDTO.class);
     }
+
+    @Override
+    public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException {
+        // Get the product from the database
+        Product productFromDB = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "product_id", String.valueOf(productId)));
+
+        // Upload the product image to server
+        // Get the file name of the new image
+        String fileName = fileService.uploadImage(path, image);
+
+        // Update the product image
+        productFromDB.setProductImage(fileName);
+
+        // Save the updated product
+        Product updatedProduct = productRepository.save(productFromDB);
+
+        return modelMapper.map(updatedProduct, ProductDTO.class);
+    }
+
 }
