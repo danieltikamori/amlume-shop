@@ -32,6 +32,7 @@ public class Product {
     @GeneratedValue(generator = "tsid_generator")
     private TSID product_id;
     private String productName;
+    private String productImage;
     private String productDescription;
     private Integer productQuantity;
     private BigDecimal productPrice;
