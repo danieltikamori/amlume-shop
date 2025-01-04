@@ -16,6 +16,9 @@ import me.amlu.shop.amlume_shop.service.ProductService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/")
@@ -72,4 +75,11 @@ public class ProductController {
         return new ResponseEntity<>(deletedProduct, null, HttpStatus.OK);
     }
 
+    @PutMapping("v1/admin/products/{product_id}/image")
+    public ResponseEntity<ProductDTO> updateProductImage(@PathVariable Long product_id, @RequestParam("image") MultipartFile image) throws IOException {
+
+        ProductDTO updatedProductDTO = productService.updateProductImage(product_id, image);
+
+        return new ResponseEntity<>(updatedProductDTO, null, HttpStatus.OK);
+    }
 }
