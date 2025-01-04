@@ -16,7 +16,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
-import java.math.BigInteger;
+import java.math.BigDecimal;
 import java.util.Objects;
 
 @Getter
@@ -34,8 +34,10 @@ public class Product {
     private String productName;
     private String productDescription;
     private Integer productQuantity;
-    private BigInteger productPrice;
-    private BigInteger productSpecialPrice;
+    private BigDecimal productPrice;
+    private BigDecimal productDiscountPercentage;
+
+    private BigDecimal productSpecialPrice;
 
     @ManyToOne
     @JoinColumn(name = "category_id")
