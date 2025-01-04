@@ -10,5 +10,19 @@
 
 package me.amlu.shop.amlume_shop.service;
 
+import me.amlu.shop.amlume_shop.payload.ProductDTO;
+import me.amlu.shop.amlume_shop.payload.ProductResponse;
+
 public interface ProductService {
+    ProductDTO addProduct(ProductDTO product, Long categoryId);
+
+    ProductResponse getAllProducts();
+
+    ProductResponse searchProductsByCategory(Long categoryId);
+
+    ProductResponse searchProductsByKeyword(String keyword);
+
+    ProductDTO updateProduct(ProductDTO product, Long productId);
+
+    ProductDTO deleteProduct(Long productId);
 }

@@ -10,10 +10,66 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import me.amlu.shop.amlume_shop.payload.ProductDTO;
+import me.amlu.shop.amlume_shop.payload.ProductResponse;
+import me.amlu.shop.amlume_shop.service.ProductService;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/")
 public class ProductController {
+
+    private final ProductService productService;
+
+    public ProductController(ProductService productService) {
+        this.productService = productService;
+    }
+
+
+    @PostMapping("v1/admin/categories/{category_id}/product")
+    public ResponseEntity<ProductDTO> addProduct(@RequestBody ProductDTO productDTO, @PathVariable Long category_id) {
+
+        ProductDTO savedProductDTO = productService.addProduct(productDTO, category_id);
+
+        return new ResponseEntity<>(savedProductDTO, null, HttpStatus.CREATED);
+
+    }
+
+    @GetMapping("v1/public/products")
+    public ResponseEntity<ProductResponse> getAllProducts() {
+        ProductResponse productResponse = productService.getAllProducts();
+        return new ResponseEntity<>(productResponse, null, HttpStatus.OK);
+
+    }
+
+    @GetMapping("v1/public/categories/{category_id}/products")
+    public ResponseEntity<ProductResponse> getProductsByCategory(@PathVariable Long category_id) {
+        ProductResponse productResponse = productService.searchProductsByCategory(category_id);
+        return new ResponseEntity<>(productResponse, null, HttpStatus.OK);
+
+    }
+
+    @GetMapping("v1/public/products/keyword/{keyword}")
+    public ResponseEntity<ProductResponse> getProductsByKeyword(@PathVariable String keyword) {
+        ProductResponse productResponse = productService.searchProductsByKeyword(keyword);
+        return new ResponseEntity<>(productResponse, null, HttpStatus.FOUND);
+    }
+
+    @PutMapping("v1/admin/products/{product_id}")
+    public ResponseEntity<ProductDTO> updateProduct(@RequestBody ProductDTO productDTO, @PathVariable Long product_id) {
+
+        ProductDTO updatedProductDTO = productService.updateProduct(productDTO, product_id);
+
+        return new ResponseEntity<>(updatedProductDTO, null, HttpStatus.OK);
+    }
+
+    @DeleteMapping("v1/admin/products/{product_id}")
+    public ResponseEntity<ProductDTO> deleteProduct(@PathVariable Long product_id) {
+        ProductDTO deletedProduct = productService.deleteProduct(product_id);
+
+        return new ResponseEntity<>(deletedProduct, null, HttpStatus.OK);
+    }
+
 }
