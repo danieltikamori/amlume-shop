@@ -10,15 +10,13 @@
 
 package me.amlu.shop.amlume_shop.model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
+import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.util.List;
 import java.util.Objects;
 
 @Entity(name = "categories")
@@ -37,6 +35,11 @@ public class Category {
     @NotBlank
     @Size(min = 2, max = 50, message = "Category name must be between 2 and 50 characters")
     private String categoryName;
+
+    @Size(min = 2, max = 255, message = "Category description must be between 2 and 255 characters")
+    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private List<Product> productsList;
 
     @Override
     public final boolean equals(Object o) {
