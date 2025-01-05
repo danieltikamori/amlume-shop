@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.service;
 
-import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
+import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.model.Product;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
@@ -19,6 +19,11 @@ import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
 import me.amlu.shop.amlume_shop.repositories.ProductRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,6 +32,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class ProductServiceImpl implements ProductService {
@@ -73,27 +79,47 @@ public class ProductServiceImpl implements ProductService {
             Category category = categoryRepository.findById(categoryId)
                     .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
-        Product product = modelMapper.map(productDTO, Product.class);
-        product.setProductImage("default.png");
-        product.setCategory(category);
+            Product product = modelMapper.map(productDTO, Product.class);
+            product.setProductImage("default.png");
+            product.setCategory(category);
 
-//        BigDecimal specialPrice = product.getProductPrice().subtract((product.getProductPrice().multiply(new BigDecimal(product.getProductDiscountPercentage()))).divide(new BigDecimal(100), RoundingMode.HALF_UP));
-        BigDecimal specialPrice = product.getProductPrice().subtract(productDTO.getProductPrice().multiply(product.getProductDiscountPercentage()).divide(new BigDecimal(100), RoundingMode.HALF_UP));
-        product.setProductSpecialPrice(specialPrice);
-        Product savedProduct = productRepository.save(product);
+            calculateSpecialPrice(product);
 
-        return modelMapper.map(savedProduct, ProductDTO.class);
+            Product savedProduct = productRepository.save(product);
+            return modelMapper.map(savedProduct, ProductDTO.class);
+
+        } catch (
+                DataIntegrityViolationException e) {
+            throw new APIException("Error saving product: " + e.getMessage());
+        }
     }
 
-    @Override
-    public ProductResponse getAllProducts() {
-        List<Product> products = productRepository.findAll();
-        List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
-    @Transactional(readOnly = true)
 
-        ProductResponse productResponse = new ProductResponse();
-        productResponse.setContent(productDTOList);
-        return productResponse;
+    @Override
+    @Transactional(readOnly = true)
+    public ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
+
+        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+        Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
+        Page<Product> pageProducts = productRepository.findAll(pageDetails);
+
+        List<Product> products = pageProducts.getContent();
+        if (!pageProducts.getContent().isEmpty()) {
+            List<ProductDTO> productDTOList = products.stream()
+                    .map(product -> modelMapper.map(product, ProductDTO.class))
+                    .toList();
+
+            ProductResponse productResponse = new ProductResponse();
+            productResponse.setContent(productDTOList);
+            productResponse.setPageNumber(pageProducts.getNumber());
+            productResponse.setPageSize(pageProducts.getSize());
+            productResponse.setTotalElements(pageProducts.getTotalElements());
+            productResponse.setTotalPages(pageProducts.getTotalPages());
+            productResponse.setLastPage(pageProducts.isLast());
+            return productResponse;
+        } else {
+            throw new NotFoundException("No products found");
+        }
     }
 
     @Override
@@ -103,23 +129,50 @@ public class ProductServiceImpl implements ProductService {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
-        List<Product> products = productRepository.findByCategoryOrderByProductPriceAsc(category);
-        List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
+        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+        Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
+        Page<Product> productPage = productRepository.findByCategory(category, pageDetails);
 
-        ProductResponse productResponse = new ProductResponse();
-        productResponse.setContent(productDTOList);
-        return productResponse;
+        List<Product> products = productPage.getContent();
+        if (!productPage.getContent().isEmpty()) {
+            List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
+
+            ProductResponse productResponse = new ProductResponse();
+            productResponse.setContent(productDTOList);
+            productResponse.setPageNumber(productPage.getNumber());
+            productResponse.setPageSize(productPage.getSize());
+            productResponse.setTotalElements(productPage.getTotalElements());
+            productResponse.setTotalPages(productPage.getTotalPages());
+            productResponse.setLastPage(productPage.isLast());
+            return productResponse;
+        } else {
+            throw new NotFoundException("Category " + category.getCategoryName() + " has no products");
+        }
     }
 
     @Override
-    public ProductResponse searchProductsByKeyword(String keyword) {
     @Transactional(readOnly = true)
+    public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String
+            sortBy, String sortDir) {
 
-        List<Product> products = productRepository.findByProductNameLikeIgnoreCase('%' + keyword + '%'); //productRepository.findByProductNameContainingIgnoreCase(keyword);
-        List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
+        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+        Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
+        Page<Product> productPage = productRepository.findByProductNameContainingIgnoreCase(keyword, pageDetails);
+
+        List<Product> products = productPage.getContent();
+        List<ProductDTO> productDTOList = products.stream()
+                .map(product -> modelMapper.map(product, ProductDTO.class))
+                .toList();
+
+        if (products.isEmpty()) throw new ResourceNotFoundException("Product", "keyword", keyword);
 
         ProductResponse productResponse = new ProductResponse();
         productResponse.setContent(productDTOList);
+        productResponse.setPageNumber(productPage.getNumber());
+        productResponse.setPageSize(productPage.getSize());
+        productResponse.setTotalElements(productPage.getTotalElements());
+        productResponse.setTotalPages(productPage.getTotalPages());
+        productResponse.setLastPage(productPage.isLast());
         return productResponse;
     }
 
@@ -174,4 +227,35 @@ public class ProductServiceImpl implements ProductService {
         return modelMapper.map(updatedProduct, ProductDTO.class);
     }
 
+    private void validateProductData(ProductDTO productDTO) throws ProductDataValidationException {
+        if (productDTO.getProductName() == null || productDTO.getProductName().isEmpty()) {
+            throw new ProductDataValidationException("Product name is required");
+        }
+        if (productDTO.getProductDescription() == null || productDTO.getProductDescription().isEmpty()) {
+            throw new ProductDataValidationException("Product description is required");
+        }
+        if (productDTO.getProductPrice() == null) {
+            throw new ProductDataValidationException("Product price is required");
+        }
+        if (productDTO.getProductQuantity() == null) {
+            throw new ProductDataValidationException("Product quantity is required");
+        }
+    }
+
+    private void calculateSpecialPrice(Product product) {
+        if (product.getProductPrice() != null && product.getProductDiscountPercentage() != null) {
+            if (product.getProductDiscountPercentage().compareTo(BigDecimal.ZERO) >= 0) {
+                BigDecimal discount = product.getProductPrice()
+                        .multiply(product.getProductDiscountPercentage())
+                        .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+
+                BigDecimal specialPrice = product.getProductPrice().subtract(discount);
+                product.setProductSpecialPrice(specialPrice);
+            } else {
+                throw new IllegalArgumentException("Product discount percentage must be positive.");
+            }
+        }
+    }
+
 }
+

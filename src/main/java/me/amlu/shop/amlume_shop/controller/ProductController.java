@@ -10,6 +10,9 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.config.AppConstants;
+import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
 import me.amlu.shop.amlume_shop.payload.ProductResponse;
 import me.amlu.shop.amlume_shop.service.ProductService;
@@ -31,8 +34,6 @@ public class ProductController {
     }
 
 
-    @PostMapping("v1/admin/categories/{category_id}/product")
-    public ResponseEntity<ProductDTO> addProduct(@RequestBody ProductDTO productDTO, @PathVariable Long category_id) {
     @PostMapping("v1/admin/categories/{categoryId}/product")
     public ResponseEntity<ProductDTO> addProduct(@Valid @RequestBody ProductDTO productDTO, @PathVariable Long categoryId) throws ProductAlreadyExistsException {
 
@@ -42,33 +43,45 @@ public class ProductController {
     }
 
     @GetMapping("v1/public/products")
-    public ResponseEntity<ProductResponse> getAllProducts() {
-        ProductResponse productResponse = productService.getAllProducts();
+    public ResponseEntity<ProductResponse> getAllProducts(
+            @RequestParam(value = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) int pageNumber,
+            @RequestParam(value = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) int pageSize,
+            @RequestParam(value = "sortBy", defaultValue = AppConstants.SORT_PRODUCTS_BY, required = false) String sortBy,
+            @RequestParam(value = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir
+    ) {
+
+        ProductResponse productResponse = productService.getAllProducts(pageNumber, pageSize, sortBy, sortDir);
         return new ResponseEntity<>(productResponse, null, HttpStatus.OK);
 
     }
 
-    @GetMapping("v1/public/categories/{category_id}/products")
-    public ResponseEntity<ProductResponse> getProductsByCategory(@PathVariable Long category_id) {
-        ProductResponse productResponse = productService.searchProductsByCategory(category_id);
     @GetMapping("v1/public/categories/{categoryId}/products")
     public ResponseEntity<ProductResponse> getProductsByCategory(@PathVariable Long categoryId,
+                                                                 @RequestParam(value = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) int pageNumber,
+                                                                 @RequestParam(value = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) int pageSize,
+                                                                 @RequestParam(value = "sortBy", defaultValue = AppConstants.SORT_PRODUCTS_BY, required = false) String sortBy,
+                                                                 @RequestParam(value = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir) {
+
         ProductResponse productResponse = productService.searchByCategory(categoryId, pageNumber, pageSize, sortBy, sortDir);
         return new ResponseEntity<>(productResponse, null, HttpStatus.OK);
 
     }
 
     @GetMapping("v1/public/products/keyword/{keyword}")
-    public ResponseEntity<ProductResponse> getProductsByKeyword(@PathVariable String keyword) {
-        ProductResponse productResponse = productService.searchProductsByKeyword(keyword);
+    public ResponseEntity<ProductResponse> getProductsByKeyword(@PathVariable String keyword,
+                                                                @RequestParam(value = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) int pageNumber,
+                                                                @RequestParam(value = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) int pageSize,
+                                                                @RequestParam(value = "sortBy", defaultValue = AppConstants.SORT_PRODUCTS_BY, required = false) String sortBy,
+                                                                @RequestParam(value = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir) {
+
+        ProductResponse productResponse = productService.searchProductByKeyword(keyword, pageNumber, pageSize, sortBy, sortDir);
         return new ResponseEntity<>(productResponse, null, HttpStatus.FOUND);
     }
 
     @PutMapping("v1/admin/products/{productId}")
     public ResponseEntity<ProductDTO> updateProduct(@Valid @RequestBody ProductDTO productDTO, @PathVariable Long productId) {
 
-        ProductDTO updatedProductDTO = productService.updateProduct(productDTO, product_id);
-
+        ProductDTO updatedProductDTO = productService.updateProduct(productDTO, productId);
         return new ResponseEntity<>(updatedProductDTO, null, HttpStatus.OK);
     }
 

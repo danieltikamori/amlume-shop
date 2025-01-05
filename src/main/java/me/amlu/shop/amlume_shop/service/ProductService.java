@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.service;
 
+import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
 import me.amlu.shop.amlume_shop.payload.ProductResponse;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,13 +18,13 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 
 public interface ProductService {
-    ProductDTO addProduct(ProductDTO product, Long categoryId);
+    ProductDTO addProduct(ProductDTO product, Long categoryId) throws ProductAlreadyExistsException;
 
-    ProductResponse getAllProducts();
+    ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir);
 
-    ProductResponse searchProductsByCategory(Long categoryId);
+    ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir);
 
-    ProductResponse searchProductsByKeyword(String keyword);
+    ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir);
 
     ProductDTO updateProduct(ProductDTO product, Long productId);
 
