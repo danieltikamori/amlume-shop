@@ -40,9 +40,9 @@ public class Product {
 
     private BigDecimal productSpecialPrice;
 
-    @ManyToOne
-    @JoinColumn(name = "category_id")
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "categoryId")
+    @ToString.Exclude
     private Category category;
 
     @Override
