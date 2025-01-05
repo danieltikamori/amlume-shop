@@ -51,6 +51,7 @@ public class ProductServiceImpl implements ProductService {
 
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
+                    .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
         Product product = modelMapper.map(productDTO, Product.class);
         product.setProductImage("default.png");
@@ -78,7 +79,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse searchProductsByCategory(Long categoryId) {
 
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
         List<Product> products = productRepository.findByCategoryOrderByProductPriceAsc(category);
         List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
@@ -103,7 +104,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO updateProduct(ProductDTO productDTO, Long productId) {
 
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "product_id", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
 
         Product product = modelMapper.map(productDTO, Product.class);
 
@@ -122,7 +123,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO deleteProduct(Long productId) {
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "product_id", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
 
         productRepository.delete(product);
         return modelMapper.map(product, ProductDTO.class);
@@ -132,7 +133,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException {
         // Get the product from the database
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "product_id", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
 
         // Upload the product image to server
         // Get the file name of the new image

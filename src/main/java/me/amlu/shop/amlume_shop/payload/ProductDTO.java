@@ -21,7 +21,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class ProductDTO {
 
-    private Long product_id;
+    private Long productId;
     private String productName;
     private String productImage;
     private String productDescription;
