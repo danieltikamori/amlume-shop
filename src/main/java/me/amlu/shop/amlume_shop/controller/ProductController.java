@@ -34,6 +34,7 @@ public class ProductController {
     @PostMapping("v1/admin/categories/{category_id}/product")
     public ResponseEntity<ProductDTO> addProduct(@RequestBody ProductDTO productDTO, @PathVariable Long category_id) {
     @PostMapping("v1/admin/categories/{categoryId}/product")
+    public ResponseEntity<ProductDTO> addProduct(@Valid @RequestBody ProductDTO productDTO, @PathVariable Long categoryId) throws ProductAlreadyExistsException {
 
         ProductDTO savedProductDTO = productService.addProduct(productDTO, categoryId);
         return new ResponseEntity<>(savedProductDTO, null, HttpStatus.CREATED);
@@ -63,9 +64,8 @@ public class ProductController {
         return new ResponseEntity<>(productResponse, null, HttpStatus.FOUND);
     }
 
-    @PutMapping("v1/admin/products/{product_id}")
-    public ResponseEntity<ProductDTO> updateProduct(@RequestBody ProductDTO productDTO, @PathVariable Long product_id) {
     @PutMapping("v1/admin/products/{productId}")
+    public ResponseEntity<ProductDTO> updateProduct(@Valid @RequestBody ProductDTO productDTO, @PathVariable Long productId) {
 
         ProductDTO updatedProductDTO = productService.updateProduct(productDTO, product_id);
 
