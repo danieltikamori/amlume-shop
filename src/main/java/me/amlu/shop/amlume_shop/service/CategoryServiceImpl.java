@@ -83,10 +83,10 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public CategoryDTO deleteCategory(Long category_id) {
+    public CategoryDTO deleteCategory(Long categoryId) {
         return CompletableFuture.supplyAsync(() -> {
-            Category existingCategory = categoryRepository.findById(category_id)
-                    .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", category_id));
+            Category existingCategory = categoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
             categoryRepository.delete(existingCategory);
             return modelMapper.map(existingCategory, CategoryDTO.class);
@@ -97,10 +97,10 @@ public class CategoryServiceImpl implements CategoryService {
     public CategoryDTO updateCategory(Long categoryId, CategoryDTO categoryDTO) {
         return CompletableFuture.supplyAsync(() -> {
             Category savedCategory = categoryRepository.findById(categoryId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Category", "category_id", categoryId));
+                    .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
 
             Category category = modelMapper.map(categoryDTO, Category.class);
-            category.setCategory_id(categoryId);
+            category.setCategoryId(categoryId);
 
             savedCategory = categoryRepository.save(category);
             return modelMapper.map(savedCategory, CategoryDTO.class);

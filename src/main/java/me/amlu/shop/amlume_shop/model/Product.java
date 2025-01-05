@@ -30,6 +30,7 @@ public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long product_id;
+    private Long productId;
     private String productName;
     private String productImage;
     private String productDescription;
@@ -41,6 +42,7 @@ public class Product {
 
     @ManyToOne
     @JoinColumn(name = "category_id")
+    @JoinColumn(name = "categoryId")
     private Category category;
 
     @Override
@@ -51,7 +53,7 @@ public class Product {
         Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
         Product product = (Product) o;
-        return getProduct_id() != null && Objects.equals(getProduct_id(), product.getProduct_id());
+        return getProductId() != null && Objects.equals(getProductId(), product.getProductId());
     }
 
     @Override

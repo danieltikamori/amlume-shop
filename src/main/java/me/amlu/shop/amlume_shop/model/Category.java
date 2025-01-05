@@ -31,7 +31,8 @@ public class Category {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long category_id;
+    @Column(name = "category_id")
+    private Long categoryId;
 
     @NotBlank
     @Size(min = 2, max = 50, message = "Category name must be between 2 and 50 characters")
@@ -45,7 +46,7 @@ public class Category {
         Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
         Category category = (Category) o;
-        return getCategory_id() != null && Objects.equals(getCategory_id(), category.getCategory_id());
+        return getCategoryId() != null && Objects.equals(getCategoryId(), category.getCategoryId());
     }
 
     @Override
