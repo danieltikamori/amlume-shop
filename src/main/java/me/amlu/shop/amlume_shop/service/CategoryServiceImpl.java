@@ -23,6 +23,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -44,10 +45,10 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public CategoryResponse getAllCategories(Integer pageNumber, Integer pageSize, String sortBy, String sortDir) {
+    @Transactional(readOnly = true)
     public CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir) {
-        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
+        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
         Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
         Page<Category> categoryPage = categoryRepository.findAll(pageDetails);
@@ -71,6 +72,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Transactional
     public CategoryDTO createCategory(CategoryDTO categoryDTO) {
         return CompletableFuture.supplyAsync(() -> {
             Category category = modelMapper.map(categoryDTO, Category.class);
@@ -84,6 +86,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Transactional
     public CategoryDTO deleteCategory(Long categoryId) {
         return CompletableFuture.supplyAsync(() -> {
             Category existingCategory = categoryRepository.findById(categoryId)
@@ -95,6 +98,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Transactional
     public CategoryDTO updateCategory(Long categoryId, CategoryDTO categoryDTO) {
         return CompletableFuture.supplyAsync(() -> {
             Category savedCategory = categoryRepository.findById(categoryId)

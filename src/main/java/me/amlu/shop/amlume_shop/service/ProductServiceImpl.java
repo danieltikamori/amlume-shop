@@ -20,6 +20,7 @@ import me.amlu.shop.amlume_shop.repositories.ProductRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -47,7 +48,27 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductDTO addProduct(ProductDTO productDTO, Long categoryId) {
+    @Transactional
+    public ProductDTO addProduct(ProductDTO productDTO, Long categoryId) throws IllegalArgumentException, ResourceNotFoundException, ProductAlreadyExistsException, APIException {
+        try {
+            if (productDTO == null) {
+                throw new IllegalArgumentException("ProductDTO cannot be null");
+            }
+            if (categoryId == null) {
+                throw new IllegalArgumentException("Category ID cannot be null");
+            }
+
+            validateProductData(productDTO); // Call the product data validation method
+
+//            if (productRepository.existsByProductNameIgnoreCase(productDTO.getProductName())) {
+//                throw new ProductAlreadyExistsException(productDTO.getProductName());
+//            }
+
+            // Check if product name exists
+            if (productRepository.existsByProductNameIgnoreCase(
+                    Objects.requireNonNull(productDTO.getProductName()))) {
+                throw new ProductAlreadyExistsException(productDTO.getProductName());
+            }
 
             Category category = categoryRepository.findById(categoryId)
                     .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
@@ -68,6 +89,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductResponse getAllProducts() {
         List<Product> products = productRepository.findAll();
         List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
+    @Transactional(readOnly = true)
 
         ProductResponse productResponse = new ProductResponse();
         productResponse.setContent(productDTOList);
@@ -75,7 +97,8 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public ProductResponse searchProductsByCategory(Long categoryId) {
+    @Transactional(readOnly = true)
+    public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir) {
 
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
@@ -90,6 +113,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     public ProductResponse searchProductsByKeyword(String keyword) {
+    @Transactional(readOnly = true)
 
         List<Product> products = productRepository.findByProductNameLikeIgnoreCase('%' + keyword + '%'); //productRepository.findByProductNameContainingIgnoreCase(keyword);
         List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
@@ -100,6 +124,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional
     public ProductDTO updateProduct(ProductDTO productDTO, Long productId) {
 
         Product productFromDB = productRepository.findById(productId)
@@ -119,6 +144,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional
     public ProductDTO deleteProduct(Long productId) {
 
         Product product = productRepository.findById(productId)
@@ -129,6 +155,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Transactional
     public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException {
         // Get the product from the database
         Product productFromDB = productRepository.findById(productId)
