@@ -12,12 +12,22 @@ package me.amlu.shop.amlume_shop.repositories;
 
 import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.model.Product;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-    List<Product> findByCategoryOrderByProductPriceAsc(Category category);
+    //    @Query(value = "SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END FROM products p WHERE UPPER(p.product_name) = UPPER(:name)", nativeQuery = true)
+//@Query(value = "SELECT COUNT(*) > 0 FROM products WHERE UPPER(product_name) = UPPER(:name)", nativeQuery = true)
+    boolean existsByProductNameIgnoreCase(@Param("name") String name);
 
-    List<Product> findByProductNameLikeIgnoreCase(String keyword);
+    Page<Product> findByProductNameContainingIgnoreCase(String keyword, Pageable pageable);
+
+    Page<Product> findByCategory(Category category, Pageable pageDetails);
+
+//    Page<Product> findByCategoryOrderByProductPriceAsc(Category category, Pageable pageDetails);
 }
