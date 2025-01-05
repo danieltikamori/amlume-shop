@@ -15,7 +15,7 @@ import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 
 public interface CategoryService {
 
-    CategoryResponse getAllCategories(Integer pageNumber, Integer pageSize, String sortBy, String sortDir);
+    CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir);
 
     CategoryDTO createCategory(CategoryDTO categoryDTO);
 
