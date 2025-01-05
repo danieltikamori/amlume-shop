@@ -10,26 +10,13 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-public class ResourceNotFoundException extends RuntimeException {
-    String resourceName;
-    String field;
-    String fieldName;
-    long fieldId;
+import java.io.Serial;
 
-    public ResourceNotFoundException(){
-    }
+public class CategoryAlreadyExistsException extends RuntimeException {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
-    public ResourceNotFoundException(String resourceName, String field, String fieldName) {
-        super(String.format("%s not found with %s : '%s'", resourceName, field, fieldName));
-        this.resourceName = resourceName;
-        this.field = field;
-        this.fieldName = fieldName;
-    }
-
-    public ResourceNotFoundException(String resourceName, String field, long fieldId) {
-        super(String.format("%s not found with %s : '%s'", resourceName, field, fieldId));
-        this.resourceName = resourceName;
-        this.field = field;
-        this.fieldId = fieldId;
+    public CategoryAlreadyExistsException(String categoryName) {
+        super("Category with name " + categoryName + " already exists");
     }
 }
