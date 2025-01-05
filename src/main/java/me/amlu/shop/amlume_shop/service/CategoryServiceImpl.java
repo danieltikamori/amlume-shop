@@ -45,6 +45,7 @@ public class CategoryServiceImpl implements CategoryService {
 
     @Override
     public CategoryResponse getAllCategories(Integer pageNumber, Integer pageSize, String sortBy, String sortDir) {
+    public CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir) {
         Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
 
@@ -64,7 +65,7 @@ public class CategoryServiceImpl implements CategoryService {
         categoryResponse.setPageSize(categoryPage.getSize());
         categoryResponse.setTotalElements(categoryPage.getTotalElements());
         categoryResponse.setTotalPages(categoryPage.getTotalPages());
-        categoryResponse.setIsLastPage(categoryPage.isLast());
+        categoryResponse.setLastPage(categoryPage.isLast());
 
         return categoryResponse;
     }
