@@ -14,9 +14,8 @@ import me.amlu.shop.amlume_shop.model.Category;
 import me.amlu.shop.amlume_shop.model.Product;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.List;
-
-public interface ProductRepository  extends JpaRepository<Product, Long>{
+@Repository
+public interface ProductRepository extends JpaRepository<Product, Long> {
 
     List<Product> findByCategoryOrderByProductPriceAsc(Category category);
 

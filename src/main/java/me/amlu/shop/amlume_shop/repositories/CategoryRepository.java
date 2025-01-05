@@ -14,9 +14,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import me.amlu.shop.amlume_shop.model.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-public interface CategoryRepository extends JpaRepository<Category, Long>{
+@Repository
+public interface CategoryRepository extends JpaRepository<Category, Long> {
     Optional<Category> findByCategoryName(@NotBlank @Size(min = 2, max = 50, message = "Category name must be between 2 and 50 characters") String categoryName);
 }
