@@ -12,7 +12,7 @@
 	<artifactId>amlume-shop</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>amlume-shop</name>
-	<description>AmLume Shop</description>
+	<description>Amlume Shop</description>
 	<url/>
 	<licenses>
 		<license/>
@@ -29,12 +29,13 @@
 	<properties>
 		<java.version>21</java.version>
 		<spring-modulith.version>1.2.4</spring-modulith.version>
+		<jackson-datatype-jsr310.version>2.18.2</jackson-datatype-jsr310.version>
 	</properties>
 	<dependencies>
-<!--		<dependency>-->
-<!--			<groupId>org.springframework.boot</groupId>-->
-<!--			<artifactId>spring-boot-starter-security</artifactId>-->
-<!--		</dependency>-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-web</artifactId>
@@ -104,6 +105,22 @@
 			<artifactId>hypersistence-utils-hibernate-63</artifactId>
 			<version>3.9.0</version>
 		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/io.github.nbaars/paseto4j-version4 -->
+		<dependency>
+			<groupId>io.github.nbaars</groupId>
+			<artifactId>paseto4j-version4</artifactId>
+			<version>2024.3</version>
+		</dependency>
+
+		<!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.datatype/jackson-datatype-jsr310 -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.datatype</groupId>
+			<artifactId>jackson-datatype-jsr310</artifactId>
+			<version>${jackson-datatype-jsr310.version}</version>
+		</dependency>
+
+
 
 		<!-- https://central.sonatype.com/artifact/io.hypersistence/hypersistence-tsid -->
 <!--		<dependency>-->
