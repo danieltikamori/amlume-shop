@@ -1,0 +1,3 @@
+paseto:
+  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
+  expiration: 3600                  # Non-sensitive config is fine here
