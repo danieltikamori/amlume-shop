@@ -113,5 +113,10 @@ fabric.properties
 # History
 .history
 
+# Secrets, environment variables, and other sensitive information
+.idea/**/secrets.xml
+.env
+*.key
+secrets/
 
 
