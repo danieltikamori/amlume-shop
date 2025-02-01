@@ -119,4 +119,6 @@ fabric.properties
 *.key
 secrets/
 
-
+# Local development
+application-local.properties
+application-local.yml
