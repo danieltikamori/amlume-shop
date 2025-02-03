@@ -30,7 +30,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @MappedSuperclass
-public class BaseEntity {
+public abstract class BaseEntity {
 
     @Version
     private int version;
@@ -86,4 +86,5 @@ public class BaseEntity {
         this.deletedAt = Instant.now();
         this.deletedByUser = this.updatedByUser; // getAuthenticatedUser();
     }
+
 }
