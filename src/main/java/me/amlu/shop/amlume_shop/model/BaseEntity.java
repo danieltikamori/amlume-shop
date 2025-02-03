@@ -5,7 +5,7 @@
  *
  * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
  *
- * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
 package me.amlu.shop.amlume_shop.model;
@@ -30,7 +30,7 @@ import java.time.Instant;
 @Getter
 @Setter
 @MappedSuperclass
-public class BaseEntity {
+public abstract class BaseEntity {
 
     @Version
     private int version;
@@ -86,4 +86,5 @@ public class BaseEntity {
         this.deletedAt = Instant.now();
         this.deletedByUser = this.updatedByUser; // getAuthenticatedUser();
     }
+
 }
