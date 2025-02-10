@@ -12,12 +12,28 @@ package me.amlu.shop.amlume_shop;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @SpringBootApplication
+@ComponentScan(basePackages = {"me.amlu.shop.amlume_shop"})
+@EnableScheduling
+@EnableTransactionManagement
+@EnableJpaAuditing
 public class AmlumeShopApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(AmlumeShopApplication.class, args);
-	}
+    public static void main(String[] args) {
+        SpringApplication.run(AmlumeShopApplication.class, args);
+
+        // Log the available beans
+//	ConfigurableApplicationContext context = SpringApplication.run(AmlumeShopApplication.class, args);
+//        System.out.println("Available beans:");
+//        for (String beanName : context.getBeanDefinitionNames()) {
+//		System.out.println(beanName);
+//	}
+    }
+
 
 }
