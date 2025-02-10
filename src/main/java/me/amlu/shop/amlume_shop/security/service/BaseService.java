@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.security.service;
 import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.model.User;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -23,15 +24,16 @@ public abstract class BaseService {
 
     protected UserServiceImpl userService;
 
-    public BaseService(UserServiceImpl userService) {
+    protected BaseService(UserServiceImpl userService) {
         this.userService = userService;
     }
     
     protected Optional<User> getCurrentUser() throws UnauthorizedException {
-        return userService.getCurrentUser();
+        return Optional.ofNullable(userService.getCurrentUser());
     }
-    
-    protected Optional<Long> getCurrentUserId() throws UnauthorizedException {
+
+    @Cacheable("currentUserId")
+    protected Long getCurrentUserId() throws UnauthorizedException {
         return userService.getCurrentUserId();
     }
 }
