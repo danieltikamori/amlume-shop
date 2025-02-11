@@ -18,6 +18,7 @@ import me.amlu.shop.amlume_shop.payload.CategoryDTO;
 import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
 import org.modelmapper.ModelMapper;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -45,6 +46,7 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
+    @Cacheable(value = "category", key = "#pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
     public CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir) {
 
