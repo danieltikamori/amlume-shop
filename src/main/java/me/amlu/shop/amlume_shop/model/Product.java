@@ -26,19 +26,19 @@ import java.util.Objects;
 @AllArgsConstructor
 @Entity
 @Table(name = "products")
-public class Product {
+public class Product extends BaseEntity {
 
-//    @Tsid
+    //    @Tsid
 //    @GeneratedValue(generator = "tsid_generator")
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(nullable = false, updatable = false,  unique = true, name = "product_id")
+    @Column(nullable = false, updatable = false, unique = true, name = "product_id")
     private Long productId;
 
     @NotBlank(message = "Product title is required")
     @Size(min = 2, max = 200, message = "Product name must be between 2 and 200 characters")
 //    @Pattern(regexp = "^[a-zA-Z0-9\\s\\-_]+$", message = "Product name must only contain alphanumeric and symbol characters")
-    @Column(nullable = false,  name = "product_name")
+    @Column(nullable = false, name = "product_name")
     private String productName;
 
     private String productImage;
@@ -54,7 +54,7 @@ public class Product {
     @Min(value = 0, message = "Product quantity must be greater than or equal to 0")
     private Integer productQuantity;
 
-    @Column(nullable = false,  name = "product_price")
+    @Column(nullable = false, name = "product_price")
     @ColumnDefault("0.0")
     @Digits(integer = 10, fraction = 2, message = "Product price must be a valid number with up to 10 digits and 2 decimal places")
     @DecimalMin(value = "0.0", inclusive = false, message = "Product price must be greater than or equal to 0")
@@ -74,6 +74,11 @@ public class Product {
     @ToString.Exclude
     private Category category;
 
+    @ManyToOne
+    @JoinColumn(name = "seller_id")
+    @ToString.Exclude
+    private User seller;
+
     @PrePersist
     public void prePersist() {
         if (productDiscountPercentage == null) {
@@ -88,15 +93,18 @@ public class Product {
     public final boolean equals(Object o) {
         if (this == o) return true;
         if (o == null) return false;
-        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
-        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
-        Product product = (Product) o;
+        if (!(o instanceof Product product)) return false;
         return getProductId() != null && Objects.equals(getProductId(), product.getProductId());
     }
 
     @Override
     public final int hashCode() {
-        return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
     }
 }
