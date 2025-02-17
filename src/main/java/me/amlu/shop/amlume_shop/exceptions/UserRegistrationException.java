@@ -13,16 +13,15 @@ package me.amlu.shop.amlume_shop.exceptions;
 import java.io.Serial;
 import java.io.Serializable;
 
-public class APIException extends RuntimeException implements Serializable {
+public class UserRegistrationException extends RuntimeException implements Serializable {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public APIException() {
+    public UserRegistrationException(String userId) {
+        super("User registration failed for user: " + userId);
     }
-
-    public APIException(String message) {
-        super(message);
+    public UserRegistrationException(String message, Throwable cause) {
+        super(message, cause);
     }
-
-
 }

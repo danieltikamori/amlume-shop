@@ -10,7 +10,9 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-public class ResourceNotFoundException extends RuntimeException {
+import java.io.Serializable;
+
+public class ResourceNotFoundException extends RuntimeException implements Serializable {
     String resourceName;
     String field;
     String fieldName;
