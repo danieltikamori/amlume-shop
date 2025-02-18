@@ -10,28 +10,44 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import java.io.Serializable;
+import lombok.Getter;
 
-public class ResourceNotFoundException extends RuntimeException implements Serializable {
-    String resourceName;
-    String field;
-    String fieldName;
-    long fieldId;
+import java.io.Serial;
 
-    public ResourceNotFoundException(){
-    }
+@Getter
+public class ResourceNotFoundException extends RuntimeException {
 
-    public ResourceNotFoundException(String resourceName, String field, String fieldName) {
-        super(String.format("%s not found with %s : '%s'", resourceName, field, fieldName));
+    @Serial
+    private static final long serialVersionUID = 1L;
+    private static final String DEFAULT_MESSAGE = "%s not found with %s : '%s'";
+    private final String resourceName;
+    private final String field;
+    private final String fieldName;
+    private final long fieldId;
+
+    public ResourceNotFoundException(String resourceName, String field, String fieldName, long fieldId) {
+        super(String.format(DEFAULT_MESSAGE, resourceName, field, fieldId));
         this.resourceName = resourceName;
         this.field = field;
         this.fieldName = fieldName;
+        this.fieldId = fieldId;
+    }
+
+    public ResourceNotFoundException(String resourceName, String field, String fieldName) {
+        super(String.format(DEFAULT_MESSAGE, resourceName, field, fieldName));
+        this.resourceName = resourceName;
+        this.field = field;
+        this.fieldName = fieldName;
+        this.fieldId = 0;
     }
 
     public ResourceNotFoundException(String resourceName, String field, long fieldId) {
-        super(String.format("%s not found with %s : '%s'", resourceName, field, fieldId));
+        super(String.format(DEFAULT_MESSAGE, resourceName, field, fieldId));
         this.resourceName = resourceName;
         this.field = field;
         this.fieldId = fieldId;
+        this.fieldName = null;
+
     }
+
 }

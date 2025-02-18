@@ -11,14 +11,13 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
-import java.io.Serializable;
 
-public class UserAlreadyExistsException extends RuntimeException implements Serializable {
+public class UserAlreadyExistsException extends RuntimeException {
 
-  @Serial
-  private static final long serialVersionUID = 1L;
+    @Serial
+    private static final long serialVersionUID = 1L;
 
-  public UserAlreadyExistsException(String userName) {
-    super("User with name " + userName + " already exists");
-  }
+    public UserAlreadyExistsException(String userName) {
+        super("User with name " + userName + " already exists");
+    }
 }

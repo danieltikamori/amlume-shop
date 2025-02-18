@@ -11,9 +11,8 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
-import java.io.Serializable;
 
-public class UserRegistrationException extends RuntimeException implements Serializable {
+public class UserRegistrationException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -21,6 +20,7 @@ public class UserRegistrationException extends RuntimeException implements Seria
     public UserRegistrationException(String userId) {
         super("User registration failed for user: " + userId);
     }
+
     public UserRegistrationException(String message, Throwable cause) {
         super(message, cause);
     }

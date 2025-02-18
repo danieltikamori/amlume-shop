@@ -11,9 +11,8 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
-import java.io.Serializable;
 
-public class APIException extends RuntimeException implements Serializable {
+public class APIException extends RuntimeException {
     @Serial
     private static final long serialVersionUID = 1L;
 
