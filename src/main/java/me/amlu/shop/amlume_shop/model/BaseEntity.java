@@ -12,8 +12,7 @@ package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.SoftDelete;
 import org.springframework.data.annotation.CreatedBy;
@@ -29,7 +28,10 @@ import java.time.Instant;
 @FilterDef(name = "adminFilter", defaultCondition = "1=1")
 @Getter
 @Setter
+@Builder
 @MappedSuperclass
+@NoArgsConstructor
+@AllArgsConstructor
 public abstract class BaseEntity {
 
     @Version
@@ -74,6 +76,11 @@ public abstract class BaseEntity {
     public void prePersist() {
         this.createdAt = Instant.now();
         this.updatedAt = this.createdAt;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = Instant.now();
     }
 
     @PreUpdate
