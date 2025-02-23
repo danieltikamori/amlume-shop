@@ -10,6 +10,10 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
+import me.amlu.shop.amlume_shop.model.Role;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCache;
@@ -18,10 +22,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
-    /**
-     * Configures the cache manager for the application.
-     */
+/**
+ * Configures the cache manager for the application.
+ */
 @EnableCaching
 @Configuration
 public class CacheConfig {
@@ -35,6 +42,7 @@ public class CacheConfig {
      * <p>
      * The cache manager is a Spring bean, and can be injected into other components.
      * <p>
+     *
      * @return a cache manager
      */
 
@@ -42,9 +50,39 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         SimpleCacheManager cacheManager = new SimpleCacheManager();
         cacheManager.setCaches(Arrays.asList(
-            new ConcurrentMapCache("currentUser"),
-            new ConcurrentMapCache("currentUserId")
+                new ConcurrentMapCache("currentUser"),
+                new ConcurrentMapCache("currentUserId"),
+                new ConcurrentMapCache("roles"),
+                new ConcurrentMapCache("rateLimit")
         ));
+
         return cacheManager;
+    }
+
+    @Bean
+    public Cache<String, Set<Role>> rolesCache() {
+        return CacheBuilder.newBuilder()
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .maximumSize(10000)
+                .recordStats() // enables statistics
+                .build();
+    }
+
+    @Bean
+    public Cache<String, AtomicInteger> rateLimitCache() {
+        return CacheBuilder.newBuilder()
+                .expireAfterWrite(1, TimeUnit.MINUTES)
+                .maximumSize(10000)
+                .recordStats()
+                .build();
+    }
+
+    @Bean
+    public Cache<String, String> asnCache(AsnProperties properties) {
+        return CacheBuilder.newBuilder()
+                .expireAfterWrite(properties.getCacheExpiration())
+                .maximumSize(properties.getCacheSize())
+                .recordStats()
+                .build();
     }
 }
