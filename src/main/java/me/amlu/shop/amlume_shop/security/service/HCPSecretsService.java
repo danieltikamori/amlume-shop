@@ -8,104 +8,187 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-/** Usage Example:
- * @Service
- * public class YourService {
- *     private final HCPSecretsService secretsService;
+/**
+ * Usage Example:
  *
- *     public YourService(HCPSecretsService secretsService) {
- *         this.secretsService = secretsService;
- *     }
- *
- *     public void someMethod() {
- *         Map<String, String> secrets = secretsService.getSecrets();
- *         // Use your secrets here
- *         String apiKey = secrets.get("API_KEY");
- *     }
+ * @Service public class YourService {
+ * private final HCPSecretsService secretsService;
+ * <p>
+ * public YourService(HCPSecretsService secretsService) {
+ * this.secretsService = secretsService;
+ * }
+ * <p>
+ * public void someMethod() {
+ * Map<String, String> secrets = secretsService.getSecrets();
+ * // Use your secrets here
+ * String apiKey = secrets.get("API_KEY");
+ * }
  * }
  */
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
 import me.amlu.shop.amlume_shop.payload.SecretsResponse;
-import org.springframework.http.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.retry.backoff.ExponentialBackOffPolicy;
+import org.springframework.retry.policy.SimpleRetryPolicy;
+import org.springframework.retry.support.RetryTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.beans.factory.annotation.Value;
-
-import java.util.Map;
 
 import java.util.Collections;
+import java.util.Map;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import static org.springframework.http.HttpStatus.*;
 
 @Service
 @Slf4j
 public class HCPSecretsService {
-    private final HCPTokenService tokenService;
     private final RestTemplate restTemplate;
-    
-    @Value("${HCP_ORGANIZATION_ID}")
-    private String organizationId;
-    
-    @Value("${HCP_PROJECT_ID}")
-    private String projectId;
-    
-    @Value("${HCP_APP_NAME}")
-    private String appName;
+    private final HCPTokenService tokenService;
+    private final String organizationId;
+    private final String projectId;
+    private final String appName;
+    private final RetryTemplate retryTemplate;
+    private final Cache<String, Map<String, String>> secretsCache;
 
-    public HCPSecretsService(HCPTokenService tokenService) {
+    private static final int CACHE_DURATION_MINUTES = 30;
+    private static final int MAX_RETRY_ATTEMPTS = 3;
+    private static final int INITIAL_RETRY_INTERVAL = 1000;
+    private static final int MAX_RETRY_INTERVAL = 5000;
+
+    public HCPSecretsService(
+            RestTemplate restTemplate,
+            HCPTokenService tokenService,
+            @Value("${hcp.organization-id}") String organizationId,
+            @Value("${hcp.project-id}") String projectId,
+            @Value("${hcp.app-name}") String appName) {
+        this.restTemplate = restTemplate;
         this.tokenService = tokenService;
-        this.restTemplate = new RestTemplate();
+        this.organizationId = organizationId;
+        this.projectId = projectId;
+        this.appName = appName;
+        this.retryTemplate = createRetryTemplate();
+        this.secretsCache = CacheBuilder.newBuilder()
+                .expireAfterWrite(CACHE_DURATION_MINUTES, TimeUnit.MINUTES)
+                .build();
+    }
+
+    private RetryTemplate createRetryTemplate() {
+        ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
+        backOffPolicy.setInitialInterval(INITIAL_RETRY_INTERVAL);
+        backOffPolicy.setMaxInterval(MAX_RETRY_INTERVAL);
+
+        SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
+        retryPolicy.setMaxAttempts(MAX_RETRY_ATTEMPTS);
+
+        RetryTemplate template = new RetryTemplate();
+        template.setBackOffPolicy(backOffPolicy);
+        template.setRetryPolicy(retryPolicy);
+
+        return template;
     }
 
     public Map<String, String> getSecrets() {
         try {
-            String url = String.format(
-                    "https://api.cloud.hashicorp.com/secrets/2023-11-28/organizations/%s/projects/%s/apps/%s/secrets:open",
-                    organizationId, projectId, appName
-            );
-
-            HttpHeaders headers = new HttpHeaders();
-            headers.setBearerAuth(tokenService.getAccessToken());
-
-            ResponseEntity<SecretsResponse> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    new HttpEntity<>(headers),
-                    SecretsResponse.class
-            );
-
-            if (response.getBody() != null) {
-                return response.getBody().getSecrets();
-            } else {
-                return Collections.emptyMap();
-            }
-
-        } catch (HttpClientErrorException e) {
-            log.error("Failed to fetch secrets from HCP due to client error: {}", e.getStatusCode(), e);
-
-            if(e.getStatusCode() == HttpStatus.UNAUTHORIZED){
-                throw new FetchSecretsException("Unauthorized to fetch secrets", e);
-            } else if (e.getStatusCode() == HttpStatus.FORBIDDEN){
-                throw new FetchSecretsException("Forbidden to fetch secrets",e);
-            } else if (e.getStatusCode() == HttpStatus.NOT_FOUND){
-                throw new FetchSecretsException("Secrets not found",e);
-            } else {
-                throw new FetchSecretsException("Client error while fetching secrets", e);
-            }
-        } catch (HttpServerErrorException e) {
-            log.error("Failed to fetch secrets from HCP due to server error: {}", e.getStatusCode(), e);
-            throw new FetchSecretsException("Server error while fetching secrets", e);
-        } catch (RestClientException e) {
-            log.error("Failed to fetch secrets from HCP due to a rest client error", e);
-            throw new FetchSecretsException("Rest client error while fetching secrets", e);
-        } catch (Exception e) {
-            log.error("Failed to fetch secrets from HCP due to an unexpected error", e);
-            throw new FetchSecretsException("Unexpected error while fetching secrets", e);
+            return secretsCache.get("secrets", this::fetchSecrets);
+        } catch (ExecutionException e) {
+            log.error("Failed to get secrets from cache", e);
+            throw new FetchSecretsException("Failed to fetch secrets", e);
         }
     }
+
+    private Map<String, String> fetchSecrets() {
+        return retryTemplate.execute(context -> {
+            try {
+                String url = buildSecretsUrl();
+                HttpHeaders headers = createHeaders();
+
+                log.debug("Fetching secrets from HCP");
+                ResponseEntity<SecretsResponse> response = restTemplate.exchange(
+                        url,
+                        HttpMethod.GET,
+                        new HttpEntity<>(headers),
+                        SecretsResponse.class
+                );
+
+                if (response.getBody() != null) {
+                    log.debug("Successfully fetched secrets from HCP");
+                    return response.getBody().getSecrets();
+                } else {
+                    log.warn("Received empty response from HCP");
+                    return Collections.emptyMap();
+                }
+
+            } catch (HttpClientErrorException e) {
+                handleClientError(e);
+                throw e; // Will be caught by retry template
+            } catch (HttpServerErrorException e) {
+                handleServerError(e);
+                throw e; // Will be caught by retry template
+            } catch (RestClientException e) {
+                log.error("Failed to fetch secrets from HCP", e);
+                throw new FetchSecretsException("Failed to fetch secrets", e);
+            }
+        });
+    }
+
+    private String buildSecretsUrl() {
+        return String.format(
+                "https://api.cloud.hashicorp.com/secrets/2023-11-28/organizations/%s/projects/%s/apps/%s/secrets:open",
+                organizationId, projectId, appName
+        );
+    }
+
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(tokenService.getAccessToken());
+        return headers;
+    }
+
+    private void handleClientError(HttpClientErrorException e) {
+        log.error("Client error while fetching secrets: {}", e.getStatusCode(), e);
+        switch (e.getStatusCode()) {
+            case UNAUTHORIZED:
+                throw new FetchSecretsException("Unauthorized to fetch secrets", e);
+            case FORBIDDEN:
+                throw new FetchSecretsException("Forbidden to fetch secrets", e);
+            case NOT_FOUND:
+                throw new FetchSecretsException("Secrets not found", e);
+            default:
+                throw new FetchSecretsException("Client error while fetching secrets", e);
+        }
+    }
+
+    private void handleServerError(HttpServerErrorException e) {
+        log.error("Server error while fetching secrets: {}", e.getStatusCode(), e);
+        throw new FetchSecretsException("Server error while fetching secrets", e);
+    }
+
+    @Scheduled(fixedRateString = "${hcp.secrets.refresh-interval:1800000}") // Default 30 minutes
+    public void refreshSecrets() {
+        try {
+            log.debug("Starting scheduled secrets refresh");
+            secretsCache.invalidate("secrets");
+            getSecrets();
+            log.debug("Completed scheduled secrets refresh");
+        } catch (Exception e) {
+            log.error("Failed to refresh secrets", e);
+        }
+    }
+
 }
