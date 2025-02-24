@@ -30,6 +30,7 @@ import me.amlu.shop.amlume_shop.security.enums.TokenType;
 import me.amlu.shop.amlume_shop.security.model.RevokedToken;
 import me.amlu.shop.amlume_shop.security.model.RevokedTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.EnhancedAuthenticationService;
+import me.amlu.shop.amlume_shop.security.service.KeyManagementFacade;
 import org.paseto4j.commons.*;
 import org.paseto4j.version4.Paseto;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,7 +42,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
-import java.security.SecureRandom;
+import java.security.NoSuchAlgorithmException;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
@@ -51,10 +52,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 
@@ -64,15 +62,30 @@ import java.util.concurrent.TimeUnit;
 @Transactional
 public class PasetoTokenServiceImpl implements PasetoTokenService {
 
-    public static final String YYYY_MM_DD_T_HH_MM_SS_Z = "yyyy-MM-dd'T'HH:mm:ss'Z'";
+    public static final String KEY_CONVERSION_ALGORITHM = "Ed25519";
+    public static final String KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE = KEY_CONVERSION_ALGORITHM + " algorithm not available";
     public static final String INVALID_TOKEN_FORMAT = "Invalid token format";
+    public static final String INVALID_PASETO_TOKEN = "Invalid PASETO Token";
+    public static final String INVALID_REFRESH_TOKEN = "Invalid refresh token";
+    public static final String INVALID_KEY_ID = "Invalid key ID";
+    public static final String KID_IS_MISSING_IN_THE_TOKEN_FOOTER = "kid is missing in the token footer";
+    public static final String TOKEN_VALIDATION_FAILED = "Token validation failed";
+    public static final String ERROR_PARSING_PASETO_CLAIMS = "Error parsing PASETO claims";
+    public static final String FAILED_TO_SERIALIZE_PASETO_CLAIMS = "Failed to serialize PASETO claims";
+    public static final String YYYY_MM_DD_T_HH_MM_SS_Z = "yyyy-MM-dd'T'HH:mm:ss'Z'";
     private static final String DEFAULT_ISSUER = "${SERVICE_NAME}";
     private static final String DEFAULT_AUDIENCE = "${SERVICE_AUDIENCE}";
 
     //    private final String tokenId = String.valueOf(UUID.randomUUID());
-    private static final String keyId = "${KEY_ID}";
-    @Value("${PASETO_WRAPPED_PASERK}")
-    private String wrappedPaserk;
+    private static final String PASETO_ACCESS_KID = "${PASETO_ACCESS_KID}";
+    private static final String PASETO_ACCESS_LOCAL_KID = "${PASETO_ACCESS_LOCAL_KID}";
+    private static final String PASETO_REFRESH_LOCAL_KID = "${PASETO_REFRESH_LOCAL_KID}";
+
+    @Value("${security.token.revoked-cache.max-size}")
+    private int maxCacheSize;
+
+//    @Value("${PASETO_WRAPPED_PASERK}")
+//    private String wrappedPaserk;
 
     private static final int MAX_PAYLOAD_SIZE = 1024 * 1024; // 1MB limit
 
@@ -84,8 +97,6 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     private final SecretKey accessSecretKey;
     private final SecretKey refreshSecretKey;
 
-    private final SecureRandom secureRandom;
-
     private final ObjectMapper objectMapper;
     private final HttpServletRequest httpServletRequest;
     private final UserRepository userRepository;
@@ -93,64 +104,136 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     private final EnhancedAuthenticationService enhancedAuthenticationService;
     private final RevokedTokenRepository revokedTokenRepository;
 
+    private final KeyManagementFacade keyManagementFacade;
+
     private final Cache<String, Boolean> revokedTokensCache;
 
+    private static final KeyFactory keyFactory;
+    static {
+        try {
+            keyFactory = KeyFactory.getInstance(KEY_CONVERSION_ALGORITHM);
+        } catch (NoSuchAlgorithmException e) {
+            log.error(KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE, e);
+            throw new KeyConversionException(KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE, e);
+        }
+    }
+
     public PasetoTokenServiceImpl(
-            @Value("${PASETO_ACCESS_PRIVATE_KEY}") String accessPrivateKeyBase64,
-            @Value("${PASETO_ACCESS_PUBLIC_KEY}") String accessPublicKeyBase64,
-            @Value("${PASETO_ACCESS_SECRET_KEY}") String accessSecretKeyString,
-            @Value("${PASETO_REFRESH_SECRET_KEY}") String refreshSecretKeyString,
-            HttpServletRequest httpServletRequest, UserRepository userRepository,
-            SecureRandom secureRandom, RefreshTokenRepository refreshTokenRepository, EnhancedAuthenticationService enhancedAuthenticationService, RevokedTokenRepository revokedTokenRepository, Cache<String, Boolean> revokedTokensCache) {
+//            @Value("${PASETO_ACCESS_PRIVATE_KEY}") String accessPrivateKeyBase64,
+//            @Value("${PASETO_ACCESS_PUBLIC_KEY}") String accessPublicKeyBase64,
+//            @Value("${PASETO_ACCESS_SECRET_KEY}") String accessSecretKeyString,
+//            @Value("${PASETO_REFRESH_SECRET_KEY}") String refreshSecretKeyString,
+            HttpServletRequest httpServletRequest, UserRepository userRepository, RefreshTokenRepository refreshTokenRepository, EnhancedAuthenticationService enhancedAuthenticationService, RevokedTokenRepository revokedTokenRepository, Cache<String, Boolean> revokedTokensCache, KeyManagementFacade keyManagementFacade) {
 
 
         this.httpServletRequest = httpServletRequest;
         this.userRepository = userRepository;
-        this.secureRandom = secureRandom;
         this.refreshTokenRepository = refreshTokenRepository;
         this.enhancedAuthenticationService = enhancedAuthenticationService;
         this.revokedTokenRepository = revokedTokenRepository;
+        this.keyManagementFacade = keyManagementFacade;
         // Cache as performance optimization
         this.revokedTokensCache = CacheBuilder.newBuilder()
                 .expireAfterWrite(1, TimeUnit.HOURS)
-                .maximumSize(10000)
+                .maximumSize(getConfigurableCacheSize())
                 .recordStats()
                 .build();
         this.objectMapper = new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+        //            KeyFactory keyFactory = KeyFactory.getInstance(KEY_CONVERSION_ALGORITHM);
+//
+//            this.accessPrivateKey = loadPrivateKey(keyFactory, accessPrivateKeyBase64);
+//            this.accessPublicKey = loadPublicKey(keyFactory, accessPublicKeyBase64);
+//
+//            this.accessSecretKey = loadSecretKey(accessSecretKeyString);
+//            this.refreshSecretKey = loadSecretKey(refreshSecretKeyString);
+
+        KeyManagementFacade.KeyPair accessKeys = keyManagementFacade.getAsymmetricKeys("ACCESS");
+        this.accessPrivateKey = convertToPrivateKey(Objects.requireNonNull(accessKeys.privateKey()));
+        this.accessPublicKey = convertToPublicKey(Objects.requireNonNull(accessKeys.publicKey()));
+
+        this.accessSecretKey = convertToSecretKey(Objects.requireNonNull(keyManagementFacade.getSymmetricKey("ACCESS")));
+        this.refreshSecretKey = convertToSecretKey(Objects.requireNonNull(keyManagementFacade.getSymmetricKey("REFRESH")));
+    }
+
+    private PrivateKey convertToPrivateKey(String privateKeyString) {
+        validateKeyString(privateKeyString, "Private");
+
         try {
-            KeyFactory keyFactory = KeyFactory.getInstance("Ed25519");
-
-            this.accessPrivateKey = loadPrivateKey(keyFactory, accessPrivateKeyBase64);
-            this.accessPublicKey = loadPublicKey(keyFactory, accessPublicKeyBase64);
-
-            this.accessSecretKey = loadSecretKey(accessSecretKeyString);
-            this.refreshSecretKey = loadSecretKey(refreshSecretKeyString);
-
+            byte[] privateKeyBytes = Base64.getDecoder().decode(privateKeyString);
+            return new PrivateKey(
+                    keyFactory.generatePrivate(new PKCS8EncodedKeySpec(privateKeyBytes)),
+                    Version.V4
+            );
+        } catch (InvalidKeySpecException e) {
+            log.error("Invalid private key specification", e);
+            throw new KeyConversionException("Invalid private key specification", e);
         } catch (Exception e) {
-            log.error("Error loading private key", e);
-            throw new PrivateKeyLoadException("Failed to load private key", e);
+            log.error("Failed to convert private key", e);
+            throw new KeyConversionException("Failed to convert private key", e);
         }
     }
 
-    private PrivateKey loadPrivateKey(KeyFactory keyFactory, String base64Key) throws InvalidKeySpecException {
-        if (base64Key == null || base64Key.isEmpty()) return null; // Or throw an exception if required
-        byte[] privateKeyBytes = Base64.getDecoder().decode(base64Key);
-        PKCS8EncodedKeySpec pkcs8EncodedKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
-        return (PrivateKey) keyFactory.generatePrivate(pkcs8EncodedKeySpec);
+    private PublicKey convertToPublicKey(String publicKeyString) {
+        if (publicKeyString == null || publicKeyString.isEmpty()) {
+            throw new IllegalArgumentException("Public key string cannot be null or empty");
+        }
+
+        try {
+            byte[] publicKeyBytes = Base64.getDecoder().decode(publicKeyString);
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(publicKeyBytes);
+            java.security.PublicKey javaPublicKey = java.security.KeyFactory.getInstance(KEY_CONVERSION_ALGORITHM).generatePublic(keySpec);
+            return new PublicKey(javaPublicKey, Version.V4);
+        } catch (NoSuchAlgorithmException e) {
+            log.error(KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE, e);
+            throw new KeyConversionException(KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE, e);
+        } catch (InvalidKeySpecException e) {
+            log.error("Invalid public key specification", e);
+            throw new KeyConversionException("Invalid public key specification", e);
+        } catch (Exception e) {
+            log.error("Failed to convert public key", e);
+            throw new KeyConversionException("Failed to convert public key", e);
+        }
     }
 
-    private PublicKey loadPublicKey(KeyFactory keyFactory, String base64Key) throws InvalidKeySpecException {
-        if (base64Key == null || base64Key.isEmpty()) return null; // Or throw an exception if required
-        byte[] publicKeyBytes = Base64.getDecoder().decode(base64Key);
-        X509EncodedKeySpec x509EncodedKeySpec = new X509EncodedKeySpec(publicKeyBytes);
-        return (PublicKey) keyFactory.generatePublic(x509EncodedKeySpec);
+    private SecretKey convertToSecretKey(String secretKeyString) {
+        if (secretKeyString == null || secretKeyString.isEmpty()) {
+            throw new IllegalArgumentException("Secret key string cannot be null or empty");
+        }
+
+        try {
+            byte[] decodedKey = Base64.getDecoder().decode(secretKeyString);
+            return new SecretKey(decodedKey, Version.V4);
+        } catch (Exception e) {
+            log.error("Failed to convert secret key", e);
+            throw new KeyConversionException("Failed to convert secret key", e);
+        }
     }
 
-    private SecretKey loadSecretKey(String base64Key) {
-        return new SecretKey(Base64.getDecoder().decode(base64Key), Version.V4);
+//    private PrivateKey loadPrivateKey(KeyFactory keyFactory, String base64Key) throws InvalidKeySpecException {
+//        if (base64Key == null || base64Key.isEmpty()) return null; // Or throw an exception if required
+//        byte[] privateKeyBytes = Base64.getDecoder().decode(base64Key);
+//        PKCS8EncodedKeySpec pkcs8EncodedKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+//        return (PrivateKey) keyFactory.generatePrivate(pkcs8EncodedKeySpec);
+//    }
+//
+//    private PublicKey loadPublicKey(KeyFactory keyFactory, String base64Key) throws InvalidKeySpecException {
+//        if (base64Key == null || base64Key.isEmpty()) return null; // Or throw an exception if required
+//        byte[] publicKeyBytes = Base64.getDecoder().decode(base64Key);
+//        X509EncodedKeySpec x509EncodedKeySpec = new X509EncodedKeySpec(publicKeyBytes);
+//        return (PublicKey) keyFactory.generatePublic(x509EncodedKeySpec);
+//    }
+//
+//    private SecretKey loadSecretKey(String base64Key) {
+//        return new SecretKey(Base64.getDecoder().decode(base64Key), Version.V4);
+//    }
+
+private void validateKeyString(String keyString, String keyType) {
+    if (keyString == null || keyString.isEmpty()) {
+        throw new IllegalArgumentException(keyType + " key string cannot be null or empty");
     }
+}
 
     @Override
     public String generatePublicAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException {
@@ -163,14 +246,21 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
             validatePayload(payload);
 
             // Create footer
-            PasetoClaims footerClaims = createPasetoFooterClaims(keyId, wrappedPaserk);
+            PasetoClaims footerClaims = createPasetoFooterClaims(PASETO_ACCESS_KID);
+//            PasetoClaims footerClaims = createPasetoFooterClaims(PASETO_ACCESS_KID, wrappedPaserk); // Assuming PASETO_ACCESS_KID and wrappedPaserk are available
             String footer = objectMapper.writeValueAsString(footerClaims); // Convert to JSON string
 
             // Create final token string with footer
             return Paseto.sign(accessPrivateKey, payload, footer);
+        } catch (JsonProcessingException e) {
+            log.error(FAILED_TO_SERIALIZE_PASETO_CLAIMS, e);
+            throw new TokenGenerationFailureException(FAILED_TO_SERIALIZE_PASETO_CLAIMS, e);
+        } catch (PasetoException e) {
+            log.error("Failed to sign PASETO token", e);
+            throw new TokenGenerationFailureException("Failed to sign PASETO token", e);
         } catch (Exception e) {
-            log.error("Failed to generate PASETO token", e);
-            throw new TokenGenerationFailureException("Token generation failed", e);
+            log.error("Unexpected error during PASETO token generation", e);
+            throw new TokenGenerationFailureException("Unexpected error during token generation", e);
         }
     }
 
@@ -182,13 +272,19 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
 
             validatePayload(payload);
 
-            PasetoClaims footerClaims = createPasetoFooterClaims(keyId, wrappedPaserk);
+            PasetoClaims footerClaims = createPasetoFooterClaims(PASETO_ACCESS_LOCAL_KID);
             String footer = objectMapper.writeValueAsString(footerClaims); // Convert to JSON string
 
             // Create final token string with footer
             return Paseto.encrypt(accessSecretKey, payload, footer);
+        } catch (JsonProcessingException e) {
+            log.error(FAILED_TO_SERIALIZE_PASETO_CLAIMS, e);
+            throw new TokenGenerationFailureException(FAILED_TO_SERIALIZE_PASETO_CLAIMS, e);
+        } catch (PasetoException e) {
+            log.error("Failed to encrypt PASETO token", e);
+            throw new TokenGenerationFailureException("Failed to encrypt PASETO token", e);
         } catch (Exception e) {
-            log.error("Failed to generate PASETO token", e);
+            log.error("Unexpected error during PASETO token generation", e);
             throw new TokenGenerationFailureException("Token generation failed", e);
         }
     }
@@ -204,12 +300,13 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
             validatePayload(payload);
 
             // Create footer
-            PasetoClaims footerClaims = createPasetoFooterClaims(keyId, wrappedPaserk);
+            PasetoClaims footerClaims = createPasetoFooterClaims(PASETO_REFRESH_LOCAL_KID);
             String footer = objectMapper.writeValueAsString(footerClaims); // Convert to JSON string
 
             String refreshToken = Paseto.encrypt(refreshSecretKey, payload, footer);
 
             // Hash and store the refresh token (example using BCrypt)
+            // amazonq-ignore-next-line
             String hashedRefreshToken = BCrypt.hashpw(refreshToken, BCrypt.gensalt()); // Hash the refresh token
             RefreshToken refreshTokenEntity = new RefreshToken();
             refreshTokenEntity.setToken(hashedRefreshToken);
@@ -225,6 +322,12 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
             refreshTokenRepository.save(refreshTokenEntity);
 
             return refreshToken; // Return the *unhashed* refresh token to the client
+        } catch (JsonProcessingException e) {
+            log.error("Failed to generate refresh token due to JSON processing error", e);
+            throw new TokenGenerationFailureException("Failed to generate refresh token due to JSON processing error", e);
+        } catch (PasetoException e) {
+            log.error("Failed to generate refresh token due to PASETO encryption error", e);
+            throw new TokenGenerationFailureException("Failed to generate refresh token due to PASETO encryption error", e);
         } catch (Exception e) {
             log.error("Failed to generate refresh token", e);
             throw new TokenGenerationFailureException("Failed to generate refresh token", e);
@@ -256,7 +359,8 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
                 throw new ClaimsExtractionFailureException("Null payload after parsing");
             }
 
-            return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {});
+            return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {
+            });
         } catch (IllegalArgumentException e) {
             throw e; // Re-throw validation errors as-is
         } catch (Exception e) {
@@ -267,59 +371,67 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     @Override
     public Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException {
         try {
-            // Verify signature using public key
-            String[] parts = token.split("\\.");
-            if (parts.length < 2 || parts.length > 3) { // Check for 2 or 3 parts
-                throw new TokenValidationFailureException(INVALID_TOKEN_FORMAT);
-            }
-
-            String signedMessage = parts[0] + "." + parts[1]; // Header and payload
-            String footer = parts.length == 3 ? parts[2] : ""; // Footer (if present)
-
-            String payload = Paseto.parse(accessPublicKey, signedMessage, footer); // Parse and verify
-
-            // Parse and validate claims
-            Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
-            });
-
-            // 1. Get kid from footer claims
-            String kid = (String) claims.get("kid");
-            if (kid == null || kid.isEmpty()) {
-                throw new TokenValidationFailureException("kid is missing in the token footer");
-            }
-
-            // 2. Get wpk (you'll need to fetch this from your secure storage)
-            String wpk = getWrappedPaserkFromStorage(); // Implement this!
-
-            // 3. Unwrap the PASERK (if not already unwrapped)
-            PASERK paserk = unwrapPaserk(wpk, masterKey); // Implement this using your master key
-
-            // 4. Get the correct public key from the PASERK using the kid
-            PublicKey publicKey = paserk.getPublicKey(kid); // PASERK should have a method to get key by ID
-
-            if (publicKey == null) {
-                throw new TokenValidationFailureException("No public key found for kid: " + kid);
-            }
-
-            validateAccessTokenClaims(claims);
-
+            String[] parts = splitToken(token);
+            String signedMessage = createSignedMessage(parts);
+            String footer = extractFooter(parts);
+            String payload = parseAndVerifyToken(signedMessage, footer);
+            Map<String, Object> claims = parseClaims(payload);
+            validateKid(claims);
+            validateAccessTokenClaims(claims, String.valueOf(TokenType.ACCESS_TOKEN));
             return claims;
+        } catch (Exception e) {
+            handleValidationException(e);
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED);
+        }
+    }
 
-        } catch (SignatureException e) { // Catch SignatureException specifically
+    private String[] splitToken(String token) throws TokenValidationFailureException {
+        String[] parts = token.split("\\.");
+        if (parts.length < 2 || parts.length > 3) {
+            throw new TokenValidationFailureException(INVALID_TOKEN_FORMAT);
+        }
+        return parts;
+    }
+
+    private String createSignedMessage(String[] parts) {
+        return parts[0] + "." + parts[1];
+    }
+
+    private String extractFooter(String[] parts) {
+        return parts.length == 3 ? parts[2] : "";
+    }
+
+    private String parseAndVerifyToken(String signedMessage, String footer) throws SignatureException {
+        return Paseto.parse(accessPublicKey, signedMessage, footer);
+    }
+
+    private Map<String, Object> parseClaims(String payload) throws JsonProcessingException {
+        return objectMapper.readValue(payload, new TypeReference<>() {
+        });
+    }
+
+    private void validateKid(Map<String, Object> claims) throws TokenValidationFailureException {
+        String kid = (String) claims.get("kid");
+        if (kid == null || kid.isEmpty()) {
+            throw new TokenValidationFailureException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER);
+        }
+        if (!PASETO_ACCESS_KID.equals(kid)) {
+            throw new TokenValidationFailureException(INVALID_KEY_ID);
+        }
+    }
+
+    private void handleValidationException(Exception e) {
+        if (e instanceof SignatureException) {
             log.error("Invalid PASETO signature", e);
-            throw new InvalidTokenSignatureException("Invalid PASETO signature"); // Or a more specific exception
-
-        } catch (JsonProcessingException e) { // Handle JSON parsing exceptions
-            log.error("Error parsing PASETO claims", e);
-            throw new TokenValidationFailureException("Error parsing PASETO claims");
-
-        } catch (IllegalArgumentException e) { // Catch IllegalArgumentException
-            log.error("Invalid PASETO Token", e);
-            throw new TokenValidationFailureException("Invalid PASETO Token");
-
-        } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
+            throw new InvalidTokenSignatureException("Invalid PASETO signature");
+        } else if (e instanceof JsonProcessingException) {
+            log.error(ERROR_PARSING_PASETO_CLAIMS, e);
+            throw new TokenValidationFailureException(ERROR_PARSING_PASETO_CLAIMS);
+        } else if (e instanceof IllegalArgumentException) {
+            log.error(INVALID_PASETO_TOKEN, e);
+            throw new TokenValidationFailureException(INVALID_PASETO_TOKEN);
+        } else {
             log.error("Failed to validate public access PASETO token", e);
-            throw new TokenValidationFailureException("Token validation failed");
         }
     }
 
@@ -336,21 +448,34 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
 
             Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
             });
-            validateAccessTokenClaims(claims);
+
+            // Get kid from footer claims
+            String kid = (String) claims.get("kid");
+            if (kid == null || kid.isEmpty()) {
+                throw new TokenValidationFailureException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER);
+            }
+
+            // Verify key ID matches
+
+            if (!PASETO_ACCESS_LOCAL_KID.equals(kid)) {
+                throw new TokenValidationFailureException(INVALID_KEY_ID);
+            }
+
+            validateAccessTokenClaims(claims, String.valueOf(TokenType.ACCESS_TOKEN));
 
             return claims;
 
         } catch (JsonProcessingException e) { // Handle JSON parsing exceptions
-            log.error("Error parsing PASETO claims", e);
-            throw new TokenValidationFailureException("Error parsing PASETO claims");
+            log.error(ERROR_PARSING_PASETO_CLAIMS, e);
+            throw new TokenValidationFailureException(ERROR_PARSING_PASETO_CLAIMS);
 
         } catch (IllegalArgumentException e) { // Catch IllegalArgumentException
-            log.error("Invalid PASETO Token", e);
-            throw new TokenValidationFailureException("Invalid PASETO Token");
+            log.error(INVALID_PASETO_TOKEN, e);
+            throw new TokenValidationFailureException(INVALID_PASETO_TOKEN);
 
         } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
             log.error("Failed to validate local access PASETO token", e);
-            throw new TokenValidationFailureException("Token validation failed");
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED);
         }
     }
 
@@ -368,20 +493,31 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
             Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
             });
 
-            validateRefreshTokenClaims(claims); // Specific validation rules for refresh token claims
+            // Get kid from footer claims
+            String kid = (String) claims.get("kid");
+            if (kid == null || kid.isEmpty()) {
+                throw new TokenValidationFailureException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER);
+            }
+
+            // Verify key ID matches
+            if (!PASETO_REFRESH_LOCAL_KID.equals(kid)) {
+                throw new TokenValidationFailureException(INVALID_KEY_ID);
+            }
+
+            validateRefreshTokenClaims(claims, String.valueOf(TokenType.REFRESH_TOKEN)); // Specific validation rules for refresh token claims
             return claims;
 
         } catch (JsonProcessingException e) { // Handle JSON parsing exceptions
-            log.error("Error parsing PASETO claims", e);
-            throw new TokenValidationFailureException("Error parsing PASETO claims");
+            log.error(ERROR_PARSING_PASETO_CLAIMS, e);
+            throw new TokenValidationFailureException(ERROR_PARSING_PASETO_CLAIMS);
 
         } catch (IllegalArgumentException e) { // Catch IllegalArgumentException
-            log.error("Invalid PASETO Token", e);
-            throw new TokenValidationFailureException("Invalid PASETO Token");
+            log.error(INVALID_PASETO_TOKEN, e);
+            throw new TokenValidationFailureException(INVALID_PASETO_TOKEN);
 
         } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
             log.error("Failed to validate refresh PASETO token", e);
-            throw new TokenValidationFailureException("Token validation failed");
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED);
         }
     }
 
@@ -407,10 +543,23 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
 
     @Override
     public PasetoClaims createAccessPasetoClaims(String userId, Duration validity) {
-        User user = userRepository.findById(Long.parseLong(userId)).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        User user = findUserById(userId);
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         String userScope = enhancedAuthenticationService.determineUserScope();
 
+        return buildAccessPasetoClaims(user, now, validity, userScope);
+    }
+
+    private User findUserById(String userId) {
+        try {
+            return userRepository.findById(Long.parseLong(userId))
+                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid user ID format", e);
+        }
+    }
+
+    private PasetoClaims buildAccessPasetoClaims(User user, ZonedDateTime now, Duration validity, String userScope) {
         return new PasetoClaims()
                 .setIssuer(DEFAULT_ISSUER)
                 .setSubject(String.valueOf(user.getUserId()))
@@ -418,18 +567,22 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
                 .setExpiration(now.plus(validity))
                 .setNotBefore(now)
                 .setIssuedAt(now)
-                .setTokenId(generateTokenId()) // Generate a unique identifier
+                .setTokenId(generateTokenId())
                 .setSessionId(httpServletRequest.getSession().getId())
                 .setScope(userScope)
                 .setTokenType(String.valueOf(TokenType.ACCESS_TOKEN));
-//                .addClaim(null, null);
     }
 
     @Override
     public PasetoClaims createRefreshPasetoClaims(String userId, Duration validity) {
-        User user = userRepository.findById(Long.parseLong(userId)).orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
+        User user;
+        try {
+            user = userRepository.findById(Long.parseLong(userId)).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid user ID format", e);
+        }
 
+        ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
         return new PasetoClaims()
                 .setIssuer(DEFAULT_ISSUER)
                 .setSubject(String.valueOf(user.getUserId()))
@@ -442,33 +595,57 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     }
 
     @Override
-    public PasetoClaims createPasetoFooterClaims(String keyId, String wrappedPaserk) {
+    public PasetoClaims createPasetoFooterClaims(String keyId) {
         return new PasetoClaims()
-                .setKeyId(keyId)
-                .setWrappedPaserk(wrappedPaserk);
+                .setKeyId(keyId);
     }
+
+//    // Use the method below if using wrapped paserk too.
+//    @Override
+//    public PasetoClaims createPasetoFooterClaims(String PASETO_ACCESS_KID, String wrappedPaserk) {
+//        return new PasetoClaims()
+//                .setKeyId(PASETO_ACCESS_KID)
+//                .setWrappedPaserk(wrappedPaserk);
+//    }
 
     private String generateTokenId() {
         return UUID.randomUUID().toString();
     }
 
     @Override
-    public void validateAccessTokenClaims(Map<String, Object> claims) throws TokenValidationFailureException {
-        Instant now = Instant.now();
+    public void validateAccessTokenClaims(Map<String, Object> claims, String expectedType) throws TokenValidationFailureException {
 
-        Instant exp = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("exp").toString()));
-        if (now.isAfter(exp)) {
-            throw new TokenValidationFailureException("Token has expired");
+        // TOCHECK: is it true that exp, nbf, and iat are automatically validated by the PASETO library?
+//        Instant now = Instant.now();
+//
+//        Instant exp = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("exp").toString()));
+//        if (now.isAfter(exp)) {
+//            throw new TokenValidationFailureException("Token has expired");
+//        }
+//
+//        Instant nbf = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("nbf").toString()));
+//        if (now.isBefore(nbf)) {
+//            throw new TokenValidationFailureException("Token is not yet valid");
+//        }
+//
+//        Instant iat = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("iat").toString()));
+//        if (now.isBefore(iat)) {
+//            throw new TokenValidationFailureException("Token is not yet valid");
+//        }
+
+        String type = (String) claims.get("type");
+        if (!expectedType.equals(type)) {
+            throw new TokenValidationException("Invalid token type");
         }
 
-        Instant nbf = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("nbf").toString()));
-        if (now.isBefore(nbf)) {
-            throw new TokenValidationFailureException("Token is not yet valid");
+        String issuer = (String) claims.get("iss");
+        if (!DEFAULT_ISSUER.equals(issuer)) {
+            throw new TokenValidationException("Invalid issuer");
         }
 
-        Instant iat = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("iat").toString()));
-        if (now.isBefore(iat)) {
-            throw new TokenValidationFailureException("Token is not yet valid");
+        String audience = (String) claims.get("aud");
+        if (!DEFAULT_AUDIENCE.equals(audience)) {
+            throw new TokenValidationException("Invalid audience");
         }
 
 //        // Validate session ID - Use in sticky session
@@ -480,31 +657,49 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     }
 
     @Override
-    public void validateRefreshTokenClaims(Map<String, Object> claims) throws TokenValidationFailureException {
-        String userId = (String) claims.get("sub"); // Get the user ID from the token
-        User user = userRepository.findById(Long.valueOf(userId)).orElseThrow(() -> new UserNotFoundException("User not found"));
+    public void validateRefreshTokenClaims(Map<String, Object> claims, String expectedType) throws TokenValidationFailureException {
+        try {
+            String userId = (String) claims.get("sub"); // Get the user ID from the token
+            User user = userRepository.findById(Long.valueOf(userId)).orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        if (user == null) {
-            throw new TokenValidationFailureException("Invalid user ID");
+            if (!user.isEnabled()) {
+                throw new TokenValidationFailureException("User account is disabled");
+            }
+
+            //        Instant now = Instant.now();
+//
+//        Instant exp = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("exp").toString()));
+//        if (now.isAfter(exp)) {
+//            throw new TokenValidationFailureException("Token has expired");
+//        }
+//
+//        Instant nbf = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("nbf").toString()));
+//        if (now.isBefore(nbf)) {
+//            throw new TokenValidationFailureException("Token is not yet valid");
+//        }
+//
+//        Instant iat = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("iat").toString()));
+//        if (now.isBefore(iat)) {
+//            throw new TokenValidationFailureException("Token is not yet valid");
+//        }
+
+            String type = (String) claims.get("type");
+            if (!expectedType.equals(type)) {
+                throw new TokenValidationException("Invalid token type");
+            }
+
+            if (!DEFAULT_ISSUER.equals(claims.get("iss"))) {
+                throw new TokenValidationException("Invalid issuer");
+            }
+
+            if (!DEFAULT_AUDIENCE.equals(claims.get("aud"))) {
+                throw new TokenValidationException("Invalid audience");
+            }
+        } catch (NumberFormatException e) {
+            throw new TokenValidationFailureException("Invalid user ID format", e);
+        } catch (UserNotFoundException | TokenValidationException e) {
+            throw new TokenValidationFailureException(e.getMessage(), e);
         }
-
-        Instant now = Instant.now();
-
-        Instant exp = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("exp").toString()));
-        if (now.isAfter(exp)) {
-            throw new TokenValidationFailureException("Token has expired");
-        }
-
-        Instant nbf = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("nbf").toString()));
-        if (now.isBefore(nbf)) {
-            throw new TokenValidationFailureException("Token is not yet valid");
-        }
-
-        Instant iat = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse(claims.get("iat").toString()));
-        if (now.isBefore(iat)) {
-            throw new TokenValidationFailureException("Token is not yet valid");
-        }
-
     }
 
     @Override
@@ -566,29 +761,39 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     @Transactional
     @Override
     public void revokeAllUserTokens(String username, String reason) {
-        List<RevokedToken> userTokens = revokedTokenRepository.findByUsername(username);
-        for (RevokedToken token : userTokens) {
-            token.setRevokedAt(Instant.now());
-            token.setReason(reason);
-            revokedTokensCache.put(token.getTokenId(), true);
+        try {
+            List<RevokedToken> userTokens = revokedTokenRepository.findByUsername(username);
+            for (RevokedToken token : userTokens) {
+                token.setRevokedAt(Instant.now());
+                token.setReason(reason);
+                revokedTokensCache.put(token.getTokenId(), true);
+            }
+            revokedTokenRepository.saveAll(userTokens);
+            log.info("Revoked all tokens for user: {}", username);
+        } catch (Exception e) {
+            log.error("Error revoking tokens for user: {}", username, e);
+            throw new SecurityException("Could not revoke tokens for user", e);
         }
-        revokedTokenRepository.saveAll(userTokens);
-        log.info("Revoked all tokens for user: {}", username);
     }
 
     private boolean isTokenRevoked(String tokenId) {
-        // First check cache
-        Boolean cachedResult = revokedTokensCache.getIfPresent(tokenId);
-        if (cachedResult != null) {
-            return cachedResult;
-        }
+        try {
+            // First check cache
+            Boolean cachedResult = revokedTokensCache.getIfPresent(tokenId);
+            if (cachedResult != null) {
+                return cachedResult;
+            }
 
-        // If not in cache, check database
-        boolean isRevoked = revokedTokenRepository.existsByTokenId(tokenId);
-        if (isRevoked) {
-            revokedTokensCache.put(tokenId, true);
+            // If not in cache, check database
+            boolean isRevoked = revokedTokenRepository.existsByTokenId(tokenId);
+            if (isRevoked) {
+                revokedTokensCache.put(tokenId, true);
+            }
+            return isRevoked;
+        } catch (Exception e) {
+            log.error("Error checking token revocation status for tokenId: {}", tokenId, e);
+            return true; // Fail-safe: assume token is revoked if there's an error
         }
-        return isRevoked;
     }
 
 //    private boolean isTokenRevoked(String token) {
@@ -634,6 +839,10 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
         }
     }
 
+    private int getConfigurableCacheSize() {
+        return maxCacheSize;
+    }
+
     // TODO: Invalidate old refresh tokens. e.g., by deleting it from the database or marking it as used).
     // TODO: Revocation:  Provide a mechanism to revoke refresh tokens (e.g., if a user logs out or if a token is suspected of being compromised).
     //
@@ -641,15 +850,14 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
 
     public AuthResponse refreshAccessToken(String refreshToken) throws InvalidTokenException, TokenValidationFailureException {
         try {
-            String hashedRefreshToken = BCrypt.hashpw(refreshToken, BCrypt.gensalt()); // Hash the incoming token
-            RefreshToken refreshTokenEntity = refreshTokenRepository.findByToken(hashedRefreshToken)
-                    .orElseThrow(() -> new InvalidTokenException("Invalid refresh token"));
+            RefreshToken refreshTokenEntity = refreshTokenRepository.findByToken(refreshToken)
+                    .orElseThrow(() -> new InvalidTokenException(INVALID_REFRESH_TOKEN));
 
             User user = refreshTokenEntity.getUser(); // Get the user from the RefreshToken entity
 
 
             if (user == null) {
-                throw new InvalidTokenException("Invalid refresh token");
+                throw new InvalidTokenException(INVALID_REFRESH_TOKEN);
             }
 
             Map<String, Object> refreshTokenClaims = validateRefreshToken(refreshToken);
@@ -657,10 +865,10 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
             // Extract user information from refresh token
             String userId = refreshTokenClaims.get("sub").toString(); // Extract userId
             User existingUser = userRepository.findById(Long.valueOf(userId))
-                    .orElseThrow(() -> new UserNotFoundException("User not found"));
+                    .orElseThrow(() -> new UserNotFoundException("User not found during refresh token validation"));
 
             if (existingUser == null) {
-                throw new InvalidTokenException("Invalid refresh token");
+                throw new InvalidTokenException(INVALID_REFRESH_TOKEN);
             }
 
             // Generate new tokens
@@ -677,33 +885,35 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
 
         } catch (UserNotFoundException e) {
             log.error("User not found during refresh token validation", e);
-            throw new InvalidRefreshTokenException("Invalid refresh token");
+            throw new InvalidRefreshTokenException("Invalid refresh token: " + e.getMessage());
         } catch (TokenValidationFailureException e) {
             log.error("Refresh token validation failed", e);
             throw e; // Re-throw the validation exception
         } catch (Exception e) {
             log.error("Unexpected error during refresh token validation", e);
-            throw new InvalidTokenException("Invalid refresh token", e);
+            throw new InvalidTokenException(INVALID_REFRESH_TOKEN, e);
         }
     }
 
-    private String getWrappedPaserkFromStorage() {
-        // Implement logic to retrieve the wpk from your secure storage (e.g., database, secrets manager)
-        // Example (using Spring's @Value):
-        // @Value("${PASETO_WRAPPED_PASERK}")
-        // private String wrappedPaserk;
-        // return wrappedPaserk;
+    // Finish implementation if we would use wrapped paserk
+//    private String getWrappedPaserkFromStorage() {
+//        // Implement logic to retrieve the wpk from your secure storage (e.g., database, secrets manager)
+//        // Example (using Spring's @Value):
+//        // @Value("${PASETO_WRAPPED_PASERK}")
+//        // private String wrappedPaserk;
+//        // return wrappedPaserk;
+//
+//        return wrappedPaserk; // Replace with your actual implementation
+//    }
+//
+//    private PASERK unwrapPaserk(String wpk, SecretKey masterKey) {
+//        // Implement logic to decrypt the wpk using your master key
+//        // You'll likely need a PASERK library that supports wrapping/unwrapping.
+//        // Example (conceptual):
+//        // return PASERK.unwrap(wpk, masterKey);
+//
+//        return null; // Replace with your actual implementation
+//    }
 
-        return wrappedPaserk; // Replace with your actual implementation
-    }
-
-    private PASERK unwrapPaserk(String wpk, SecretKey masterKey) {
-        // Implement logic to decrypt the wpk using your master key
-        // You'll likely need a PASERK library that supports wrapping/unwrapping.
-        // Example (conceptual):
-        // return PASERK.unwrap(wpk, masterKey);
-
-        return null; // Replace with your actual implementation
-    }
 }
 
