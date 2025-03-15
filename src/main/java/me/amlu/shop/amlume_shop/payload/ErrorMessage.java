@@ -21,24 +21,25 @@ import java.util.Date;
 @Getter
 public class ErrorMessage {
     @Setter
-    @Getter
     private String message;
+
     @Setter
-    @Getter
     private String title;
-    @Getter
+
     private HttpStatus error;
+
     private int status;
+
     @Setter
-    @Getter
     private String code;
+
     @Setter
     private String timestamp;
+
     @Setter
-    @Getter
     private Object data;
+
     @Setter
-    @Getter
     private String requestId;
 
     public ErrorMessage() {
