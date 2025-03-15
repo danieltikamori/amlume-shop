@@ -22,9 +22,9 @@ import java.util.Optional;
 @Component
 public abstract class BaseService {
 
-    protected UserServiceImpl userService;
+    protected UserService userService;
 
-    protected BaseService(UserServiceImpl userService) {
+    protected BaseService(UserService userService) {
         this.userService = userService;
     }
     
