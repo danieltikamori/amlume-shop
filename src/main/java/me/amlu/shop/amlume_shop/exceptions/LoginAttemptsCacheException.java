@@ -11,18 +11,30 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
+import java.util.concurrent.ExecutionException;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class LoginAttemptsCacheException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
+    public LoginAttemptsCacheException(String errorAccessingLoginAttemptsCache, ExecutionException e) {
+        super(errorAccessingLoginAttemptsCache, e);
+    }
+
+    public LoginAttemptsCacheException(String message) {
         super(message);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public LoginAttemptsCacheException(String message, Throwable cause) {
+        super(message, cause);
     }
 
+    public LoginAttemptsCacheException(Throwable cause) {
+        super(cause);
+    }
+
+    public LoginAttemptsCacheException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

@@ -12,28 +12,37 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class KeyConversionException extends RuntimeException {
+public class ClaimsExtractionFailureException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public KeyConversionException(String message, Throwable cause) {
-        super(message, cause);
+    public ClaimsExtractionFailureException(String errorExtractingClaimsFromToken, Exception e) {
+        super(errorExtractingClaimsFromToken, e);
     }
 
-    public KeyConversionException(String message) {
-        super(message);
+    public ClaimsExtractionFailureException(String errorExtractingClaimsFromToken) {
+        super(errorExtractingClaimsFromToken);
     }
 
-    public KeyConversionException(Throwable cause) {
-        super(cause);
+    public ClaimsExtractionFailureException(Exception e) {
+        super(e);
     }
 
-    public KeyConversionException() {
+    public ClaimsExtractionFailureException() {
         super();
     }
 
-    public KeyConversionException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
-        super(message, cause, enableSuppression, writableStackTrace);
+    public ClaimsExtractionFailureException(String errorExtractingClaimsFromToken, Throwable cause) {
+        super(errorExtractingClaimsFromToken, cause);
     }
+
+    public ClaimsExtractionFailureException(Throwable cause) {
+        super(cause);
+    }
+
+    protected ClaimsExtractionFailureException(String errorExtractingClaimsFromToken, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(errorExtractingClaimsFromToken, cause, enableSuppression, writableStackTrace);
+    }
+
 }

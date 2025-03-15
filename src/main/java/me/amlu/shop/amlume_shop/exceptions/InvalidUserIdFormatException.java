@@ -12,17 +12,32 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class InvalidUserIdFormatException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
-        super(message);
+    public InvalidUserIdFormatException(String invalidUserIdFormat, NumberFormatException e) {
+        super(invalidUserIdFormat, e);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public InvalidUserIdFormatException(String invalidUserIdFormat, Exception e) {
+        super(invalidUserIdFormat, e);
     }
 
+    public InvalidUserIdFormatException(String invalidUserIdFormat) {
+        super(invalidUserIdFormat);
+    }
+
+    public InvalidUserIdFormatException(String invalidUserIdFormat, Throwable cause) {
+        super(invalidUserIdFormat, cause);
+    }
+
+    public InvalidUserIdFormatException(Throwable cause) {
+        super(cause);
+    }
+
+    public InvalidUserIdFormatException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

@@ -12,17 +12,24 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class UserNotLoggedOutException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
+    public UserNotLoggedOutException(String message) {
         super(message);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public UserNotLoggedOutException(String message, Throwable cause) {
+        super(message, cause);
     }
 
+    public UserNotLoggedOutException(Throwable cause) {
+        super(cause);
+    }
+
+    public UserNotLoggedOutException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

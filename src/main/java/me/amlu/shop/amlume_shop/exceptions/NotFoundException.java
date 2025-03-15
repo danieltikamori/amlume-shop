@@ -13,10 +13,12 @@ package me.amlu.shop.amlume_shop.exceptions;
 import java.io.Serial;
 
 public class NotFoundException extends APIException {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
     public NotFoundException() {
+        super();
     }
 
     public NotFoundException(String message) {

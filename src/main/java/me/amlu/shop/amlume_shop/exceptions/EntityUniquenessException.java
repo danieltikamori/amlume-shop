@@ -12,28 +12,36 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class KeyConversionException extends RuntimeException {
+public class EntityUniquenessException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public KeyConversionException(String message, Throwable cause) {
-        super(message, cause);
+    public EntityUniquenessException(String errorCheckingForEntityUniqueness, Exception e) {
+        super(errorCheckingForEntityUniqueness, e);
     }
 
-    public KeyConversionException(String message) {
-        super(message);
+    public EntityUniquenessException(String errorCheckingForEntityUniqueness) {
+        super(errorCheckingForEntityUniqueness);
     }
 
-    public KeyConversionException(Throwable cause) {
-        super(cause);
-    }
-
-    public KeyConversionException() {
+    public EntityUniquenessException() {
         super();
     }
 
-    public KeyConversionException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
-        super(message, cause, enableSuppression, writableStackTrace);
+    public EntityUniquenessException(Exception e) {
+        super(e);
+    }
+
+    public EntityUniquenessException(String errorCheckingForEntityUniqueness, Throwable cause) {
+        super(errorCheckingForEntityUniqueness, cause);
+    }
+
+    public EntityUniquenessException(Throwable cause) {
+        super(cause);
+    }
+
+    protected EntityUniquenessException(String errorCheckingForEntityUniqueness, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(errorCheckingForEntityUniqueness, cause, enableSuppression, writableStackTrace);
     }
 }

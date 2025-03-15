@@ -22,6 +22,18 @@ public class TokenValidationFailureException extends RuntimeException {
     }
 
     public TokenValidationFailureException(String failedToValidateToken, Throwable cause) {
-        super("Token validation failed: " + failedToValidateToken, cause);
+        super(failedToValidateToken, cause);
+    }
+
+    public TokenValidationFailureException(Throwable cause) {
+        super(cause);
+    }
+
+    public TokenValidationFailureException() {
+        super("Token validation failed");
+    }
+
+    public TokenValidationFailureException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

@@ -12,17 +12,25 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class InvalidTokenClaimException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
-        super(message);
+    public InvalidTokenClaimException(String s) {
+        super(s);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public InvalidTokenClaimException(String s, Throwable throwable) {
+        super(s, throwable);
+    }
+
+    public InvalidTokenClaimException(Throwable throwable) {
+        super(throwable);
+    }
+
+    public InvalidTokenClaimException() {
+        super();
     }
 
 }

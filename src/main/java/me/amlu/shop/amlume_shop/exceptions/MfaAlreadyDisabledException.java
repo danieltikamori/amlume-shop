@@ -12,17 +12,28 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class MfaAlreadyDisabledException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
+    public MfaAlreadyDisabledException(String message) {
         super(message);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public MfaAlreadyDisabledException(String message, Throwable cause) {
+        super(message, cause);
     }
 
+    public MfaAlreadyDisabledException(Throwable cause) {
+        super(cause);
+    }
+
+    public MfaAlreadyDisabledException() {
+        super("MFA is already disabled.");
+    }
+
+    public MfaAlreadyDisabledException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

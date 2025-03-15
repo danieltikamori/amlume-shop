@@ -11,23 +11,34 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
+import java.util.concurrent.ExecutionException;
 
-public class RoleNotFoundException extends RuntimeException {
+public class IsUserBlockedCheckStatusException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private static final String DEFAULT_MESSAGE = "Role not found";
-
-    public RoleNotFoundException(String message) {
-        super(message);
+    public IsUserBlockedCheckStatusException(String errorCheckingBlockedStatus, ExecutionException e) {
+        super(errorCheckingBlockedStatus, e);
     }
 
-    public RoleNotFoundException() {
-        super(DEFAULT_MESSAGE);
+    public IsUserBlockedCheckStatusException(String errorCheckingBlockedStatus, Throwable cause) {
+        super(errorCheckingBlockedStatus, cause);
     }
-    
-    public RoleNotFoundException(String roleName, Throwable cause) {
-        super(DEFAULT_MESSAGE + ": " + roleName, cause);
+
+    public IsUserBlockedCheckStatusException(String errorCheckingBlockedStatus) {
+        super(errorCheckingBlockedStatus);
+    }
+
+    public IsUserBlockedCheckStatusException(Throwable cause) {
+        super(cause);
+    }
+
+    public IsUserBlockedCheckStatusException() {
+        super("Error checking blocked status");
+    }
+
+    protected IsUserBlockedCheckStatusException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

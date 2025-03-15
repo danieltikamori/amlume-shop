@@ -12,17 +12,24 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class UserScopeMissingException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
-        super(message);
+    public UserScopeMissingException(String userScopeIsMissing) {
+        super(userScopeIsMissing);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public UserScopeMissingException(String userScopeIsMissing, Throwable cause) {
+        super(userScopeIsMissing, cause);
     }
 
+    public UserScopeMissingException(Throwable cause) {
+        super(cause);
+    }
+
+    public UserScopeMissingException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

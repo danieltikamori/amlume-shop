@@ -17,20 +17,23 @@ public class KeyInitializationException extends RuntimeException {
     @Serial
     private static final long serialVersionUID = 1L;
 
-        public KeyInitializationException(String message, Throwable cause) {
-            super(message, cause);
-        }
-
-        public KeyInitializationException(String message) {
-            super(message);
-        }
-        public KeyInitializationException(Throwable cause) {
-            super(cause);
-        }
-        public KeyInitializationException() {
-            super();
-        }
-        public KeyInitializationException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
-            super(message, cause, enableSuppression, writableStackTrace);
-        }
+    public KeyInitializationException(String message, Throwable cause) {
+        super(message, cause);
     }
+
+    public KeyInitializationException(String message) {
+        super(message);
+    }
+
+    public KeyInitializationException(Throwable cause) {
+        super(cause);
+    }
+
+    public KeyInitializationException() {
+        super();
+    }
+
+    public KeyInitializationException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
+}

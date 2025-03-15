@@ -18,9 +18,10 @@ public class InvalidTokenSignatureException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     public InvalidTokenSignatureException(String failedToValidateToken) {
-      super("Token validation failed: " + failedToValidateToken);
+        super("Token validation failed: " + failedToValidateToken);
     }
+
     public InvalidTokenSignatureException(String failedToValidateToken, Throwable cause) {
-      super("Token validation failed: " + failedToValidateToken, cause);
+        super("Token validation failed: " + failedToValidateToken, cause);
     }
-  }
+}

@@ -12,17 +12,28 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class LoginAttemptsExceededException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
+    public LoginAttemptsExceededException(String message) {
         super(message);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public LoginAttemptsExceededException(String message, Throwable cause) {
+        super(message, cause);
     }
 
+    public LoginAttemptsExceededException(Throwable cause) {
+        super(cause);
+    }
+
+    public LoginAttemptsExceededException() {
+        super("Login attempts exceeded");
+    }
+
+    protected LoginAttemptsExceededException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
+    }
 }

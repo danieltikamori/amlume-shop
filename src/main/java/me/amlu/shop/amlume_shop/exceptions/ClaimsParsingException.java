@@ -10,19 +10,37 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 import java.io.Serial;
 
-public class TokenGenerationFailureException extends RuntimeException {
+public class ClaimsParsingException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public TokenGenerationFailureException(String message) {
-        super(message);
+    public ClaimsParsingException(String errorParsingClaims, JsonProcessingException e) {
+
+        super(errorParsingClaims, e);
     }
 
-    public TokenGenerationFailureException(String failedToGenerateToken, Throwable cause) {
-        super(failedToGenerateToken, cause);
+    public ClaimsParsingException(String errorParsingClaims) {
+
+        super(errorParsingClaims);
     }
 
+    public ClaimsParsingException(String errorParsingClaims, Throwable cause) {
+
+        super(errorParsingClaims, cause);
+    }
+
+    public ClaimsParsingException(Throwable cause) {
+
+        super(cause);
+    }
+
+    protected ClaimsParsingException(String errorParsingClaims, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+
+        super(errorParsingClaims, cause, enableSuppression, writableStackTrace);
+    }
 }
