@@ -109,8 +109,13 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "mfa_secret", nullable = true)
     private String mfaSecret;
 
-    @Column(name = "refresh_token", nullable = false)
-    private String refreshToken;
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
+    @ToString.Exclude // CascadeType.ALL is important
+    private List<RefreshToken> refreshTokens;
+
+    @Column(name = "device_fingerprinting_enabled")
+    @Builder.Default
+    private boolean deviceFingerprintingEnabled = true;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     @ToString.Exclude

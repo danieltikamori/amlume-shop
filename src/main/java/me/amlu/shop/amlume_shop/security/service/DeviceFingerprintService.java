@@ -14,11 +14,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintMismatchException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 
 public interface DeviceFingerprintService {
-    // TODO: Salt rotation
-    // TODO: Give user choice to disable device fingerprint
-    // TODO: Add device fingerprint to user(?)
+
     void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request);
 
 
@@ -32,9 +31,32 @@ public interface DeviceFingerprintService {
 
 //    void storeOrUpdateFingerprint(User user, String deviceFingerprint);
 
+    void checkDeviceLimit(User user);
+
+    void validateInput(User user, String deviceFingerprint);
+
     boolean verifyDevice(User user, String fingerprint);
 
     void trustDevice(long userId, String fingerprint);
 
     void storeOrUpdateFingerprint(User user, String accessToken, String refreshToken, String deviceFingerprint);
+
+    void updateExistingFingerprint(UserDeviceFingerprint fingerprint,
+                                   String accessToken,
+                                   String refreshToken);
+
+    void createNewFingerprint(User user,
+                              String accessToken,
+                              String refreshToken,
+                              String deviceFingerprint);
+
+    void markDeviceSuspicious(String userId, String fingerprint);
+
+    void revokeAllDevices(String userId, String exceptFingerprint);
+
+    void deactivateDevice(String userId, String fingerprint);
+
+    void disableDeviceFingerprinting(User user);
+
+    void enableDeviceFingerprinting(User user);
 }
