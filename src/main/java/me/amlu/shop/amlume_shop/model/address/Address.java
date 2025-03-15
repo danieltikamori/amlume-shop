@@ -8,31 +8,32 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.model;
+package me.amlu.shop.amlume_shop.model.address;
+
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.*;
-import me.amlu.shop.amlume_shop.config.ValidPostalCode;
+import me.amlu.shop.amlume_shop.model.BaseEntity;
+import me.amlu.shop.amlume_shop.model.User;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
 import org.hibernate.annotations.Filter;
 import org.hibernate.proxy.HibernateProxy;
 
-import java.util.List;
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @Cacheable
 @Entity
 @Getter
-@Setter
 @ToString
-@NoArgsConstructor
 @AllArgsConstructor
 @org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
 @Table(name = "addresses")
-public class Address extends BaseEntity {
+public class Address extends BaseEntity implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -40,39 +41,74 @@ public class Address extends BaseEntity {
     private Long addressId;
 
     @Filter(name = "deletedFilter")
-    @NotBlank
-    @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters")
-    @Column(name = "street")
-    private String street;
+    @Embedded
+    private Street street;
 
-    @NotBlank
-    @Size(min = 5, max = 250, message = "Building must be between 5 and 250 characters")
-    @Column(name = "building_name")
-    private String buildingName;
+    @Embedded
+    private Building building;
 
-    @NotBlank
-    @Size(min = 5, max = 250, message = "City must be between 5 and 250 characters")
-    @Column(name = "city")
-    private String city;
+    @Embedded
+    private City city;
 
-    @NotBlank
-    @Size(min = 5, max = 250, message = "State must be between 5 and 250 characters")
-    @Column(name = "state")
-    private String state;
-    @NotBlank
-    @Size(min = 5, max = 250, message = "Country must be between 5 and 250 characters")
-    @Column(name = "country")
-    private String country;
+    @Embedded
+    private State state;
 
-    @ValidPostalCode
-    @NotBlank
-    @Size(min = 5, max = 250, message = "Zip code must be between 5 and 250 characters")
-    @Column(name = "zip_code")
-    private String zipCode;
+    @Embedded
+    private Country country;
 
-    @ManyToMany(mappedBy = "addresses")
-    @ToString.Exclude
-    private List<User> usersList = new CopyOnWriteArrayList<>();
+    @Embedded
+    private ZipCode zipCode;
+
+    @ManyToOne
+    @JoinColumn(name = "user_id")
+    private User user;
+
+//    @ManyToMany(mappedBy = "addresses")
+//    @ToString.Exclude
+//    private List<User> usersList = new CopyOnWriteArrayList<>();
+
+    protected Address() {
+    } // for JPA
+
+    public Address(Street street, Building building, City city,
+                   State state, Country country, ZipCode zipCode) {
+        this.street = street;
+        this.building = building;
+        this.city = city;
+        this.state = state;
+        this.country = country;
+        this.zipCode = zipCode;
+    }
+
+    // Getters only - make it immutable
+    Street getStreet() {
+        return street;
+    }
+
+    Building getBuilding() {
+        return building;
+    }
+
+    City getCity() {
+        return city;
+    }
+
+    State getState() {
+        return state;
+    }
+
+    Country getCountry() {
+        return country;
+    }
+
+    ZipCode getZipCode() {
+        return zipCode;
+    }
+
+    User getUser() {
+        return user;
+    }
+
 
     @Override
     public final boolean equals(Object o) {
@@ -92,4 +128,5 @@ public class Address extends BaseEntity {
         HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
         return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
     }
+
 }
