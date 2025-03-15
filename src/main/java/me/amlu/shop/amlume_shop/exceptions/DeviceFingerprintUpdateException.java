@@ -12,16 +12,28 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class DeviceFingerprintDeletionException extends RuntimeException {
+public class DeviceFingerprintUpdateException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public DeviceFingerprintDeletionException(String message) {
+    public DeviceFingerprintUpdateException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public DeviceFingerprintUpdateException(String message) {
         super(message);
     }
 
-    public DeviceFingerprintDeletionException(String message, Throwable cause) {
-        super(message, cause);
+    public DeviceFingerprintUpdateException(Throwable cause) {
+        super(cause);
+    }
+
+    public DeviceFingerprintUpdateException() {
+        super("Device fingerprint update failed");
+    }
+
+    public DeviceFingerprintUpdateException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

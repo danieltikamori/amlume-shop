@@ -10,8 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import io.micrometer.common.util.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
 import me.amlu.shop.amlume_shop.exceptions.*;
@@ -30,6 +31,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
@@ -65,6 +67,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     public void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) throws DeviceFingerprintRegistrationException {
         validateInputs(userId, request);
         String clientIp = getClientIpAddress(request);
+
+        // Validate IP and spoofing
+        ipSecurityCheck(request, clientIp);
+
+        // Apply rate limiting
+        applyRateLimitingOnRegisterDevice(userId, clientIp);
+
         logIpAddressResolution(userId, clientIp, request.getHeader(X_FORWARDED_FOR));
 
         try {
@@ -83,6 +92,29 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         } catch (Exception e) {
             handleRegistrationError(userId, e);
         }
+    }
+
+    private void ipSecurityCheck(HttpServletRequest request, String clientIp) {
+        // Validate IP
+        if (!ipValidationService.isValidIp(clientIp)) {
+            log.warn("Invalid IP detected: {}", clientIp);
+        }
+
+        // Check for spoofing
+        if (ipSecurityService.isIpSuspicious(clientIp, request)) {
+            log.warn("Suspicious IP detected: {}", clientIp);
+            throw new SecurityException("Suspicious IP activity detected");
+        }
+    }
+
+    private void applyRateLimitingOnRegisterDevice(String userId, String clientIp) {
+        ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
+            if (!allowed) {
+                log.warn("Rate limit exceeded for IP: {}", clientIp);
+                auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId,"No yet generated fingerprint");
+                throw new RateLimitExceededException("Rate limit exceeded for IP address");
+            }
+                });
     }
 
     private void validateInputs(String userId, HttpServletRequest request) {
@@ -112,12 +144,12 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
     }
 
-    private void processFingerprint(User user, String fingerprint, String clientIp) {
+    private void processFingerprint(User user, String deviceFingerprint, String clientIp) {
         userDeviceFingerprintRepository
-                .findByUserAndDeviceFingerprint(user, fingerprint)
+                .findByUserAndDeviceFingerprint(user, deviceFingerprint)
                 .ifPresentOrElse(
                         this::updateExistingFingerprint,
-                        () -> createNewFingerprint(user, fingerprint, clientIp)
+                        () -> createNewFingerprint(user, deviceFingerprint, clientIp)
                 );
     }
 
@@ -150,25 +182,38 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     @Override
-    public void deleteDeviceFingerprint(String userId, Long fingerprintId) {
+    public void validateDeviceFingerprint(String userId, String deviceFingerprint, HttpServletRequest request) {
+        String clientIp = getClientIpAddress(request);
+
+        // Validate IP and spoofing
+        ipSecurityCheck(request, clientIp);
+
         try {
-            User user = userRepository.findById(Long.valueOf(userId))
-                    .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
+            User user = findAndValidateUser(userId);
+            UserDeviceFingerprint fingerprint = findAndValidateFingerprint(user, deviceFingerprint);
 
-            UserDeviceFingerprint fingerprint = userDeviceFingerprintRepository.findById(fingerprintId)
-                    .orElseThrow(() -> new DeviceFingerprintNotFoundException("Device Fingerprint not found"));
+            validateIpSecurity(userId, clientIp, fingerprint);
+            updateFingerprintUsage(fingerprint, clientIp);
 
-            // Security check - ensure fingerprint belongs to user
-            if (!fingerprint.getUser().getUserId().equals(user.getUserId())) {
-                log.warn("Attempted unauthorized fingerprint deletion. User: {}, Fingerprint: {}", userId, fingerprintId);
-                throw new UnauthorizedAccessException("Unauthorized access to device fingerprint");
-            }
+            auditLogger.logDeviceValidation(user, fingerprint, true);
+
+        } catch (Exception e) {
+            handleValidationError(userId, deviceFingerprint, clientIp, e);
+        }
+    }
+
+    @Override
+    public void deleteDeviceFingerprint(String userId, String deviceFingerprint) {
+        try {
+            User user = findAndValidateUser(userId);
+            UserDeviceFingerprint fingerprint = findAndValidateFingerprint(user, deviceFingerprint);
 
             userDeviceFingerprintRepository.delete(fingerprint);
-            log.info("Device fingerprint {} deleted for user {}", fingerprintId, userId);
+            log.info("Device fingerprint {} deleted for user {}", deviceFingerprint, userId);
+            auditLogger.logDeviceDeletion(user, fingerprint);
+
         } catch (Exception e) {
-            log.error("Error deleting fingerprint {} for user {}", fingerprintId, userId, e);
-            throw e;
+            handleDeletionError(userId, deviceFingerprint, e);
         }
     }
 
@@ -190,20 +235,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     @Override
     public String generateDeviceFingerprint(String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) {
         try {
-//            // Initialize map with known capacity to avoid resizing
-//            Map<String, String> data = new LinkedHashMap<>(INITIAL_MAP_CAPACITY);
-//
-//            // Collect user agent once to avoid multiple requests
-//            String userAgent = request.getHeader(USER_AGENT);
-
-            Map<String, String> data = new TreeMap<>(); // Use TreeMap for automatic sorting
-
-            // Add data points (handle nulls and empty values). Recommendation: Keep alphabetically ordered by key and consistent formatting.
-            addDataPoints(screenWidth, screenHeight, request, data);
-
-            // Network information with improved IP handling
-            String ipAddress = getClientIpAddress(request);
-            addData(data, "IP-Address", ipAddress);
+            Map<String, String> data = collectDeviceData(userAgent, screenWidth, screenHeight, request);
 
             // Browser capabilities and security headers
             addBrowserHeaders(data, request);
@@ -212,43 +244,33 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             // Platform-specific information
             addPlatformInfo(data, request);
 
-            // Validate collected data
             if (data.isEmpty()) {
-                log.warn("No fingerprint data collected");
-//                return UUID.randomUUID().toString(); // Fallback if no data
-                return null; // Or handle as appropriate
+                log.warn("No valid device data collected for fingerprinting");
+                return generateFallbackFingerprint();
             }
 
-            // Add salt and hash
-            // Generate fingerprint
-            String saltedFingerprint = generateFingerprintHash(data);
-            log.info("Generated device fingerprint: {}", saltedFingerprint);
-            return saltedFingerprint;
+            return generateFingerprintHash(data);
 
-        } catch (DeviceFingerprintGenerationException e) {
-            log.error("Error generating fingerprint", e);
-//            return UUID.randomUUID().toString(); // Fallback if SHA-256 is not available
-            return generateFallbackFingerprint(); // Or handle as appropriate
+        } catch (Exception e) {
+            log.error("Error generating device fingerprint", e);
+            return generateFallbackFingerprint();
         }
     }
 
-    private void addDataPoints(String screenWidth, String screenHeight, HttpServletRequest request, Map<String, String> data) {
-        addData(data, USER_AGENT, request.getHeader(USER_AGENT));
-        addData(data, ACCEPT_LANGUAGE, request.getHeader(ACCEPT_LANGUAGE));
-        addData(data, "Platform", getPlatform(request.getHeader(USER_AGENT)));
-        addData(data, "Time-Zone", getTimeZone(request));
-//            addData(data, "Time-Zone", request.getHeader("X-Time-Zone"));
-        addData(data, "Screen-Width", screenWidth);
-        addData(data, "Screen-Height", screenHeight);
-        addData(data, "Accept-Language", request.getHeader("Accept-Language"));
-        addData(data, "IP-address", request.getRemoteAddr());
-        addData(data, "Session-ID", request.getSession().getId());
-    }
+    private Map<String, String> collectDeviceData(String userAgent, String screenWidth,
+                                                  String screenHeight, HttpServletRequest request) {
+        Map<String, String> data = new LinkedHashMap<>(INITIAL_MAP_CAPACITY);
 
-    private void addData(Map<String, String> data, String key, String value) {
-        if (StringUtils.isNotBlank(value)) {
-            data.put(key, value);
-        }
+        addDataIfValid(data, USER_AGENT, userAgent);
+        addDataIfValid(data, "Screen-Width", screenWidth);
+        addDataIfValid(data, "Screen-Height", screenHeight);
+        addDataIfValid(data, ACCEPT_LANGUAGE, request.getHeader(ACCEPT_LANGUAGE));
+        addDataIfValid(data, "Platform", getPlatform(userAgent));
+        addDataIfValid(data, "Time-Zone", getTimeZone(request));
+        addDataIfValid(data, "IP-Address", getClientIpAddress(request));
+        addSessionData(data, request);
+
+        return data;
     }
 
     private String getPlatform(String userAgent) {
@@ -283,132 +305,216 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         return "Other"; // Or handle unknown platforms differently
     }
 
-
-    private String getTimeZone(HttpServletRequest request) {
-        // Get the timezone from the request header
-        return Optional.ofNullable(request.getHeader(TIME_ZONE))
-                .orElse(ZoneOffset.UTC.getId());  // Provide default timezone
-    }
-
-
     private void addBrowserHeaders(Map<String, String> data, HttpServletRequest request) {
-        addData(data, "Accept", request.getHeader("Accept"));
-        addData(data, "Accept-Encoding", request.getHeader("Accept-Encoding"));
-        addData(data, "Connection", request.getHeader("Connection"));
-        addData(data, "Host", request.getHeader("Host"));
+        addDataIfValid(data, "Accept", request.getHeader("Accept"));
+        addDataIfValid(data, "Accept-Encoding", request.getHeader("Accept-Encoding"));
+        addDataIfValid(data, "Connection", request.getHeader("Connection"));
+        addDataIfValid(data, "Host", request.getHeader("Host"));
     }
 
     private void addSecurityHeaders(Map<String, String> data, HttpServletRequest request) {
-        addData(data, "Sec-Fetch-Site", request.getHeader("Sec-Fetch-Site"));
-        addData(data, "Sec-Fetch-Mode", request.getHeader("Sec-Fetch-Mode"));
-        addData(data, "Sec-Fetch-User", request.getHeader("Sec-Fetch-User"));
-        addData(data, "Sec-Fetch-Dest", request.getHeader("Sec-Fetch-Dest"));
-        addData(data, "Sec-Ch-Ua", request.getHeader("Sec-Ch-Ua"));
-        addData(data, "Sec-Ch-Ua-Mobile", request.getHeader("Sec-Ch-Ua-Mobile"));
-        addData(data, "Sec-Ch-Ua-Platform", request.getHeader("Sec-Ch-Ua-Platform"));
+        addDataIfValid(data, "Sec-Fetch-Site", request.getHeader("Sec-Fetch-Site"));
+        addDataIfValid(data, "Sec-Fetch-Mode", request.getHeader("Sec-Fetch-Mode"));
+        addDataIfValid(data, "Sec-Fetch-User", request.getHeader("Sec-Fetch-User"));
+        addDataIfValid(data, "Sec-Fetch-Dest", request.getHeader("Sec-Fetch-Dest"));
+        addDataIfValid(data, "Sec-Ch-Ua", request.getHeader("Sec-Ch-Ua"));
+        addDataIfValid(data, "Sec-Ch-Ua-Mobile", request.getHeader("Sec-Ch-Ua-Mobile"));
+        addDataIfValid(data, "Sec-Ch-Ua-Platform", request.getHeader("Sec-Ch-Ua-Platform"));
     }
 
     private void addPlatformInfo(Map<String, String> data, HttpServletRequest request) {
         // Add any custom headers your frontend sends
-        addData(data, "Platform-Type", request.getHeader("X-Platform-Type"));
-        addData(data, "App-Version", request.getHeader("X-App-Version"));
-        addData(data, "Device-Model", request.getHeader("X-Device-Model"));
+        addDataIfValid(data, "Platform-Type", request.getHeader("X-Platform-Type"));
+        addDataIfValid(data, "App-Version", request.getHeader("X-App-Version"));
+        addDataIfValid(data, "Device-Model", request.getHeader("X-Device-Model"));
     }
 
-    private String getClientIpAddress(HttpServletRequest request) {
-        String ip = extractIpFromHeaders(request);
-
-        // Validate IP
-        if (!ipValidationService.isValidIp(ip)) {
-            log.warn("Invalid IP detected: {}", ip);
-            return "0.0.0.0";
-        }
-
-        // Check for spoofing
-        if (ipSecurityService.isIpSuspicious(ip, request)) {
-            log.warn("Suspicious IP detected: {}", ip);
-            throw new SecurityException("Suspicious IP activity detected");
-        }
-
-        // Apply rate limiting
-        ipRateLimitService.checkRateLimit(ip)
-                .thenAccept(allowed -> {
-                    if (!allowed) {
-                        throw new RateLimitExceededException("Rate limit exceeded for IP: " + ip);
-                    }
-                });
-
-        return ip;
-    }
-
-    private String extractIpFromHeaders(HttpServletRequest request) {
-        String[] headerNamesToTry = {
-                "X-Forwarded-For",
-                "Proxy-Client-IP",
-                "WL-Proxy-Client-IP",
-                "HTTP_X_FORWARDED_FOR",
-                "HTTP_X_FORWARDED",
-                "HTTP_X_CLUSTER_CLIENT_IP",
-                "HTTP_CLIENT_IP",
-                "HTTP_FORWARDED_FOR",
-                "HTTP_FORWARDED",
-                "HTTP_VIA",
-                "REMOTE_ADDR"
-        };
-
-
-        for (String header : headerNamesToTry) {
-            String ip = request.getHeader(header);
-            if (StringUtils.isNotBlank(ip) && !"unknown".equalsIgnoreCase(ip)) {
-                // Handle multiple IP addresses
-//                if (ip.contains(",")) {
-//                    // Get first IP in the list (client IP)
-//                    ip = ip.split(",")[0].trim();
-//                }
-//                    return ip;
-                // Return first non-proxy IP if multiple IPs are present
-                return ip.contains(",") ? ip.split(",")[0].trim() : ip;
-                }
-            }
-        // Fallback to remote address
-        return request.getRemoteAddr();
-        }
-
-    private String generateFallbackFingerprint() {
-        return UUID.randomUUID().toString();
+    private void addSessionData(Map<String, String> data, HttpServletRequest request) {
+        Optional.ofNullable(request.getSession(false))
+                .map(HttpSession::getId)
+                .ifPresent(sessionId -> addDataIfValid(data, "Session-ID", sessionId));
     }
 
     private String generateFingerprintHash(Map<String, String> data) {
         try {
-            StringBuilder rawFingerprint = new StringBuilder();
-
-            // Create normalized string from data
-            for (Map.Entry<String, String> entry : data.entrySet()) {
-                rawFingerprint.append(entry.getKey())
-                        .append(":")
-                        .append(entry.getValue())
-                        .append("|");
-            }
+            TreeMap<String, String> sortedData = new TreeMap<>(data);
+            StringBuilder rawFingerprint = new StringBuilder(buildRawFingerprint(sortedData));
 
             // Add timestamp-based component for uniqueness
             String timeComponent = String.valueOf(System.currentTimeMillis() / (24 * 60 * 60 * 1000)); // Daily rotation
             rawFingerprint.append(timeComponent);
 
-            // Add salt and generate hash
-            return generateHashWithSalt(rawFingerprint);
-
+            return hashWithSalt(rawFingerprint.toString());
         } catch (NoSuchAlgorithmException e) {
-            log.error("Error generating fingerprint hash", e);
-            throw new DeviceFingerprintGenerationException("Failed to generate fingerprint hash", e);
+            log.error("Hash algorithm not available", e);
+            return generateFallbackFingerprint();
         }
     }
 
-    private String generateHashWithSalt(StringBuilder rawFingerprint) throws NoSuchAlgorithmException {
-        String saltedFingerprint = rawFingerprint.toString() + fingerprintSalt;
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest(saltedFingerprint.getBytes(StandardCharsets.UTF_8));
+    private String buildRawFingerprint(TreeMap<String, String> sortedData) {
+        return sortedData.entrySet().stream()
+                .map(entry -> entry.getKey() + ":" + entry.getValue())
+                .collect(Collectors.joining("|"));
+    }
 
+    private String hashWithSalt(String input) throws NoSuchAlgorithmException {
+        MessageDigest digest = MessageDigest.getInstance(HASH_ALGORITHM);
+        byte[] saltedInput = (input + fingerprintSalt).getBytes(StandardCharsets.UTF_8);
+        byte[] hash = digest.digest(saltedInput);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+    }
+
+    private UserDeviceFingerprint findAndValidateFingerprint(User user, String fingerprintId) {
+        if (user == null || StringUtils.isBlank(fingerprintId)) {
+            log.error("Invalid input parameters for fingerprint validation");
+            throw new IllegalArgumentException("User and fingerprint ID must not be null or empty");
+        }
+
+        try {
+            UserDeviceFingerprint fingerprint = userDeviceFingerprintRepository
+                    .findByUserAndDeviceFingerprint(user, fingerprintId)
+                    .orElseThrow(() -> new DeviceFingerprintNotFoundException(
+                            String.format("Device Fingerprint not found for user %s", user.getUserId())));
+
+            if (!fingerprint.isActive()) {
+                log.warn("Attempt to use inactive fingerprint: {} for user: {}", fingerprintId, user.getUserId());
+                throw new InactiveDeviceFingerprintException("Device fingerprint is inactive");
+            }
+
+            return fingerprint;
+        } catch (Exception e) {
+            log.error("Error validating fingerprint: {} for user: {}", fingerprintId, user.getUserId(), e);
+            throw new DeviceFingerprintValidationException("Error validating device fingerprint", e);
+        }
+    }
+
+    private void validateIpSecurity(String userId, String clientIp, UserDeviceFingerprint fingerprint) {
+        if (StringUtils.isBlank(clientIp)) {
+            log.error("Empty or null client IP address");
+            throw new InvalidIpAddressException("Client IP address cannot be empty");
+        }
+
+        try {
+            // Validate IP format
+            if (!ipValidationService.isValidIp(clientIp)) {
+                log.warn("Invalid IP address detected: {}", clientIp);
+                auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUserDeviceFingerprintId()), clientIp);
+                throw new InvalidIpAddressException("Invalid IP address format");
+            }
+
+            // Check if IP is blocked
+            if (ipSecurityService.isIpBlocked(clientIp)) {
+                log.warn("Blocked IP address attempted access: {}", clientIp);
+                auditLogger.logSecurityEvent("BLOCKED_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
+                throw new BlockedIpAddressException("IP address is blocked");
+            }
+
+            // Check rate limiting
+            ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
+                if (!allowed) {
+                    log.warn("Rate limit exceeded for IP: {}", clientIp);
+                    auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
+                    throw new RateLimitExceededException("Rate limit exceeded for IP address");
+                }
+            });
+
+            // Log successful validation
+            log.debug("IP security validation passed for IP: {}", clientIp);
+
+        } catch (Exception e) {
+            if (!(e instanceof InvalidIpAddressException ||
+                    e instanceof BlockedIpAddressException ||
+                    e instanceof RateLimitExceededException)) {
+                log.error("Unexpected error during IP security validation", e);
+                throw new IpValidationException("Error during IP security validation", e);
+            }
+
+        }
+    }
+
+    private void updateFingerprintUsage(UserDeviceFingerprint fingerprint, String clientIp) {
+        if (fingerprint == null) {
+            throw new IllegalArgumentException("Fingerprint cannot be null");
+        }
+
+        try {
+            Instant now = Instant.now();
+
+            // Update fingerprint details
+            fingerprint.setLastUsedAt(now);
+            fingerprint.setLastKnownIp(clientIp);
+            fingerprint.setUpdateCount(fingerprint.getUpdateCount() + 1);
+
+            // Save and verify the update
+            UserDeviceFingerprint updatedFingerprint = userDeviceFingerprintRepository.save(fingerprint);
+
+            if (!updatedFingerprint.getLastUsedAt().equals(now)) {
+                log.warn("Fingerprint update verification failed for user: {}", fingerprint.getUser().getUserId());
+                throw new DeviceFingerprintUpdateException("Failed to update fingerprint usage");
+            }
+
+            log.debug("Successfully updated fingerprint usage for user: {}", fingerprint.getUser().getUserId());
+
+            // Log the update for audit purposes
+            auditLogger.logFingerprintUpdate(fingerprint.getUser().getUserId(), clientIp);
+
+        } catch (Exception e) {
+            log.error("Error updating fingerprint usage for user: {}",
+                    fingerprint.getUser().getUserId(), e);
+            throw new DeviceFingerprintUpdateException("Failed to update fingerprint usage", e);
+        }
+    }
+
+    private String getClientIpAddress(HttpServletRequest request) {
+
+        return Arrays.stream(IP_HEADERS)
+                .map(request::getHeader)
+                .filter(this::isValidIpHeader)
+                .map(this::extractFirstIp)
+                .findFirst()
+                .orElseGet(request::getRemoteAddr);
+    }
+
+    private boolean isValidIpHeader(String ip) {
+        return StringUtils.isNotBlank(ip) && !"unknown".equalsIgnoreCase(ip);
+    }
+
+    private String extractFirstIp(String ip) {
+        return ip.contains(",") ? ip.split(",")[0].trim() : ip;
+    }
+
+    /**
+     * Gets the timezone from the request header.
+     * If the header is not present or empty, the default timezone of UTC is used.
+     *
+     * @param request The HTTP request
+     * @return The timezone as a string
+     */
+    private String getTimeZone(HttpServletRequest request) {
+        return Optional.ofNullable(request.getHeader("Time-Zone"))
+                .orElse(ZoneOffset.UTC.getId());
+    }
+
+    private void addDataIfValid(Map<String, String> data, String key, String value) {
+        if (StringUtils.isNotBlank(value)) {
+            data.put(key, value);
+        }
+    }
+
+    private String generateFallbackFingerprint() {
+        return "fallbackFingerprint_" + UUID.randomUUID().toString();
+//        return UUID.randomUUID().toString();
+    }
+
+    private void handleValidationError(String userId, String fingerprintId, String clientIp, Exception e) {
+        log.error("Error validating device fingerprint for user: {} fingerprint: {}", userId, fingerprintId, e);
+        auditLogger.logFailedValidation(userId, fingerprintId, clientIp);
+        throw new DeviceFingerprintValidationException("Failed to validate device fingerprint", e);
+    }
+
+    private void handleDeletionError(String userId, String fingerprintId, Exception e) {
+        log.error("Error deleting device fingerprint for user: {} fingerprint: {}", userId, fingerprintId, e);
+        throw new DeviceFingerprintDeletionException("Failed to delete device fingerprint", e);
     }
 
     @Override
@@ -446,15 +552,10 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             fingerprints.stream()
                     .filter(fp -> fp.getDeviceFingerprint().equals(currentFingerprint))
                     .findFirst()
-                    .ifPresent(this::updateDeviceLastUsed);
+                    .ifPresent(this::updateExistingFingerprint);
         }
 
         log.info("Device fingerprint verified for user: {}", userId);
-    }
-
-    private void updateDeviceLastUsed(UserDeviceFingerprint device) {
-        device.setLastUsedAt(Instant.now());
-        userDeviceFingerprintRepository.save(device);
     }
 
     private boolean isValidFingerprintFormat(String fingerprint) {
@@ -464,8 +565,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     @Override
-    public void trustDevice(long userId, String fingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(userId, fingerprint)
+    public void trustDevice(long userId, String deviceFingerprint) {
+        userDeviceFingerprintRepository.findByUserIdAndFingerprint(userId, deviceFingerprint)
                 .ifPresent(device -> {
                     device.setTrusted(true);
                     device.setLastUsedAt(Instant.now());
@@ -541,14 +642,14 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     @Override
-    public void markDeviceSuspicious(String userId, String fingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), fingerprint)
+    public void markDeviceSuspicious(String userId, String deviceFingerprint) {
+        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), deviceFingerprint)
                 .ifPresent(device -> {
                     device.setFailedAttempts(device.getFailedAttempts() + 1);
                     if (device.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
                         device.setActive(false);
                         device.setDeactivatedAt(Instant.now());
-                        auditLogger.logSecurityEvent(userId, fingerprint, "DEVICE_DEACTIVATED");
+                        auditLogger.logSecurityEvent("DEVICE_DEACTIVATED", userId, deviceFingerprint);
                     }
                     userDeviceFingerprintRepository.save(device);
                 });
@@ -565,7 +666,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             userDeviceFingerprintRepository.save(device);
         });
 
-        auditLogger.logSecurityEvent(userId, null, "ALL_DEVICES_REVOKED");
+        auditLogger.logSecurityEvent("ALL_DEVICES_REVOKED EXCEPT this fingerprint:", userId, exceptFingerprint);
     }
 
 
@@ -603,20 +704,9 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         return userDeviceFingerprintRepository.existsByUserAndFingerprint(user, fingerprint);
     }
 
-    private String generateHash(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest((input + fingerprintSalt).getBytes(StandardCharsets.UTF_8));
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("Error generating device fingerprint hash", e);
-            throw new DeviceFingerprintGenerationException("Failed to generate fingerprint hash", e);
-        }
-    }
-
     @Override
-    public void deactivateDevice(String userId, String fingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), fingerprint)
+    public void deactivateDevice(String userId, String deviceFingerprint) {
+        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), deviceFingerprint)
                 .ifPresent(device -> {
                     device.setActive(false);
                     device.setDeactivatedAt(Instant.now());
@@ -634,7 +724,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                     userDeviceFingerprintRepository.save(device);
                 });
         userRepository.save(user);
-        auditLogger.logSecurityEvent(String.valueOf(user.getUserId()), null, "DEVICE_FINGERPRINTING_DISABLED");
+        auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_DISABLED", String.valueOf(user.getUserId()), null);
         log.warn("Device fingerprinting disabled for user: {}", user.getUserId());
     }
 
@@ -642,7 +732,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     public void enableDeviceFingerprinting(User user) {
         user.setDeviceFingerprintingEnabled(true);
         userRepository.save(user);
-        auditLogger.logSecurityEvent(String.valueOf(user.getUserId()), null, "DEVICE_FINGERPRINTING_ENABLED");
+        auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_ENABLED", String.valueOf(user.getUserId()), null);
         log.warn("Device fingerprinting enabled for user: {}", user.getUserId());
     }
 }

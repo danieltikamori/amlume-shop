@@ -23,7 +23,11 @@ public interface DeviceFingerprintService {
     void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) throws DeviceFingerprintRegistrationException;
 
 
-    void deleteDeviceFingerprint(String userId, Long fingerprintId);
+//    void deleteDeviceFingerprint(String userId, Long fingerprintId);
+
+    void validateDeviceFingerprint(String userId, String fingerprintId, HttpServletRequest request);
+
+    void deleteDeviceFingerprint(String userId, String deviceFingerprint);
 
     void deleteDeviceFingerprint(User user, Long fingerprintId);
 
