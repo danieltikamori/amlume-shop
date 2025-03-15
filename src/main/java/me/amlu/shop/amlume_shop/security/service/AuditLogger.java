@@ -11,6 +11,8 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -24,8 +26,38 @@ public class AuditLogger {
         // You might want to save this to a database or send to a security monitoring system
     }
 
-    public void logSecurityEvent(String userId, String fingerprint, String action) {
+    public void logSecurityEvent(String action,String userId, String fingerprint) {
         log.info("Important Security event: {} - User: {} - Device: {} - Timestamp: {}",
                 action, userId, fingerprint, Instant.now());
+    }
+
+    public void logSecurityEvent(String action,String userId, String fingerprint, String clientIp) {
+        log.info("Important Security event: {} - User: {} - Device: {} - Timestamp: {} - Client IP: {}",
+                action, userId, fingerprint, Instant.now(), clientIp);
+    }
+
+    public void logDeviceCreation(User user, UserDeviceFingerprint fingerprint) {
+        log.info("Device creation: User: {} - Device: {} - Timestamp: {}",
+                user.getUserId(), fingerprint.getUserDeviceFingerprintId(), Instant.now());
+    }
+
+    public void logDeviceDeletion(User user, UserDeviceFingerprint fingerprint) {
+        log.info("Device deletion: User: {} - Device: {} - Timestamp: {}",
+                user.getUserId(), fingerprint.getUserDeviceFingerprintId(), Instant.now());
+    }
+
+    public void logFailedValidation(String userId, String fingerprintId, String clientIp) {
+        log.warn("Failed validation: User: {} - Device: {} - Client IP: {} - Timestamp: {}",
+                userId, fingerprintId, clientIp, Instant.now());
+    }
+
+    public void logDeviceValidation(User user, UserDeviceFingerprint fingerprint, boolean b) {
+        log.info("Device validation: User: {} - Device: {} - Result: {} - Timestamp: {}",
+                user.getUserId(), fingerprint.getUserDeviceFingerprintId(), b, Instant.now());
+    }
+
+    public void logFingerprintUpdate(Long userId, String clientIp) {
+        log.info("Fingerprint update: User: {} - Client IP: {} - Timestamp: {}",
+                userId, clientIp, Instant.now());
     }
 }
