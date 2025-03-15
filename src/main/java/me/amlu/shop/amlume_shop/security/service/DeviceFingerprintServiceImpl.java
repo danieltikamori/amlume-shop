@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import io.micrometer.common.util.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
@@ -26,11 +27,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.Optional;
 
-import static me.amlu.shop.amlume_shop.commons.Constants.USER_NOT_FOUND;
-import static me.amlu.shop.amlume_shop.commons.Constants.X_FORWARDED_FOR;
+import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
 @Slf4j
 @Service
@@ -46,69 +47,106 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private final IpRateLimitService ipRateLimitService;
 
     private final String fingerprintSalt;
-    @Value("${security.max-devices-per-user}")
-    private int maxDevicesPerUser;
-    private static final int MAX_FAILED_ATTEMPTS = 5;
+    private final int maxDevicesPerUser;
 
-    public DeviceFingerprintServiceImpl(@Value("${FINGERPRINT_SALT}") String fingerprintSalt, UserRepository userRepository, UserDeviceFingerprintRepository userDeviceFingerprintRepository, AuditLogger auditLogger, SecurityProperties securityProperties, IpValidationService ipValidationService, IpSecurityService ipSecurityService, IpRateLimitService ipRateLimitService) {
-        this.fingerprintSalt = fingerprintSalt;
-        this.userRepository = userRepository;
-        this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
-        this.auditLogger = auditLogger;
-        this.securityProperties = securityProperties;
-        this.ipValidationService = ipValidationService;
-        this.ipSecurityService = ipSecurityService;
-        this.ipRateLimitService = ipRateLimitService;
+    public DeviceFingerprintServiceImpl(@Value("${FINGERPRINT_SALT}") String fingerprintSalt, @Value("${security.max-devices-per-user}") int maxDevicesPerUser, UserRepository userRepository, UserDeviceFingerprintRepository userDeviceFingerprintRepository, AuditLogger auditLogger, SecurityProperties securityProperties, IpValidationService ipValidationService, IpSecurityService ipSecurityService, IpRateLimitService ipRateLimitService) {
+        this.fingerprintSalt = Objects.requireNonNull(fingerprintSalt, "Fingerprint salt cannot be null");
+        this.maxDevicesPerUser = maxDevicesPerUser;
+        this.userRepository = Objects.requireNonNull(userRepository, "UserRepository cannot be null");
+        this.userDeviceFingerprintRepository = Objects.requireNonNull(userDeviceFingerprintRepository, "UserDeviceFingerprintRepository cannot be null");
+        this.auditLogger = Objects.requireNonNull(auditLogger, "AuditLogger cannot be null");
+        this.securityProperties = Objects.requireNonNull(securityProperties, "SecurityProperties cannot be null");
+        this.ipValidationService = Objects.requireNonNull(ipValidationService, "IpValidationService cannot be null");
+        this.ipSecurityService = Objects.requireNonNull(ipSecurityService, "IpSecurityService cannot be null");
+        this.ipRateLimitService = Objects.requireNonNull(ipRateLimitService, "IpRateLimitService cannot be null");
     }
 
     @Override
-    public void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) {
+    public void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) throws DeviceFingerprintRegistrationException {
+        validateInputs(userId, request);
         String clientIp = getClientIpAddress(request);
         logIpAddressResolution(userId, clientIp, request.getHeader(X_FORWARDED_FOR));
 
         try {
-            User user = userRepository.findById(Long.valueOf(userId))
-                    .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
+            User user = findAndValidateUser(userId);
 
             // Check if user has disabled device fingerprinting
-            if (!user.isDeviceFingerprintingEnabled()) {
-                log.info("Device fingerprinting is disabled for user: {}", userId);
-                return; // Do nothing if disabled
-            }
+            validateDeviceFingerprinting(user);
 
             // Check if user has reached maximum devices
-            long deviceCount = userDeviceFingerprintRepository.countByUser(user);
-            if (deviceCount >= maxDevicesPerUser) {
-                throw new MaxDevicesExceededException("Maximum number of devices reached for user");
-            }
+            validateDeviceLimit(user);
 
             String fingerprint = generateDeviceFingerprint(userAgent, screenWidth, screenHeight, request);
 
-            Optional<UserDeviceFingerprint> existingFingerprint =
-                    userDeviceFingerprintRepository.findByUserAndDeviceFingerprint(user, fingerprint);
+            processFingerprint(user, fingerprint, clientIp);
 
-            if (existingFingerprint.isEmpty()) {
-                UserDeviceFingerprint newFingerprint = UserDeviceFingerprint.builder()
-                        .user(user)
-                        .deviceFingerprint(fingerprint)
-//                        .createdAt(Instant.now()) // Already set in @PrePersist
-//                        .updatedAt(Instant.now())
-                        .lastUsedAt(Instant.now())
-                        .lastKnownIp(clientIp)
-                        .isActive(true)
-                        .build();
-                userDeviceFingerprintRepository.save(newFingerprint);
-                log.info("New device fingerprint registered for user: {}", userId);
-            } else {
-                // Update last used timestamp
-                UserDeviceFingerprint existing = existingFingerprint.get();
-                existing.setLastUsedAt(Instant.now());
-                userDeviceFingerprintRepository.save(existing);
-            }
         } catch (Exception e) {
-            log.error("Error registering device fingerprint for user: {}", userId, e);
-            throw new DeviceFingerprintAdditionException("Failed to register device fingerprint", e);
+            handleRegistrationError(userId, e);
         }
+    }
+
+    private void validateInputs(String userId, HttpServletRequest request) {
+        if (StringUtils.isBlank(userId)) {
+            throw new IllegalArgumentException("User ID cannot be empty");
+        }
+        Objects.requireNonNull(request, "Request cannot be null");
+    }
+
+    private User findAndValidateUser(String userId) {
+        return userRepository.findById(Long.valueOf(userId))
+                .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
+    }
+
+    private void validateDeviceFingerprinting(User user) {
+        if (!user.isDeviceFingerprintingEnabled()) {
+            log.info("Device fingerprinting is disabled for user: {}", user.getUserId());
+            throw new DeviceFingerprintingDisabledException("Device fingerprinting is disabled");
+        }
+    }
+
+    private void validateDeviceLimit(User user) {
+        long deviceCount = userDeviceFingerprintRepository.countByUser(user);
+        if (deviceCount >= maxDevicesPerUser) {
+            log.warn("Maximum device limit reached for user: {}", user.getUserId());
+            throw new MaxDevicesExceededException("Maximum number of devices reached for user");
+        }
+    }
+
+    private void processFingerprint(User user, String fingerprint, String clientIp) {
+        userDeviceFingerprintRepository
+                .findByUserAndDeviceFingerprint(user, fingerprint)
+                .ifPresentOrElse(
+                        this::updateExistingFingerprint,
+                        () -> createNewFingerprint(user, fingerprint, clientIp)
+                );
+    }
+
+    private void updateExistingFingerprint(UserDeviceFingerprint existing) {
+        existing.setLastUsedAt(Instant.now());
+        userDeviceFingerprintRepository.save(existing);
+        log.debug("Updated last used timestamp for existing device fingerprint: {}",
+                existing.getDeviceFingerprint());
+    }
+
+    private void createNewFingerprint(User user, String fingerprint, String clientIp) {
+        UserDeviceFingerprint newFingerprint = UserDeviceFingerprint.builder()
+                .user(user)
+                .deviceFingerprint(fingerprint)
+                .lastUsedAt(Instant.now())
+                .lastKnownIp(clientIp)
+                .isActive(true)
+                .build();
+        userDeviceFingerprintRepository.save(newFingerprint);
+        log.info("New device fingerprint registered for user: {}", user.getUserId());
+    }
+
+    private void handleRegistrationError(String userId, Exception e) throws DeviceFingerprintRegistrationException {
+        log.error("Error registering device fingerprint for user: {}", userId, e);
+        if (e instanceof DeviceFingerprintingDisabledException ||
+                e instanceof MaxDevicesExceededException) {
+            throw new DeviceFingerprintRegistrationException(e.getMessage());
+        }
+        throw new DeviceFingerprintAdditionException("Failed to register device fingerprint", e);
     }
 
     @Override
@@ -152,14 +190,16 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     @Override
     public String generateDeviceFingerprint(String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) {
         try {
+//            // Initialize map with known capacity to avoid resizing
+//            Map<String, String> data = new LinkedHashMap<>(INITIAL_MAP_CAPACITY);
+//
+//            // Collect user agent once to avoid multiple requests
+//            String userAgent = request.getHeader(USER_AGENT);
+
             Map<String, String> data = new TreeMap<>(); // Use TreeMap for automatic sorting
 
             // Add data points (handle nulls and empty values). Recommendation: Keep alphabetically ordered by key and consistent formatting.
-            addData(data, "User-Agent", userAgent);
-            addData(data, "Screen-Width", screenWidth);
-            addData(data, "Screen-Height", screenHeight);
-            addData(data, "Accept-Language", request.getHeader("Accept-Language"));
-            addData(data, "Time-Zone", request.getHeader("X-Time-Zone"));
+            addDataPoints(screenWidth, screenHeight, request, data);
 
             // Network information with improved IP handling
             String ipAddress = getClientIpAddress(request);
@@ -181,20 +221,75 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
             // Add salt and hash
             // Generate fingerprint
-            return generateFingerprintHash(data);
+            String saltedFingerprint = generateFingerprintHash(data);
+            log.info("Generated device fingerprint: {}", saltedFingerprint);
+            return saltedFingerprint;
 
         } catch (DeviceFingerprintGenerationException e) {
             log.error("Error generating fingerprint", e);
 //            return UUID.randomUUID().toString(); // Fallback if SHA-256 is not available
-            return null; // Or handle as appropriate
+            return generateFallbackFingerprint(); // Or handle as appropriate
         }
     }
 
+    private void addDataPoints(String screenWidth, String screenHeight, HttpServletRequest request, Map<String, String> data) {
+        addData(data, USER_AGENT, request.getHeader(USER_AGENT));
+        addData(data, ACCEPT_LANGUAGE, request.getHeader(ACCEPT_LANGUAGE));
+        addData(data, "Platform", getPlatform(request.getHeader(USER_AGENT)));
+        addData(data, "Time-Zone", getTimeZone(request));
+//            addData(data, "Time-Zone", request.getHeader("X-Time-Zone"));
+        addData(data, "Screen-Width", screenWidth);
+        addData(data, "Screen-Height", screenHeight);
+        addData(data, "Accept-Language", request.getHeader("Accept-Language"));
+        addData(data, "IP-address", request.getRemoteAddr());
+        addData(data, "Session-ID", request.getSession().getId());
+    }
+
     private void addData(Map<String, String> data, String key, String value) {
-        if (value != null && !value.isEmpty()) {
+        if (StringUtils.isNotBlank(value)) {
             data.put(key, value);
         }
     }
+
+    private String getPlatform(String userAgent) {
+        if (StringUtils.isBlank(userAgent)) {
+            return null;
+        }
+
+        // Convert to lowercase once and store
+        String userAgentLower = userAgent.toLowerCase(Locale.ENGLISH);
+
+        // Use switch for better performance with string matching
+        if (userAgentLower.contains("windows")) {
+            return "Windows";
+        }
+
+        if (userAgentLower.contains("mac")) {  // Simplified mac detection
+            return "macOS";
+        }
+
+        if (userAgentLower.contains("linux")) {
+            return "Linux";
+        }
+
+        if (userAgentLower.contains("android")) {
+            return "Android";
+        }
+
+        if (userAgentLower.contains("ios")) {
+            return "iOS";
+        }
+
+        return "Other"; // Or handle unknown platforms differently
+    }
+
+
+    private String getTimeZone(HttpServletRequest request) {
+        // Get the timezone from the request header
+        return Optional.ofNullable(request.getHeader(TIME_ZONE))
+                .orElse(ZoneOffset.UTC.getId());  // Provide default timezone
+    }
+
 
     private void addBrowserHeaders(Map<String, String> data, HttpServletRequest request) {
         addData(data, "Accept", request.getHeader("Accept"));
@@ -264,18 +359,24 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
         for (String header : headerNamesToTry) {
             String ip = request.getHeader(header);
-            if (ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip)) {
+            if (StringUtils.isNotBlank(ip) && !"unknown".equalsIgnoreCase(ip)) {
                 // Handle multiple IP addresses
-                if (ip.contains(",")) {
-                    // Get first IP in the list (client IP)
-                    ip = ip.split(",")[0].trim();
-                }
-                    return ip;
+//                if (ip.contains(",")) {
+//                    // Get first IP in the list (client IP)
+//                    ip = ip.split(",")[0].trim();
+//                }
+//                    return ip;
+                // Return first non-proxy IP if multiple IPs are present
+                return ip.contains(",") ? ip.split(",")[0].trim() : ip;
                 }
             }
         // Fallback to remote address
         return request.getRemoteAddr();
         }
+
+    private String generateFallbackFingerprint() {
+        return UUID.randomUUID().toString();
+    }
 
     private String generateFingerprintHash(Map<String, String> data) {
         try {
@@ -294,16 +395,20 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             rawFingerprint.append(timeComponent);
 
             // Add salt and generate hash
-            String saltedFingerprint = rawFingerprint.toString() + fingerprintSalt;
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(saltedFingerprint.getBytes(StandardCharsets.UTF_8));
-
-            return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
+            return generateHashWithSalt(rawFingerprint);
 
         } catch (NoSuchAlgorithmException e) {
             log.error("Error generating fingerprint hash", e);
             throw new DeviceFingerprintGenerationException("Failed to generate fingerprint hash", e);
         }
+    }
+
+    private String generateHashWithSalt(StringBuilder rawFingerprint) throws NoSuchAlgorithmException {
+        String saltedFingerprint = rawFingerprint.toString() + fingerprintSalt;
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(saltedFingerprint.getBytes(StandardCharsets.UTF_8));
+
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
     }
 
     @Override

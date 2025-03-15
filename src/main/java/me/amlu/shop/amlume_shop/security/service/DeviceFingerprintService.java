@@ -11,14 +11,16 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.servlet.http.HttpServletRequest;
+import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintAdditionException;
 import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintMismatchException;
+import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintRegistrationException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.model.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 
 public interface DeviceFingerprintService {
 
-    void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request);
+    void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) throws DeviceFingerprintRegistrationException;
 
 
     void deleteDeviceFingerprint(String userId, Long fingerprintId);
