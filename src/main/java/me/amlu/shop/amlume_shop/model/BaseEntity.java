@@ -12,38 +12,43 @@ package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.*;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.SoftDelete;
+import org.hibernate.annotations.SoftDeleteType;
+import org.hibernate.mapping.SoftDeletable;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 
 @EntityListeners(AuditingEntityListener.class)
-@SoftDelete
 @FilterDef(name = "deletedFilter", defaultCondition = "deleted_at IS NULL")
 @FilterDef(name = "adminFilter", defaultCondition = "1=1")
 @Getter
-@Setter
-@Builder
+@SuperBuilder
 @MappedSuperclass
 @NoArgsConstructor
-@AllArgsConstructor
-public abstract class BaseEntity {
+public abstract class BaseEntity implements Serializable, SoftDeletable {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Version
     private int version;
 
-    @Column(name = "idempotency_key", unique = true,  nullable = false)
+    @Column(name = "idempotency_key", unique = true, nullable = false)
     private String idempotencyKey;
-
 
     @CreatedDate
     @NotBlank
-    @Column(name = "created_at", nullable = false, updatable = false,  columnDefinition = "DATETIME ZONE='UTC'")
+    @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "DATETIME ZONE='UTC'")
     private Instant createdAt;
 
     @CreatedBy
@@ -55,22 +60,27 @@ public abstract class BaseEntity {
     @LastModifiedDate
     @NotBlank
     @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME ZONE='UTC'")
-    private Instant updatedAt;
+    Instant updatedAt;
 
     @NotBlank
     @ManyToOne
     @JoinColumn(name = "updated_by", nullable = false)
     private User updatedByUser;
 
-    @SoftDelete
-//    @SensitiveData(rolesAllowed = {"ADMIN", "ROOT"})
-    @Column(nullable = true, name = "deleted_at", columnDefinition = "DATETIME ZONE='UTC'")
-    private Instant deletedAt;
+    @SoftDelete(columnName = "deleted", strategy = SoftDeleteType.DELETED)
+    @NotBlank
+    @Column(name = "deleted", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean deleted = false;
 
 //    @SensitiveData(rolesAllowed = {"ADMIN", "ROOT"})
+    @Column(nullable = true, name = "deleted_at", columnDefinition = "DATETIME ZONE='UTC'")
+    Instant deletedAt;
+
+    //    @SensitiveData(rolesAllowed = {"ADMIN", "ROOT"})
     @ManyToOne
     @JoinColumn(nullable = true, name = "deleted_by")
-    private User deletedByUser;
+    User deletedByUser;
 
     @PrePersist
     public void prePersist() {
@@ -92,6 +102,19 @@ public abstract class BaseEntity {
     public void preRemove() {
         this.deletedAt = Instant.now();
         this.deletedByUser = this.updatedByUser; // getAuthenticatedUser();
+    }
+
+    @Override
+    public void enableSoftDelete(org.hibernate.mapping.Column indicatorColumn) {
+        this.deletedAt = Instant.now();
+        this.deletedByUser = this.getUpdatedByUser();
+        this.deleted = true;
+        this.updatedAt = Instant.now();
+    }
+
+    @Override
+    public org.hibernate.mapping.Column getSoftDeleteColumn() {
+        return new org.hibernate.mapping.Column("deleted");
     }
 
 }
