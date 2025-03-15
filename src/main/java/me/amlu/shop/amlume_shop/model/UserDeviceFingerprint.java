@@ -49,14 +49,22 @@ public class UserDeviceFingerprint extends BaseEntity {
     @Column(name = "last_used_at", nullable = false)
     private Instant lastUsedAt = Instant.now();
 
+    @Column(name = "deactivated_at")
+    private Instant deactivatedAt;
+
+    @NotBlank
+    @Column(name = "failed_attempts", nullable = false)
+    @Builder.Default
+    private int failedAttempts = 0; // Set default value to 0 for failed attempts
+
     @NotBlank
     @Column(name = "trusted")
     private boolean trusted;
 
     @NotBlank
     @Column(name = "active")
-    private boolean active;
-
+    @Builder.Default
+    private boolean active = true;
 
     @NotBlank
     @Column(name = "device_fingerprint", unique = true, nullable = false)
@@ -66,10 +74,23 @@ public class UserDeviceFingerprint extends BaseEntity {
     @Column(name = "device_name")
     private String deviceName;
 
-//    @PrePersist
-//    protected void onCreate() {
-//        createdAt = Instant.now();
-//    }
+    @Column(name = "last_known_ip")
+    private String lastKnownIp;
+
+    @NotBlank
+    @Column(name = "update_count",  nullable = false)
+    @Builder.Default
+    private int updateCount = 0;
+
+    @Column(name = "location")
+    private String location;
+
+    @Column(name = "last_known_country")
+    private String lastKnownCountry;
+
+    @NotBlank
+    @Column(name = "browser_info", nullable = false)
+    private String browserInfo;
 
 //    @NotBlank
 //    @Column(name = "device_type")
@@ -210,6 +231,16 @@ public class UserDeviceFingerprint extends BaseEntity {
 //    @NotBlank
 //    @Column(name = "device_ip_referrer_search")
 //    private String deviceIpReferrerSearch;
+
+    public static class UserDeviceFingerprintBuilder {
+        private boolean active;
+        // existing methods...
+
+        public UserDeviceFingerprintBuilder isActive(boolean active) {
+            this.active = active;
+            return this;
+        }
+    }
 
     @Override
     public final boolean equals(Object o) {
