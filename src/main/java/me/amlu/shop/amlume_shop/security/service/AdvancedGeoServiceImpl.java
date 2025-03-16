@@ -15,6 +15,7 @@ import com.codahale.metrics.Timer;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.maxmind.geoip2.exception.GeoIp2Exception;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.AsnConfigLoader;
 import me.amlu.shop.amlume_shop.security.enums.RiskLevel;
@@ -36,6 +37,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     private final MaxMindGeoService maxMindGeoService;
+    private final GeoIp2Service geoIp2Service;
     private final LoadingCache<String, GeoLocationHistory> locationHistoryCache;
     private final AlertService alertService;
     private final MetricRegistry metrics;
@@ -51,10 +53,11 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     @Value("${security.geo.time-window-hours}")
     private static final int TIME_WINDOW_HOURS = 24;
 
-    public AdvancedGeoServiceImpl(MaxMindGeoService maxMindGeoService,
+    public AdvancedGeoServiceImpl(MaxMindGeoService maxMindGeoService, GeoIp2Service geoIp2Service,
                                   AlertService alertService,
                                   MetricRegistry metrics, AsnConfigLoader asnConfigLoader, EnhancedVpnDetectorService vpnDetector, AsnReputationService reputationService) {
         this.maxMindGeoService = maxMindGeoService;
+        this.geoIp2Service = geoIp2Service;
         this.alertService = alertService;
         this.metrics = metrics;
         this.asnConfigLoader = asnConfigLoader;
@@ -226,8 +229,8 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
 //                knownVpnAsns.contains(location.getAsn());
 //    }
 
-    public boolean isVpnConnection(String ip) {
-        String asn = lookupAsn(ip);
+    public boolean isVpnConnection(String ip) throws GeoIp2Exception {
+        String asn = String.valueOf(geoIp2Service.lookupAsn(ip));
         boolean isVpn = vpnDetector.isLikelyVpn(ip, asn);
 
         // Update reputation based on detection result
