@@ -1,0 +1,401 @@
+#
+# Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+#
+# This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+#
+# Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+#
+# Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+#
+
+alert:
+  max-batch-size: 100
+
+asn:
+  ratelimit:
+    capacity: 100
+    refill-rate: 10
+  update:
+    schedule: 0 0 0 * * *
+
+cache:
+  token:
+    initial-capacity: ${CACHE_INITIAL_CAPACITY:100}
+    maximum-size: ${CACHE_MAXIMUM_SIZE:10000}
+    expiration-minutes: ${CACHE_EXPIRATION_MINUTES:30}
+    revoked-cache:
+      max-size: 10000
+  stats:
+    report:
+      interval: 60000  # milliseconds
+  asn:
+    size: 10000
+    expiration: 1h
+
+geoip:
+  database:
+    #    path: classpath:GeoLite2-Country.mmdb
+    path: classpath:/project/geoip/GeoLite2-City.mmdb
+
+geoip2:
+  database:
+    path: /project/geoip/GeoLite2-ASN.mmdb
+  account-id: ${GEOIP2_ACCOUNT_ID}
+  license-key: ${GEOIP2_LICENSE_KEY}
+
+hcp:
+  HCP_CLIENT_ID: ${HCP_CLIENT_ID}
+  HCP_CLIENT_SECRET: ${HCP_CLIENT_SECRET}
+  HCP_ORGANIZATION_ID: ${HCP_ORGANIZATION_ID}
+  HCP_PROJECT_ID: ${HCP_PROJECT_ID}
+  HCP_APP_NAME: ${HCP_APP_NAME}
+
+logging:
+  level:
+    me.amlu.shop.amlume_shop.config: DEBUG
+    me.amlu.shop.amlume_shop.service: DEBUG
+    me.amlu.shop.amlume_shop.controller: DEBUG
+    me.amlu.shop.amlume_shop.repository: DEBUG
+    me.amlu.shop.amlume_shop.security: DEBUG
+    me.amlu.shop.amlume_shop.util: DEBUG
+    me.amlu.shop.amlume_shop.exception: DEBUG
+    me.amlu.shop.amlume_shop.model: DEBUG
+
+notification:
+  email:
+    from: ${NOTIFICATION_EMAIL_FROM}
+    to: ${NOTIFICATION_EMAIL_TO}
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL}
+    channel: ${SLACK_CHANNEL_NAME}
+    channel-id: ${SLACK_CHANNEL_ID}
+
+paseto:
+  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
+  expiration: 3600                  # Non-sensitive config is fine here
+  access:
+    local:
+      kid: ${PASETO_ACCESS_LOCAL_KID}
+    public:
+      kid: ${PASETO_ACCESS_PUBLIC_KID}
+  refresh:
+    local:
+      kid: ${PASETO_REFRESH_LOCAL_KID}
+    public:
+      kid: ${PASETO_REFRESH_PUBLIC_KID}
+  tokennofooter:
+    parts: 3
+  tokenwithfooter:
+    parts: 4
+
+recaptcha:
+  secret: ${RECAPTCHA_SECRET_KEY}
+  site-key: ${RECAPTCHA_SITE_KEY}
+
+project:
+  image:
+    path: /project/images
+  file:
+    path: /project/files
+  geoip:
+    path: /project/geoip
+
+ratelimit:
+  token:
+    validation: 200.0
+  claims:
+    validation: 200.0
+  capacity: 100.0
+  duration: 1
+  time-unit: MINUTES
+
+resilience4j:
+  retry:
+    instances:
+      captchaValidation:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+  circuitbreaker:
+    instances:
+      valkeyService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+
+  timelimiter:
+    instances:
+      valkeyService:
+        timeoutDuration: 1s
+  #        cancelRunningFuture: true
+
+  bulkhead:
+    instances:
+      valkeyService:
+        maxConcurrentCalls: 10
+
+  timeout:
+    instances:
+      valkeyService:
+        timeoutDuration: 1s
+
+  mail:
+    host: ${MAIL_HOST}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    port: ${MAIL_PORT}
+    properties:
+      mail:
+        smtp:
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE}
+          auth: ${MAIL_AUTH_ENABLE}
+
+security:
+  max-devices-per-user: 5
+  device-fingerprint:
+    hash-algorithm: ${HASH_ALGORITHM}
+    hash-encoding: ${HASH_ENCODING}
+    fingerprint-salt: ${FINGERPRINT_SALT}
+
+    verification-timeout-seconds: 300
+    storage:
+      type: database  # or redis/hazelcast
+    trusted-device:
+      expiration-days: 30
+  ip:
+    suspicious-requests-threshold: 5
+    block-threshold: 10
+  token:
+    revoked-cache:
+      max-size: 10000
+
+  #      expiration-seconds: 3600
+  user:
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 300  # 5 minutes
+      time-window-minutes: 30
+      lockout-duration-minutes: 30
+    password:
+      min-length: 12
+      max-length: 127
+      strength:
+        min-score: 3
+        min-entropy: 30
+        min-uppercase: 1
+        min-lowercase: 1
+        min-digits: 1
+        min-special: 1
+
+service:
+  name: ${SERVICE_NAME}
+  audience: ${SERVICE_AUDIENCE}
+  version: ${SERVICE_VERSION}
+  environment: ${SERVICE_ENVIRONMENT}
+
+spring:
+#  hazelcast:
+#    config: classpath:hazelcast.xml
+#  data:
+#    redis:
+#      host: localhost       # Or your Redis server's hostname/IP
+#      port: 6379            # Default Redis port
+#      # password: your_redis_password # If you have a password
+  application:
+    name: ${SERVICE_NAME}
+    version: ${SERVICE_VERSION}
+    environment: ${SERVICE_ENVIRONMENT}
+    description: ${SERVICE_DESCRIPTION}
+    audience: ${SERVICE_AUDIENCE}
+    contact:
+      name: ${SERVICE_CONTACT_NAME}
+      url: ${SERVICE_CONTACT_URL}
+      email: ${SERVICE_CONTACT_EMAIL}
+    license:
+      name: ${SERVICE_LICENSE_NAME}
+      url: ${SERVICE_LICENSE_URL}
+      version: ${SERVICE_LICENSE_VERSION}
+      description: ${SERVICE_LICENSE_DESCRIPTION}
+      contact:
+        name: ${SERVICE_LICENSE_CONTACT_NAME}
+        url: ${SERVICE_LICENSE_CONTACT_URL}
+        email: ${SERVICE_LICENSE_CONTACT_EMAIL}
+
+  cache:
+    cache-names: mfaTokens
+    caffeine:
+      spec: maximumSize=1000,expireAfterWrite=1h
+
+  cloud:
+    vault:
+      enabled: true
+      fail-fast: true
+
+    gateway:
+      routes:
+        - id: asn_lookup_route
+          uri: lb://asn-lookup-service
+          predicates:
+            - Path=/asn/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+#  datasource:
+#    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+#    username: ${DB_USER}
+#    password: ${DB_PASSWORD}
+#    driverClassName: org.postgresql.Driver
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+    datasource:
+      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+      username: sa
+      password:
+      driverClassName: org.h2.Driver
+  main:
+#    allow-circular-references: true
+    keep-alive: true
+    web-application-type: reactive
+  profiles:
+    active: local
+  threads:
+    virtual:
+      enabled: true
+      enabled.manually: false
+      name-prefix: ${SERVICE_NAME}
+
+  jpa: # To store events in a database
+#    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: true # Show SQL generated by JPA queries in the console
+    hibernate:
+                ddl-auto: create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production.
+                properties:
+                hibernate:
+                  dialect: org.hibernate.dialect.PostgreSQLDialect
+                show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true
+          time_zone: UTC
+
+  mfa:
+    rate-limit:
+              max-attempts: 5
+              window-seconds: 300  # 5 minutes
+              time-window-minutes: 30
+
+token:
+  access:
+    validity: 3600
+    auto-refresh: true
+  processing:
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 300  # 5 minutes
+      time-window-minutes: 30
+      lockout-duration-minutes: 30
+      lockout-duration-seconds: 300
+      lockout-duration-hours: 1
+    batch:
+      size: 100
+  refresh:
+    validity: 86400
+    auto-refresh: true
+  validation:
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 300  # 5 minutes
+      time-window-minutes: 30
+
+valkey:
+  nodes: ${VALKEY_HOST}:${VALKEY_PORT}
+  host: ${VALKEY_HOST}
+  port: ${VALKEY_PORT}
+  password: ${VALKEY_PASSWORD}
+  database: ${VALKEY_DATABASE}
+  timeout: 5000
+  cluster:
+    enabled: false
+    nodes: ${VALKEY_HOST}:${VALKEY_PORT}
+    password: ${VALKEY_CLUSTER_PASSWORD}
+    timeout: 5000
+  max-attempts: 5
+  max-batch-size: 100
+  max-pipeline-requests: 100
+  max-connections: 100
+  max-connections-per-node: 100
+  max-connections-per-node-per-route: 100
+  max-connections-per-route: 100
+
+  pool:
+    max-active: 8
+    max-idle: 8
+    min-idle: 0
+    max-wait-millis: 10000
+    min-evictable-idle-time-millis: 10000
+    num-tests-per-eviction-run: 3
+    time-between-eviction-runs-millis: 10000
+    test-while-idle: true
+    test-on-borrow: true
+    test-on-return: true
+    block-when-exhausted: true
+    soft-min-evictable-idle-time-millis: 10000
+    lifo: false
+    eviction-policy-class-name: org.apache.commons.pool2.impl.DefaultEvictionPolicy
+    jmx-enabled: true
+    jmx-name-base: connection-pool
+    jmx-name-prefix: "valkey.pool"
+
+resilience4j:
+  retry:
+    instances:
+      captchaValidation:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+
+vault:
+  uri: ${VAULT_URI}
+  token: ${VAULT_TOKEN}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, prometheus,metrics
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+    show-details: always
+  metrics:
+    enable:
+      all: true
+    export:
+      prometheus:
+        step: 10s
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        valkey.operation.duration: true
+        paseto.token.validation: true
+        percentiles:
+          paseto.token.validation: 0.5,0.95,0.99
+#          valkey.operation.duration: 0.5,0.95,0.99
+#          http.server.requests: 0.5,0.95,0.99

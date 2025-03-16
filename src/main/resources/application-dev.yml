@@ -1,0 +1,11 @@
+spring:
+  profiles:
+    active: dev
+  sleuth:
+    sampler:
+      probability: 1.0 # Sample all requests in development
+    log:
+      slf4j:
+        enabled: true
+
+# Other non-sensitive development configurations
