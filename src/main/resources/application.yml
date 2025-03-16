@@ -74,18 +74,30 @@ paseto:
   secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
   expiration: 3600                  # Non-sensitive config is fine here
   access:
+    expiration: 3600
     local:
+      expiration: 3600
+      secret-key: ${PASETO_ACCESS_SECRET_KEY}
       kid: ${PASETO_ACCESS_LOCAL_KID}
     public:
+      expiration: 3600
+      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
+      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
       kid: ${PASETO_ACCESS_PUBLIC_KID}
   refresh:
+    expiration: 86400
     local:
+      expiration: 86400
+      secret-key: ${PASETO_REFRESH_SECRET_KEY}
       kid: ${PASETO_REFRESH_LOCAL_KID}
     public:
+      expiration: 86400
+      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
+      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
       kid: ${PASETO_REFRESH_PUBLIC_KID}
-  tokennofooter:
+  token-no-footer:
     parts: 3
-  tokenwithfooter:
+  token-with-footer:
     parts: 4
 
 recaptcha:
@@ -190,6 +202,8 @@ security:
         min-lowercase: 1
         min-digits: 1
         min-special: 1
+  vpn:
+    min-suspicious-factors: 2
 
 service:
   name: ${SERVICE_NAME}
@@ -298,26 +312,49 @@ spring:
 
 token:
   access:
+    validity: 3600 # 1 hour
+    auto-refresh: true
+  claims:
     validity: 3600
     auto-refresh: true
+    auto-refresh-attempts: 3
+    auto-refresh-interval: 300000
+    validation:
+      rate-limit:
+        permits-per-second: 10
+        max-attempts: 5
+        window-seconds: 300  # 5 minutes
+        time-window-minutes: 30
+        lockout-duration-minutes: 30
+        lockout-duration-seconds: 300
+        lockout-duration-hours: 1
+        lockout-duration-days: 1
+  local:
   processing:
     rate-limit:
+      permits-per-second: 10
       max-attempts: 5
       window-seconds: 300  # 5 minutes
       time-window-minutes: 30
       lockout-duration-minutes: 30
       lockout-duration-seconds: 300
       lockout-duration-hours: 1
+      lockout-duration-days: 1
     batch:
       size: 100
   refresh:
-    validity: 86400
+    validity: 86400 # 24 hours
     auto-refresh: true
   validation:
     rate-limit:
+      permits-per-second: 10
       max-attempts: 5
       window-seconds: 300  # 5 minutes
       time-window-minutes: 30
+      lockout-duration-minutes: 30
+      lockout-duration-seconds: 300
+      lockout-duration-hours: 1
+      lockout-duration-days: 1
 
 valkey:
   nodes: ${VALKEY_HOST}:${VALKEY_PORT}
@@ -358,18 +395,22 @@ valkey:
     jmx-name-base: connection-pool
     jmx-name-prefix: "valkey.pool"
 
-resilience4j:
-  retry:
-    instances:
-      captchaValidation:
-        maxAttempts: 3
-        waitDuration: 1s
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-
 vault:
   uri: ${VAULT_URI}
   token: ${VAULT_TOKEN}
+
+web:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+    allowed-methods: ${CORS_ALLOWED_METHODS}
+    allowed-headers: ${CORS_ALLOWED_HEADERS}
+    exposed-headers: ${CORS_EXPOSED_HEADERS}
+    allow-credentials: ${CORS_ALLOW_CREDENTIALS}
+    max-age: ${CORS_MAX_AGE}
+  whois:
+    server: ${WHOIS_SERVER}
+
+
 
 management:
   endpoints:
