@@ -34,7 +34,24 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
     }
 
     @Override
-    public String lookupAsn(String ip) throws GeoIp2Exception {
+    public AsnResponse lookupAsn(String ip) throws GeoIp2Exception {
+        try {
+            InetAddress ipAddress = InetAddress.getByName(ip);
+            return databaseReader.asn(ipAddress);
+        } catch (AddressNotFoundException e) {
+            log.debug("IP address not found in database: {}", ip);
+            return null;
+        } catch (InvalidDatabaseException e) {
+            log.error("Invalid GeoIP2 database", e);
+            throw new GeoIp2Exception("Invalid GeoIP2 database", e);
+        } catch (IOException | GeoIp2Exception e) {
+            log.error("Error reading from GeoIP2 database", e);
+            throw new GeoIp2Exception("Error reading from GeoIP2 database", e);
+        }
+    }
+
+    @Override
+    public String lookupAsnString(String ip) throws GeoIp2Exception {
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
             AsnResponse response = databaseReader.asn(ipAddress);

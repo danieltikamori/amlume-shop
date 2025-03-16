@@ -10,14 +10,14 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+public interface AsnLookupService {
+    String lookupAsn(String ip);
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+    String lookupAsnWithGeoIp2(String ip);
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
+    String lookupAsnUncached(String ip);
 
-    GeoLocation lookupLocation(String ip);
+    String lookupAsnViaDns(String ip);
+
+    String lookupAsnViaWhois(String ip);
 }

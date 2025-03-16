@@ -10,14 +10,21 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import jakarta.servlet.http.HttpServletRequest;
+import me.amlu.shop.amlume_shop.security.model.IpMetadata;
+import org.springframework.transaction.annotation.Transactional;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+public interface IpSecurityService {
+    boolean isIpSuspicious(String ip, HttpServletRequest request);
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
+    boolean isIpBlocked(String ipAddress);
 
-    GeoLocation lookupLocation(String ip);
+    void blockIp(String ipAddress, String reason);
+
+    @Transactional
+    void persistIpMetadata(String ip, IpMetadata metadata);
+
+    void unblockIp(String userId, String ipAddress);
+
+    boolean isIpWhitelisted(String ipAddress);
 }

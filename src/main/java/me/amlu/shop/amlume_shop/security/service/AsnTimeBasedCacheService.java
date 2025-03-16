@@ -10,14 +10,28 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import lombok.Data;
+import org.springframework.scheduling.annotation.Scheduled;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+import java.time.Instant;
+import java.util.concurrent.TimeUnit;
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
+public interface AsnTimeBasedCacheService {
+    String getAsn(String ip);
 
-    GeoLocation lookupLocation(String ip);
+    // Periodic backgroud refresh strategy to maintain cache consistency
+    // Peridodically refresh the cache to ensure that the ASN information is up to date
+    @Scheduled(fixedRate = 12, timeUnit = TimeUnit.HOURS)
+    void refreshCache();
+
+    @Data
+    public static class CachedAsn {
+        private final String asn;
+        private final Instant timestamp;
+
+        CachedAsn(String asn) {
+            this.asn = asn;
+            this.timestamp = Instant.now();
+        }
+    }
 }

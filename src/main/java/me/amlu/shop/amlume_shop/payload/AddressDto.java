@@ -8,16 +8,8 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.payload;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
-
-    String lookupAsnString(String ip) throws GeoIp2Exception;
-
-    GeoLocation lookupLocation(String ip);
+public record AddressDto(String country) {
 }

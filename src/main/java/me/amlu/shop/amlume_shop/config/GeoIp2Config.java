@@ -17,10 +17,12 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class GeoIp2Config {
-    @Value("${geoip2.license.key}")
+//    @Value("${geoip2.license.key}")
+    @Value("${GEOIP2_LICENSE_KEY}")
     private String licenseKey;
 
-    @Value("${geoip2.account.id}")
+//    @Value("${geoip2.account.id}")
+    @Value("${GEOIP2_ACCOUNT_ID}")
     private int accountId;
 
     // For local MaxMind database file

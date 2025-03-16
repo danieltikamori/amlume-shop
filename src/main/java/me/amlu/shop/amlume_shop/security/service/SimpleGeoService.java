@@ -47,30 +47,31 @@ public class SimpleGeoService implements GeoLocationService {
                 });
     }
 
-//    @Override
+    //    @Override
     public String getGeolocation(String ip) {
         try {
-            return geoCache.get(ip);
+            return String.valueOf(geoCache.get(ip));
         } catch (ExecutionException e) {
             log.error("Error getting geolocation for IP: {}", ip, e);
-            return GeoLocation.unknown();
+            return String.valueOf(GeoLocation.unknown());
         }
     }
 
     private GeoLocation lookupGeolocation(String ip) {
         try {
             String url = String.format("http://ip-api.com/json/%s", ip);
-            ParameterizedTypeReference<Map<String, String>> typeRef = new ParameterizedTypeReference<Map<String, String>>() {};
+            ParameterizedTypeReference<Map<String, String>> typeRef = new ParameterizedTypeReference<Map<String, String>>() {
+            };
             ResponseEntity<Map<String, String>> response = restTemplate.exchange(url, HttpMethod.GET, null, typeRef);
 //            ResponseEntity<Map<String, String>> response = restTemplate.getForEntity(url, typeRef);
 //            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
-            
+
             if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
                 Map<String, String> data = response.getBody();
                 return GeoLocation.builder()
                         .countryCode(data.get("countryCode"))
                         .countryName(data.get("country"))
-                        .continent(data.get("continent"))
+//                        .continent(data.get("continent"))
                         .build();
             }
         } catch (Exception e) {

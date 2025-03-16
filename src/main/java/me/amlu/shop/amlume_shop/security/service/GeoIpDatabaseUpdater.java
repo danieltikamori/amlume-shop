@@ -11,18 +11,23 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
-import java.net.URL; // Deprecated
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 
 @Service
 @Slf4j
@@ -37,11 +42,16 @@ public class GeoIpDatabaseUpdater {
     public void updateDatabase() {
         try {
             String url = String.format(
-                "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz",
-                    "https://git.io/GeoLite2-City.mmdb",
-//                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=%s&suffix=tar.gz",
-                licenseKey
+                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz",
+                    licenseKey
             );
+
+//            String url = String.format(
+//                "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz",
+//                    "https://git.io/GeoLite2-City.mmdb",
+////                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=%s&suffix=tar.gz",
+//                licenseKey
+//            );
 
             // Download and extract new database
             downloadAndUpdateDatabase(url);
@@ -52,21 +62,63 @@ public class GeoIpDatabaseUpdater {
     }
 
     private void downloadAndUpdateDatabase(String url) throws IOException, URISyntaxException {
-        Path tempFile = Files.createTempFile("geoip", ".tar.gz");
-        
+//        Path localDatabasePath = Paths.get(this.databasePath);
+//        Path tempFile = localDatabasePath.resolve("geoip.tar.gz");
+        Path tempFile = Paths.get(this.databasePath).resolve("geoip.tar.gz");
+
         try (InputStream in = new URI(url).toURL().openStream()) {
             Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
             extractDatabase(tempFile);
         } finally {
             Files.deleteIfExists(tempFile);
+            log.info("Temporary file deleted: {}, path: {} at time: {}", tempFile, tempFile.toAbsolutePath(), Instant.now());
         }
     }
 
     private void extractDatabase(Path tarGzFile) throws IOException {
-
-        // TODO: Implement tar.gz extraction
         // Implementation of tar.gz extraction
+        Path localDatabasePath = tarGzFile.getParent();
+        try (TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(tarGzFile.toFile())))) {
+            TarArchiveEntry entry;
+            while ((entry = tarArchiveInputStream.getNextEntry()) != null) {
+                Path filePath = localDatabasePath.resolve(entry.getName());
+                if (entry.isDirectory()) {
+                    createDirectory(filePath);
+                    continue;
+                }
+                copyFile(tarArchiveInputStream, filePath);
+                if (filePath.getFileName().toString().endsWith(".mmdb")) {
+                    log.info("Extracted GeoIP database: {}", filePath);
+                }
+            }
+        }
+    }
 
-        // Copy the .mmdb file to the configured location
+    private void createDirectory(Path filePath) {
+        try {
+            Files.createDirectories(filePath);
+        } catch (IOException e) {
+            log.error("Error creating directory", e);
+        }
+    }
+
+    private void copyFile(TarArchiveInputStream tarArchiveInputStream, Path filePath) {
+        try {
+            Files.copy(tarArchiveInputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            log.error("Error copying file", e);
+        }
+
+//        try (TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(tarGzFile.toFile())))) {
+//            TarArchiveEntry entry;
+//            while ((entry = tarArchiveInputStream.getNextEntry()) != null) {
+//                Path filePath = tarGzFile.getParent().resolve(entry.getName());
+//                if (entry.isDirectory()) {
+//                    Files.createDirectories(filePath);
+//                } else {
+//                    Files.copy(tarArchiveInputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+//                }
+//            }
+//        }
     }
 }

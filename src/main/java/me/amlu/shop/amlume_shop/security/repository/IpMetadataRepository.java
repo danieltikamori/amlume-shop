@@ -8,16 +8,15 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.security.repository;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import me.amlu.shop.amlume_shop.security.model.IpMetadataEntity;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+import java.util.Optional;
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
-
-    GeoLocation lookupLocation(String ip);
+@Repository
+public interface IpMetadataRepository extends JpaRepository<IpMetadataEntity, Long> {
+    Optional<IpMetadataEntity> findByIpAddress(String ipAddress);
 }

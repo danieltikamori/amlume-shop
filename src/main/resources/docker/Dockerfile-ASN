@@ -1,0 +1,16 @@
+FROM eclipse-temurin:17-jre-alpine
+
+WORKDIR /app
+
+# Add GeoIP database
+COPY GeoLite2-ASN.mmdb /app/GeoLite2-ASN.mmdb
+
+# Add application jar
+COPY target/*.jar app.jar
+
+# Set environment variables
+ENV JAVA_OPTS="-Xmx512m -Xms256m"
+
+EXPOSE 8080
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

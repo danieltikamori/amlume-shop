@@ -8,16 +8,22 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.security.repository;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import me.amlu.shop.amlume_shop.security.model.IpBlock;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+@Repository
+public interface IpBlockRepository extends JpaRepository<IpBlock, Long> {
+    boolean existsByIpAddressAndActiveTrue(String ipAddress);
+    
+    @Modifying
+    @Query("UPDATE IpBlock b SET b.active = false WHERE b.ipAddress = :ipAddress")
+    void deactivateIpBlock(@Param("ipAddress") String ipAddress);
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
-
-    GeoLocation lookupLocation(String ip);
+    void deleteByIpAddress(String ip);
 }

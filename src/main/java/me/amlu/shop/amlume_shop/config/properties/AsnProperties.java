@@ -8,16 +8,20 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.config.properties;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Configuration;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+import java.time.Duration;
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
-
-    GeoLocation lookupLocation(String ip);
+@Configuration
+@ConfigurationProperties(prefix = "asn")
+@Data
+public class AsnProperties {
+    private int cacheSize = 10000;
+    private Duration cacheExpiration = Duration.ofHours(24);
+    private Duration staleThreshold = Duration.ofDays(30);
+    private String cleanupSchedule = "0 0 0 * * *"; // Daily at midnight
 }

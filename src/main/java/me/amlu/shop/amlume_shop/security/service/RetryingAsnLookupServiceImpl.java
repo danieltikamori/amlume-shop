@@ -10,14 +10,28 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.AsnResponse;
-import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import io.github.resilience4j.retry.Retry;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
-public interface GeoIp2Service {
-    AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
+/**
+ * @author Daniel Itiro Tikamori
+ * @version 1.0
+ * @since 2025-02-16
+ * Implementing backoff and retry mechanism for ASN lookup service
+ */
+@Slf4j
+@Service
+public class RetryingAsnLookupServiceImpl implements RetryingAsnLookupService {
+    private final AsnLookupService delegate;
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
+    public RetryingAsnLookupServiceImpl(AsnLookupService delegate) {
+        this.delegate = delegate;
+    }
 
-    GeoLocation lookupLocation(String ip);
+    @Override
+    public String lookupAsn(String ip) {
+        return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
+                () -> delegate.lookupAsn(ip)).get();
+    }
 }
