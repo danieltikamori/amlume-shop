@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+  ~
+  ~ This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+  ~
+  ~ Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+  ~
+  ~ Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+  -->
+
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
@@ -42,7 +52,9 @@
         <slack-api-client.version>1.42.0</slack-api-client.version>
         <commons-io.version>2.16.1</commons-io.version>
         <apache.commons.csv.version>1.11.0</apache.commons.csv.version>
+        <apache.commons.compress.version>1.27.1</apache.commons.compress.version>
         <aws-java-sdk-s3.version>1.12.771</aws-java-sdk-s3.version>
+        <spring-vault-core.version>3.1.2</spring-vault-core.version>
         <jackson-datatype-jsr310.version>2.18.2</jackson-datatype-jsr310.version>
         <google-guava.version>33.4.0-jre</google-guava.version>
         <commons-codec.version>1.17.2</commons-codec.version>
@@ -60,6 +72,8 @@
         <vavr.version>0.10.5</vavr.version>
         <bucket4j.version>8.14.0</bucket4j.version>
         <dropwizard-metrics-core.version>4.2.30</dropwizard-metrics-core.version>
+        <dropwizard-metrics-jvm.version>4.2.30</dropwizard-metrics-jvm.version>
+        <dropwizard-metrics-graphite.version>4.0.12</dropwizard-metrics-graphite.version>
         <resilience4j-micrometer.version>2.3.0</resilience4j-micrometer.version>
         <redisson.version>3.44.0</redisson.version>
         <dotenv-java.version>3.1.0</dotenv-java.version>
@@ -69,6 +83,13 @@
         <libphonenumber-carrier.version>1.229</libphonenumber-carrier.version>
         <swagger.version>2.2.28</swagger.version>
         <springfox.version>3.0.0</springfox.version>
+        <maxmind.geoip2.version>4.2.1</maxmind.geoip2.version>
+        <dnsjava.version>3.6.3</dnsjava.version>
+        <prometheus-simpleclient.version>0.16.0</prometheus-simpleclient.version>
+        <prometheus-simpleclient_hotspot.version>0.16.0</prometheus-simpleclient_hotspot.version>
+        <bcprov-jdk18on.version>1.80</bcprov-jdk18on.version>
+
+
 
     </properties>
     <dependencies>
@@ -171,6 +192,14 @@
             <version>${apache.commons.csv.version}</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-compress -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>${apache.commons.compress.version}</version>
+        </dependency>
+
+
         <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3 -->
         <dependency>
             <groupId>com.amazonaws</groupId>
@@ -218,6 +247,23 @@
             <artifactId>paseto4j-version4</artifactId>
             <version>2024.3</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-config-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-vault-config</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.springframework.vault/spring-vault-core -->
+        <dependency>
+            <groupId>org.springframework.vault</groupId>
+            <artifactId>spring-vault-core</artifactId>
+            <version>${spring-vault-core.version}</version>
+        </dependency>
+
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.datatype/jackson-datatype-jsr310 -->
         <dependency>
@@ -270,6 +316,12 @@
             <artifactId>java-jwt</artifactId>
             <version>${java-jwt.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-lang3</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/io.github.resilience4j/resilience4j-core -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
@@ -308,6 +360,12 @@
             <artifactId>resilience4j-retry</artifactId>
             <version>${resilience4j-retry.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.vavr</groupId>
             <artifactId>vavr</artifactId>
@@ -485,6 +543,77 @@
             <artifactId>springfox-core</artifactId>
             <version>${springfox.version}</version>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.maxmind.geoip2/geoip2 -->
+        <dependency>
+            <groupId>com.maxmind.geoip2</groupId>
+            <artifactId>geoip2</artifactId>
+            <version>${maxmind.geoip2.version}</version>
+        </dependency>
+
+        <!-- WebClient -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+
+        <!-- Jackson for JSON -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-jvm</artifactId>
+            <version>${dropwizard-metrics-jvm.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/dnsjava/dnsjava -->
+        <dependency>
+            <groupId>dnsjava</groupId>
+            <artifactId>dnsjava</artifactId>
+            <version>${dnsjava.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.prometheus/simpleclient -->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+            <version>${prometheus-simpleclient.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.prometheus/simpleclient_hotspot -->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_hotspot</artifactId>
+            <version>${prometheus-simpleclient_hotspot.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+
+<!--        <dependency>-->
+<!--            <groupId>io.micrometer</groupId>-->
+<!--            <artifactId>micrometer-prometheus-metrics</artifactId>-->
+<!--        </dependency>-->
+
+        <!-- https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk18on -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>${bcprov-jdk18on.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+
+
 
         <!-- https://central.sonatype.com/artifact/io.hypersistence/hypersistence-tsid -->
         <!--		<dependency>-->
