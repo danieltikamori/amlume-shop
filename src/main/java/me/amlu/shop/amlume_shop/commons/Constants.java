@@ -12,7 +12,6 @@ package me.amlu.shop.amlume_shop.commons;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -31,7 +30,6 @@ public class Constants {
 
     // Tolerances
     // For time-based validation
-    @Value("${clock.skew.tolerance}")
     public static final Duration CLOCK_SKEW_TOLERANCE = Duration.ofSeconds(10);
 
     // Authentication and Authorization constants
@@ -72,20 +70,6 @@ public class Constants {
     public static final long LOCK_DURATION_MILLIS = 1000 * 60 * (long) 60;
     public static final String HASH_ALGORITHM = "SHA-256";
     public static final int INITIAL_MAP_CAPACITY = 16;
-    public static final String[] IP_HEADERS = {
-            X_FORWARDED_FOR,
-            "Proxy-Client-IP",
-            "WL-Proxy-Client-IP",
-            "HTTP_X_FORWARDED_FOR",
-            "HTTP_X_FORWARDED",
-            "HTTP_CLIENT_IP",
-            "HTTP_X_CLUSTER_CLIENT_IP",
-            "HTTP_CLIENT_IP",
-            "HTTP_FORWARDED_FOR",
-            "HTTP_FORWARDED",
-            "HTTP_VIA",
-            "REMOTE_ADDR"
-    };
 
     private static final String LINE_SEPARATOR = "\n";
 
