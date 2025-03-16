@@ -11,23 +11,30 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
+import java.util.concurrent.ExecutionException;
 
-public class RoleNotFoundException extends RuntimeException {
+public class TokenProcessingException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private static final String DEFAULT_MESSAGE = "Role not found";
+    public TokenProcessingException(String deviceFingerprint, ExecutionException e) {
+        super("Failed to process token for device: " + deviceFingerprint, e);
+    }
 
-    public RoleNotFoundException(String message) {
+    public TokenProcessingException(String message) {
         super(message);
     }
 
-    public RoleNotFoundException() {
-        super(DEFAULT_MESSAGE);
+    public TokenProcessingException(String message, Throwable cause) {
+        super(message, cause);
     }
 
-    public RoleNotFoundException(String roleName, Throwable cause) {
-        super(DEFAULT_MESSAGE + ": " + roleName, cause);
+    public TokenProcessingException(Throwable cause) {
+        super(cause);
+    }
+
+    public TokenProcessingException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

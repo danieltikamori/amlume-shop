@@ -18,9 +18,24 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ErrorResponse {
+
+    private int statusCode;
     private String code;
     private String message;
 
+    public ErrorResponse(String message, int statusCode) {
+        this.message = message;
+        this.statusCode = statusCode;
+    }
+
+    public ErrorResponse(String code, String message) {
+        this.message = message;
+        this.code = code;
+    }
+
     public ErrorResponse(String tooManyDevices, String message, int value) {
+        this.message = message;
+        this.statusCode = value;
+        this.code = tooManyDevices;
     }
 }

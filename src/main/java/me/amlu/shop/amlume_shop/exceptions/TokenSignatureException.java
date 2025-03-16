@@ -12,22 +12,28 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class RoleNotFoundException extends RuntimeException {
+public class TokenSignatureException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    private static final String DEFAULT_MESSAGE = "Role not found";
-
-    public RoleNotFoundException(String message) {
+    public TokenSignatureException(String message) {
         super(message);
     }
 
-    public RoleNotFoundException() {
-        super(DEFAULT_MESSAGE);
+    public TokenSignatureException(String message, Throwable cause) {
+        super(message, cause);
     }
 
-    public RoleNotFoundException(String roleName, Throwable cause) {
-        super(DEFAULT_MESSAGE + ": " + roleName, cause);
+    public TokenSignatureException(Throwable cause) {
+        super(cause);
+    }
+
+    public TokenSignatureException() {
+        super("Token signature is invalid");
+    }
+
+    public TokenSignatureException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }
