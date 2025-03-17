@@ -45,19 +45,29 @@ public class TokenBucketAsnLookupServiceImpl implements TokenBucketAsnLookupServ
     private final AsnLookupService delegate;
 
     public TokenBucketAsnLookupServiceImpl(
-            @Value("${asn.ratelimit.capacity:100}") int capacity,
-            @Value("${asn.ratelimit.refill-rate:10}") double refillRate,
+            @Value("${asn.ratelimit.capacity}") int capacity,
+            @Value("${asn.ratelimit.refill-rate}") double refillRate,
             AsnLookupService delegate) {
         this.tokenBucket = new TokenBucketImpl(capacity, refillRate);
         this.delegate = delegate;
     }
 
+    /**
+     * Looks up the Autonomous System Number (ASN) for the given IP address using the wrapped {@link AsnLookupService}.
+     * The lookup is rate-limited to prevent abuse and ensure fair usage.
+     * If the rate limit is exceeded, a RateLimitExceededException is thrown.
+     * The method returns null if the lookup fails.
+     *
+     * @param ip the IP address to lookup
+     * @return the ASN for the given IP address, or null if the lookup fails
+     * @throws RateLimitExceededException if the rate limit for ASN lookups is exceeded
+     */
     @Override
     public String lookupAsn(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            log.warn("Rate limit exceeded for IP: {}", ip);
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            return delegate.lookupAsn(ip);
         }
-        return delegate.lookupAsn(ip);
+        log.warn("Rate limit exceeded for IP: {}", ip);
+        throw new RateLimitExceededException("ASN lookup rate limit exceeded");
     }
 }

@@ -16,6 +16,8 @@ import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
 import me.amlu.shop.amlume_shop.resilience.service.TokenBucket;
 import org.springframework.stereotype.Service;
 
+import static me.amlu.shop.amlume_shop.commons.Constants.*;
+
 /**
  * @author Daniel Itiro Tikamori
  * @version 1.0
@@ -35,6 +37,9 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 public class MonitoredTokenBucketAsnLookupServiceImpl implements AsnLookupService {
+
+
+
     private final TokenBucket tokenBucket;
     private final AsnLookupService delegate;
     private final MeterRegistry meterRegistry;
@@ -54,57 +59,56 @@ public class MonitoredTokenBucketAsnLookupServiceImpl implements AsnLookupServic
 
     @Override
     public String lookupAsn(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            meterRegistry.counter(ASN_LOOKUP_REQUESTS_METRIC).increment();
+            return delegate.lookupAsn(ip);
         }
 
-        meterRegistry.counter("asn.lookup.requests").increment();
-        return delegate.lookupAsn(ip);
+        meterRegistry.counter(ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC).increment();
+        throw new RateLimitExceededException(ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 
     @Override
     public String lookupAsnWithGeoIp2(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            meterRegistry.counter(ASN_LOOKUP_REQUESTS_METRIC).increment();
+            return delegate.lookupAsnWithGeoIp2(ip);
         }
 
-        meterRegistry.counter("asn.lookup.requests").increment();
-        return delegate.lookupAsnWithGeoIp2(ip);
-
+        meterRegistry.counter(ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC).increment();
+        throw new RateLimitExceededException(ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 
     @Override
     public String lookupAsnUncached(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            meterRegistry.counter(ASN_LOOKUP_REQUESTS_METRIC).increment();
+            return delegate.lookupAsnUncached(ip);
         }
 
-        meterRegistry.counter("asn.lookup.requests").increment();
-        return delegate.lookupAsnUncached(ip);
+        meterRegistry.counter(ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC).increment();
+        throw new RateLimitExceededException(ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 
     @Override
     public String lookupAsnViaDns(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            meterRegistry.counter(ASN_LOOKUP_REQUESTS_METRIC).increment();
+            return delegate.lookupAsnViaDns(ip);
         }
 
-        meterRegistry.counter("asn.lookup.requests").increment();
-        return delegate.lookupAsnViaDns(ip);
+        meterRegistry.counter(ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC).increment();
+        throw new RateLimitExceededException(ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 
     @Override
     public String lookupAsnViaWhois(String ip) {
-        if (!tokenBucket.tryConsume(1)) {
-            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+        if (tokenBucket.tryConsume(1)) {
+            meterRegistry.counter(ASN_LOOKUP_REQUESTS_METRIC).increment();
+            return delegate.lookupAsnViaWhois(ip);
         }
 
-        meterRegistry.counter("asn.lookup.requests").increment();
-        return delegate.lookupAsnViaWhois(ip);
+        meterRegistry.counter(ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC).increment();
+        throw new RateLimitExceededException(ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE);
     }
 }
