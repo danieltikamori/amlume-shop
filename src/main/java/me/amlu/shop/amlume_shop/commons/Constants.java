@@ -20,6 +20,11 @@ import java.time.Duration;
 @Component
 @Getter
 public class Constants {
+    //ASN constants
+    public static final String ASN_LOOKUP_REQUESTS_METRIC = "asn.lookup.requests";
+    public static final String ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC = "asn.lookup.ratelimit.exceeded";
+    public static final String ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE = "ASN lookup rate limit exceeded";
+
     // Pagination constants
     public static final String PAGE_NUMBER = "0";
     public static final String PAGE_SIZE = "50";
@@ -57,6 +62,10 @@ public class Constants {
 //    public static final String X_FORWARDED_SERVER_SCHEME = "X-Forwarded-Server-Scheme";
 //    public static final String X_FORWARDED_SERVER_URI = "X-Forwarded-Server-Uri";
 
+    // Resilience constants
+    public static final String CIRCUIT_BREAKER = "circuitBreaker";
+    public static final String RATES_LIMITER = "rateLimiter";
+
     // User constants
     public static final String USER_ID = "userId";
     public static final String USERNAME = "XXXXXXXX";
@@ -68,6 +77,7 @@ public class Constants {
     public static final String ROLE_PREFIX = "ROLE_";
     public static final int MAX_FAILED_ATTEMPTS = 5;
     public static final long LOCK_DURATION_MILLIS = 1000 * 60 * (long) 60;
+    public static final long LOCK_TIME_DURATION = 24 * 60 * 60 * (long) 1000; // 24 hours in milliseconds
     public static final String HASH_ALGORITHM = "SHA-256";
     public static final int INITIAL_MAP_CAPACITY = 16;
 
