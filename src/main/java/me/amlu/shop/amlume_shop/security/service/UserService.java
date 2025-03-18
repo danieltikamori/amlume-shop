@@ -21,21 +21,37 @@ public interface UserService {
     User getCurrentUser();
 
     Long getCurrentUserId();
+
     User getUserById(Long userId);
+
     User getUserByUsername(String username);
+
     User getUserByEmail(String email);
+
     User getUserByUsernameOrEmail(String usernameOrEmail);
+
     User getUserProfile(Long userId);
+
     User createUser(User user);
+
     User updateUser(User user);
+
     void deleteUser(Long userId);
+
     boolean existsByUsername(String username);
+
     boolean existsByEmail(String email);
+
     boolean existsByUsernameOrEmail(String username, String email);
+
     boolean existsById(Long userId);
+
     boolean existsByUsernameAndIdNot(String username, Long userId);
+
     boolean existsByEmailAndIdNot(String email, Long userId);
+
     boolean existsByUsernameOrEmailAndIdNot(String username, String email, Long userId);
+
     boolean existsByIdNot(Long userId);
 
     User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException;

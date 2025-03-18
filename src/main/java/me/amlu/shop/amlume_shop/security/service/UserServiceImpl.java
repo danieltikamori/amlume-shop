@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.slack.api.methods.response.bots.BotsInfoResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
@@ -36,6 +35,8 @@ import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
 
+import static me.amlu.shop.amlume_shop.commons.Constants.*;
+
 //The UserService should primarily be responsible for managing user data (creating, updating, retrieving users)
 
 @Slf4j
@@ -43,18 +44,16 @@ import java.util.Set;
 @Transactional
 public class UserServiceImpl implements UserService {
 
-    private static final int MAX_FAILED_ATTEMPTS = 5;
-    private static final long LOCK_TIME_DURATION = 24 * 60 * 60 * (long)1000; // 24 hours in milliseconds
-
-
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserServiceImpl userService;
 
-    public UserServiceImpl(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public UserServiceImpl(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, UserServiceImpl userService) {
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.userService = userService;
     }
 
     @Override
@@ -70,8 +69,6 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setUserEmail(request.getUserEmail());
         user.setMfaEnabled(request.isMfaEnabled());
-        user.setCreatedAt(Instant.now());
-        user.setUpdatedAt(Instant.now());
         user.setLastLoginTime(Instant.now());
 
         // Assign default roles
@@ -82,7 +79,7 @@ public class UserServiceImpl implements UserService {
 //        roles.add(userRole);
 
         Optional<Role> customerRoleOptional = Optional.ofNullable(roleRepository.findByRoleName(AppRole.ROLE_CUSTOMER));
-        Role customerRole = customerRoleOptional.orElseThrow(() -> new RoleNotFoundException("Role not found"));
+        Role customerRole = customerRoleOptional.orElseThrow(() -> new RoleNotFoundException("Role " + AppRole.ROLE_CUSTOMER + " not found"));
         roles.add(customerRole);
 
         user.setRoles(roles); // Set the roles
@@ -108,9 +105,9 @@ public class UserServiceImpl implements UserService {
     public User findUserByUsername(String username) {
         try {
             return userRepository.findByUsername(username)
-                    .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                    .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
         } catch (Exception e) {
-            throw new UsernameNotFoundException("User not found");
+            throw new UsernameNotFoundException(USER_NOT_FOUND);
         }
     }
 
@@ -132,14 +129,14 @@ public class UserServiceImpl implements UserService {
     // Optional: Method to get just the user ID if that's all you need
     @Cacheable("currentUserId")
     public Long getCurrentUserId() {  // For Long type ID
-        return getCurrentUser().getUserId();
+        return userService.getCurrentUser().getUserId();
     }
 
 
     @Override
     public User getUserById(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
     }
 
     @Override
@@ -172,11 +169,11 @@ public class UserServiceImpl implements UserService {
         return null;
     }
 
+    // Use logical deletion (softDelete)
     @Override
     public void deleteUser(Long userId) {
-        // TODO: Add logical user deletion
         if (!userRepository.existsById(userId)) {
-            throw new UsernameNotFoundException("User not found");
+            throw new UsernameNotFoundException(USER_NOT_FOUND);
         }
         userRepository.deleteById(userId);
         log.info("User deleted with ID: {}", userId);
@@ -263,7 +260,6 @@ public class UserServiceImpl implements UserService {
         user.setFailedLoginAttempts(0);
         userRepository.save(user);
     }
-
 
 }
 
