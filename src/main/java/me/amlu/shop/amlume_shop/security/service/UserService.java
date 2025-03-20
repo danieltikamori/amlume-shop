@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 
 import javax.management.relation.RoleNotFoundException;
@@ -45,14 +45,6 @@ public interface UserService {
     boolean existsByUsernameOrEmail(String username, String email);
 
     boolean existsById(Long userId);
-
-    boolean existsByUsernameAndIdNot(String username, Long userId);
-
-    boolean existsByEmailAndIdNot(String email, Long userId);
-
-    boolean existsByUsernameOrEmailAndIdNot(String username, String email, Long userId);
-
-    boolean existsByIdNot(Long userId);
 
     User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException;
 

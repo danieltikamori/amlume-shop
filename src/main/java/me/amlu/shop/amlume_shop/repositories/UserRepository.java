@@ -10,13 +10,15 @@
 
 package me.amlu.shop.amlume_shop.repositories;
 
-import me.amlu.shop.amlume_shop.model.Role;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 
@@ -28,13 +30,49 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsername(String username);
 
-    User findByUsernameOrEmail(String username);
+    Optional<User> findByUsernameOrEmail(String username);
 
-    User findByRefreshToken(String hashpw);
+    Optional<User> findByRefreshToken(String hashpw);
 
-    Optional<User> findByIdWithRoles(Long id);
+//    Optional<User> findByIdWithRoles(Long id); // Possibly unnecessary because we are using fetch = FetchType.EAGER in the User class.
 
-    @Query("SELECT r FROM User u JOIN u.roles r WHERE u.id = :id")
-    Set<Role> findRolesByUserId(@Param("id") Long id);
+//    * **`@Modifying`:** Indicates that the query will modify data.
+//    * **`@Query`:** Defines the JPQL query to execute.
+//    * **`@Param`:** Binds the method parameters to the query parameters.
 
+    @Query("SELECT r FROM User u JOIN u.roles r WHERE u.userId = :userId")
+    Set<UserRole> findRolesByUserId(@Param("userId") Long userId);
+
+    boolean existsByContactInfoEmail(String email);
+
+//    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.contactInfo.email = :email")
+//    boolean existsByEmail(@Param("email") String email);
+
+    @Modifying
+    @Query("UPDATE User u SET u.accountStatus.failedLoginAttempts = :failedLoginAttempts WHERE u.userId = :userId")
+    void updateFailedLoginAttempts(@Param("userId") Long userId, @Param("failedLoginAttempts") int failedLoginAttempts);
+
+    @Modifying
+    @Query("UPDATE User u SET u.accountStatus.accountNonLocked = :accountNonLocked, u.accountStatus.lockTime = :lockTime WHERE u.userId = :userId")
+    void updateAccountLockStatus(@Param("userId") Long userId, @Param("accountNonLocked") boolean accountNonLocked, @Param("lockTime") Instant lockTime);
+
+    @Modifying
+    @Query("UPDATE User u SET u.accountStatus.accountNonLocked = true, u.accountStatus.lockTime = null, u.accountStatus.failedLoginAttempts = 0 WHERE u.userId = :userId")
+    void unlockUser(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE User u SET u.authenticationInfo.password = :password WHERE u.userId = :userId")
+    void updatePassword(@Param("userId") Long userId, @Param("password") String password);
+
+    @Modifying
+    @Query("UPDATE User u SET u.refreshToken = :refreshToken WHERE u.userId = :userId")
+    void updateRefreshToken(@Param("userId") Long userId, @Param("refreshToken") String refreshToken);
+
+    @Modifying
+    @Query("UPDATE User u SET u.refreshToken = null WHERE u.userId = :userId")
+    void clearRefreshToken(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE User u SET u.accountStatus.lastLoginTime = :now WHERE u.userId = :userId")
+    void updateLastLoginTime(@Param("userId") Long userId, @Param("now") Instant now);
 }

@@ -10,11 +10,10 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.Embedded;
 import lombok.*;
-import me.amlu.shop.amlume_shop.model.AppRole;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -22,16 +21,28 @@ import java.io.Serializable;
 @Builder
 @Embeddable
 @Getter
-@NoArgsConstructor(force = true)
-@AllArgsConstructor
+@Setter
 @EqualsAndHashCode
-@ToString
-public final class UserRole implements Serializable {
+@NoArgsConstructor(force = true)
+public class DeviceFingerprintingInfo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Enumerated(EnumType.STRING)
-    private final AppRole roleName;
+    @Column(name = "device_fingerprinting_enabled")
+    private final boolean deviceFingerprintingEnabled;
+
+    @Embedded
+    private final UserDeviceFingerprints deviceFingerprints;
+
+    protected DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled) {
+        this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
+        this.deviceFingerprints = null;
+    }
+
+    protected DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled, UserDeviceFingerprints deviceFingerprints) {
+        this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
+        this.deviceFingerprints = deviceFingerprints;
+    }
 
 }

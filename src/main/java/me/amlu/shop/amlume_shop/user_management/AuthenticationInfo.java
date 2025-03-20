@@ -11,27 +11,42 @@
 package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import lombok.*;
-import me.amlu.shop.amlume_shop.model.AppRole;
+import jakarta.persistence.Embedded;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
 
-@Builder
 @Embeddable
-@Getter
-@NoArgsConstructor(force = true)
 @AllArgsConstructor
+@Getter
 @EqualsAndHashCode
-@ToString
-public final class UserRole implements Serializable {
+@NoArgsConstructor
+public final class AuthenticationInfo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Enumerated(EnumType.STRING)
-    private final AppRole roleName;
+    @Embedded
+    Username username;
+
+    @Embedded
+    UserPassword password;
+
+    public AuthenticationInfo(@NotBlank @Size(min = 3, max = 20) String username, String encode) {
+    }
+
+    public String getUsername() {
+        return username.getUsername();
+    }
+
+    public String getPassword() {
+        return password.getPassword();
+    }
 
 }

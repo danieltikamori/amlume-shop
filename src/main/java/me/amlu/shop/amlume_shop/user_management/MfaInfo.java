@@ -10,28 +10,40 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
+import jakarta.persistence.Embedded;
 import lombok.*;
-import me.amlu.shop.amlume_shop.model.AppRole;
 
-import java.io.Serial;
 import java.io.Serializable;
 
 @Builder
 @Embeddable
 @Getter
-@NoArgsConstructor(force = true)
 @AllArgsConstructor
 @EqualsAndHashCode
-@ToString
-public final class UserRole implements Serializable {
+@NoArgsConstructor(force = true)
+public final class MfaInfo implements Serializable {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @Column(name = "mfa_enabled", nullable = false)
+    @Builder.Default
+    private final boolean mfaEnabled = false;
 
-    @Enumerated(EnumType.STRING)
-    private final AppRole roleName;
+    @Column(name = "mfa_enforced")
+    private final boolean mfaEnforced;
+
+    @Embedded
+    private MfaQrCodeUrl mfaQrCodeUrl;
+
+    @Embedded
+    private MfaSecret mfaSecret;
+
+    String getMfaQrCodeUrl() {
+        return mfaQrCodeUrl.getMfaQrCodeUrlValue();
+    }
+
+    String getMfaSecret() {
+        return mfaSecret.getMfaSecretValue();
+    }
 
 }

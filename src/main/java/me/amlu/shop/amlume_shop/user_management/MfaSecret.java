@@ -10,28 +10,47 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import lombok.*;
-import me.amlu.shop.amlume_shop.model.AppRole;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Builder
 @Embeddable
-@Getter
-@NoArgsConstructor(force = true)
-@AllArgsConstructor
-@EqualsAndHashCode
-@ToString
-public final class UserRole implements Serializable {
+public class MfaSecret implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Enumerated(EnumType.STRING)
-    private final AppRole roleName;
+    @Column(name = "mfa_secret", nullable = true)
+    private String mfaSecretValue;
 
+    protected MfaSecret() { // Required by JPA
+    }
+
+    public MfaSecret(String mfaSecretValue) {
+        this.mfaSecretValue = mfaSecretValue;
+    }
+
+    public String getMfaSecretValue() {
+        return mfaSecretValue;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof MfaSecret mfaSecret)) return false;
+        return Objects.equals(mfaSecretValue, mfaSecret.mfaSecretValue);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(mfaSecretValue);
+    }
+
+    @Override
+    public String toString() {
+        return mfaSecretValue;
+    }
 }
