@@ -30,4 +30,6 @@ public interface ResilienceService {
     boolean allowRequestByUserPerInstance(String username) throws TooManyAttemptsException;
 
     boolean tryAcquireWithTimeout(RRateLimiter rateLimiter, Duration timeout);
+
+    boolean isRateLimitExceeded(String username);
 }

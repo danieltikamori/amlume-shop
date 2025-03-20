@@ -91,7 +91,9 @@ public class ResilienceServiceImpl implements ResilienceService {
                     lock.unlock(); // Always release the lock
                 }
             } else {
-                throw new TooManyAttemptsException("Could not acquire lock for IP rate limiting.");
+                // Return false if lock cannot be acquired
+                return false;
+//                throw new TooManyAttemptsException("Could not acquire lock for IP rate limiting.");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -121,13 +123,16 @@ public class ResilienceServiceImpl implements ResilienceService {
                         counter.incrementAndGet();
                         return true;
                     } else {
-                        throw new TooManyAttemptsException("Too many requests from this user.");
+                        log.warn("Too many requests from user: {}", username);
+                        return false; // Return false when count is equal to USER_MAX_REQUESTS
+//                        throw new TooManyAttemptsException("Too many requests from this user.");
                     }
                 } finally {
                     lock.unlock(); // Always release the lock
                 }
             } else {
                 throw new TooManyAttemptsException("Could not acquire lock for rate limiting."); // Lock timeout
+//                return false; // Return false when lock cannot be acquired
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // Restore interrupt status
@@ -147,5 +152,9 @@ public class ResilienceServiceImpl implements ResilienceService {
     @Override
     public boolean tryAcquireWithTimeout(RRateLimiter rateLimiter, Duration timeout) {
             return rateLimiter.tryAcquire(timeout);
+    }
+
+    public boolean isRateLimitExceeded(String username) {
+        return allowRequestByUsername(username);
     }
 }

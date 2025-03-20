@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.security.service;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.model.*;
 import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -136,14 +137,14 @@ public class SecurityAuditService {
         log.warn("MFA verification failed for user: {}", username);
     }
 
-    public void logRoleAssignment(String username, Set<Role> roles, Object resource) {
+    public void logRoleAssignment(String username, Set<UserRole> roles, Object resource) {
         SecurityEvent event = SecurityEvent.builder()
                 .eventType(SecurityEventType.ROLE_ASSIGNMENT)
                 .username(username)
                 .timestamp(Instant.now())
                 .details(Map.of(
                         "roles", roles.stream()
-                                .map(Role::getRoleName)
+                                .map(UserRole::getRoleName)
                                 .collect(Collectors.toSet()),
                         "resource", resource.getClass().getSimpleName(),
                         "resourceId", Objects.requireNonNull(getResourceId(resource))
