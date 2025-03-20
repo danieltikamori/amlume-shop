@@ -10,17 +10,16 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.model.AppRole;
-import me.amlu.shop.amlume_shop.model.Role;
-import me.amlu.shop.amlume_shop.model.User;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.repositories.RoleRepository;
 import me.amlu.shop.amlume_shop.repositories.UserRepository;
+import me.amlu.shop.amlume_shop.user_management.*;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -45,13 +44,11 @@ import static me.amlu.shop.amlume_shop.commons.Constants.*;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserServiceImpl userService;
 
-    public UserServiceImpl(UserRepository userRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder, UserServiceImpl userService) {
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, UserServiceImpl userService) {
         this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.userService = userService;
     }
@@ -64,22 +61,18 @@ public class UserServiceImpl implements UserService {
         }
 
         // Create new user with hashed password
-        User user = new User();
-        user.setUsername(request.getUsername());
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setUserEmail(request.getUserEmail());
-        user.setMfaEnabled(request.isMfaEnabled());
-        user.setLastLoginTime(Instant.now());
+        User user = User.builder()
+                .authenticationInfo(new AuthenticationInfo(request.getUsername(), passwordEncoder.encode(request.getPassword())))
+                .contactInfo(ContactInfo.builder().email(request.getUserEmail()).build())
+                .mfaInfo(MfaInfo.builder().mfaEnabled(request.isMfaEnabled()).build())
+                .accountStatus(AccountStatus.builder().lastLoginTime(Instant.now()).build())
+                .build();
 
         // Assign default roles
-        Set<Role> roles = new HashSet<>();
+        Set<UserRole> roles = new HashSet<>();
 
-//        Optional<Role> userRoleOptional = Optional.ofNullable(roleRepository.findByRoleName(AppRole.ROLE_USER));
-//        Role userRole = userRoleOptional.orElseThrow(() -> new RoleNotFoundException("Role " + AppRole.ROLE_USER + " not found"));
-//        roles.add(userRole);
-
-        Optional<Role> customerRoleOptional = Optional.ofNullable(roleRepository.findByRoleName(AppRole.ROLE_CUSTOMER));
-        Role customerRole = customerRoleOptional.orElseThrow(() -> new RoleNotFoundException("Role " + AppRole.ROLE_CUSTOMER + " not found"));
+        Optional<UserRole> customerRoleOptional = Optional.of(new UserRole(AppRole.ROLE_CUSTOMER));
+        UserRole customerRole = customerRoleOptional.orElseThrow(() -> new RoleNotFoundException("Role " + AppRole.ROLE_CUSTOMER + " not found"));
         roles.add(customerRole);
 
         user.setRoles(roles); // Set the roles
@@ -141,32 +134,38 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User getUserByUsername(String username) {
-        return null;
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
     }
 
     @Override
     public User getUserByEmail(String email) {
-        return null;
+        return userRepository.findByEmail(email);
     }
 
     @Override
     public User getUserByUsernameOrEmail(String usernameOrEmail) {
-        return null;
+        return userRepository.findByUsernameOrEmail(usernameOrEmail)
+                .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
     }
 
+    // TOCHECK : Update
     @Override
     public User getUserProfile(Long userId) {
-        return null;
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
     }
 
+    // TOCHECK : Update, safety
     @Override
     public User createUser(User user) {
-        return null;
+        return userRepository.save(user);
     }
 
+    // TOCHECK : Update, safety
     @Override
     public User updateUser(User user) {
-        return null;
+        return userRepository.save(user);
     }
 
     // Use logical deletion (softDelete)
@@ -182,83 +181,69 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public boolean existsByUsername(String username) {
-        return false;
+        return userRepository.existsByUsername(username);
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        return false;
+        return userRepository.existsByContactInfoEmail(email);
     }
 
     @Override
     public boolean existsByUsernameOrEmail(String username, String email) {
-        return false;
+        return userRepository.existsByUsername(username) || userRepository.existsByContactInfoEmail(email);
     }
 
     @Override
     public boolean existsById(Long userId) {
-        return false;
+        return userRepository.existsById(userId);
     }
 
-    @Override
-    public boolean existsByUsernameAndIdNot(String username, Long userId) {
-        return false;
-    }
-
-    @Override
-    public boolean existsByEmailAndIdNot(String email, Long userId) {
-        return false;
-    }
-
-    @Override
-    public boolean existsByUsernameOrEmailAndIdNot(String username, String email, Long userId) {
-        return false;
-    }
-
-    @Override
-    public boolean existsByIdNot(Long userId) {
-        return false;
-    }
-
+    @Transactional
     public void incrementFailedLogins(User user) {
-//        user.setFailedLoginAttempts(user.getFailedLoginAttempts() + 1);
-
-        int newFailedAttempts = user.getFailedLoginAttempts() + 1;
-        user.setFailedLoginAttempts(newFailedAttempts);
-
-        if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
-            lockUser(user);
+        // Update failedLoginAttempts
+        userRepository.updateFailedLoginAttempts(user.getUserId(), user.getAccountStatus().getFailedLoginAttempts() + 1);
+        if (user.getAccountStatus().getFailedLoginAttempts() + 1 >= MAX_FAILED_ATTEMPTS) {
+            userService.lockUser(user);
         }
-        userRepository.save(user);
     }
 
+
+    @Transactional
     public void lockUser(User user) {
-        user.setAccountNonLocked(false);
-        user.setLockTime(Instant.now());
-        userRepository.save(user);
+        userRepository.updateAccountLockStatus(user.getUserId(), false, Instant.now());
     }
 
+    @Transactional
     public boolean unlockWhenTimeExpired(User user) {
-        Instant lockTime = user.getLockTime();
+        Instant lockTime = user.getAccountStatus().getLockTime();
         if (lockTime != null) {
             long lockTimeInMillis = lockTime.toEpochMilli();
             long currentTimeInMillis = System.currentTimeMillis();
 
             if (currentTimeInMillis - lockTimeInMillis >= LOCK_TIME_DURATION) {
-                user.setAccountNonLocked(true);
-                user.setLockTime(null);
-                user.setFailedLoginAttempts(0);
-                userRepository.save(user);
-
+                userRepository.unlockUser(user.getUserId());
                 return true;
             }
         }
         return false;
     }
 
+    @Transactional
     public void resetFailedAttempts(User user) {
-        user.setFailedLoginAttempts(0);
-        userRepository.save(user);
+        userRepository.updateFailedLoginAttempts(user.getUserId(), 0);
+    }
+
+    @Transactional
+    public void resetFailedLogins(User user) {
+        // Update failedLoginAttempts
+        userRepository.updateFailedLoginAttempts(user.getUserId(), 0);
+    }
+
+    @Transactional
+    public void updateLastLoginTime(User user) {
+        // Update lastLoginTime
+        userRepository.updateLastLoginTime(user.getUserId(), Instant.now());
     }
 
 }

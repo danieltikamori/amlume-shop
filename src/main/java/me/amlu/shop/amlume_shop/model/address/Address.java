@@ -14,7 +14,7 @@ package me.amlu.shop.amlume_shop.model.address;
 import jakarta.persistence.*;
 import lombok.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.CacheConcurrencyStrategy;
 import org.hibernate.annotations.Filter;
 import org.hibernate.proxy.HibernateProxy;
