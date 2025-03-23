@@ -53,21 +53,27 @@ public class UniqueEntityValidator implements ConstraintValidator<UniqueEntity, 
     }
 
     @Override
+    @SuppressWarnings("rawtypes")
     public boolean isValid(Object value, ConstraintValidatorContext context) {
         if (value == null) {
             return true;
         }
 
         try {
-            // Get repository based on entity type
             Class<?> entityClass = value.getClass();
-            JpaRepository<?, ?> repository = getRepository(entityClass);
+            JpaRepository repository = getRepository(entityClass);
 
-            // Build the query criteria
-//            Example<?> example = buildExample(value, entityClass);
-            Example<S> example = (Example<S>) buildExample(value, entityClass);
+            ExampleMatcher matcher = ExampleMatcher.matching()
+                    .withIgnorePaths("id")
+                    .withStringMatcher(ExampleMatcher.StringMatcher.EXACT)
+                    .withIgnoreNullValues();
 
-            // Check for existing entity
+            for (String field : annotation.fields()) {
+                matcher = matcher.withMatcher(field,
+                        ExampleMatcher.GenericPropertyMatchers.exact());
+            }
+
+            Example example = Example.of(value, matcher);
             boolean exists = repository.exists(example);
 
             if (exists) {
@@ -85,27 +91,12 @@ public class UniqueEntityValidator implements ConstraintValidator<UniqueEntity, 
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private <T> JpaRepository<T, ?> getRepository(Class<T> entityClass) {
+    @SuppressWarnings("rawtypes")
+    private JpaRepository getRepository(Class<?> entityClass) {
         String repositoryBeanName = entityClass.getSimpleName() + "Repository";
         repositoryBeanName = repositoryBeanName.substring(0, 1).toLowerCase() +
                 repositoryBeanName.substring(1);
 
-        return (JpaRepository<T, ?>) applicationContext.getBean(repositoryBeanName);
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> Example<T> buildExample(Object entity, Class<T> entityClass) {
-        ExampleMatcher matcher = ExampleMatcher.matching()
-                .withIgnorePaths("id")  // Ignore ID field
-                .withStringMatcher(ExampleMatcher.StringMatcher.EXACT)
-                .withIgnoreNullValues();
-
-        for (String field : annotation.fields()) {
-            matcher = matcher.withMatcher(field,
-                    ExampleMatcher.GenericPropertyMatchers.exact());
-        }
-
-        return Example.of((T) entity, matcher);
+        return (JpaRepository) applicationContext.getBean(repositoryBeanName);
     }
 }
