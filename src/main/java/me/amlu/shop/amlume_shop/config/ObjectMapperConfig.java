@@ -16,6 +16,7 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.beans.factory.config.CustomEditorConfigurer;
@@ -45,26 +46,22 @@ public class ObjectMapperConfig {
     @Primary
     @Bean
     public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-
-        // Register modules
-        mapper.registerModule(new JavaTimeModule())
-                .registerModule(new Jdk8Module());
+        ObjectMapper mapper = JsonMapper.builder()
+                // Register modules
+                .addModule(new JavaTimeModule())
+                .addModule(new Jdk8Module())
 //                .registerModule(new JavaTimeModule());
-
-        // Configure serialization features
-        mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
+                // Configure serialization features
+                .serializationInclusion(JsonInclude.Include.NON_NULL)
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
-
-        // Configure deserialization features
-        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
+                // Configure deserialization features
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                 .enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
-                // Adjust instant handling
-                .enable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS);
-
-        // Configure timezone to UTC
-        mapper.setTimeZone(TimeZone.getTimeZone(ZoneOffset.UTC));
+                .enable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+                // Configure timezone to UTC
+                .defaultTimeZone(TimeZone.getTimeZone(ZoneOffset.UTC))
+                .build();
 
         // Configure visibility
         mapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY)
@@ -72,6 +69,11 @@ public class ObjectMapperConfig {
                 .setVisibility(PropertyAccessor.IS_GETTER, JsonAutoDetect.Visibility.NONE)
                 .setVisibility(PropertyAccessor.SETTER, JsonAutoDetect.Visibility.NONE);
 
+        // Register security modules
+        ClassLoader loader = getClass().getClassLoader();
+        List<com.fasterxml.jackson.databind.Module> securityModules =
+                SecurityJackson2Modules.getModules(loader);
+        mapper.registerModules(securityModules);
 
         return mapper;
     }
@@ -112,10 +114,8 @@ public class ObjectMapperConfig {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
 
-        // Set up Jackson2JsonRedisSerializer with our ObjectMapper
-        Jackson2JsonRedisSerializer<Object> serializer =
-                new Jackson2JsonRedisSerializer<>(Object.class);
-        serializer.setObjectMapper(objectMapper);
+        // Create Jackson2JsonRedisSerializer with type resolving
+        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
 
         // Configure serializers
         template.setDefaultSerializer(serializer);
@@ -152,16 +152,4 @@ public class ObjectMapperConfig {
         return configurer;
     }
 
-    /**
-     * Configure ObjectMapper for Spring Security
-     */
-    @Bean
-    public SecurityJackson2Modules securityJackson2Modules() {
-        return new SecurityJackson2Modules();
-    }
-//    @Bean
-//    public SecurityJackson2Modules securityJackson2Modules(ObjectMapper objectMapper) {
-//        SecurityJackson2Modules.register(objectMapper);
-//        return null; // or remove the return statement altogether
-//    }
 }
