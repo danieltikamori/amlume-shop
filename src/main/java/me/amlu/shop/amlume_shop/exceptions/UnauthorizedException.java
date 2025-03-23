@@ -22,4 +22,16 @@ public class UnauthorizedException extends AuthenticationException {
     public UnauthorizedException(String noAuthenticatedUserFound) {
         super(noAuthenticatedUserFound);
     }
+
+    public UnauthorizedException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
+    public UnauthorizedException(Throwable cause) {
+        super(cause.getMessage(), cause);
+    }
+
+    public UnauthorizedException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+        super(message, cause);
+    }
 }

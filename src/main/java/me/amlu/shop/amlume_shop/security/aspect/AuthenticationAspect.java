@@ -35,7 +35,7 @@ public class AuthenticationAspect {
         this.userService = userService;
     }
 
-    @Before("@annotation(requiresAuthentication)")
+    @Before("@annotation(requiresAuthentication) || @within(requiresAuthentication)")
     public void checkAuthentication(JoinPoint joinPoint, RequiresAuthentication requiresAuthentication)
             throws UnauthorizedException {
         try {
@@ -49,11 +49,23 @@ public class AuthenticationAspect {
 
             log.debug("Authentication successful for method: {}.{}", className, methodName);
         } catch (UnauthorizedException e) {
-            log.warn("Authentication failed: {}", e.getMessage());
-            throw new UnauthorizedException("Authentication required to access this resource");
+            log.warn("Authentication failed for {}.{}: {}",
+                    joinPoint.getSignature().getDeclaringTypeName(),
+                    joinPoint.getSignature().getName(),
+                    e.getMessage());
+
+            if (requiresAuthentication.strict()) {
+                throw new UnauthorizedException(requiresAuthentication.message(), e);
+            }
         } catch (Exception e) {
-            log.error("Unexpected error during authentication check", e);
-            throw new UnauthorizedException("Authentication check failed due to system error");
+            log.error("Unexpected error during authentication check for {}.{}",
+                    joinPoint.getSignature().getDeclaringTypeName(),
+                    joinPoint.getSignature().getName(),
+                    e);
+
+            if (requiresAuthentication.strict()) {
+                throw new UnauthorizedException(requiresAuthentication.message(), e);
+            }
         }
     }
 
