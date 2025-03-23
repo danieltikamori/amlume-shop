@@ -15,13 +15,15 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.cache.*;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
-import me.amlu.shop.amlume_shop.model.Role;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.security.model.TokenData;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -51,25 +53,25 @@ public class CacheConfig {
     public static final int CACHE_REFRESH_MINUTES = 30; // CACHE_REFRESH_MINUTES
 
     private static final int CACHE_CONCURRENCY_LEVEL = Runtime.getRuntime().availableProcessors();
-    private static final long CACHE_EXPIRATION_AFTER_WRITE = 60 * 60 * 1000; // 1 hour
-    private static final long CACHE_EXPIRATION_AFTER_ACCESS = 30 * 60 * 1000;
-    private static final long CACHE_REFRESH_AFTER_WRITE = 30 * 60 * 1000;
-    private static final long CACHE_REFRESH_AFTER_ACCESS = 15 * 60 * 1000;
+    private static final long CACHE_EXPIRATION_AFTER_WRITE = 60 * 60 * 1000L; // 1 hour
+    private static final long CACHE_EXPIRATION_AFTER_ACCESS = 30 * 60 * 1000L;
+    private static final long CACHE_REFRESH_AFTER_WRITE = 30 * 60 * 1000L;
+    private static final long CACHE_REFRESH_AFTER_ACCESS = 15 * 60 * 1000L;
     private static final int CACHE_MAXIMUM_WEIGHT = 100;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE = 60 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS = 30 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE = 30 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS = 15 * 60 * 1000;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE = 60 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS = 30 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE = 30 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS = 15 * 60 * 1000L;
     private static final int CACHE_WEIGHTED_MAXIMUM_WEIGHT = 100;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE_JITTER = 5 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS_JITTER = 2 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE_JITTER = 2 * 60 * 1000;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS_JITTER = 1 * 60 * 1000;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE_JITTER = 5 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS_JITTER = 2 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE_JITTER = 2 * 60 * 1000L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS_JITTER = 1 * 60 * 1000L;
     private static final int CACHE_WEIGHTED_MAXIMUM_WEIGHT_JITTER = 10;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE_JITTER_RATIO = 10;
-    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS_JITTER_RATIO = 5;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE_JITTER_RATIO = 5;
-    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS_JITTER_RATIO = 2;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_WRITE_JITTER_RATIO = 10L;
+    private static final long CACHE_WEIGHTED_EXPIRATION_AFTER_ACCESS_JITTER_RATIO = 5L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_WRITE_JITTER_RATIO = 5L;
+    private static final long CACHE_WEIGHTED_REFRESH_AFTER_ACCESS_JITTER_RATIO = 2L;
     private static final int CACHE_WEIGHTED_MAXIMUM_WEIGHT_JITTER_RATIO = 20;
 
     private final MetricRegistry metricRegistry;
@@ -111,7 +113,14 @@ public class CacheConfig {
     }
 
     @Bean
-    public Cache<String, Set<Role>> rolesCache() {
+    public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
+        StringRedisTemplate template = new StringRedisTemplate();
+        template.setConnectionFactory(connectionFactory);
+        return template;
+    }
+
+    @Bean
+    public Cache<String, Set<UserRole>> rolesCache() {
         return CacheBuilder.newBuilder()
                 .concurrencyLevel(Runtime.getRuntime().availableProcessors())
                 .expireAfterWrite(5, TimeUnit.MINUTES)
@@ -148,7 +157,7 @@ public class CacheConfig {
         return CacheBuilder.newBuilder()
                 .initialCapacity(CACHE_INITIAL_CAPACITY)
                 .maximumSize(CACHE_MAXIMUM_SIZE)
-                .maximumWeight(CACHE_MAXIMUM_MEMORY_MB * 1024 * 1024)
+                .maximumWeight(CACHE_MAXIMUM_MEMORY_MB * 1024 * 1024L)
                 .weigher((key, value) -> (int) Optional.of(value)
                         .map(TokenData::getApproximateSize)
                         .orElse(0))  // If token have varying sizes, use Weight-based sizing

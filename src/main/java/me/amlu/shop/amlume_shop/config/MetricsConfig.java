@@ -22,6 +22,7 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import me.amlu.shop.amlume_shop.security.service.CaptchaService;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -39,6 +40,14 @@ public class MetricsConfig implements io.micrometer.prometheusmetrics.Prometheus
                 this,
                 collectorRegistry,
                 Clock.SYSTEM
+        );
+    }
+
+    @Bean
+    MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
+        return registry -> registry.config().commonTags(
+                "application", "amlume-shop",
+                "environment", "development"
         );
     }
 
