@@ -15,6 +15,8 @@ import jakarta.validation.ConstraintValidatorContext;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.EntityUniquenessException;
 import org.springframework.context.ApplicationContext;
+import org.springframework.data.domain.Example;
+import org.springframework.data.domain.ExampleMatcher;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Component;
 
@@ -39,72 +41,71 @@ import java.util.Map;
 public class UniqueEntityValidator implements ConstraintValidator<UniqueEntity, Object> {
 
     private final ApplicationContext applicationContext;
+    private UniqueEntity annotation;
 
     public UniqueEntityValidator(ApplicationContext applicationContext) {
         this.applicationContext = applicationContext;
     }
 
-    private String[] fields;
-
-    // Store repository instances for faster lookup (optional, but recommended)
-    private final Map<Class<?>, JpaRepository<?, ?>> repositoryCache = new HashMap<>();
-
     @Override
-    public void initialize(UniqueEntity constraintAnnotation) {
-        this.fields = constraintAnnotation.fields();
+    public void initialize(UniqueEntity annotation) {
+        this.annotation = annotation;
     }
 
     @Override
-    public boolean isValid(Object entity, ConstraintValidatorContext context) {
-        Object repository = getRepositoryForEntity(entity.getClass());
-        boolean exists = checkIfEntityExists(repository, entity);
+    public boolean isValid(Object value, ConstraintValidatorContext context) {
+        if (value == null) {
+            return true;
+        }
 
-        if (exists) {
-            context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate(context.getDefaultConstraintMessageTemplate())
-                    .addPropertyNode(fields[0])
-                    .addConstraintViolation();
+        try {
+            // Get repository based on entity type
+            Class<?> entityClass = value.getClass();
+            JpaRepository<?, ?> repository = getRepository(entityClass);
+
+            // Build the query criteria
+//            Example<?> example = buildExample(value, entityClass);
+            Example<S> example = (Example<S>) buildExample(value, entityClass);
+
+            // Check for existing entity
+            boolean exists = repository.exists(example);
+
+            if (exists) {
+                context.disableDefaultConstraintViolation();
+                context.buildConstraintViolationWithTemplate(annotation.message())
+                        .addPropertyNode(String.join(",", annotation.fields()))
+                        .addConstraintViolation();
+                return false;
+            }
+
+            return true;
+        } catch (Exception e) {
+            log.error("Error validating uniqueness for entity: {}", value.getClass(), e);
             return false;
         }
-        return true;
     }
 
-    private Object getRepositoryForEntity(Class<?> entityClass) {
-        return repositoryCache.computeIfAbsent(entityClass, clazz -> {
-            // Assuming your repositories follow a naming convention (e.g., EntityNameRepository)
-            String repositoryName = clazz.getSimpleName() + "Repository";
-            return (JpaRepository<?, ?>) applicationContext.getBean(repositoryName);
-        });
+    @SuppressWarnings("unchecked")
+    private <T> JpaRepository<T, ?> getRepository(Class<T> entityClass) {
+        String repositoryBeanName = entityClass.getSimpleName() + "Repository";
+        repositoryBeanName = repositoryBeanName.substring(0, 1).toLowerCase() +
+                repositoryBeanName.substring(1);
+
+        return (JpaRepository<T, ?>) applicationContext.getBean(repositoryBeanName);
     }
 
-    private boolean checkIfEntityExists(Object repository, Object entity) {
-        try {
-            for (String fieldName : fields) {
-                Field field = entity.getClass().getDeclaredField(fieldName);
-                field.trySetAccessible();
-                Object fieldValue = field.get(entity);
+    @SuppressWarnings("unchecked")
+    private <T> Example<T> buildExample(Object entity, Class<T> entityClass) {
+        ExampleMatcher matcher = ExampleMatcher.matching()
+                .withIgnorePaths("id")  // Ignore ID field
+                .withStringMatcher(ExampleMatcher.StringMatcher.EXACT)
+                .withIgnoreNullValues();
 
-                // 1. Get Field Types Dynamically:
-                Class<?>[] fieldTypes = new Class<?>[fields.length];
-                for (int i = 0; i < fields.length; i++) {
-                    fieldTypes[i] = entity.getClass().getDeclaredField(fields[i]).getType();
-                }
-
-                // 2. Construct Method Name:
-                String methodName = "findBy" + String.join("And", fields);
-
-                // 3. Invoke Method with Correct Types:
-                Object existingEntity = repository.getClass().getMethod(methodName, fieldTypes)
-                        .invoke(repository, fieldValue); // Pass only fieldValue once
-
-                if (existingEntity != null) {
-                    return true; // Duplicate found
-                }
-            }
-        } catch (Exception e) {
-            log.error("Error checking for entity uniqueness", e);
-            throw new EntityUniquenessException("Error checking for entity uniqueness", e);
+        for (String field : annotation.fields()) {
+            matcher = matcher.withMatcher(field,
+                    ExampleMatcher.GenericPropertyMatchers.exact());
         }
-        return false; // No duplicates found
+
+        return Example.of((T) entity, matcher);
     }
 }
