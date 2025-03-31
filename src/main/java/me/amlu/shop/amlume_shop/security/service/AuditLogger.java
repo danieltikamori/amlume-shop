@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 import org.springframework.stereotype.Service;
 
