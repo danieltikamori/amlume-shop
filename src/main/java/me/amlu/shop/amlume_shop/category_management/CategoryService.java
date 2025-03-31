@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Daniel Itiro Tikamori. All rights reserved.
+ * Copyright (c) 2024-2025 Daniel Itiro Tikamori. All rights reserved.
  *
  * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
  *
@@ -8,14 +8,28 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.category_management;
 
+import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.payload.CategoryDTO;
 import me.amlu.shop.amlume_shop.payload.CategoryResponse;
+
+import java.util.List;
 
 public interface CategoryService {
 
     CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir);
+
+    List<Category> findAllSubcategories(Category category);
+
+    List<Category> findAncestors(Category category);
+
+    boolean isDescendantOf(Category possibleDescendant, Category possibleAncestor);
+
+    int getDepth(Category category);
+
+    // Prevent circular references
+    void validateHierarchy(Category category, Category newParent);
 
     CategoryDTO createCategory(CategoryDTO categoryDTO);
 

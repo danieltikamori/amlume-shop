@@ -12,13 +12,22 @@ package me.amlu.shop.amlume_shop.repositories;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface CategoryRepository extends JpaRepository<Category, Long> {
     Optional<Category> findByCategoryName(@NotBlank @Size(min = 2, max = 50, message = "Category name must be between 2 and 50 characters") String categoryName);
+
+    @Query("SELECT c FROM Category c WHERE c.hierarchyLevel.path LIKE :pathPattern%")
+    List<Category> findByHierarchyLevelPathStartingWith(@Param("pathPattern") String pathPattern);
+
+    @Query("SELECT c FROM Category c WHERE c.hierarchyLevel.level = :level")
+    List<Category> findByLevel(@Param("level") int level);
 }
