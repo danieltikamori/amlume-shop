@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
