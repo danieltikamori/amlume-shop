@@ -279,6 +279,20 @@ spring:
       username: sa
       password:
       driverClassName: org.h2.Driver
+
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-empty-string-as-null-object: true
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    mapper:
+      accept-case-insensitive-properties: true
+    property-naming-strategy: SNAKE_CASE
+    time-zone: UTC
+
   main:
 #    allow-circular-references: true
     keep-alive: true
@@ -432,6 +446,7 @@ management:
       all: true
     export:
       prometheus:
+        enabled: true
         step: 10s
     tags:
       application: ${spring.application.name}
