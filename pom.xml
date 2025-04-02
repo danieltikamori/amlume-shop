@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.2</version>
+        <version>3.4.4</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>me.amlume.shop</groupId>
@@ -88,8 +88,6 @@
         <prometheus-simpleclient.version>0.16.0</prometheus-simpleclient.version>
         <prometheus-simpleclient_hotspot.version>0.16.0</prometheus-simpleclient_hotspot.version>
         <bcprov-jdk18on.version>1.80</bcprov-jdk18on.version>
-
-
 
     </properties>
     <dependencies>
@@ -270,6 +268,15 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson-datatype-jsr310.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-parameter-names</artifactId>
         </dependency>
 
         <dependency>
@@ -461,25 +468,39 @@
             <version>${redisson.version}</version>
         </dependency>
 
+        <!--        Valkey GLIDE-->
+        <!--        Choose the appropriate classifier-->
 
-        <!-- Micrometer for metrics -->
+<!--        &lt;!&ndash;osx-aarch_64&ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>io.valkey</groupId>-->
+<!--            <artifactId>valkey-glide</artifactId>-->
+<!--            <classifier>osx-aarch_64</classifier>-->
+<!--            <version>[1.0.0,2.0.0)</version>-->
+<!--        </dependency>-->
+
+<!--        &lt;!&ndash;linux-aarch_64&ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>io.valkey</groupId>-->
+<!--            <artifactId>valkey-glide</artifactId>-->
+<!--            <classifier>linux-aarch_64</classifier>-->
+<!--            <version>[1.0.0,2.0.0)</version>-->
+<!--        </dependency>-->
+
+        <!--linux-x86_64-->
         <dependency>
-            <groupId>io.micrometer</groupId>
-            <artifactId>micrometer-registry-prometheus</artifactId>
+            <groupId>io.valkey</groupId>
+            <artifactId>valkey-glide</artifactId>
+            <classifier>linux-x86_64</classifier>
+            <version>[1.0.0,2.0.0)</version>
         </dependency>
 
+<!--        Valkey-java Alternative to Valkey Glide-->
         <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-config-server</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-vault-config</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.springframework.vault</groupId>
-            <artifactId>spring-vault-core</artifactId>
+            <groupId>io.valkey</groupId>
+            <artifactId>valkey-java</artifactId>
+            <version>5.3.0</version>
+<!--            <version>LATEST</version>-->
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.github.cdimascio/dotenv-java -->
@@ -592,13 +613,19 @@
 
         <dependency>
             <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
+        <!-- Micrometer for metrics -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
-<!--        <dependency>-->
-<!--            <groupId>io.micrometer</groupId>-->
-<!--            <artifactId>micrometer-prometheus-metrics</artifactId>-->
-<!--        </dependency>-->
+        <!--        <dependency>-->
+        <!--            <groupId>io.micrometer</groupId>-->
+        <!--            <artifactId>micrometer-prometheus-metrics</artifactId>-->
+        <!--        </dependency>-->
 
         <!-- https://mvnrepository.com/artifact/org.bouncycastle/bcprov-jdk18on -->
         <dependency>
@@ -611,8 +638,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
-
-
 
 
         <!-- https://central.sonatype.com/artifact/io.hypersistence/hypersistence-tsid -->
