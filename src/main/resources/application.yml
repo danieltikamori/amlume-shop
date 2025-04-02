@@ -240,7 +240,11 @@ spring:
         email: ${SERVICE_LICENSE_CONTACT_EMAIL}
 
   cache:
+    type: redis  # redis/valkey
     cache-names: mfaTokens
+    valkey:
+      host: ${VALKEY_HOST:localhost}
+      port: ${VALKEY_PORT:7000}
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=1h
 
