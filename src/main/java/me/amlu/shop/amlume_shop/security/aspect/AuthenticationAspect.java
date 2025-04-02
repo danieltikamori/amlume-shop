@@ -24,7 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.payload.UserDTO;
-import me.amlu.shop.amlume_shop.security.service.UserServiceImpl;
+import me.amlu.shop.amlume_shop.user_management.UserServiceImpl;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
