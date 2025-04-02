@@ -12,14 +12,13 @@ package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.Product;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
 import me.amlu.shop.amlume_shop.model.address.Address;
