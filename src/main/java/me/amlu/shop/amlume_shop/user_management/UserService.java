@@ -8,11 +8,11 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
+import org.springframework.security.core.userdetails.UserDetails;
 
 import javax.management.relation.RoleNotFoundException;
 
@@ -31,6 +31,8 @@ public interface UserService {
     User getUserByUsernameOrEmail(String usernameOrEmail);
 
     User getUserProfile(Long userId);
+
+    UserDetails getUserDetails(String userId);
 
     User createUser(User user);
 
@@ -51,4 +53,8 @@ public interface UserService {
 //    boolean authenticateUser(String username, String password);
 
     User findUserByUsername(String username);
+
+//    boolean hasRole(User user, UserRole role);
+
+    boolean hasRole(User user, String role);
 }

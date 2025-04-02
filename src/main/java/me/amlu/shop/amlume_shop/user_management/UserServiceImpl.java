@@ -8,22 +8,22 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.user_management;
 
-import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.model.AppRole;
+import me.amlu.shop.amlume_shop.payload.UserDTO;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.repositories.UserRepository;
-import me.amlu.shop.amlume_shop.user_management.*;
+import me.amlu.shop.amlume_shop.service.CacheService;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -46,11 +46,13 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserServiceImpl userService;
+    private final CacheService cacheService;
 
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, UserServiceImpl userService) {
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, UserServiceImpl userService, CacheService cacheService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.userService = userService;
+        this.cacheService = cacheService;
     }
 
     @Override
@@ -63,7 +65,7 @@ public class UserServiceImpl implements UserService {
         // Create new user with hashed password
         User user = User.builder()
                 .authenticationInfo(new AuthenticationInfo(request.getUsername(), passwordEncoder.encode(request.getPassword())))
-                .contactInfo(ContactInfo.builder().email(request.getUserEmail()).build())
+                .contactInfo(ContactInfo.builder().userEmail(new UserEmail(request.getUserEmail())).build())
                 .mfaInfo(MfaInfo.builder().mfaEnabled(request.isMfaEnabled()).build())
                 .accountStatus(AccountStatus.builder().lastLoginTime(Instant.now()).build())
                 .build();
@@ -156,7 +158,16 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND));
     }
 
-    // TOCHECK : Update, safety
+    @Override
+    public UserDetails getUserDetails(String userId) {
+        return cacheService.getOrCache(
+                USER_CACHE,
+                USER_CACHE_KEY_PREFIX + userId,
+                () -> userRepository.findUserDetails(userId)
+        );
+    }
+
+                // TOCHECK : Update, safety
     @Override
     public User createUser(User user) {
         return userRepository.save(user);
@@ -165,7 +176,15 @@ public class UserServiceImpl implements UserService {
     // TOCHECK : Update, safety
     @Override
     public User updateUser(User user) {
+        cacheService.invalidate(USER_CACHE, USER_CACHE_KEY_PREFIX + user.getUserId());
         return userRepository.save(user);
+    }
+
+    public void updateUserProfile(String userId, User user) {
+        // Update in database
+        userRepository.update(user);
+        // Invalidate cached version
+        cacheService.invalidate(USER_CACHE, USER_CACHE_KEY_PREFIX + userId);
     }
 
     // Use logical deletion (softDelete)
@@ -197,6 +216,12 @@ public class UserServiceImpl implements UserService {
     @Override
     public boolean existsById(Long userId) {
         return userRepository.existsById(userId);
+    }
+
+    @Override
+    public boolean hasRole(User user, String role) {
+        return user.getRoles().stream()
+                .anyMatch(userRole -> userRole.getRoleName().name().equals(role));
     }
 
     @Transactional
@@ -246,5 +271,8 @@ public class UserServiceImpl implements UserService {
         userRepository.updateLastLoginTime(user.getUserId(), Instant.now());
     }
 
+    public boolean isValidUser(UserDTO user) {
+        return user != null && user.getUserId() != null && user.getUsername() != null && user.getUserEmail() != null;
+    }
 }
 
