@@ -10,24 +10,12 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.user_management.User;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
-public class UserDTO {
-    private Long userId;
-    private String username;
-    private String userEmail;
+public record UserDTO(Long userId, String username, String userEmail) {
 
     public static UserDTO fromUser(User user) {
-        UserDTO dto = new UserDTO();
-        dto.setUserId(user.getUserId());
-        dto.setUsername(user.getUsername());
-        dto.setUserEmail(user.getContactInfo().getEmail());
-        return dto;
+        return new UserDTO(user.getUserId(), user.getUsername(), user.getContactInfo().getEmail());
     }
+
 }
