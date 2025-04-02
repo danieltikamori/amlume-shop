@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.repositories;
+package me.amlu.shop.amlume_shop.category_management;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
