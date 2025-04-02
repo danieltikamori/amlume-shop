@@ -19,11 +19,26 @@ import java.time.Duration;
 @Slf4j
 @Component
 @Getter
-public class Constants {
+public final class Constants {
     //ASN constants
     public static final String ASN_LOOKUP_REQUESTS_METRIC = "asn.lookup.requests";
     public static final String ASN_LOOKUP_RATELIMIT_EXCEEDED_METRIC = "asn.lookup.ratelimit.exceeded";
     public static final String ASN_LOOKUP_RATE_LIMIT_EXCEEDED_MESSAGE = "ASN lookup rate limit exceeded";
+
+    // Cache constants
+    public static final String CACHE = "cache";
+    private static final String CACHE_VERSION = "v1";
+    public static final String AUTH_CACHE_KEY_PREFIX = "auth:";
+    public static final String USER_CACHE = "userCache";
+    public static final String AUTH_CACHE = "authCache";
+    public static final String LOCK_PREFIX = "auth:lock:";
+    public static final String USER_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":user:";
+    public static final Duration USER_CACHE_DURATION = Duration.ofMinutes(30);
+    public static final String ANNOTATION_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":annotation:";
+    public static final Duration ANNOTATION_CACHE_DURATION = Duration.ofHours(24);
+    public static final Duration LOCK_TIMEOUT = Duration.ofSeconds(10);
+
+    public static final int COMPRESSION_THRESHOLD_BYTES = 1024;
 
     // Pagination constants
     public static final String PAGE_NUMBER = "0";
@@ -65,6 +80,10 @@ public class Constants {
     // Resilience constants
     public static final String CIRCUIT_BREAKER = "circuitBreaker";
     public static final String RATES_LIMITER = "rateLimiter";
+    public static final String RETRY = "retry";
+    public static final int MAX_RETRY_ATTEMPTS = 3;
+    public static final long RETRY_INTERVAL = 1000L;
+    public static final Long MAX_REQUESTS_PER_MINUTE = 100L;
 
     // User constants
     public static final String USER_ID = "userId";
@@ -80,6 +99,7 @@ public class Constants {
     public static final long LOCK_TIME_DURATION = 24 * 60 * 60 * (long) 1000; // 24 hours in milliseconds
     public static final String HASH_ALGORITHM = "SHA-256";
     public static final int INITIAL_MAP_CAPACITY = 16;
+    public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
 
     private static final String LINE_SEPARATOR = "\n";
 
