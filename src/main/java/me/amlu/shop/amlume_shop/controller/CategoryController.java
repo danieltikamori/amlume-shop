@@ -11,10 +11,10 @@
 package me.amlu.shop.amlume_shop.controller;
 
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.config.AppConstants;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.payload.CategoryDTO;
 import me.amlu.shop.amlume_shop.payload.CategoryResponse;
-import me.amlu.shop.amlume_shop.service.CategoryService;
+import me.amlu.shop.amlume_shop.category_management.CategoryService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,10 +30,10 @@ public class CategoryController {
     }
 
     @GetMapping("v1/public/categories")
-    public ResponseEntity<CategoryResponse> getAllCategories(@RequestParam (name = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) int pageNumber,
-                                                             @RequestParam(name = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) int pageSize,
-                                                             @RequestParam(name = "sortBy", defaultValue = AppConstants.SORT_CATEGORIES_BY, required = false) String sortBy,
-                                                             @RequestParam(name = "sortDir", defaultValue = AppConstants.SORT_DIR, required = false) String sortDir
+    public ResponseEntity<CategoryResponse> getAllCategories(@RequestParam (name = "pageNumber", defaultValue = Constants.PAGE_NUMBER, required = false) int pageNumber,
+                                                             @RequestParam(name = "pageSize", defaultValue = Constants.PAGE_SIZE, required = false) int pageSize,
+                                                             @RequestParam(name = "sortBy", defaultValue = Constants.SORT_CATEGORIES_BY, required = false) String sortBy,
+                                                             @RequestParam(name = "sortDir", defaultValue = Constants.SORT_DIR, required = false) String sortDir
                                                              ) {
         CategoryResponse categoryResponse = categoryService.getAllCategories(pageNumber, pageSize, sortBy, sortDir);
 
@@ -41,7 +41,7 @@ public class CategoryController {
     }
 
     @PostMapping("v1/public/categories")
-    public ResponseEntity<CategoryDTO> CreateCategory(@Valid @RequestBody CategoryDTO categoryDTO) {
+    public ResponseEntity<CategoryDTO> createCategory(@Valid @RequestBody CategoryDTO categoryDTO) {
         CategoryDTO savedCategoryDTO = categoryService.createCategory(categoryDTO);
 
         return new ResponseEntity<>(savedCategoryDTO, HttpStatus.CREATED);
