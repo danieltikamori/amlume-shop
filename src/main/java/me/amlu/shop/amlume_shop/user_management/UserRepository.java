@@ -8,15 +8,15 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.repositories;
+package me.amlu.shop.amlume_shop.user_management;
 
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -75,4 +75,22 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.accountStatus.lastLoginTime = :now WHERE u.userId = :userId")
     void updateLastLoginTime(@Param("userId") Long userId, @Param("now") Instant now);
+
+    void update(User profile);
+
+    UserDetails findUserDetails(String userId);
+
+    @Query("SELECT new me.amlu.shop.amlume_shop.model.AuthenticationInfo(" +
+            "u.username, u.password, u.enabled) " +
+            "FROM User u WHERE u.username = :username")
+    AuthenticationInfo findAuthenticationInfoByUsername(@Param("username") String username);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE User u SET " +
+            "u.password = :#{#newInfo.password}, " +
+            "u.enabled = :#{#newInfo.enabled} " +
+            "WHERE u.username = :username")
+    void updateAuthenticationInfo(@Param("username") String username,
+                                  @Param("newInfo") AuthenticationInfo newInfo);
 }
