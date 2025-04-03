@@ -11,9 +11,9 @@
 package me.amlu.shop.amlume_shop.controller;
 
 import lombok.RequiredArgsConstructor;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
-import me.amlu.shop.amlume_shop.security.service.UserService;
+import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
