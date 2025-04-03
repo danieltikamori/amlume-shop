@@ -25,9 +25,7 @@ import java.util.Objects;
 
 @Getter
 @Setter
-@ToString
-@RequiredArgsConstructor
-@AllArgsConstructor
+@ToString(exclude = {"category", "seller", "order"}) // Exclude relationships from toString
 @Entity
 @Table(name = "products")
 public class Product extends BaseEntity {
@@ -36,62 +34,52 @@ public class Product extends BaseEntity {
 //    @GeneratedValue(generator = "tsid_generator")
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(nullable = false, updatable = false, unique = true, name = "product_id")
+    @Column(name = "product_id", nullable = false, updatable = false, unique = true)
     private Long productId;
 
     @NotBlank(message = "Product title is required")
     @Size(min = 2, max = 200, message = "Product name must be between 2 and 200 characters")
-//    @Pattern(regexp = "^[a-zA-Z0-9\\s\\-_]+$", message = "Product name must only contain alphanumeric and symbol characters")
-    @Column(nullable = false, name = "product_name")
+    @Column(name = "product_name", nullable = false)
     private String productName;
 
+    @Column(name = "product_image")
     private String productImage;
 
     @NotBlank(message = "Product description is required")
     @Size(min = 2, max = 2000, message = "Product description must be between 2 and 2000 characters")
-//    @Pattern(regexp = "^[a-zA-Z0-9\\s\\-_]+$", message = "Product description must only contain alphanumeric and symbol characters")
-    @Column(nullable = false, name = "product_description")
+    @Column(name = "product_description", nullable = false, length = 2000) // Specify length for varchar
     private String productDescription;
 
-    @Column(nullable = false, name = "product_quantity")
+    @Column(name = "product_quantity", nullable = false)
     @ColumnDefault("0")
     @Min(value = 0, message = "Product quantity must be greater than or equal to 0")
     private Integer productQuantity;
 
-    @Column(nullable = false, name = "product_price")
+    @Column(name = "product_price", nullable = false, precision = 12, scale = 2) // Specify precision and scale
     @ColumnDefault("0.0")
     @Digits(integer = 10, fraction = 2, message = "Product price must be a valid number with up to 10 digits and 2 decimal places")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Product price must be greater than or equal to 0")
+    @DecimalMin(value = "0.0", inclusive = false, message = "Product price must be greater than 0")
     private BigDecimal productPrice;
 
-    @Column(nullable = false, name = "product_discount_percentage")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Product discount percentage must be greater than or equal to 0")
-    @DecimalMax(value = "100.0", inclusive = false, message = "Product discount percentage must be less than or equal to 100")
+    @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2)
+    @DecimalMin(value = "0.0", inclusive = true, message = "Product discount percentage must be greater than or equal to 0")
+    @DecimalMax(value = "100.0", inclusive = true, message = "Product discount percentage must be less than or equal to 100")
     private BigDecimal productDiscountPercentage;
 
-    @Column(nullable = false, name = "product_special_price")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Product special price must be greater than or equal to 0")
+    @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2) // Specify precision and scale
+    @DecimalMin(value = "0.0", inclusive = false, message = "Product special price must be greater than 0")
     private BigDecimal productSpecialPrice;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "categoryId")
-    @ToString.Exclude
+    @JoinColumn(name = "category_id") // Changed name to category_id
     private Category category;
-
-//    @Column(nullable = false, name = "product_department")
-//    private String department;
-//
-//    @Column(nullable = false, name = "product_region")
-//    private String productRegion;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
-    @ToString.Exclude
     private User seller;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id")
-    @ToString.Exclude
     private transient Order order;
 
     @Override
@@ -103,13 +91,10 @@ public class Product extends BaseEntity {
         if (productSpecialPrice == null) {
             productSpecialPrice = productPrice;
         }
-//        if (productRegion == null) {
-//            throw new IllegalStateException("Product region cannot be null");
-//        }
     }
 
     public User getCategoryManager() {
-        return category.getCategoryManager();
+        return category != null ? category.getCategoryManager() : null; // Handle null category
     }
 
     public boolean isHighValue() {
@@ -121,7 +106,7 @@ public class Product extends BaseEntity {
     }
 
     public boolean isRestricted() {
-        return category.hasSpecialRestrictions();
+        return category != null && category.hasSpecialRestrictions(); // Handle null category
     }
 
     @Override
