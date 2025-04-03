@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.repositories;
 
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
@@ -30,4 +30,6 @@ public interface UserDeviceFingerprintRepository extends JpaRepository<UserDevic
     Optional<UserDeviceFingerprint> findByUserIdAndFingerprint(Long aLong, String fingerprint);
 
     boolean existsByUserAndFingerprint(User user, String fingerprint);
+
+    List<UserDeviceFingerprint> findByUserIdAndDeviceFingerprintNot(String userId, String exceptFingerprint);
 }
