@@ -19,7 +19,7 @@ import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.category_management.Category;
-import me.amlu.shop.amlume_shop.model.Product;
+import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
 import me.amlu.shop.amlume_shop.model.address.Address;
 import org.hibernate.proxy.HibernateProxy;
