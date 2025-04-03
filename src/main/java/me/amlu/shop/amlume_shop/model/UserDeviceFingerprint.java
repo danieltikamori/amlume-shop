@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.model;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.proxy.HibernateProxy;
 
 import java.time.Instant;
@@ -91,6 +92,12 @@ public class UserDeviceFingerprint extends BaseEntity {
     @NotBlank
     @Column(name = "browser_info", nullable = false)
     private String browserInfo;
+
+    @Override
+    public boolean isDeviceFingerprintingEnabled() {
+        User userToBeChecked = getUser();
+        return userToBeChecked != null && userToBeChecked.isDeviceFingerprintingEnabled();
+    }
 
 //    @NotBlank
 //    @Column(name = "device_type")
@@ -234,7 +241,7 @@ public class UserDeviceFingerprint extends BaseEntity {
 
     public static class UserDeviceFingerprintBuilder {
         private boolean active;
-        // existing methods...
+
 
         public UserDeviceFingerprintBuilder isActive(boolean active) {
             this.active = active;
