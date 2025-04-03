@@ -18,30 +18,74 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
 @Configuration
 public class SecurityHeadersConfig {
+
     @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE) // Set the filter order
     public FilterRegistrationBean<OncePerRequestFilter> securityHeadersFilter() {
-        return new FilterRegistrationBean<>(new OncePerRequestFilter() {
+        FilterRegistrationBean<OncePerRequestFilter> registrationBean = new FilterRegistrationBean<>(new OncePerRequestFilter() {
             @Override
             protected void doFilterInternal(@NotNull HttpServletRequest request,
                                             @NotNull HttpServletResponse response,
                                             @NotNull FilterChain filterChain)
-                throws ServletException, IOException {
-                
+                    throws ServletException, IOException {
+
+                // Prevent MIME-sniffing
                 response.setHeader("X-Content-Type-Options", "nosniff");
+
+                // Prevent clickjacking
                 response.setHeader("X-Frame-Options", "DENY");
+
+                // Enable browser's XSS filter
                 response.setHeader("X-XSS-Protection", "1; mode=block");
-                response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
-                response.setHeader("Cache-Control", "no-store");
-                response.setHeader("Pragma", "no-cache");
-                
+
+                // Enforce HTTPS and prevent protocol downgrade attacks
+                response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
+
+                // Prevent caching of sensitive data
+                response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+                response.setHeader("Pragma", "no-cache"); // For HTTP 1.0 compatibility
+
+                // Control referrer information
+                response.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+
+                // Content Security Policy (CSP) - Customize this to fit your application's needs!
+                response.setHeader("Content-Security-Policy",
+                        "default-src 'self'; " +
+                                "script-src 'self' 'unsafe-inline'; " + // Add 'unsafe-inline' if you use inline scripts
+                                "style-src 'self' 'unsafe-inline'; " + // Add 'unsafe-inline' if you use inline styles
+                                "img-src 'self' data:; " +
+                                "font-src 'self'; " +
+                                "object-src 'none'; " +
+                                "frame-ancestors 'none'; " +
+                                "base-uri 'self'; " +
+                                "form-action 'self';"
+                );
+
+                // Permissions Policy - Customize this to fit the application's needs!
+                response.setHeader("Permissions-Policy",
+                        "geolocation=(), " +
+                                "midi=(), " +
+                                "sync-xhr=(), " +
+                                "microphone=(), " +
+                                "camera=(), " +
+                                "magnetometer=(), " +
+                                "gyroscope=(), " +
+                                "fullscreen=(), " +
+                                "payment=()"
+                );
+
                 filterChain.doFilter(request, response);
             }
         });
+        registrationBean.setOrder(Ordered.HIGHEST_PRECEDENCE); // Set the filter order
+        return registrationBean;
     }
 }
