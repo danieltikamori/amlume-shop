@@ -10,13 +10,9 @@
 
 package me.amlu.shop.amlume_shop.repositories;
 
-import me.amlu.shop.amlume_shop.model.AppRole;
-import me.amlu.shop.amlume_shop.model.Role;
+import me.amlu.shop.amlume_shop.model.MfaSettings;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-
 @Repository
-public interface RoleRepository extends JpaRepository<Role, Long>{
-    Role findByRoleName(AppRole roleUser);
-
+public interface MfaSettingsRepository extends JpaRepository<MfaSettings, Long> {
 }
