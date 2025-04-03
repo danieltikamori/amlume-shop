@@ -8,15 +8,16 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.repositories;
+package me.amlu.shop.amlume_shop.product_management;
 
-import me.amlu.shop.amlume_shop.model.Category;
-import me.amlu.shop.amlume_shop.model.Product;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
@@ -28,6 +29,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Page<Product> findByProductNameContainingIgnoreCase(String keyword, Pageable pageable);
 
     Page<Product> findByCategory(Category category, Pageable pageDetails);
+
+    void updatePrice(String productId, BigDecimal newPrice);
 
 //    Page<Product> findByCategoryOrderByProductPriceAsc(Category category, Pageable pageDetails);
 }

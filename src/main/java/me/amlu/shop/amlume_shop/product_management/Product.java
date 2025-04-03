@@ -8,11 +8,15 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.model;
+package me.amlu.shop.amlume_shop.product_management;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
+import me.amlu.shop.amlume_shop.category_management.Category;
+import me.amlu.shop.amlume_shop.model.BaseEntity;
+import me.amlu.shop.amlume_shop.model.Order;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.proxy.HibernateProxy;
 
@@ -74,11 +78,23 @@ public class Product extends BaseEntity {
     @ToString.Exclude
     private Category category;
 
-    @ManyToOne
-    @JoinColumn(name = "seller_id")
+//    @Column(nullable = false, name = "product_department")
+//    private String department;
+//
+//    @Column(nullable = false, name = "product_region")
+//    private String productRegion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "seller_id", nullable = false)
     @ToString.Exclude
     private User seller;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    @ToString.Exclude
+    private transient Order order;
+
+    @Override
     @PrePersist
     public void prePersist() {
         if (productDiscountPercentage == null) {
@@ -87,6 +103,25 @@ public class Product extends BaseEntity {
         if (productSpecialPrice == null) {
             productSpecialPrice = productPrice;
         }
+//        if (productRegion == null) {
+//            throw new IllegalStateException("Product region cannot be null");
+//        }
+    }
+
+    public User getCategoryManager() {
+        return category.getCategoryManager();
+    }
+
+    public boolean isHighValue() {
+        return productPrice.compareTo(BigDecimal.valueOf(1000)) > 0;
+    }
+
+    public boolean isLowValue() {
+        return productPrice.compareTo(BigDecimal.valueOf(1000)) < 0;
+    }
+
+    public boolean isRestricted() {
+        return category.hasSpecialRestrictions();
     }
 
     @Override
@@ -107,4 +142,5 @@ public class Product extends BaseEntity {
         HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
         return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
     }
+
 }

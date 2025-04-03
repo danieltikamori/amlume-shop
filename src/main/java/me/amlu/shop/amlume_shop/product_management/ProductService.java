@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.product_management;
 
 import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
@@ -31,4 +31,6 @@ public interface ProductService {
     ProductDTO deleteProduct(Long productId);
 
     ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException;
+
+    boolean isValidProduct(Product product);
 }

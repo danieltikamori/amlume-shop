@@ -8,17 +8,21 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.product_management;
 
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import me.amlu.shop.amlume_shop.category_management.Category;
+import me.amlu.shop.amlume_shop.category_management.CategoryRepository;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.Category;
-import me.amlu.shop.amlume_shop.model.Product;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
 import me.amlu.shop.amlume_shop.payload.ProductResponse;
-import me.amlu.shop.amlume_shop.repositories.CategoryRepository;
-import me.amlu.shop.amlume_shop.repositories.ProductRepository;
+import me.amlu.shop.amlume_shop.resilience.ExponentialBackoffRateLimiter;
+import me.amlu.shop.amlume_shop.service.CacheService;
+import me.amlu.shop.amlume_shop.service.FileService;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,20 +41,23 @@ import java.util.Objects;
 @Service
 public class ProductServiceImpl implements ProductService {
 
+    @Value("${project.image.path}")
+    private String path;
+
+    private final ExponentialBackoffRateLimiter backoffRateLimiter;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
     private final ModelMapper modelMapper;
     private final FileService fileService;
+    private final CacheService cacheService;
 
-    @Value("${project.image}")
-    private String path;
-
-
-    public ProductServiceImpl(CategoryRepository categoryRepository, ProductRepository productRepository, ModelMapper modelMapper, FileService fileService) {
+    public ProductServiceImpl(ExponentialBackoffRateLimiter backoffRateLimiter, CategoryRepository categoryRepository, ProductRepository productRepository, ModelMapper modelMapper, FileService fileService, CacheService cacheService) {
+        this.backoffRateLimiter = backoffRateLimiter;
         this.categoryRepository = categoryRepository;
         this.productRepository = productRepository;
         this.modelMapper = modelMapper;
         this.fileService = fileService;
+        this.cacheService = cacheService;
     }
 
     @Override
@@ -96,33 +103,41 @@ public class ProductServiceImpl implements ProductService {
 
 
     @Override
+    @Cacheable(value = "product", key = "#productId")
+    @RateLimiter(name = "defaultRateLimiter")
     @Transactional(readOnly = true)
     public ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
 
-        Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-        Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
-        Page<Product> pageProducts = productRepository.findAll(pageDetails);
+        try {
+            return backoffRateLimiter.executeWithBackoff(() -> {
+                Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+                Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
+                Page<Product> pageProducts = productRepository.findAll(pageDetails);
 
-        List<Product> products = pageProducts.getContent();
-        if (!pageProducts.getContent().isEmpty()) {
-            List<ProductDTO> productDTOList = products.stream()
-                    .map(product -> modelMapper.map(product, ProductDTO.class))
-                    .toList();
+                List<Product> products = pageProducts.getContent();
 
-            ProductResponse productResponse = new ProductResponse();
-            productResponse.setContent(productDTOList);
-            productResponse.setPageNumber(pageProducts.getNumber());
-            productResponse.setPageSize(pageProducts.getSize());
-            productResponse.setTotalElements(pageProducts.getTotalElements());
-            productResponse.setTotalPages(pageProducts.getTotalPages());
-            productResponse.setLastPage(pageProducts.isLast());
-            return productResponse;
-        } else {
-            throw new NotFoundException("No products found");
+                List<ProductDTO> productDTOList = products.stream()
+                        .map(product -> modelMapper.map(product, ProductDTO.class))
+                        .toList();
+
+                ProductResponse productResponse = new ProductResponse();
+                productResponse.setContent(productDTOList);
+                productResponse.setPageNumber(pageProducts.getNumber());
+                productResponse.setPageSize(pageProducts.getSize());
+                productResponse.setTotalElements(pageProducts.getTotalElements());
+                productResponse.setTotalPages(pageProducts.getTotalPages());
+                productResponse.setLastPage(pageProducts.isLast());
+                return productResponse;
+            });
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RequestInterruptionException("Request interrupted while getting products", e);
         }
+
     }
 
     @Override
+    @Cacheable(value = "product", key = "#categoryId")
     @Transactional(readOnly = true)
     public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir) {
 
@@ -151,6 +166,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    @Cacheable(value = "product", key = "#keyword")
     @Transactional(readOnly = true)
     public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String
             sortBy, String sortDir) {
@@ -164,7 +180,7 @@ public class ProductServiceImpl implements ProductService {
                 .map(product -> modelMapper.map(product, ProductDTO.class))
                 .toList();
 
-        if (products.isEmpty()) throw new ResourceNotFoundException("Product", "keyword", keyword);
+        if (products.isEmpty()) throw new ResourceNotFoundException(Constants.PRODUCT, "keyword", keyword);
 
         ProductResponse productResponse = new ProductResponse();
         productResponse.setContent(productDTOList);
@@ -181,7 +197,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO updateProduct(ProductDTO productDTO, Long productId) {
 
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
 
         Product product = modelMapper.map(productDTO, Product.class);
 
@@ -196,12 +212,20 @@ public class ProductServiceImpl implements ProductService {
         return modelMapper.map(updatedProduct, ProductDTO.class);
     }
 
+    @Transactional
+    public void updateProductPrice(String productId, BigDecimal newPrice) {
+        productRepository.updatePrice(productId, newPrice);
+        // Ensure cache reflects the new price
+        cacheService.invalidate("productCache", "product:" + productId);
+    }
+
+
     @Override
     @Transactional
     public ProductDTO deleteProduct(Long productId) {
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
 
         productRepository.delete(product);
         return modelMapper.map(product, ProductDTO.class);
@@ -212,7 +236,7 @@ public class ProductServiceImpl implements ProductService {
     public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException {
         // Get the product from the database
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException("Product", "productId", String.valueOf(productId)));
+                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
 
         // Upload the product image to server
         // Get the file name of the new image
@@ -225,6 +249,12 @@ public class ProductServiceImpl implements ProductService {
         Product updatedProduct = productRepository.save(productFromDB);
 
         return modelMapper.map(updatedProduct, ProductDTO.class);
+    }
+
+    // TOCHECK: Finish this
+    @Override
+    public boolean isValidProduct(Product product) {
+        return product != null && product.getProductName() != null && !product.getProductName().isEmpty();
     }
 
     private void validateProductData(ProductDTO productDTO) throws ProductDataValidationException {
