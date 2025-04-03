@@ -10,35 +10,34 @@
 
 /**
  * SensitiveDataValidator - Role-based Access Control Validator
- *
+ * <p>
  * This class implements a custom validation mechanism for protecting sensitive data
  * in the application through role-based access control (RBAC). It works in conjunction
  * with the @SensitiveData annotation to enforce access restrictions based on user roles.
- *
+ * <p>
  * Key Features:
  * - Validates access to sensitive data based on user roles
  * - Integrates with Spring Security's authentication mechanism
  * - Supports multiple role-based authorization checks
- *
+ * <p>
  * Usage Example:
  * {@code
- *     @SensitiveData(rolesAllowed = {"ADMIN", "MANAGER"})
- *     private String sensitiveField;
- * }
  *
+ * @SensitiveData(rolesAllowed = {"ADMIN", "MANAGER"})
+ * private String sensitiveField;
+ * }
+ * <p>
  * Validation Process:
  * 1. Checks if the user is authenticated
  * 2. Retrieves the user's granted authorities
  * 3. Compares user's roles against the allowed roles
  * 4. Grants or denies access based on role matching
- *
  * @author Daniel Itiro Tikamori
  * @version 1.0
- * @since 2024-01
- *
- * @see SensitiveData
+ * @see me.amlu.shop.amlume_shop.config.SensitiveData
  * @see ConstraintValidator
  * @see org.springframework.security.core.Authentication
+ * @since 2025-02-22
  */
 
 package me.amlu.shop.amlume_shop.config;
@@ -49,30 +48,29 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public class SensitiveDataValidator implements ConstraintValidator<SensitiveData, Object> {
-    private String[] rolesAllowed;
+    private Set<String> rolesAllowedSet;
 
     @Override
     public void initialize(SensitiveData constraintAnnotation) {
-        this.rolesAllowed = constraintAnnotation.rolesAllowed();
+        this.rolesAllowedSet = Arrays.stream(constraintAnnotation.rolesAllowed())
+                .map(role -> "ROLE_" + role)
+                .collect(Collectors.toSet());
     }
 
     @Override
     public boolean isValid(Object value, ConstraintValidatorContext context) {
-        // 1. Get the authenticated user's roles
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
-            return false; // Not authenticated - deny access
+            return false;
         }
-        // 2. Check if the user has any of the allowed roles
-        for (GrantedAuthority authority : authentication.getAuthorities()) {
-            for (String role : rolesAllowed) {
-                if (authority.getAuthority().equals("ROLE_" + role)) {
-                    return true; // User has an allowed role - allow access
-                }
-            }
-        }
-        // 3. If no allowed role is found, return false (deny access)
-        return false;
+
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(rolesAllowedSet::contains);
     }
 }

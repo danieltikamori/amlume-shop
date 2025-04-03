@@ -30,3 +30,35 @@ public @interface SensitiveData {
 
     Class<? extends Payload>[] payload() default {};
 }
+
+/** Example usage with @SensitiveData annotation
+ * @SensitiveData(rolesAllowed = {"ADMIN"}) // Static roles
+ * public class DocumentService {
+ *
+ *     @SensitiveData(rolesAllowed = {}) // Only dynamic roles
+ *     public Document getDocument(String documentId) {
+ *         // Method implementation
+ *     }
+ *
+ *     @SensitiveData(rolesAllowed = {"MANAGER"}) // Both static and dynamic roles
+ *     public void updateDocument(Document document) {
+ *         // Method implementation
+ *     }
+ * }
+ */
+
+/** Example usage with @SensitiveData annotation
+ * @SensitiveData(rolesAllowed = {"ADMIN"}) // Static roles
+ * public class DocumentService {
+ *
+ *     @SensitiveData(rolesAllowed = {}) // Only dynamic roles
+ *     public Document getDocument(String documentId) {
+ *         // Method implementation
+ *     }
+ *
+ *     @SensitiveData(rolesAllowed = {"MANAGER"}) // Both static and dynamic roles
+ *     public void updateDocument(Document document) {
+ *         // Method implementation
+ *     }
+ * }
+ */
