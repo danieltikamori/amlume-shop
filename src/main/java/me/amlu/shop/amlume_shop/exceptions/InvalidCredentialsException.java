@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class InvalidCredentialsException extends RuntimeException {
+public class InvalidCredentialsException extends BaseException {
 
     @Serial
     private static final long serialVersionUID = 1L;

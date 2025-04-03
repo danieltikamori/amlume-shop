@@ -15,9 +15,8 @@ import lombok.Getter;
 
 import java.io.Serial;
 
-@AllArgsConstructor
 @Getter
-public class TooManyAttemptsException extends RuntimeException {
+public class TooManyAttemptsException extends BaseException {
 
     @Serial
     private static final long serialVersionUID = 1L;

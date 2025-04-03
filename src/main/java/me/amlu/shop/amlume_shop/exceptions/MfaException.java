@@ -10,18 +10,49 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
+import lombok.Getter;
+
 import java.io.Serial;
 
-public class MfaException extends RuntimeException {
+@Getter
+public class MfaException extends BaseException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public MfaException(String message) {
-        super(message);
+    public enum MfaErrorType {
+        TOKEN_NOT_FOUND,
+        INVALID_TOKEN,
+        INVALID_CODE,
+        INVALID_METHOD,
+        ENFORCEMENT_FAILED,
+        SETUP_FAILED,
+        VERIFICATION_FAILED,
+        CHALLENGE_FAILED,
+        RECOVERY_CODE_ERROR,
+        RECOVERY_CODE_USAGE_ERROR,
+        RECOVERY_CODE_GENERATION_ERROR,
+        RECOVERY_CODE_DELETION_ERROR,
+        RECOVERY_CODE_EXPIRATION_ERROR,
+        RECOVERY_CODE_INVALIDATION_ERROR,
+        RECOVERY_CODE_RECOVERY_ERROR,
+        RECOVERY_CODE_RESET_ERROR,
+        RECOVERY_CODE_VERIFICATION_ERROR,
+        RECOVERY_CODE_LIST_ERROR,
+        RECOVERY_CODE_COUNT_ERROR,
+        RECOVERY_CODE_CREATION_ERROR
     }
 
-    public MfaException(String message, Throwable cause) {
-        super(message, cause);
+    private final MfaErrorType errorType;
+
+    public MfaException(MfaErrorType errorType, String message) {
+        super(message);
+        this.errorType = errorType;
     }
+
+    public MfaException(MfaErrorType errorType, String message, Throwable cause) {
+        super(message, cause);
+        this.errorType = errorType;
+    }
+
 }

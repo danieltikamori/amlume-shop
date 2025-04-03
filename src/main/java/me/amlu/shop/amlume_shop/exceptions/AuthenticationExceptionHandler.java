@@ -10,263 +10,110 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.oauth2.common.exceptions.InvalidTokenException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import java.time.LocalDateTime;
+
+@Slf4j
 @ControllerAdvice
-public class AuthenticationExceptionHandler {
-    
-    @ExceptionHandler(UsernameNotFoundException.class)
-    public ResponseEntity<String> handleUsernameNotFound(UsernameNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                           .body("User not found");
+public class AuthenticationExceptionHandler extends ResponseEntityExceptionHandler {
+
+    private static final Logger authLogger = LoggerFactory.getLogger(AuthenticationExceptionHandler.class);
+
+    // Custom Error Response Class
+    public record ErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path) {
     }
-    
+
+    // Centralized Exception Handling Method
+    private ResponseEntity<ErrorResponse> handleException(Exception ex, HttpStatus status, WebRequest request) {
+        authLogger.error("Exception: {}", ex.getMessage(), ex);
+        ErrorResponse errorResponse = new ErrorResponse(
+                LocalDateTime.now(),
+                status.value(),
+                status.getReasonPhrase(),
+                ex.getMessage(),
+                request.getDescription(false).substring(4)
+        );
+        return new ResponseEntity<>(errorResponse, status);
+    }
+
+    // Specific Exception Handlers
+    @ExceptionHandler(UsernameNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUsernameNotFound(UsernameNotFoundException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.NOT_FOUND, request);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<String> handleIllegalArgument(IllegalArgumentException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<String> handleAuthenticationException(AuthenticationException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.UNAUTHORIZED, request);
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)
-    public ResponseEntity<String> handleInvalidCredentialsException(InvalidCredentialsException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleInvalidCredentialsException(InvalidCredentialsException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.UNAUTHORIZED, request);
     }
 
     @ExceptionHandler(UserNotFoundException.class)
-    public ResponseEntity<String> handleUserNotFoundException(UserNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleUserNotFoundException(UserNotFoundException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.NOT_FOUND, request);
     }
 
     @ExceptionHandler(UserAlreadyExistsException.class)
-    public ResponseEntity<String> handleUserAlreadyExistsException(UserAlreadyExistsException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleUserAlreadyExistsException(UserAlreadyExistsException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.CONFLICT, request);
     }
 
     @ExceptionHandler(InvalidTokenException.class)
-    public ResponseEntity<String> handleInvalidTokenException(InvalidTokenException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleInvalidTokenException(InvalidTokenException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.UNAUTHORIZED, request);
     }
 
     @ExceptionHandler(InvalidRefreshTokenException.class)
-    public ResponseEntity<String> handleInvalidRefreshTokenException(InvalidRefreshTokenException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleInvalidRefreshTokenException(InvalidRefreshTokenException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.UNAUTHORIZED, request);
     }
 
     @ExceptionHandler(InvalidCaptchaException.class)
-    public ResponseEntity<String> handleInvalidCaptchaException(InvalidCaptchaException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleInvalidCaptchaException(InvalidCaptchaException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.BAD_REQUEST, request);
     }
 
     @ExceptionHandler(TooManyAttemptsException.class)
-    public ResponseEntity<String> handleTooManyAttemptsException(TooManyAttemptsException ex) {
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleTooManyAttemptsException(TooManyAttemptsException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.TOO_MANY_REQUESTS, request);
     }
 
     @ExceptionHandler(LockedException.class)
-    public ResponseEntity<String> handleLockedException(LockedException ex) {
-        return ResponseEntity.status(HttpStatus.LOCKED)
-                           .body(ex.getMessage());
+    public ResponseEntity<ErrorResponse> handleLockedException(LockedException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.LOCKED, request);
     }
 
-    @ExceptionHandler(MfaTokenNotFoundException.class)
-    public ResponseEntity<String> handleMfaTokenNotFoundException(MfaTokenNotFoundException ex) {
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                           .body(ex.getMessage());
+    // Grouping MFA Exceptions
+    @ExceptionHandler(MfaException.class)
+    public ResponseEntity<ErrorResponse> handleMfaExceptions(MfaException ex, WebRequest request) {
+        return handleException(ex, HttpStatus.BAD_REQUEST, request);
     }
 
-    @ExceptionHandler(InvalidMfaTokenException.class)
-    public ResponseEntity<String> handleInvalidMfaTokenException(InvalidMfaTokenException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
+    // Generic Exception Handler
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
+        authLogger.error("Unexpected exception: {}", ex.getMessage(), ex);
+        return handleException(new RuntimeException("An unexpected error occurred."), HttpStatus.INTERNAL_SERVER_ERROR, request);
     }
-
-    @ExceptionHandler(MfaEnforcementException.class)
-    public ResponseEntity<String> handleMfaEnforcementException(MfaEnforcementException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaSetupException.class)
-    public ResponseEntity<String> handleMfaSetupException(MfaSetupException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaVerificationException.class)
-    public ResponseEntity<String> handleMfaVerificationException(MfaVerificationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaChallengeException.class)
-    public ResponseEntity<String> handleMfaChallengeException(MfaChallengeException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaRecoveryCodeException.class)
-    public ResponseEntity<String> handleMfaRecoveryCodeException(MfaRecoveryCodeException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaRecoveryCodeUsageException.class)
-    public ResponseEntity<String> handleMfaRecoveryCodeUsageException(MfaRecoveryCodeUsageException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(MfaRecoveryCodeGenerationException.class)
-    public ResponseEntity<String> handleMfaRecoveryCodeGenerationException(MfaRecoveryCodeGenerationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaCodeException.class)
-    public ResponseEntity<String> handleInvalidMfaCodeException(InvalidMfaCodeException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaMethodException.class)
-    public ResponseEntity<String> handleInvalidMfaMethodException(InvalidMfaMethodException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaEnforcementException.class)
-    public ResponseEntity<String> handleInvalidMfaEnforcementException(InvalidMfaEnforcementException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaSetupException.class)
-    public ResponseEntity<String> handleInvalidMfaSetupException(InvalidMfaSetupException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaVerificationException.class)
-    public ResponseEntity<String> handleInvalidMfaVerificationException(InvalidMfaVerificationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaChallengeException.class)
-    public ResponseEntity<String> handleInvalidMfaChallengeException(InvalidMfaChallengeException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeException(InvalidMfaRecoveryCodeException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeUsageException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeUsageException(InvalidMfaRecoveryCodeUsageException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeGenerationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeGenerationException(InvalidMfaRecoveryCodeGenerationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeDeletionException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeDeletionException(InvalidMfaRecoveryCodeDeletionException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeExpirationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeExpirationException(InvalidMfaRecoveryCodeExpirationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeInvalidationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeInvalidationException(InvalidMfaRecoveryCodeInvalidationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeRecoveryException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeRecoveryException(InvalidMfaRecoveryCodeRecoveryException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeResetException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeResetException(InvalidMfaRecoveryCodeResetException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeVerificationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeVerificationException(InvalidMfaRecoveryCodeVerificationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeListException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeListException(InvalidMfaRecoveryCodeListException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeCountException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeCountException(InvalidMfaRecoveryCodeCountException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeCreationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeCreationException(InvalidMfaRecoveryCodeCreationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeDeletionException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeDeletionException(InvalidMfaRecoveryCodeDeletionException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeExpirationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeExpirationException(InvalidMfaRecoveryCodeExpirationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-    @ExceptionHandler(InvalidMfaRecoveryCodeInvalidationException.class)
-    public ResponseEntity<String> handleInvalidMfaRecoveryCodeInvalidationException(InvalidMfaRecoveryCodeInvalidationException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                           .body(ex.getMessage());
-    }
-
-
 }

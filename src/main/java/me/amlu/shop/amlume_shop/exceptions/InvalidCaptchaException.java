@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class InvalidCaptchaException extends RuntimeException {
+public class InvalidCaptchaException extends BaseException {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -20,4 +20,5 @@ public class InvalidCaptchaException extends RuntimeException {
     public InvalidCaptchaException(String message) {
         super(message);
     }
+
 }

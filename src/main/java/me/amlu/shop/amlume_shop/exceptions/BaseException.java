@@ -12,12 +12,16 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class UserAlreadyExistsException extends BaseException {
+public class BaseException extends RuntimeException {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public UserAlreadyExistsException(String userName) {
-        super("User with name " + userName + " already exists");
+    public BaseException(String message) {
+        super(message);
+    }
+
+    public BaseException(String message, Throwable cause) {
+        super(message, cause);
     }
 }

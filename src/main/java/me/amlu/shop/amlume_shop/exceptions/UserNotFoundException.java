@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.exceptions;
 
 import java.io.Serial;
 
-public class UserNotFoundException extends RuntimeException {
+public class UserNotFoundException extends BaseException {
 
     @Serial
     private static final long serialVersionUID = 1L;
