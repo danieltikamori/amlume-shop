@@ -102,6 +102,8 @@ public final class Constants {
     public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
 
     private static final String LINE_SEPARATOR = "\n";
+    public static final String PRODUCT = "Product";
+    public static final String PRODUCT_ID = "productId";
 
     private Constants() {
     } // Private constructor to prevent instantiation
