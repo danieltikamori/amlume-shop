@@ -96,6 +96,30 @@ public class User extends BaseEntity implements UserDetails {
     @ToString.Exclude // CascadeType.ALL is important
     private List<RefreshToken> refreshTokens;
 
+    public User(AuthenticationInfo authenticationInfo, ContactInfo contactInfo, AccountStatus accountStatus, MfaInfo mfaInfo, DeviceFingerprintingInfo deviceFingerprintingInfo, LocationInfo locationInfo, Set<UserRole> roles, List<Address> addresses, List<Category> categories, Set<Product> products, List<RefreshToken> refreshTokens) {
+        this.authenticationInfo = authenticationInfo;
+        this.contactInfo = contactInfo;
+        this.accountStatus = accountStatus;
+        this.mfaInfo = mfaInfo;
+        this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+        this.locationInfo = locationInfo;
+        this.roles = roles;
+        this.addresses = addresses;
+        this.categories = categories;
+        this.products = products;
+        this.refreshTokens = refreshTokens;
+    }
+
+    public User(AuthenticationInfo authenticationInfo, ContactInfo contactInfo, AccountStatus accountStatus, MfaInfo mfaInfo, LocationInfo locationInfo, Set<UserRole> roles) {
+        this.authenticationInfo = authenticationInfo;
+        this.contactInfo = contactInfo;
+        this.accountStatus = accountStatus;
+        this.mfaInfo = mfaInfo;
+        this.deviceFingerprintingInfo = new DeviceFingerprintingInfo(true); // Default to true for new users
+        this.locationInfo = locationInfo;
+        this.roles = roles;
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()  // Assuming 'roles' is a Set<UserRole> and Role has a 'name' attribute
@@ -137,6 +161,43 @@ public class User extends BaseEntity implements UserDetails {
     @Override
     public boolean isEnabled() {
         return accountStatus.isEnabled();
+    }
+
+    @Override
+    public boolean isDeviceFingerprintingEnabled() {
+        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
+    }
+
+    public void enableDeviceFingerprinting() {
+        new User(
+                this.authenticationInfo,
+                this.contactInfo,
+                this.accountStatus,
+                this.mfaInfo,
+                this.deviceFingerprintingInfo.enableFingerprinting(),
+                this.locationInfo,
+                this.roles,
+                this.addresses,
+                this.categories,
+                this.products,
+                this.refreshTokens
+        );
+    }
+
+    public void disableDeviceFingerprinting() {
+        new User(
+                this.authenticationInfo,
+                this.contactInfo,
+                this.accountStatus,
+                this.mfaInfo,
+                this.deviceFingerprintingInfo.disableFingerprinting(),
+                this.locationInfo,
+                this.roles,
+                this.addresses,
+                this.categories,
+                this.products,
+                this.refreshTokens
+        );
     }
 
     @Override

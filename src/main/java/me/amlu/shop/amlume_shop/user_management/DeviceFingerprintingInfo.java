@@ -17,13 +17,13 @@ import lombok.*;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
 @Builder
 @Embeddable
 @Getter
-@Setter
+@ToString
 @EqualsAndHashCode
-@NoArgsConstructor(force = true)
 public class DeviceFingerprintingInfo implements Serializable {
 
     @Serial
@@ -35,14 +35,28 @@ public class DeviceFingerprintingInfo implements Serializable {
     @Embedded
     private final UserDeviceFingerprints deviceFingerprints;
 
-    protected DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled) {
-        this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
-        this.deviceFingerprints = null;
-    }
-
-    protected DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled, UserDeviceFingerprints deviceFingerprints) {
+    public DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled, UserDeviceFingerprints deviceFingerprints) {
         this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
         this.deviceFingerprints = deviceFingerprints;
     }
 
+    public DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled) {
+        this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
+        this.deviceFingerprints = null;
+    }
+
+    // Required for JPA
+    protected DeviceFingerprintingInfo() {
+        this.deviceFingerprintingEnabled = false;
+        this.deviceFingerprints = null;
+    }
+
+    public DeviceFingerprintingInfo enableFingerprinting() {
+//        Objects.requireNonNull(deviceFingerprints, "deviceFingerprints cannot be null");
+        return new DeviceFingerprintingInfo(true, deviceFingerprints);
+    }
+
+    public DeviceFingerprintingInfo disableFingerprinting() {
+        return new DeviceFingerprintingInfo(false, null);
+    }
 }

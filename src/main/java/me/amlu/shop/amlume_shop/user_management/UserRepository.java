@@ -24,6 +24,9 @@ import java.util.Set;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    Optional<User> findByUserId(Long userId);
+
     boolean existsByUsername(String username);
 
     User findByEmail(String email);
