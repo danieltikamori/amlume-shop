@@ -39,6 +39,12 @@ public class HCPTokenService {
     @Value("${HCP_CLIENT_SECRET}")
     private String clientSecret;
 
+    private final RestTemplate restTemplate;
+
+    public HCPTokenService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
+
     public String getAccessToken() {
         if (isTokenExpired()) {
             refreshToken();
@@ -48,8 +54,6 @@ public class HCPTokenService {
 
     private synchronized void refreshToken() {
         try {
-            RestTemplate restTemplate = new RestTemplate();
-
             MultiValueMap<String, String> requestBody = new LinkedMultiValueMap<>();
             requestBody.add("client_id", clientId);
             requestBody.add("client_secret", clientSecret);

@@ -103,6 +103,21 @@ public class HCPSecretsService {
         return template;
     }
 
+    public static final String PASETO_ACCESS_PRIVATE_KEY = "PASETO_ACCESS_PRIVATE_KEY";
+    public static final String PASETO_ACCESS_PUBLIC_KEY = "PASETO_ACCESS_PUBLIC_KEY";
+    public static final String PASETO_ACCESS_SECRET_KEY = "PASETO_ACCESS_SECRET_KEY";
+    public static final String PASETO_REFRESH_SECRET_KEY = "PASETO_REFRESH_SECRET_KEY";
+
+    // To be used with the constants above
+    public String getSecret(String key) {
+        Map<String, String> secrets = getSecrets();
+        String secret = secrets.get(key);
+        if (secret == null) {
+            throw new FetchSecretsException("Secret not found: " + key);
+        }
+        return secret;
+    }
+
     public Map<String, String> getSecrets() {
         try {
             return secretsCache.get("secrets", this::fetchSecrets);
@@ -126,9 +141,15 @@ public class HCPSecretsService {
                         SecretsResponse.class
                 );
 
+//                if (response.getBody() != null) {
+//                    log.debug("Successfully fetched secrets from HCP");
+//                    return response.getBody().getSecrets();
+
+                // For debugging purposes, log the keys retrieved from HCP
                 if (response.getBody() != null) {
-                    log.debug("Successfully fetched secrets from HCP");
-                    return response.getBody().getSecrets();
+                    Map<String, String> secrets = response.getBody().getSecrets();
+                    log.debug("Retrieved keys from HCP: {}", secrets.keySet());
+                    return secrets;
                 } else {
                     log.warn("Received empty response from HCP");
                     return Collections.emptyMap();
@@ -158,6 +179,22 @@ public class HCPSecretsService {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(tokenService.getAccessToken());
         return headers;
+    }
+
+    public String getPasetoAccessPrivateKey() {
+        return getSecret(PASETO_ACCESS_PRIVATE_KEY);
+    }
+
+    public String getPasetoAccessPublicKey() {
+        return getSecret(PASETO_ACCESS_PUBLIC_KEY);
+    }
+
+    public String getPasetoAccessSecretKey() {
+        return getSecret(PASETO_ACCESS_SECRET_KEY);
+    }
+
+    public String getPasetoRefreshSecretKey() {
+        return getSecret(PASETO_REFRESH_SECRET_KEY);
     }
 
     private void handleClientError(HttpClientErrorException e) {
