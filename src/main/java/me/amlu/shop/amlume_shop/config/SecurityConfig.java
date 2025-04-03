@@ -22,6 +22,9 @@ import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -43,7 +46,7 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableReactiveMethodSecurity
+@EnableMethodSecurity
 @EnableAsync
 public class SecurityConfig {
 
@@ -158,4 +161,13 @@ public class SecurityConfig {
         );
     }
 
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        // Use fromHierarchy() directly
+        String hierarchy = """
+                ROLE_ADMIN > ROLE_CATEGORY_MANAGER
+                ROLE_CATEGORY_MANAGER > ROLE_SELLER
+                ROLE_SELLER > ROLE_USER""";
+        return RoleHierarchyImpl.fromHierarchy(hierarchy);
+    }
 }
