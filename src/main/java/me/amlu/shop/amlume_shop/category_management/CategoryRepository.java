@@ -12,7 +12,6 @@ package me.amlu.shop.amlume_shop.category_management;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.category_management.Category;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
