@@ -10,15 +10,14 @@
 
 package me.amlu.shop.amlume_shop.config.properties;
 
+import lombok.Getter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+@Getter
 @Component
 public class SecurityProperties {
     @Value("${security.max-devices-per-user:5}")
     private int maxDevicesPerUser;
 
-    public int getMaxDevicesPerUser() {
-        return maxDevicesPerUser;
-    }
 }
