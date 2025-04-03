@@ -13,7 +13,7 @@ package me.amlu.shop.amlume_shop.category_management;
 import jakarta.persistence.*;
 import lombok.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.Product;
+import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.apache.commons.lang3.StringUtils;
 import org.hibernate.annotations.BatchSize;
@@ -82,7 +82,7 @@ public class Category extends BaseEntity {
      * @return true if the category name contains "restricted"
      */
     public boolean hasSpecialRestrictions() {
-        return StringUtils.containsIgnoreCase((CharSequence) categoryName, "restricted");
+        return StringUtils.containsIgnoreCase(categoryName.getValue(), "restricted");
     }
 
     /**
@@ -91,7 +91,7 @@ public class Category extends BaseEntity {
      * @return true if the category name is "main" (case-insensitive)
      */
     public boolean isMainCategory() {
-        return StringUtils.equalsIgnoreCase((CharSequence) categoryName, "main");
+        return StringUtils.equalsIgnoreCase(categoryName.getValue(), "main");
     }
 
 

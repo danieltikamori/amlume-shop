@@ -10,29 +10,39 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.ToString;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
 
+@Getter
 @Embeddable
-public class CategoryName {
-    @NotBlank
-    @Size(min = 2, max = 50)
-    @Column(name = "category_name")
+@ToString
+public class CategoryName implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    @NotBlank(message = "Category name is required")
+    @Size(min = 2, max = 200, message = "Category name must be between 2 and 200 characters")
     private final String value;
 
     public CategoryName(String value) {
-        if (value == null || value.trim().length() < 2 || value.trim().length() > 50) {
-            throw new IllegalArgumentException("Category name must be between 2 and 50 characters");
+        Objects.requireNonNull(value, "Category name cannot be null");
+        if (value.trim().length() < 2 || value.trim().length() > 200) {
+            throw new IllegalArgumentException("Category name must be between 2 and 200 characters");
         }
         this.value = value.trim();
     }
 
-    public String getValue() {
-        return value;
+    // Required for JPA
+    protected CategoryName() {
+        this.value = null;
     }
 
     @Override

@@ -10,27 +10,39 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
-import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.Getter;
+import lombok.ToString;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.util.Objects;
 
+@Getter
 @Embeddable
-public class Description {
-    @Size(min = 2, max = 255)
-    @Column(name = "description")
+@ToString
+public class Description implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    @NotBlank(message = "Description is required")
+    @Size(min = 2, max = 2000, message = "Description must be between 2 and 2000 characters")
     private final String value;
 
     public Description(String value) {
-        if (value != null && (value.trim().length() < 2 || value.trim().length() > 255)) {
-            throw new IllegalArgumentException("Description must be between 2 and 255 characters");
+        Objects.requireNonNull(value, "Description cannot be null");
+        if (value.trim().length() < 2 || value.trim().length() > 2000) {
+            throw new IllegalArgumentException("Description must be between 2 and 2000 characters");
         }
-        this.value = value != null ? value.trim() : null;
+        this.value = value.trim();
     }
 
-    public String getValue() {
-        return value;
+    // Required for JPA
+    protected Description() {
+        this.value = null;
     }
 
     @Override
