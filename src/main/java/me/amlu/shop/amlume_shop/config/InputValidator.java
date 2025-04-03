@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.config;
 
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.model.Category;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.Order;
 import me.amlu.shop.amlume_shop.model.Product;
 import org.springframework.stereotype.Component;
