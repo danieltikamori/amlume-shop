@@ -328,6 +328,25 @@ spring:
               window-seconds: 300  # 5 minutes
               time-window-minutes: 30
 
+# Thread Pool Configuration
+threadpool:
+  io:
+    core-pool-size: 20
+    max-pool-size: 200
+    queue-capacity: 2000
+    thread-name-prefix: my-io-task-
+  token-background:
+    core-pool-size: 5
+    max-pool-size: 50
+    queue-capacity: 500
+    thread-name-prefix: my-token-background-
+  token-cpu:
+    queue-capacity: 50
+    thread-name-prefix: my-token-cpu-
+  scalable-token:
+    keep-alive-seconds: 120
+    thread-name-prefix: my-scalable-token-
+
 token:
   access:
     validity: 3600 # 1 hour
