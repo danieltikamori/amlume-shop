@@ -11,8 +11,11 @@
 package me.amlu.shop.amlume_shop.product_management;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.*;
-import lombok.*;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.model.Order;
@@ -37,38 +40,36 @@ public class Product extends BaseEntity {
     @Column(name = "product_id", nullable = false, updatable = false, unique = true)
     private Long productId;
 
-    @NotBlank(message = "Product title is required")
-    @Size(min = 2, max = 200, message = "Product name must be between 2 and 200 characters")
-    @Column(name = "product_name", nullable = false)
-    private String productName;
+    @Embedded
+    @Valid
+    private ProductName productName;
 
     @Column(name = "product_image")
     private String productImage;
 
-    @NotBlank(message = "Product description is required")
-    @Size(min = 2, max = 2000, message = "Product description must be between 2 and 2000 characters")
-    @Column(name = "product_description", nullable = false, length = 2000) // Specify length for varchar
-    private String productDescription;
+    @Embedded
+    @Valid
+    private ProductDescription productDescription;
 
     @Column(name = "product_quantity", nullable = false)
     @ColumnDefault("0")
     @Min(value = 0, message = "Product quantity must be greater than or equal to 0")
     private Integer productQuantity;
 
-    @Column(name = "product_price", nullable = false, precision = 12, scale = 2) // Specify precision and scale
-    @ColumnDefault("0.0")
-    @Digits(integer = 10, fraction = 2, message = "Product price must be a valid number with up to 10 digits and 2 decimal places")
-    @DecimalMin(value = "0.0", inclusive = false, message = "Product price must be greater than 0")
-    private BigDecimal productPrice;
+    @Embedded
+    @Valid
+    @AttributeOverride(name = "amount", column = @Column(name = "product_price", nullable = false, precision = 12, scale = 2))
+    private Money productPrice;
 
-    @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2)
-    @DecimalMin(value = "0.0", inclusive = true, message = "Product discount percentage must be greater than or equal to 0")
-    @DecimalMax(value = "100.0", inclusive = true, message = "Product discount percentage must be less than or equal to 100")
-    private BigDecimal productDiscountPercentage;
+    @Embedded
+    @Valid
+    @AttributeOverride(name = "percentage", column = @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2))
+    private DiscountPercentage productDiscountPercentage;
 
-    @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2) // Specify precision and scale
-    @DecimalMin(value = "0.0", inclusive = false, message = "Product special price must be greater than 0")
-    private BigDecimal productSpecialPrice;
+    @Embedded
+    @Valid
+    @AttributeOverride(name = "amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2))
+    private Money productSpecialPrice;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id") // Changed name to category_id
@@ -86,7 +87,7 @@ public class Product extends BaseEntity {
     @PrePersist
     public void prePersist() {
         if (productDiscountPercentage == null) {
-            productDiscountPercentage = BigDecimal.ZERO;
+            productDiscountPercentage = new DiscountPercentage(BigDecimal.ZERO);
         }
         if (productSpecialPrice == null) {
             productSpecialPrice = productPrice;
@@ -98,11 +99,11 @@ public class Product extends BaseEntity {
     }
 
     public boolean isHighValue() {
-        return productPrice.compareTo(BigDecimal.valueOf(1000)) > 0;
+        return productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) > 0;
     }
 
     public boolean isLowValue() {
-        return productPrice.compareTo(BigDecimal.valueOf(1000)) < 0;
+        return productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) < 0;
     }
 
     public boolean isRestricted() {
