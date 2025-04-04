@@ -13,7 +13,6 @@ package me.amlu.shop.amlume_shop.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.paseto4j.version4.Paseto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -46,8 +45,4 @@ public class TokenConfig {
         return new SecretKeySpec(decodedKey, "PASETO");
     }
 
-    @Bean
-    public Paseto paseto() {
-        return new Paseto();
-    }
 }
