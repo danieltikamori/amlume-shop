@@ -14,6 +14,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -26,18 +28,22 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.security.SignatureException;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static me.amlu.shop.amlume_shop.commons.Constants.BEARER_TOKEN_PREFIX;
+
+@Slf4j
 @Component
 public class PasetoAuthenticationFilter extends OncePerRequestFilter {
 
-    private final PasetoTokenServiceImpl pasetoTokenService;
-    private static final String BEARER_PREFIX = "Bearer ";
+    private final PasetoTokenService pasetoTokenService;
+//    private static final String BEARER_PREFIX = "Bearer ";
 
-    public PasetoAuthenticationFilter(PasetoTokenServiceImpl pasetoTokenService) {
+    public PasetoAuthenticationFilter(PasetoTokenService pasetoTokenService) {
         this.pasetoTokenService = pasetoTokenService;
     }
 
@@ -67,25 +73,33 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
                     // Set the authentication in SecurityContext
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 } else {
-                    logger.warn("Invalid token received");
+                    log.warn("Invalid token received");
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     SecurityContextHolder.clearContext();
                     return;
                 }
             }
         } catch (TokenValidationFailureException e) {
-            logger.error("Cannot set user authentication", e);
+            log.error("Cannot set user authentication", e);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             SecurityContextHolder.clearContext();
+        } catch (SignatureException e) {
+            throw new InvalidTokenSignatureException("Invalid token signature", e);
         }
 
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * DO NOT USE Apache Commons Lang StringUtils because it doesn't check for hasText
+     * Extracts the token from the request headers.
+     * @param request the HTTP request
+     * @return the token or null if no token is found
+     */
     private String extractTokenFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
-        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {
-            return bearerToken.substring(BEARER_PREFIX.length());
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_TOKEN_PREFIX)) {
+            return bearerToken.substring(BEARER_TOKEN_PREFIX.length());
         }
         return null;
     }
