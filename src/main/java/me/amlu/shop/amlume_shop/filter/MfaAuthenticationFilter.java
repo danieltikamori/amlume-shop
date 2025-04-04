@@ -15,14 +15,14 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import me.amlu.shop.amlume_shop.exceptions.MfaAuthenticationException;
-import me.amlu.shop.amlume_shop.exceptions.MfaValidationException;
+import me.amlu.shop.amlume_shop.exceptions.AuthenticationExceptionHandler;
+import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse;
 import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.MfaService;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.jetbrains.annotations.NotNull;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -31,20 +31,24 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Component
 public class MfaAuthenticationFilter extends OncePerRequestFilter {
     private final MfaService mfaService;
     private final MfaTokenRepository mfaTokenRepository;
     private final ObjectMapper objectMapper;
+    private final List<String> excludedUris;
 
     public MfaAuthenticationFilter(MfaService mfaService,
                                    MfaTokenRepository mfaTokenRepository,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   @Value("#{'${mfa.excluded-uris}'.split(',')}") List<String> excludedUris) {
         this.mfaService = mfaService;
         this.mfaTokenRepository = mfaTokenRepository;
         this.objectMapper = objectMapper;
+        this.excludedUris = excludedUris;
     }
 
     @Override
@@ -61,47 +65,37 @@ public class MfaAuthenticationFilter extends OncePerRequestFilter {
             User user = validateAndGetUser();
             validateMfaIfEnabled(user, request);
             filterChain.doFilter(request, response);
-        } catch (MfaAuthenticationException e) {
-            sendErrorResponse(response, e.getStatus(), e.getCode(), e.getMessage());
+        } catch (MfaException e) {
+            sendErrorResponse(response, request, HttpStatus.UNAUTHORIZED, e.getMessage());
+        } catch (Exception e) {
+            sendErrorResponse(response, request, HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
         }
     }
 
     private boolean requiresMfa(HttpServletRequest request) {
         String uri = request.getRequestURI();
-        return !(uri.startsWith("/api/auth/") ||
-                uri.startsWith("/public/") ||
-                uri.equals("/health") ||
-                uri.equals("/favicon.ico"));
+        return excludedUris.stream().noneMatch(uri::startsWith);
     }
 
     private void sendErrorResponse(HttpServletResponse response,
+                                   HttpServletRequest request,
                                    HttpStatus status,
-                                   String code,
                                    String message) throws IOException {
         response.setStatus(status.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 
-        ErrorResponse errorResponse = new ErrorResponse(code, message);
+        AuthenticationExceptionHandler.ErrorResponse errorResponse = new AuthenticationExceptionHandler.ErrorResponse(LocalDateTime.now(), status.value(), status.getReasonPhrase(), message, request.getRequestURI());
         objectMapper.writeValue(response.getOutputStream(), errorResponse);
-    }
-
-    private boolean isAuthenticated(Authentication auth) {
-        return auth != null && auth.isAuthenticated();
     }
 
     private User validateAndGetUser() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (!isAuthenticated(auth)) {
-            throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "Authentication is required");
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new MfaException(MfaException.MfaErrorType.INVALID_TOKEN, "Authentication is required");
         }
 
-        if (!(auth.getPrincipal() instanceof User)) {
-            throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "INVALID_USER", "Invalid user type");
-        }
-
-        User user = (User) auth.getPrincipal();
-        if (user == null) {
-            throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "USER_NOT_FOUND", "User not found");
+        if (!(auth.getPrincipal() instanceof User user)) {
+            throw new MfaException(MfaException.MfaErrorType.INVALID_TOKEN, "Invalid user type");
         }
 
         return user;
@@ -114,33 +108,27 @@ public class MfaAuthenticationFilter extends OncePerRequestFilter {
 
         String mfaCode = request.getHeader("X-MFA-Code");
         if (mfaCode == null || mfaCode.trim().isEmpty()) {
-            throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "MFA_REQUIRED", "MFA code is required");
+            throw new MfaException(MfaException.MfaErrorType.INVALID_CODE, "MFA code is required");
         }
 
-        try {
-            if (!validateMfaCode(user, mfaCode)) {
-                throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "INVALID_MFA", "Invalid MFA code");
-            }
-        } catch (MfaValidationException e) {
-            throw new MfaAuthenticationException(HttpStatus.UNAUTHORIZED, "MFA_ERROR", e.getMessage());
-        } catch (RuntimeException e) {
-            throw new MfaAuthenticationException(HttpStatus.INTERNAL_SERVER_ERROR, "MFA_ERROR", "Error validating MFA code");
-        }
+        validateMfaCode(user, mfaCode);
     }
 
-    private boolean validateMfaCode(User user, String code) {
-        return mfaTokenRepository.findByUser(user)
-                .map(token -> {
+    private void validateMfaCode(User user, String code) {
+        mfaTokenRepository.findByUser(user)
+                .ifPresentOrElse(token -> {
                     try {
-                        return mfaService.verifyCode(token.getSecret(), code);
+                        if (!mfaService.verifyCode(token.getSecret(), code)) {
+                            throw new MfaException(MfaException.MfaErrorType.INVALID_CODE, "Invalid MFA code");
+                        }
                     } catch (TooManyAttemptsException e) {
-                        throw new MfaValidationException("Too many MFA attempts", e);
-                    } catch (ExecutionException e) {
-                        throw new MfaValidationException("Error validating MFA code", e);
+                        throw new MfaException(MfaException.MfaErrorType.RECOVERY_CODE_USAGE_ERROR, "Too many MFA attempts", e);
+                    } catch (Exception e) {
+                        throw new MfaException(MfaException.MfaErrorType.RECOVERY_CODE_VERIFICATION_ERROR, "Error validating MFA code", e);
                     }
-                })
-                .orElseThrow(() -> new MfaValidationException("No MFA token found for user"));
+                }, () -> {
+                    throw new MfaException(MfaException.MfaErrorType.TOKEN_NOT_FOUND, "No MFA token found for user");
+                });
     }
-
 }
 
