@@ -11,7 +11,9 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.*;
+import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.springframework.security.core.Authentication;
