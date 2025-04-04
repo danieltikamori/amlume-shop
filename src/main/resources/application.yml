@@ -323,6 +323,7 @@ spring:
           time_zone: UTC
 
   mfa:
+    excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
     rate-limit:
               max-attempts: 5
               window-seconds: 300  # 5 minutes
