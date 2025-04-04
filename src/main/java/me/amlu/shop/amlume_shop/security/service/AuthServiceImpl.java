@@ -10,17 +10,24 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import io.micrometer.common.util.StringUtils;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.model.User;
 import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
 import me.amlu.shop.amlume_shop.payload.user.LoginRequest;
 import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
+import me.amlu.shop.amlume_shop.service.CacheService;
+import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -28,6 +35,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -55,16 +63,22 @@ public class AuthServiceImpl extends BaseService implements AuthService {
     private final PasetoTokenService pasetoTokenService;
     private final MfaService mfaService;
     private final MfaTokenRepository mfaTokenRepository;
+    private final UserRepository userRepository;
+    private final CacheService cacheService;
+    private final MeterRegistry meterRegistry;
 
     private final HttpServletRequest request;
     private final String fingerprintSalt;
 
-    public AuthServiceImpl(AuthenticationManager authenticationManager, PasetoTokenService pasetoTokenService, MfaService mfaService, MfaTokenRepository mfaTokenRepository,
+    public AuthServiceImpl(AuthenticationManager authenticationManager, PasetoTokenService pasetoTokenService, MfaService mfaService, MfaTokenRepository mfaTokenRepository, UserRepository userRepository, CacheService cacheService, MeterRegistry meterRegistry,
                            HttpServletRequest request, @Value("${FINGERPRINT_SALT}") String fingerprintSalt) {
         this.authenticationManager = authenticationManager;
         this.pasetoTokenService = pasetoTokenService;
         this.mfaService = mfaService;
         this.mfaTokenRepository = mfaTokenRepository;
+        this.userRepository = userRepository;
+        this.cacheService = cacheService;
+        this.meterRegistry = meterRegistry;
         this.request = request;
         this.fingerprintSalt = fingerprintSalt;
     }
@@ -343,4 +357,37 @@ public class AuthServiceImpl extends BaseService implements AuthService {
         return REFRESH_TOKEN_DURATION;
     }
 
+    @Transactional(readOnly = true)
+    public AuthenticationInfo getAuthenticationInfo(String username) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        try {
+            AuthenticationInfo info = cacheService.getOrCache(
+                    AUTH_CACHE,
+                    Constants.AUTH_CACHE_KEY_PREFIX + username,
+                    () -> userRepository.findAuthenticationInfoByUsername(username)
+            );
+            sample.stop(meterRegistry.timer("auth.info.fetch",
+                    "status", "success"));
+            return info;
+        } catch (Exception e) {
+            sample.stop(meterRegistry.timer("auth.info.fetch",
+                    "status", "error"));
+            throw e;
+        }
+    }
+
+    @Transactional(noRollbackFor = Exception.class)
+    @CacheEvict(value = AUTH_CACHE, key = "'auth:' + #username")
+    public void updateAuthenticationInfo(String username, AuthenticationInfo newInfo) {
+        if (username == null || newInfo == null) {
+            throw new IllegalArgumentException("Username and new info cannot be null");
+        }
+
+        if (!username.equals(newInfo.getUsername())) {
+            throw new IllegalArgumentException("Username mismatch");
+        }
+
+        userRepository.updateAuthenticationInfo(username, newInfo);
+        cacheService.invalidate(AUTH_CACHE, Constants.AUTH_CACHE_KEY_PREFIX + username);
+    }
 }

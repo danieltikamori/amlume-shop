@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.exceptions.MfaVerificationException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
 import me.amlu.shop.amlume_shop.payload.user.LoginRequest;
 
