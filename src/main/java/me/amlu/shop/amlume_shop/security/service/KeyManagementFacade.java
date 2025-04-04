@@ -36,6 +36,8 @@ public class KeyManagementFacade {
     // Cache duration
     private static final int CACHE_DURATION_HOURS = 1;
 
+    private static final String KEY_PREFIX = "PASETO_";
+    
     public KeyManagementFacade(
             HCPSecretsService hcpSecretsService) {
         this.hcpSecretsService = hcpSecretsService;
@@ -63,8 +65,8 @@ public class KeyManagementFacade {
 
     public KeyPair getAsymmetricKeys(String purpose) {
         try {
-            String privateKey = getCachedKey("private_" + purpose);
-            String publicKey = getCachedKey("public_" + purpose);
+            String privateKey = getCachedKey(KEY_PREFIX + purpose + "_PRIVATE_KEY");
+            String publicKey = getCachedKey(KEY_PREFIX + purpose + "_PUBLIC_KEY");
             return new KeyPair(privateKey, publicKey);
         } catch (Exception e) {
             log.error("Failed to retrieve asymmetric keys for purpose: {}", purpose);
@@ -74,7 +76,7 @@ public class KeyManagementFacade {
 
     public String getSymmetricKey(String purpose) {
         try {
-            return getCachedKey("symmetric_" + purpose);
+            return getCachedKey(KEY_PREFIX + purpose + "_SECRET_KEY");
         } catch (Exception e) {
             log.error("Failed to retrieve symmetric key for purpose: {}", purpose);
             throw new KeyManagementException("Key retrieval failed", e);
@@ -89,7 +91,7 @@ public class KeyManagementFacade {
     }
 
     private void updateKeys(Map<String, String> secrets) {
-        secrets.forEach((key, value) -> keyCache.put(key, value));
+        secrets.forEach(keyCache::put);
     }
 
     @Scheduled(fixedRate = 3600000) // Refresh every hour
