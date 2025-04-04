@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import com.eatthepath.otp.TimeBasedOneTimePasswordGenerator;
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.bouncycastle.util.encoders.Base32;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.encrypt.Encryptors;
