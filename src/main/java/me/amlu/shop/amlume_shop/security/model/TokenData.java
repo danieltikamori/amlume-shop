@@ -43,12 +43,10 @@ public record TokenData(
 
     // TOCHECK
     public static Object getApproximateSize(Object o) {
-        if (o instanceof String) {
-            return ((String) o).length();
-        } else if (o instanceof Map) {
-            return ((Map<?, ?>) o).size();
-        } else {
-            return 0;
-        }
+        return switch (o) {
+            case String string -> string.length();
+            case Map<?, ?> map -> map.size();
+            default -> 0;
+        };
     }
 }
