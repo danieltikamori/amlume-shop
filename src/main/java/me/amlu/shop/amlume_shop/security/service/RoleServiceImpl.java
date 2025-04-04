@@ -11,16 +11,19 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
 import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator;
 import me.amlu.shop.amlume_shop.config.SecurityValidator;
-import me.amlu.shop.amlume_shop.model.*;
-import me.amlu.shop.amlume_shop.repositories.UserRepository;
+import me.amlu.shop.amlume_shop.model.AppRole;
+import me.amlu.shop.amlume_shop.model.Order;
+import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.product_management.ProductService;
 import me.amlu.shop.amlume_shop.resilience.service.ResilienceService;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
-import me.amlu.shop.amlume_shop.service.ProductService;
 import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CacheEvict;
@@ -114,7 +117,7 @@ public class RoleServiceImpl implements RoleService {
                         addCategoryRoles(category, dynamicRoles, username);
                 default -> {
                     log.error("Unsupported resource type: {}", resource.getClass().getSimpleName());
-                throw new IllegalStateException("Unexpected value: " + resource);
+                    throw new IllegalStateException("Unexpected value: " + resource);
                 }
             }
 
