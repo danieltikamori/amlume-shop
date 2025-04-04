@@ -49,5 +49,8 @@ public final class TokenConstants {
     public static final String JTI_CLAIM_KEY = "jti";
     public static final String CLAIM_SCOPE = "scope";
 
+    // Messages
+    public static final String TIME_SPENT_VALIDATING_PASETO_TOKENS = "Time spent validating PASETO tokens";
+
     private TokenConstants() {}
 }
