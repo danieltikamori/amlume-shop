@@ -118,5 +118,5 @@ public abstract class BaseEntity implements Serializable, SoftDeletable {
         return new org.hibernate.mapping.Column("deleted");
     }
 
-    public abstract boolean isDeviceFingerprintingEnabled();
+//    public abstract boolean isDeviceFingerprintingEnabled();
 }

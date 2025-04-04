@@ -93,7 +93,7 @@ public class UserDeviceFingerprint extends BaseEntity {
     @Column(name = "browser_info", nullable = false)
     private String browserInfo;
 
-    @Override
+
     public boolean isDeviceFingerprintingEnabled() {
         User userToBeChecked = getUser();
         return userToBeChecked != null && userToBeChecked.isDeviceFingerprintingEnabled();

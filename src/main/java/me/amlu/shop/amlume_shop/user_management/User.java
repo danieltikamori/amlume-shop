@@ -163,7 +163,7 @@ public class User extends BaseEntity implements UserDetails {
         return accountStatus.isEnabled();
     }
 
-    @Override
+
     public boolean isDeviceFingerprintingEnabled() {
         return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
     }
