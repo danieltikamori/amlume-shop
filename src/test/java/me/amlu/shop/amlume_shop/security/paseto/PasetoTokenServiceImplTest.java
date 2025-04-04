@@ -17,13 +17,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
 import me.amlu.shop.amlume_shop.repositories.RefreshTokenRepository;
-import me.amlu.shop.amlume_shop.repositories.UserRepository;
 import me.amlu.shop.amlume_shop.security.enums.TokenType;
-import me.amlu.shop.amlume_shop.security.model.RevokedTokenRepository;
+import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.EnhancedAuthenticationService;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -85,6 +85,31 @@ class PasetoTokenServiceImplTest {
     private final String PASETO_REFRESH_SECRET_KEY = "refreshSecretKey";
     private final String PASETO_WRAPPED_PASERK = "wpk";
     private final String KEY_ID = "keyId";
+
+    @Test
+    public void testKeyConversion() {
+        String privateKeyString = "MC4CAQAwBQYDK2VwBCIEIOFfI2fecyMLXnv4e/M0iyxP0pdLf1aBNSiqrCCL/6Ra";
+        String publicKeyString = "MCowBQYDK2VwAyEAjAHSnKHGcWygrd85kgmN+x3TTaUIWa1wFMCs/DGKi58";
+
+        try {
+            PrivateKey privateKey = convertToPrivateKey(privateKeyString);
+            PublicKey publicKey = convertToPublicKey(publicKeyString);
+
+            // Create a test payload
+            String payload = "test message";
+
+            // Sign with private key
+            byte[] signature = privateKey.sign(payload.getBytes());
+
+            // Verify with public key
+            boolean isValid = publicKey.verify(payload.getBytes(), signature);
+
+            assert isValid : "Signature verification failed";
+
+        } catch (Exception e) {
+            fail("Key conversion failed: " + e.getMessage());
+        }
+    }
 
     @Test
     void generatePublicAccessToken_happyPath() throws Exception {
@@ -251,7 +276,7 @@ class PasetoTokenServiceImplTest {
 
 
     @Test
-    void validateRefreshToken_happyPath() throws Exception {
+    void validateLocalRefreshToken_happyPath() throws Exception {
 
         // Arrange
         User user = new User();
@@ -262,7 +287,7 @@ class PasetoTokenServiceImplTest {
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(i -> i.getArguments()[0]);
 
         // Act
-        Map<String, Object> claims = pasetoTokenService.validateRefreshToken(token);
+        Map<String, Object> claims = pasetoTokenService.validateLocalRefreshToken(token);
 
         // Assert
         assertEquals("1", claims.get("sub"));
@@ -353,14 +378,14 @@ class PasetoTokenServiceImplTest {
         claims.put("iat", now.minusSeconds(30).toString());
 
         // Act
-        pasetoTokenService.validateAccessTokenClaims(claims);
+        pasetoTokenService.validateAccessTokenClaims(claims, String.valueOf(TokenType.ACCESS_TOKEN));
 
         // Assert - No exception thrown means success
     }
 
 
     @Test
-    void validateRefreshTokenClaims_happyPath() throws TokenValidationFailureException {
+    void validateLocalRefreshTokenClaims_happyPath() throws TokenValidationFailureException {
         // Arrange
         Map<String, Object> claims = new HashMap<>();
         Instant now = Instant.now();
@@ -374,7 +399,7 @@ class PasetoTokenServiceImplTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user));
 
         // Act
-        pasetoTokenService.validateRefreshTokenClaims(claims);
+        pasetoTokenService.validateRefreshTokenClaims(claims, String.valueOf(TokenType.REFRESH_TOKEN));
 
         // Assert - No exception thrown means success
     }

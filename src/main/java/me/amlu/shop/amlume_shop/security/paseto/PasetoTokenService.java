@@ -12,46 +12,22 @@ package me.amlu.shop.amlume_shop.security.paseto;
 
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
-import me.amlu.shop.amlume_shop.model.User;
-import org.springframework.transaction.annotation.Transactional;
+import me.amlu.shop.amlume_shop.user_management.User;
 
+import java.security.SignatureException;
 import java.time.Duration;
 import java.util.Map;
 
 public interface PasetoTokenService {
-    String generatePublicAccessToken(String username, Duration validity) throws TokenGenerationFailureException;
+    String generatePublicAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException;
 
-    String generateLocalAccessToken(String username, Duration validity) throws TokenGenerationFailureException;
+    String generateLocalAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException;
 
     String generateRefreshToken(User user);
 
-    Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException;
-
-    Map<String, Object> validateLocalAcessToken(String token) throws TokenValidationFailureException;
-
-    Map<String, Object> validateRefreshToken(String token) throws TokenValidationFailureException;
-
-    PasetoClaims createAccessPasetoClaims(String username, Duration validity);
-
-    PasetoClaims createRefreshPasetoClaims(String userId, Duration validity);
-
-    PasetoClaims createPasetoFooterClaims(String keyId, String wrappedPaserk);
-
-    void validateAccessTokenClaims(Map<String, Object> claims) throws TokenValidationFailureException;
-
-    void validateRefreshTokenClaims(Map<String, Object> claims) throws TokenValidationFailureException;
-
-    void validatePayload(String payload) throws TokenGenerationFailureException;
-
-    boolean isTokenExpired(String token);
-
-//    @Transactional
-//    void revokeToken(String token);
-
-    @Transactional
-    void revokeToken(String token, String reason);
-
-    @Transactional
-    void revokeAllUserTokens(String name, String reason);
+    Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException, SignatureException;
+    Map<String, Object> validateLocalAccessToken(String token) throws TokenValidationFailureException;
+    Map<String, Object> validateLocalRefreshToken(String token) throws TokenValidationFailureException;
 }
+
 
