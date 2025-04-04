@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -30,7 +30,7 @@ public class SecurityNotificationService {
     public void sendAccountLockedEmail(User user) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
-        message.setTo(user.getUserEmail());
+        message.setTo(user.getContactInfo().getEmail());
         message.setSubject("Account Security Alert");
         message.setText("""
                 Dear %s,
