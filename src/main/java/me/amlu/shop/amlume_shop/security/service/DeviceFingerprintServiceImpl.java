@@ -10,16 +10,16 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
-import me.amlu.shop.amlume_shop.repositories.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +40,20 @@ import static me.amlu.shop.amlume_shop.commons.Constants.*;
 @Transactional
 public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
+    protected static final String[] IP_HEADERS = {
+            X_FORWARDED_FOR,
+            "Proxy-Client-IP",
+            "WL-Proxy-Client-IP",
+            "HTTP_X_FORWARDED_FOR",
+            "HTTP_X_FORWARDED",
+            "HTTP_CLIENT_IP",
+            "HTTP_X_CLUSTER_CLIENT_IP",
+            "HTTP_CLIENT_IP",
+            "HTTP_FORWARDED_FOR",
+            "HTTP_FORWARDED",
+            "HTTP_VIA",
+            "REMOTE_ADDR"
+    };
     private final UserRepository userRepository;
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
     private final AuditLogger auditLogger;
@@ -110,7 +124,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private void applyRateLimitingOnRegisterDevice(String userId, String clientIp) {
         ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
             if (!allowed) {
-                log.warn("Rate limit exceeded for IP: {}", clientIp);
+                log.warn("Rate limit exceeded for IP: {} on device registration", clientIp);
                 auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId,"No yet generated fingerprint");
                 throw new RateLimitExceededException("Rate limit exceeded for IP address");
             }
@@ -125,7 +139,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     private User findAndValidateUser(String userId) {
-        return userRepository.findById(Long.valueOf(userId))
+        return userRepository.findByUserId(Long.valueOf(userId))
                 .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
     }
 
@@ -412,7 +426,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             // Check rate limiting
             ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
                 if (!allowed) {
-                    log.warn("Rate limit exceeded for IP: {}", clientIp);
+                    log.warn("Rate limit exceeded for IP: {} on fingerprint: {}", clientIp, fingerprint);
                     auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
                     throw new RateLimitExceededException("Rate limit exceeded for IP address");
                 }
@@ -503,7 +517,6 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     private String generateFallbackFingerprint() {
         return "fallbackFingerprint_" + UUID.randomUUID().toString();
-//        return UUID.randomUUID().toString();
     }
 
     private void handleValidationError(String userId, String fingerprintId, String clientIp, Exception e) {
@@ -655,20 +668,6 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 });
     }
 
-    @Override
-    public void revokeAllDevices(String userId, String exceptFingerprint) {
-        List<UserDeviceFingerprint> devices = userDeviceFingerprintRepository
-                .findByUserIdAndDeviceFingerprintNot(userId, exceptFingerprint); // TOCHECK: method
-
-        devices.forEach(device -> {
-            device.setActive(false);
-            device.setDeactivatedAt(Instant.now());
-            userDeviceFingerprintRepository.save(device);
-        });
-
-        auditLogger.logSecurityEvent("ALL_DEVICES_REVOKED EXCEPT this fingerprint:", userId, exceptFingerprint);
-    }
-
 
     @Override
     public void checkDeviceLimit(User user) {
@@ -705,6 +704,20 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     @Override
+    public void revokeAllDevices(String userId, String exceptFingerprint) {
+        List<UserDeviceFingerprint> devices = userDeviceFingerprintRepository
+                .findByUserIdAndDeviceFingerprintNot(userId, exceptFingerprint); // TOCHECK: method
+
+        devices.forEach(device -> {
+            device.setActive(false);
+            device.setDeactivatedAt(Instant.now());
+            userDeviceFingerprintRepository.save(device);
+        });
+
+        auditLogger.logSecurityEvent("ALL_DEVICES_REVOKED EXCEPT this fingerprint:", userId, exceptFingerprint);
+    }
+
+    @Override
     public void deactivateDevice(String userId, String deviceFingerprint) {
         userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), deviceFingerprint)
                 .ifPresent(device -> {
@@ -716,7 +729,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public void disableDeviceFingerprinting(User user) {
-        user.setDeviceFingerprintingEnabled(false);
+        user.disableDeviceFingerprinting();
         userDeviceFingerprintRepository.findByUser(user)
                 .forEach(device -> {
                     device.setActive(false);
@@ -730,7 +743,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public void enableDeviceFingerprinting(User user) {
-        user.setDeviceFingerprintingEnabled(true);
+        user.enableDeviceFingerprinting();
         userRepository.save(user);
         auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_ENABLED", String.valueOf(user.getUserId()), null);
         log.warn("Device fingerprinting enabled for user: {}", user.getUserId());

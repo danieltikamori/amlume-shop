@@ -11,11 +11,10 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.servlet.http.HttpServletRequest;
-import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintAdditionException;
 import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintMismatchException;
 import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintRegistrationException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
-import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 
 public interface DeviceFingerprintService {
