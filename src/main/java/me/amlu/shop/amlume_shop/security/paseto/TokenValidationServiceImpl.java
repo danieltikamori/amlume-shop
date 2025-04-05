@@ -10,31 +10,45 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.util.concurrent.RateLimiter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
-import io.prometheus.client.Counter;
-import io.prometheus.client.Summary;
-import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.security.enums.TokenType;
-import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
-import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRepository;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
-import org.apache.commons.lang3.StringUtils;
-import org.paseto4j.commons.PasetoException;
-import org.paseto4j.version4.Paseto;
-import org.springframework.stereotype.Service;
+//import static me.amlu.shop.amlume_shop.exceptions.ErrorMessages.*;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.CLAIMS_PAYLOAD_EXCEEDS_MAXIMUM_SIZE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.DEFAULT_AUDIENCE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.ERROR_EXTRACTING_CLAIMS_FROM_TOKEN;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.ERROR_PARSING_CLAIMS;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.ERROR_SERIALIZING_CLAIMS_TO_JSON;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_AUDIENCE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_KEY_ID;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_PASETO_SIGNATURE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_PASETO_TOKEN;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_SUBJECT;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_TOKEN_FORMAT;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_TOKEN_FORMAT_INVALID_PARTS;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_TOKEN_ISSUER;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_TOKEN_LENGTH;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.INVALID_TOKEN_TYPE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.KID_IS_MISSING_IN_THE_TOKEN_FOOTER;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.MISSING_REQUIRED_CLAIM;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.NO_ROLES_FOUND_FOR_USER;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.NULL_PAYLOAD_AFTER_PARSING;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.PASETO_TOKEN_FOOTER_PLACE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.PASETO_TOKEN_PARTS_LENGTH;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.PASETO_TOKEN_PAYLOAD_PLACE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_EXPIRED;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_ID_IS_MISSING_CANNOT_REVOKE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_ISSUED_IN_THE_FUTURE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_NOT_YET_VALID;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOCATION_FAILED;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_EXPIRED;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_INVALID_AUDIENCE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_INVALID_ISSUER;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_INVALID_SUBJECT;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_INVALID_TOKEN_TYPE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_ISSUED_IN_THE_FUTURE;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_MISSING_CLAIM;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_REVOKED_NOT_YET_VALID;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_TYPE_CLAIM_IS_MISSING;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_VALIDATION_FAILED;
+import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.USER_ACCOUNT_DISABLED;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SignatureException;
@@ -45,11 +59,49 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
-import static me.amlu.shop.amlume_shop.exceptions.ErrorMessages.*;
-import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.DEFAULT_AUDIENCE;
-import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.PASETO_TOKEN_PARTS_LENGTH;
+import org.apache.commons.lang3.StringUtils;
+import org.paseto4j.commons.PasetoException;
+import org.paseto4j.version4.Paseto;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.commons.Constants;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsExtractionFailureException;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsParsingException;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsSizeException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidKeyIdException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenFormatException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenLengthException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
+import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
+import me.amlu.shop.amlume_shop.exceptions.TokenRevocationException;
+import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
+import me.amlu.shop.amlume_shop.exceptions.TooManyRequestsException;
+import me.amlu.shop.amlume_shop.resilience.service.RedisRateLimiter;
+import me.amlu.shop.amlume_shop.security.enums.TokenType;
+import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
+import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
+import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
+import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 
 //Single Responsibility Principle :
 //
@@ -88,7 +140,7 @@ import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.PASET
 public class TokenValidationServiceImpl implements TokenValidationService {
 
     private final ObjectMapper objectMapper;
-    private final KeyManagementService keyManagementService;
+    private final KeyManagementService keyManagementService;ø
     private final TokenUtilService tokenUtilService;
     private final TokenCacheService tokenCacheService;
     private final TokenClaimsService tokenClaimsService;
@@ -99,41 +151,22 @@ public class TokenValidationServiceImpl implements TokenValidationService {
     private final PasetoPropertyResolver pasetoPropertyResolver;
     private final TokenConfigurationService tokenConfigurationService;
 
-    private final RateLimiter tokenValidationRateLimiter;
-    private final RateLimiter claimsValidationRateLimiter;
+    private final RedisRateLimiter redisRateLimiter;
 
-//    @Value("${rateLimit.token.validation}")
-//    private double tokenValidationRateLimiterValue;
-//
-//    @Value("${rateLimit.claims.validation}")
-//    private double claimsValidationRateLimiterValue;
-
-//    @Value("${paseto.access.kid}")
-//    private String pasetoAccessKid;
-//
-//    @Value("${paseto.access.local.kid}")
-//    private String pasetoAccessLocalKid;
-//
-//    @Value("${paseto.refresh.local.kid}")
-//    private String pasetoRefreshLocalKid;
+    // Rate limiters using Semaphore
+    private final Semaphore tokenValidationSemaphore;
+    private final Semaphore claimsValidationSemaphore;
 
     // Metrics
     private final PrometheusMeterRegistry meterRegistry;
 
-    private final Summary tokenValidationLatency = Summary.build()
-            .name("paseto_token_validation_seconds")
-            .help(TokenConstants.TIME_SPENT_VALIDATING_PASETO_TOKENS)
-            .quantile(0.5, 0.05)    // Add 50th percentile with 5% tolerance
-            .quantile(0.95, 0.01)   // Add 95th percentile with 1% tolerance
-            .maxAgeSeconds(300) // 5 minutes maximum age for samples
-            .ageBuckets(5)
-            .register();
-
     private final Counter tokenValidationCounter;
     private final Timer tokenValidationTimer;
+    private DistributionSummary tokenValidationLatency;
 
 
-    public TokenValidationServiceImpl(ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenCacheService tokenCacheService, TokenClaimsService tokenClaimsService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, RevokedTokenRepository revokedTokenRepository, PrometheusMeterRegistry meterRegistry, Counter tokenValidationCounter, Timer tokenValidationTimer, PasetoPropertyResolver pasetoPropertyResolver, TokenConfigurationService tokenConfigurationService) {
+    public TokenValidationServiceImpl(@Qualifier("redisTemplate") RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenCacheService tokenCacheService, TokenClaimsService tokenClaimsService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, RevokedTokenRepository revokedTokenRepository, PrometheusMeterRegistry meterRegistry, Counter tokenValidationCounter, Timer tokenValidationTimer, PasetoPropertyResolver pasetoPropertyResolver, TokenConfigurationService tokenConfigurationService, DistributionSummary tokenValidationLatency) {
+        this.redisRateLimiter = new RedisRateLimiter(redisTemplate, tokenConfigurationService);
         this.objectMapper = objectMapper;
         this.keyManagementService = keyManagementService;
         this.tokenUtilService = tokenUtilService;
@@ -146,25 +179,18 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         this.meterRegistry = meterRegistry;
         this.pasetoPropertyResolver = pasetoPropertyResolver;
         this.tokenConfigurationService = tokenConfigurationService;
-        this.tokenValidationCounter = Counter.build()
-                .name("paseto_token_validation_total")
-                .help("Total number of PASETO token validations")
-                .register();
-        this.tokenValidationTimer = Timer.builder("paseto.token.validation")
-                .description(TokenConstants.TIME_SPENT_VALIDATING_PASETO_TOKENS)
-                .tags("type", "validation")
-                .publishPercentiles(0.5, 0.95, 0.99) // Add percentiles
-                .publishPercentileHistogram()
-                .minimumExpectedValue(Duration.ofMillis(1))
-                .maximumExpectedValue(Duration.ofSeconds(10))
-                .register(meterRegistry);
-        this.tokenValidationRateLimiter = RateLimiter.create(tokenConfigurationService.getValidationRateLimitPermitsPerSecond());
-        this.claimsValidationRateLimiter = RateLimiter.create(tokenConfigurationService.getClaimsValidationRateLimitPermitsPerSecond());
+        this.tokenValidationCounter = tokenValidationCounter;
+        this.tokenValidationTimer = tokenValidationTimer;
+        this.tokenValidationLatency = tokenValidationLatency;
+        // Initialize Semaphores with the configured permits
+        this.tokenValidationSemaphore = new Semaphore((int) tokenConfigurationService.getValidationRateLimitPermitsPerSecond(), true); // Fair mode
+        this.claimsValidationSemaphore = new Semaphore((int) tokenConfigurationService.getClaimsValidationRateLimitPermitsPerSecond(), true); // Fair mode
     }
+
 
     private Timer createTokenValidationTimer(MeterRegistry registry) {
         return Timer.builder("paseto.token.validation")
-                .description(TokenConstants.TIME_SPENT_VALIDATING_PASETO_TOKENS)
+                .description("Time spent validating PASETO tokens")
                 .tags("type", "validation")
                 .publishPercentiles(0.5, 0.95, 0.99) // Add percentiles
                 .publishPercentileHistogram()
@@ -173,11 +199,6 @@ public class TokenValidationServiceImpl implements TokenValidationService {
                 .register(registry);
     }
 
-//    // Rate limiter for token validation to prevent abuse and ensure rate limiting
-//    private final RateLimiter tokenValidationRateLimiter = RateLimiter.create(tokenConfigurationService.getValidationRateLimitPermitsPerSecond());
-//    private final RateLimiter claimsValidationRateLimiter = RateLimiter.create(tokenConfigurationService.getClaimsValidationRateLimitPermitsPerSecond());
-
-    // Add structured logging
     private void logTokenValidationAttempt(String token, boolean success, String errorMessage) {
         if (success) {
             log.info("Token validation successful for token: {}", maskToken(token));
@@ -207,17 +228,14 @@ public class TokenValidationServiceImpl implements TokenValidationService {
 
     @Override
     public Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException, SignatureException {
-        tokenValidationRateLimiter.tryAcquire();
+        // Acquire a permit from the semaphore
+        if (!tokenValidationSemaphore.tryAcquire()) {
+            throw new TooManyRequestsException("Token validation rate limit exceeded");
+        }
 
-        Summary.Timer timer = tokenValidationLatency.startTimer();
+        DistributionSummary.Sample timer = DistributionSummary.start(meterRegistry);
         try {
-            //            Timer.Sample sample = Timer.start();
-//            Timer.Sample sample = Timer.start(meterRegistry);
             log.debug("Validating public access token");
-
-            // Check if token is blacklisted
-//            isTokenBlacklisted();
-
             validateTokenStringLength(token);
 
             String[] parts = splitToken(token);
@@ -227,19 +245,18 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             Map<String, Object> claims = parseClaims(payload);
             validatePublicAccessKid(claims);
             validatePublicAccessTokenClaims(claims, String.valueOf(TokenType.ACCESS_TOKEN));
-//            sample.stop(tokenValidationTimer);
             log.debug("Public access token validation successful");
             return claims;
         } catch (TokenValidationFailureException e) {
             handlePublicAccessTokenValidationException(e);
-            throw new TokenValidationFailureException(String.valueOf(TOKEN_VALIDATION_FAILED), e);
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e); // Use the constant
         } catch (JsonProcessingException e) {
-            throw new ClaimsParsingException("Error parsing claims", e);
+            throw new ClaimsParsingException(ERROR_PARSING_CLAIMS, e); // Use the constant
         } catch (SignatureException e) {
-            throw new SignatureException("Invalid PASETO signature", e);
+            throw new SignatureException(INVALID_PASETO_SIGNATURE, e); // Use the constant
         } finally {
-            timer.observeDuration();
-            //            sample.stop(tokenValidationTimer);
+            timer.stop(tokenValidationLatency);
+            tokenValidationSemaphore.release(); // Release the permit
         }
     }
 
@@ -264,23 +281,26 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             return claims;
 
         } catch (JsonProcessingException e) { // Handle JSON parsing exceptions
-            log.error(String.valueOf(ERROR_PARSING_CLAIMS), e);
-            throw new TokenValidationFailureException(String.valueOf(ERROR_PARSING_CLAIMS), e);
+            log.error(ERROR_PARSING_CLAIMS, e);
+            throw new TokenValidationFailureException(ERROR_PARSING_CLAIMS, e);
 
         } catch (IllegalArgumentException e) { // Catch IllegalArgumentException
-            log.error(String.valueOf(INVALID_PASETO_TOKEN), e);
-            throw new TokenValidationFailureException(String.valueOf(INVALID_PASETO_TOKEN), e);
+            log.error(INVALID_PASETO_TOKEN, e);
+            throw new TokenValidationFailureException(INVALID_PASETO_TOKEN, e);
 
         } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
             log.error("Failed to validate local access PASETO token", e);
-            throw new TokenValidationFailureException(String.valueOf(TOKEN_VALIDATION_FAILED), e);
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e);
         }
     }
 
 
     @Override
     public Map<String, Object> validateLocalRefreshToken(String token) throws TokenValidationFailureException { // Separate refresh token validation
-        tokenValidationRateLimiter.acquire();
+        // Acquire a permit from the semaphore
+        if (!tokenValidationSemaphore.tryAcquire()) {
+            throw new TooManyRequestsException("Token validation rate limit exceeded");
+        }
 
         try {
             validateTokenStringLength(token);
@@ -288,7 +308,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             // Split token into header, payload, and footer
             String[] parts = splitToken(token);
 
-            String payload = Paseto.decrypt(keyManagementService.getRefreshSecretKey(), parts[TokenConstants.PASETO_TOKEN_PAYLOAD_PLACE], parts[TokenConstants.PASETO_TOKEN_FOOTER_PLACE]);
+            String payload = Paseto.decrypt(keyManagementService.getRefreshSecretKey(), parts[PASETO_TOKEN_PAYLOAD_PLACE], parts[PASETO_TOKEN_FOOTER_PLACE]);
 
             Map<String, Object> claims = objectMapper.readValue(payload, new TypeReference<>() {
             });
@@ -313,24 +333,17 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             throw e;
         } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
             log.error("Unexpected error during token validation: {}", e.getMessage(), e);
-            throw new TokenValidationFailureException(String.valueOf(TOKEN_VALIDATION_FAILED), e);
+            throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e);
+        } finally {
+            tokenValidationSemaphore.release(); // Release the permit
         }
     }
-
-//    private static void isTokenBlacklisted() {
-//        // Check if token is blacklisted
-//        String jti = (String) claims.get(TokenClaims.JTI);
-//        if (tokenBlacklistService.isBlacklisted(jti)) {
-//            throw new TokenValidationFailureException("Token has been revoked");
-//        }
-//    }
-
 
     private void validateTokenStringLength(String token) throws InvalidTokenLengthException {
         Objects.requireNonNull(token, "Token cannot be null");
 
         if (token.length() < TokenConstants.MIN_TOKEN_LENGTH || token.length() > TokenConstants.MAX_TOKEN_LENGTH) {
-            throw new InvalidTokenLengthException("Token length out of acceptable range");
+            throw new InvalidTokenLengthException(INVALID_TOKEN_LENGTH); // Use the constant
         }
     }
 
@@ -338,24 +351,22 @@ public class TokenValidationServiceImpl implements TokenValidationService {
     private String[] splitToken(String token) throws InvalidTokenFormatException {
         String[] parts = token.split("\\.");
         if (parts.length > PASETO_TOKEN_PARTS_LENGTH || parts.length < PASETO_TOKEN_PARTS_LENGTH) {
-            throw new InvalidTokenFormatException(String.valueOf(INVALID_TOKEN_FORMAT));
+            throw new InvalidTokenFormatException(INVALID_TOKEN_FORMAT);
         }
         return parts;
     }
 
     private String createSignedMessage(String[] parts) throws InvalidTokenFormatException {
         if (parts[2].isBlank()) {
-            throw new InvalidTokenFormatException(String.valueOf(INVALID_TOKEN_FORMAT));
+            throw new InvalidTokenFormatException(INVALID_TOKEN_FORMAT);
         }
-//        return parts[0] + "." + parts[1];
         return parts[TokenConstants.PASETO_TOKEN_PAYLOAD_PLACE]; // Payload part of the token
     }
 
     private String extractFooter(String[] parts) {
         if (parts[3].isBlank()) {
-            throw new InvalidTokenFormatException(String.valueOf(INVALID_TOKEN_FORMAT));
+            throw new InvalidTokenFormatException(INVALID_TOKEN_FORMAT);
         }
-//        return parts.length == PASETO_TOKEN_PARTS_LENGTH ? parts[3] : ""; // Use this if the there's tokens with AND without footers
         return parts[TokenConstants.PASETO_TOKEN_FOOTER_PLACE]; // Footer part of the token
     }
 
@@ -363,8 +374,8 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         try {
             return Paseto.parse(keyManagementService.getAccessPublicKey(), signedMessage, footer);
         } catch (SignatureException e) {
-            log.error("Invalid PASETO signature", e);
-            throw new SignatureException("Invalid PASETO signature", e);
+            log.error(INVALID_PASETO_SIGNATURE, e);
+            throw new SignatureException(INVALID_PASETO_SIGNATURE, e);
         }
     }
 
@@ -376,7 +387,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             return objectMapper.readValue(payload, new TypeReference<>() {
             });
         } catch (JsonProcessingException e) {
-            log.error(String.valueOf(ERROR_PARSING_CLAIMS), e);
+            log.error(ERROR_PARSING_CLAIMS, e);
             throw new TokenValidationFailureException("Error parsing claims", e);
         }
     }
@@ -384,52 +395,60 @@ public class TokenValidationServiceImpl implements TokenValidationService {
     private void validatePublicAccessKid(Map<String, Object> claims) throws InvalidKeyIdException {
         String kid = (String) claims.get("kid");
         if (kid.isBlank()) {
-            throw new InvalidKeyIdException(String.valueOf(KID_IS_MISSING_IN_THE_TOKEN_FOOTER));
+            throw new InvalidKeyIdException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER); // Use the constant
         }
         if (!pasetoPropertyResolver.resolvePublicAccessKid().equals(kid)) {
-            throw new TokenValidationFailureException(String.valueOf(INVALID_KEY_ID));
+            throw new TokenValidationFailureException(INVALID_KEY_ID); // Use the constant
         }
     }
 
     private void validateLocalAccessKid(Map<String, Object> claims) throws InvalidKeyIdException {
         String kid = (String) claims.get("kid");
         if (kid.isBlank()) {
-            throw new InvalidKeyIdException(String.valueOf(KID_IS_MISSING_IN_THE_TOKEN_FOOTER));
+            throw new InvalidKeyIdException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER);
         }
         if (!pasetoPropertyResolver.resolveLocalAccessKid().equals(kid)) {
-            throw new TokenValidationFailureException(String.valueOf(INVALID_KEY_ID));
+            throw new TokenValidationFailureException(INVALID_KEY_ID);
         }
     }
 
     private void validateLocalRefreshKid(Map<String, Object> claims) throws InvalidKeyIdException {
         String kid = (String) claims.get("kid");
         if (kid.isBlank()) {
-            throw new InvalidKeyIdException(String.valueOf(KID_IS_MISSING_IN_THE_TOKEN_FOOTER));
+            throw new InvalidKeyIdException(KID_IS_MISSING_IN_THE_TOKEN_FOOTER);
         }
         if (!pasetoPropertyResolver.resolveLocalRefreshKid().equals(kid)) {
-            throw new TokenValidationFailureException(String.valueOf(INVALID_KEY_ID));
+            throw new TokenValidationFailureException(INVALID_KEY_ID);
         }
     }
 
 
     private void handlePublicAccessTokenValidationException(Exception e) throws TokenValidationFailureException {
-        if (e instanceof SignatureException) {
-            log.error("Invalid PASETO signature", e);
-            throw new InvalidTokenSignatureException("Invalid PASETO signature", e);
-        } else if (e instanceof JsonProcessingException) {
-            log.error(String.valueOf(ERROR_PARSING_CLAIMS), e);
-            throw new TokenValidationFailureException(String.valueOf(ERROR_PARSING_CLAIMS), e);
-        } else if (e instanceof IllegalArgumentException) {
-            log.error(String.valueOf(INVALID_PASETO_TOKEN), e);
-            throw new TokenValidationFailureException(String.valueOf(INVALID_PASETO_TOKEN), e);
-        } else if (e instanceof TokenValidationFailureException) {
-            throw new TokenValidationFailureException("Token validation failed", e); // TOCHECK
-        } else if (e instanceof PasetoException) {
-            log.error("PASETO-specific error occurred", e);
-            throw new TokenValidationFailureException("PASETO-specific error occurred", e);
-        } else {
-            log.error("Unexpected error during public access PASETO token validation", e);
-            throw new TokenValidationFailureException("Unexpected error during token validation", e);
+        switch (e) {
+            case SignatureException signatureException -> {
+                log.error(INVALID_PASETO_SIGNATURE, e); // Use the constant
+
+                throw new InvalidTokenSignatureException(INVALID_PASETO_SIGNATURE, e); // Use the constant // Use the constant
+            }
+            case JsonProcessingException jsonProcessingException -> {
+                log.error(ERROR_PARSING_CLAIMS, e); // Use the constant
+
+                throw new TokenValidationFailureException(ERROR_PARSING_CLAIMS, e); // Use the constant // Use the constant
+            }
+            case IllegalArgumentException illegalArgumentException -> {
+                log.error(INVALID_PASETO_TOKEN, e);
+                throw new TokenValidationFailureException(INVALID_PASETO_TOKEN, e);
+            }
+            case TokenValidationFailureException tokenValidationFailureException ->
+                    throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e); // TOCHECK
+            case PasetoException pasetoException -> {
+                log.error("PASETO-specific error occurred", e);
+                throw new TokenValidationFailureException("PASETO-specific error occurred", e);
+            }
+            case null, default -> {
+                log.error("Unexpected error during public access PASETO token validation", e);
+                throw new TokenValidationFailureException("Unexpected error during token validation", e);
+            }
         }
     }
 
@@ -458,15 +477,21 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validatePublicAccessTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
+        // Acquire a permit from the semaphore
+        if (!claimsValidationSemaphore.tryAcquire()) {
+            throw new TooManyRequestsException("Claims validation rate limit exceeded");
+        }
 
-        claimsValidationRateLimiter.tryAcquire();
-
-        validateClaimsSize(claims);
-        validateTokenSessionId(claims);
-        validateUserStatus(claims);
-        validateTokenMetadata(claims, expectedType);
-        validateTokenTiming(claims);
-        validateTokenIdentity(claims);
+        try {
+            validateClaimsSize(claims);
+            validateTokenSessionId(claims);
+            validateUserStatus(claims);
+            validateTokenMetadata(claims, expectedType);
+            validateTokenTiming(claims);
+            validateTokenIdentity(claims);
+        } finally {
+            claimsValidationSemaphore.release(); // Release the permit
+        }
     }
 
     /**
@@ -478,14 +503,21 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validateLocalAccessTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
+        // Acquire a permit from the semaphore
+        if (!claimsValidationSemaphore.tryAcquire()) {
+            throw new TooManyRequestsException("Claims validation rate limit exceeded");
+        }
 
-        claimsValidationRateLimiter.tryAcquire();
-        validateClaimsSize(claims);
-        validateTokenSessionId(claims);
-        validateServiceStatus(claims);
-        validateTokenMetadata(claims, expectedType);
-        validateTokenTiming(claims);
-        validateTokenIdentity(claims);
+        try {
+            validateClaimsSize(claims);
+            validateTokenSessionId(claims);
+            validateServiceStatus(claims);
+            validateTokenMetadata(claims, expectedType);
+            validateTokenTiming(claims);
+            validateTokenIdentity(claims);
+        } finally {
+            claimsValidationSemaphore.release(); // Release the permit
+        }
     }
 
     /**
@@ -497,14 +529,20 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validateLocalRefreshTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
+        // Acquire a permit from the semaphore
+        if (!claimsValidationSemaphore.tryAcquire()) {
+            throw new TooManyRequestsException("Claims validation rate limit exceeded");
+        }
 
-        claimsValidationRateLimiter.tryAcquire();
-
-        validateClaimsSize(claims);
-        validateUserStatus(claims);
-        validateTokenMetadata(claims, expectedType);
-        validateTokenTiming(claims);
-        validateTokenIdentity(claims);
+        try {
+            validateClaimsSize(claims);
+            validateUserStatus(claims);
+            validateTokenMetadata(claims, expectedType);
+            validateTokenTiming(claims);
+            validateTokenIdentity(claims);
+        } finally {
+            claimsValidationSemaphore.release(); // Release the permit
+        }
     }
 
     @Override
@@ -512,10 +550,10 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         try {
             String claimsJson = objectMapper.writeValueAsString(claims);
             if (claimsJson.length() > TokenConstants.MAX_CLAIMS_SIZE) {
-                throw new ClaimsSizeException("Claims payload exceeds maximum size");
+                throw new ClaimsSizeException(CLAIMS_PAYLOAD_EXCEEDS_MAXIMUM_SIZE); // Use the constant
             }
         } catch (JsonProcessingException e) {
-            throw new ClaimsSizeException("Error serializing claims to JSON", e);
+            throw new ClaimsSizeException(ERROR_SERIALIZING_CLAIMS_TO_JSON, e); // Use the constant
         }
     }
 
@@ -542,7 +580,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     private void validateUserEnabled(User user) throws TokenValidationFailureException {
         if (!user.isEnabled()) {
-            throw new TokenValidationFailureException("User account is disabled");
+            throw new TokenValidationFailureException(USER_ACCOUNT_DISABLED);
         }
     }
 
@@ -552,7 +590,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         Set<UserRole> roles = userRepository.findRolesByUserId(Long.valueOf(tokenUtilService.extractUserId(claims)));
 
         if (Objects.isNull(roles) || roles.isEmpty()) {
-            throw new TokenValidationFailureException("No roles found for user");
+            throw new TokenValidationFailureException(NO_ROLES_FOUND_FOR_USER);
         }
         Set<String> expectedScopes = roles.stream()
                 .map(role -> role.getRoleName().name().toUpperCase())
@@ -566,7 +604,6 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         if (!expectedScopes.containsAll(actualScopes)) {
             log.warn("User scope validation failed. Expected: {}, Actual: {}", expectedScopes, actualScopes);
             throw new TokenValidationFailureException("Invalid user scope. Actual: " + actualScopes);
-//            throw new TokenValidationFailureException("Invalid user scope. Expected: " + expectedScopes + ", Actual: " + actualScopes);
         }
     }
 
@@ -576,19 +613,6 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      * For Kubernetes, this method should be modified to check the Kubernetes API for service status and authorization
      */
     private void validateServiceStatus(Map<String, Object> claims) throws TokenValidationFailureException {
-        // Finish implementation if required to Kubernetes
-//        log.debug("Validating service status for token");
-//        try {
-//            String serviceId = tokenUtilService.extractServiceId(claims);
-//            Service service= tokenUtilService.getServiceId(serviceId);
-//            validateServiceEnabled(service);
-//            validateNotRevoked(claims);
-//            validateServiceScope(claims);
-//            log.debug("Service status validation successful");
-//        } catch (TokenValidationFailureException e) {
-//            log.warn("Service status validation failed: {}", e.getMessage());
-//            throw e;
-//        }
     }
 
     /**
@@ -643,22 +667,6 @@ public class TokenValidationServiceImpl implements TokenValidationService {
     }
 
     /**
-     * Less efficient as creates a set of ALL missing claims. Validates that all required claims are present
-     */
-//    @Override
-//    public void validateRequiredClaims(Map<String, Object> claims, Set<String> requiredClaims) throws TokenValidationFailureException {
-//        Set<String> missingClaims = new HashSet<>();
-//        for (String claimName : requiredClaims) {
-//            if (!claims.containsKey(claimName)) {
-//                missingClaims.add(claimName);
-//            }
-//        }
-//        if (!missingClaims.isEmpty()) {
-//            throw new TokenValidationFailureException("Missing required claims: " + String.join(", ", missingClaims));
-//        }
-//    }
-
-    /**
      * Validates that all required claims are present. Efficient as it stops after the first missing claim.
      */
     private void validateRequiredClaims(Map<String, Object> claims) throws TokenValidationFailureException {
@@ -679,22 +687,22 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      * @throws TokenValidationFailureException
      */
     private void handleMissingClaim(Map<String, Object> claims, String missingClaim) throws TokenValidationFailureException {
-        String errorMessage = "Missing required claim: " + missingClaim + ". Possible token tampering.";
+        String errorMessage = String.format(MISSING_REQUIRED_CLAIM, missingClaim); // Use String.format()
 
         // Revoke the token
         String tokenId = (String) claims.get("jti");
         if (tokenId != null) {
             try {
-                tokenRevocationService.revokeToken(tokenId, errorMessage);
+                tokenRevocationService.revokeToken(tokenId, String.format(TOKEN_REVOKED_MISSING_CLAIM, missingClaim));
             } catch (TokenRevocationException e) {
-                log.error("Failed to revoke token: {}", e.getMessage());
+                log.error(TOKEN_REVOCATION_FAILED, e.getMessage());
             }
         } else {
-            log.error("Token ID (jti) is missing, cannot revoke.");
+            log.error(TOKEN_ID_IS_MISSING_CANNOT_REVOKE);
         }
 
         // Log the error
-        log.error("Missing required claim: {}", missingClaim);
+        log.error(errorMessage);
 
         // Throw the exception
         throw new InvalidTokenException(errorMessage);
@@ -710,38 +718,37 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             // Token has expired, so revoke it
             String tokenId = tokenUtilService.extractTokenId(claims);
             try {
-                tokenRevocationService.revokeToken(tokenId, "Token has expired or possible replay attack detected");
+                tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_EXPIRED);
             } catch (Exception e) {
-                log.error("Failed to revoke expired token: {}", e.getMessage());
+                log.error(TOKEN_REVOCATION_FAILED, e.getMessage());
             }
             log.error("At expiration validation, Token with id {} has expired or possible replay attack detected", tokenId);
-            throw new TokenValidationFailureException("Token has expired");
-
+            throw new TokenValidationFailureException(TOKEN_EXPIRED);
         }
     }
 
     /**
      * Validates token not before
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token not before is not valid
      */
     private void validateNotBefore(Map<String, Object> claims) throws TokenValidationFailureException {
         Instant nbf = tokenUtilService.extractClaimInstant(claims, ClaimKeys.NOT_BEFORE);
         if (Instant.now().minus(Constants.CLOCK_SKEW_TOLERANCE).isBefore(nbf)) {
             // Token is not yet valid, so revoke it as possible replay attack or another security issue
             String tokenId = tokenUtilService.extractTokenId(claims);
-            tokenRevocationService.revokeToken(tokenId, "At not before validation, Token is not yet valid (possible replay attack)");
+            tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_NOT_YET_VALID);
             log.error("At not before validation, Token with id {} is not yet valid, possible replay attack or another security issue", tokenId);
-            throw new TokenValidationFailureException("Token is not yet valid");
+            throw new TokenValidationFailureException(TOKEN_NOT_YET_VALID);
         }
     }
 
     /**
      * Validates token issuance time
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token issuance time is not valid
      */
     private void validateIssuanceTime(Map<String, Object> claims) throws TokenValidationFailureException {
         long startTime = System.nanoTime();
@@ -756,32 +763,32 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             if (Instant.now().minus(Constants.CLOCK_SKEW_TOLERANCE).isBefore(iat)) {
                 // Token issuance time is not valid, so revoke it as possible replay attack or another security issue
                 String tokenId = tokenUtilService.extractTokenId(claims);
-                tokenRevocationService.revokeToken(tokenId, "At issuance time validation, Token issuance time is not valid (possible replay attack or another security issue)");
+                tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_ISSUED_IN_THE_FUTURE);
                 log.error("At issuance time validation, Token with id {} was issued in the future, possible replay attack or another security issue", tokenId);
-                throw new TokenValidationFailureException("Token issuance time is not valid");
+                throw new TokenValidationFailureException(TOKEN_ISSUED_IN_THE_FUTURE);
             }
         } catch (DateTimeParseException e) {
             throw new TokenValidationFailureException("Invalid issuance time format", e);
         } finally {
             long duration = System.nanoTime() - startTime;
-//            metricRegistry.recordTimingMetric("token.validation.issuance_time", duration);
+            log.debug("Validation took {} nanoseconds", duration);
         }
     }
 
     /**
      * Validates token issuer
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token issuer is not valid
      */
     private void validateIssuer(Map<String, Object> claims) throws TokenValidationFailureException {
         String issuer = claims.get(ClaimKeys.ISSUER).toString();
         if (!TokenConstants.DEFAULT_ISSUER.equals(issuer)) {
             // Token issuer is not valid, so revoke it as possible Issuer Spoofing/Impersonation, replay attack or another security issue
             String tokenId = tokenUtilService.extractTokenId(claims);
-            tokenRevocationService.revokeToken(tokenId, "At issuer validation, Token issuer is not valid (possible Issuer Spoofing/Impersonation, replay attack or another security issue)");
+            tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_INVALID_ISSUER);
             log.error("At issuer validation, Token with id {} issuer is not valid, expecting {} but found {}.Possible Issuer Spoofing/Impersonation, replay attack or another security issue", tokenId, TokenConstants.DEFAULT_ISSUER, issuer);
-            throw new TokenValidationFailureException("Invalid token issuer");
+            throw new TokenValidationFailureException(INVALID_TOKEN_ISSUER);
         }
     }
 
@@ -789,8 +796,8 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      * Validates token type
      * ACCESS_TOKEN or REFRESH_TOKEN
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token type is not valid
      */
     private void validateTokenType(Map<String, Object> claims, String expectedType) throws TokenValidationFailureException {
         try {
@@ -798,30 +805,30 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             if (!expectedType.equals(tokenType)) {
                 // Token type is not valid, so revoke it as possible Token Confusion/Type Mismatch attacks, replay attack or another security issue
                 String tokenId = claims.get(ClaimKeys.PASETO_ID).toString();
-                tokenRevocationService.revokeToken(tokenId, "At token type validation, Token type is not valid (possible Token Confusion/Type Mismatch attacks, replay attack or another security issue)");
+                tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_INVALID_TOKEN_TYPE);
                 log.error("At token type validation, Token type is not valid, expected {} but got {}. Possible Token Confusion/Type Mismatch attacks, replay attack or another security issue", expectedType, tokenType);
-                throw new TokenValidationFailureException("Invalid token type");
+                throw new TokenValidationFailureException(INVALID_TOKEN_TYPE);
             }
             log.debug("Token type validation successful");
         } catch (NullPointerException e) {
-            throw new TokenValidationFailureException("Token type claim is missing", e);
+            throw new TokenValidationFailureException(TOKEN_TYPE_CLAIM_IS_MISSING, e);
         }
     }
 
     /**
      * Validates token audience
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token audience is not valid
      */
     private void validateAudience(Map<String, Object> claims) throws TokenValidationFailureException {
         String audience = claims.get(ClaimKeys.AUDIENCE).toString();
         if (!DEFAULT_AUDIENCE.equals(audience)) {
             // Token audience is not valid, so revoke it as possible Audience Restriction Bypass/Token Reuse attacks, replay attack or another security issue
             String tokenId = tokenUtilService.extractTokenId(claims);
-            tokenRevocationService.revokeToken(tokenId, "At audience validation, Token audience is not valid (possible Audience Restriction Bypass/Token Reuse attacks, replay attack or another security issue)");
+            tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_INVALID_AUDIENCE);
             log.error("At audience validation, Token with id {} audience is not valid, expecting {} but found {}. Possible Audience Restriction Bypass/Token Reuse attacks, replay attack or another security issue", tokenId, DEFAULT_AUDIENCE, audience);
-            throw new TokenValidationFailureException("Invalid audience");
+            throw new TokenValidationFailureException(INVALID_AUDIENCE);
         }
     }
 
@@ -829,19 +836,18 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      * Validates token subject
      * User ID
      *
-     * @param claims
-     * @throws TokenValidationFailureException
+     * @param claims Map<String, Object>
+     * @throws TokenValidationFailureException if the token subject is not valid
      */
     private void validateSubject(Map<String, Object> claims) throws TokenValidationFailureException {
-
         String subject = claims.get(ClaimKeys.SUBJECT).toString();
         String userId = httpServletRequest.getSession().getAttribute("userId").toString();
         if (!subject.equals(userId)) {
             // Token subject is not valid, so revoke it as possible Subject Impersonation/Authorization Bypass, replay attack or another security issue
             String tokenId = tokenUtilService.extractTokenId(claims);
-            tokenRevocationService.revokeToken(tokenId, "At subject validation, Token subject is not valid (possible Subject Impersonation/Authorization Bypass, replay attack or another security issue)");
+            tokenRevocationService.revokeToken(tokenId, TOKEN_REVOKED_INVALID_SUBJECT);
             log.error("At subject validation, Token with id {} subject is not valid, expecting {} but found {}. Possible Subject Impersonation/Authorization Bypass, replay attack or another security issue", tokenId, userId, subject);
-            throw new TokenValidationFailureException("Invalid subject");
+            throw new TokenValidationFailureException(INVALID_SUBJECT);
         }
     }
 
@@ -849,8 +855,8 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      * Extracts claims from public access token
      * It was originally intended to be in the TokenUtilService class, but it was moved here to avoid excessive dependency injection
      *
-     * @param token
-     * @return
+     * @param token String
+     * @return Map<String, Object>
      */
     @Override
     public Map<String, Object> extractClaimsFromPublicAccessToken(String token) {
@@ -862,7 +868,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         try {
             String[] parts = token.split("\\.");
             if (parts.length != PASETO_TOKEN_PARTS_LENGTH) {
-                throw new IllegalArgumentException(String.valueOf(INVALID_TOKEN_FORMAT));
+                throw new IllegalArgumentException(INVALID_TOKEN_FORMAT);
             }
 
             // Validate that each part is not empty
@@ -874,22 +880,23 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             }
             if (!invalidParts.isEmpty()) {
                 invalidParts.setLength(invalidParts.length() - 2); // Remove trailing ", "
-                throw new IllegalArgumentException(String.valueOf(INVALID_TOKEN_FORMAT) + ". Invalid parts: " + invalidParts);
+                throw new IllegalArgumentException(String.format(INVALID_TOKEN_FORMAT_INVALID_PARTS, invalidParts));
             }
 
             String payload = Paseto.parse(keyManagementService.getAccessPublicKey(), parts[2], parts[3]);
 
             // Null check after parsing
             if (payload == null) {
-                throw new ClaimsExtractionFailureException("Null payload after parsing");
+                throw new ClaimsExtractionFailureException(NULL_PAYLOAD_AFTER_PARSING);
             }
 
             return objectMapper.readValue(payload, new TypeReference<Map<String, Object>>() {
             });
+
         } catch (IllegalArgumentException e) {
             throw new TokenValidationFailureException("Invalid token format: " + e.getMessage(), e); // Add context when re-throwing
         } catch (Exception e) {
-            throw new ClaimsExtractionFailureException("Error extracting claims from token", e);
+            throw new ClaimsExtractionFailureException(ERROR_EXTRACTING_CLAIMS_FROM_TOKEN, e);
         }
     }
 
