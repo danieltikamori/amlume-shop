@@ -26,6 +26,9 @@ public class TokenProperties {
     private double rateLimit;
     private double claimsValidationRateLimitPermitsPerSecond;
     private double validationRateLimitPermitsPerSecond;
+    private int validationRateLimitMaxAttempts;
+    private int validationRateLimitWindowSeconds;
+    private int validationRateLimitWindowSizeInSeconds;
 
 //    @Value("${token.access.validity}")
 //    private long accessTokenValidity;

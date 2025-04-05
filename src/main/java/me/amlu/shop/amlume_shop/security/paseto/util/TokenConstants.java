@@ -51,6 +51,48 @@ public final class TokenConstants {
 
     // Messages
     public static final String TIME_SPENT_VALIDATING_PASETO_TOKENS = "Time spent validating PASETO tokens";
+    public static final String TOKEN_VALIDATION_FAILED = "Token validation failed";
+    public static final String ERROR_PARSING_CLAIMS = "Error parsing token claims";
+    public static final String INVALID_PASETO_TOKEN = "Invalid PASETO token";
+    public static final String INVALID_TOKEN_FORMAT = "Invalid token format";
+    public static final String INVALID_PASETO_SIGNATURE = "Invalid PASETO signature";
+    public static final String INVALID_KEY_ID = "Invalid key ID";
+    public static final String KID_IS_MISSING_IN_THE_TOKEN_FOOTER = "KID is missing in the token footer";
+    public static final String INVALID_TOKEN_LENGTH = "Invalid token length";
+    public static final String TOKEN_EXPIRED = "Token has expired";
+    public static final String TOKEN_NOT_YET_VALID = "Token is not yet valid";
+    public static final String TOKEN_ISSUED_IN_THE_FUTURE = "Token was issued in the future";
+    public static final String INVALID_TOKEN_ISSUER = "Invalid token issuer";
+    public static final String INVALID_TOKEN_TYPE = "Invalid token type";
+    public static final String INVALID_AUDIENCE = "Invalid audience";
+    public static final String INVALID_SUBJECT = "Invalid subject";
+    public static final String MISSING_REQUIRED_CLAIM = "Missing required claim: %s. Possible token tampering.";
+    public static final String SESSION_ID_MISMATCH = "Session ID mismatch";
+    public static final String USER_ACCOUNT_DISABLED = "User account is disabled";
+    public static final String NO_ROLES_FOUND_FOR_USER = "No roles found for user";
+    public static final String INVALID_USER_SCOPE = "Invalid user scope. Actual: %s";
+    public static final String CLAIMS_PAYLOAD_EXCEEDS_MAXIMUM_SIZE = "Claims payload exceeds maximum size";
+    public static final String ERROR_SERIALIZING_CLAIMS_TO_JSON = "Error serializing claims to JSON";
+    public static final String PAYLOAD_CANNOT_BE_NULL_OR_EMPTY = "Payload cannot be null or empty";
+    public static final String PAYLOAD_SIZE_EXCEEDS_MAXIMUM_ALLOWED_SIZE = "Payload size exceeds maximum allowed size";
+    public static final String TOKEN_TYPE_CLAIM_IS_MISSING = "Token type claim is missing";
+    public static final String TOKEN_ID_IS_MISSING_CANNOT_REVOKE = "Token ID (jti) is missing, cannot revoke.";
+    public static final String NULL_PAYLOAD_AFTER_PARSING = "Null payload after parsing";
+    public static final String ERROR_EXTRACTING_CLAIMS_FROM_TOKEN = "Error extracting claims from token";
+    public static final String INVALID_TOKEN_FORMAT_INVALID_PARTS = "Invalid token format. Invalid parts: %s";
+    public static final String TOKEN_REVOCATION_FAILED = "Failed to revoke token: {}";
+    public static final String TOKEN_REVOKED_SESSION_ID_MISMATCH = "Token revoked due to Session ID mismatch";
+    public static final String TOKEN_REVOKED_EXPIRED = "Token revoked due to expiration or possible replay attack detected";
+    public static final String TOKEN_REVOKED_NOT_YET_VALID = "Token revoked because it is not yet valid (possible replay attack)";
+    public static final String TOKEN_REVOKED_ISSUED_IN_THE_FUTURE = "Token revoked because it was issued in the future (possible replay attack or another security issue)";
+    public static final String TOKEN_REVOKED_INVALID_ISSUER = "Token revoked because the issuer is not valid (possible Issuer Spoofing/Impersonation, replay attack or another security issue)";
+    public static final String TOKEN_REVOKED_INVALID_TOKEN_TYPE = "Token revoked because the token type is not valid (possible Token Confusion/Type Mismatch attacks, replay attack or another security issue)";
+    public static final String TOKEN_REVOKED_INVALID_AUDIENCE = "Token revoked because the audience is not valid (possible Audience Restriction Bypass/Token Reuse attacks, replay attack or another security issue)";
+    public static final String TOKEN_REVOKED_INVALID_SUBJECT = "Token revoked because the subject is not valid (possible Subject Impersonation/Authorization Bypass, replay attack or another security issue)";
+    public static final String TOKEN_REVOKED_MISSING_CLAIM = "Token revoked due to missing required claim: %s. Possible token tampering.";
+    public static final String TOKEN_REVOKED_GENERIC = "Token revoked due to: %s";
+    public static final String TOKEN_VALIDATION = "token-validation";
+    public static final String CLAIMS_VALIDATION = "claims-validation";
 
     private TokenConstants() {}
 }

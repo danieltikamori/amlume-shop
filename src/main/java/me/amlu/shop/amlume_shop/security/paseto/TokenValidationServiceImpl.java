@@ -11,6 +11,42 @@
 package me.amlu.shop.amlume_shop.security.paseto;
 
 //import static me.amlu.shop.amlume_shop.exceptions.ErrorMessages.*;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+//import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
+import jakarta.servlet.http.HttpServletRequest;
+import java.nio.charset.StandardCharsets;
+import java.security.SignatureException;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.commons.Constants;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsExtractionFailureException;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsParsingException;
+import me.amlu.shop.amlume_shop.exceptions.ClaimsSizeException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidKeyIdException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenFormatException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenLengthException;
+import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
+import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
+import me.amlu.shop.amlume_shop.exceptions.TokenRevocationException;
+import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
+import me.amlu.shop.amlume_shop.exceptions.TooManyRequestsException;
+import me.amlu.shop.amlume_shop.resilience.service.RedisRateLimiter;
+import me.amlu.shop.amlume_shop.security.enums.TokenType;
+import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
+import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.CLAIMS_PAYLOAD_EXCEEDS_MAXIMUM_SIZE;
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.DEFAULT_AUDIENCE;
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.ERROR_EXTRACTING_CLAIMS_FROM_TOKEN;
@@ -49,19 +85,11 @@ import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_TYPE_CLAIM_IS_MISSING;
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.TOKEN_VALIDATION_FAILED;
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.USER_ACCOUNT_DISABLED;
-
-import java.nio.charset.StandardCharsets;
-import java.security.SignatureException;
-import java.time.Duration;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.Semaphore;
-import java.util.stream.Collectors;
-
+import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
+import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.apache.commons.lang3.StringUtils;
 import org.paseto4j.commons.PasetoException;
 import org.paseto4j.version4.Paseto;
@@ -69,78 +97,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.DistributionSummary;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
-import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.exceptions.ClaimsExtractionFailureException;
-import me.amlu.shop.amlume_shop.exceptions.ClaimsParsingException;
-import me.amlu.shop.amlume_shop.exceptions.ClaimsSizeException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidKeyIdException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidTokenException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidTokenFormatException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidTokenLengthException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
-import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
-import me.amlu.shop.amlume_shop.exceptions.TokenRevocationException;
-import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
-import me.amlu.shop.amlume_shop.exceptions.TooManyRequestsException;
-import me.amlu.shop.amlume_shop.resilience.service.RedisRateLimiter;
-import me.amlu.shop.amlume_shop.security.enums.TokenType;
-import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
-import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRepository;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
-
-//Single Responsibility Principle :
-//
-//TokenValidationService should focus on token validation (structure, signature, expiration)
-//
-//TokenClaimService should handle claim-specific operations (extraction, validation, processing)
-//
-//Separation of Concerns :
-//
-//Claims validation is a distinct responsibility from token validation
-//
-//Token validation checks if the token is valid structurally and cryptographically
-//
-//Claims validation checks the content/business rules within the token
-//
-//Maintainability :
-//
-//Keeping claims logic separate makes the code more maintainable
-//
-//Easier to modify claim requirements without touching token validation
-//
-//Better testability as you can test claims validation independently
-
-//public class TokenValidationServiceImpl {
-//    // Handles token structure, signature, expiration
-//    public boolean validateToken(String token) {
-//        // Validate token structure
-//        // Check signature
-//        // Verify expiration
-//    }
-//}
-
 
 @Slf4j
 @Service
 public class TokenValidationServiceImpl implements TokenValidationService {
 
     private final ObjectMapper objectMapper;
-    private final KeyManagementService keyManagementService;ø
+    private final KeyManagementService keyManagementService;
     private final TokenUtilService tokenUtilService;
     private final TokenCacheService tokenCacheService;
     private final TokenClaimsService tokenClaimsService;
@@ -153,19 +116,37 @@ public class TokenValidationServiceImpl implements TokenValidationService {
 
     private final RedisRateLimiter redisRateLimiter;
 
-    // Rate limiters using Semaphore
-    private final Semaphore tokenValidationSemaphore;
-    private final Semaphore claimsValidationSemaphore;
-
     // Metrics
-    private final PrometheusMeterRegistry meterRegistry;
+    private final MeterRegistry meterRegistry;
+
+//    private final PrometheusMeterRegistry meterRegistry;
 
     private final Counter tokenValidationCounter;
-    private final Timer tokenValidationTimer;
-    private DistributionSummary tokenValidationLatency;
+    private final Timer tokenValidationLatency;
+    private final Timer tokenClaimsValidationLatency;
 
 
-    public TokenValidationServiceImpl(@Qualifier("redisTemplate") RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenCacheService tokenCacheService, TokenClaimsService tokenClaimsService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, RevokedTokenRepository revokedTokenRepository, PrometheusMeterRegistry meterRegistry, Counter tokenValidationCounter, Timer tokenValidationTimer, PasetoPropertyResolver pasetoPropertyResolver, TokenConfigurationService tokenConfigurationService, DistributionSummary tokenValidationLatency) {
+//    public TokenValidationServiceImpl(@Qualifier("redisTemplate") RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenCacheService tokenCacheService, TokenClaimsService tokenClaimsService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, RevokedTokenRepository revokedTokenRepository, MeterRegistry meterRegistry, Counter tokenValidationCounter, PasetoPropertyResolver pasetoPropertyResolver, TokenConfigurationService tokenConfigurationService, Timer tokenValidationLatency, Timer tokenClaimsValidationLatency) {
+//        this.tokenClaimsValidationLatency = tokenClaimsValidationLatency;
+//        this.redisRateLimiter = new RedisRateLimiter(redisTemplate, tokenConfigurationService);
+//        this.objectMapper = objectMapper;
+//        this.keyManagementService = keyManagementService;
+//        this.tokenUtilService = tokenUtilService;
+//        this.tokenCacheService = tokenCacheService;
+//        this.tokenClaimsService = tokenClaimsService;
+//        this.tokenRevocationService = tokenRevocationService;
+//        this.httpServletRequest = httpServletRequest;
+//        this.userRepository = userRepository;
+//        this.revokedTokenRepository = revokedTokenRepository;
+//        this.meterRegistry = meterRegistry;
+//        this.pasetoPropertyResolver = pasetoPropertyResolver;
+//        this.tokenConfigurationService = tokenConfigurationService;
+//        this.tokenValidationCounter = tokenValidationCounter;
+//        this.tokenValidationLatency = tokenValidationLatency;
+//    }
+
+    public TokenValidationServiceImpl(@Qualifier("redisTemplate") RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenCacheService tokenCacheService, TokenClaimsService tokenClaimsService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, RevokedTokenRepository revokedTokenRepository, MeterRegistry meterRegistry, Counter tokenValidationCounter, PasetoPropertyResolver pasetoPropertyResolver, TokenConfigurationService tokenConfigurationService, Timer tokenValidationLatency, Timer tokenClaimsValidationLatency) {
+        this.tokenClaimsValidationLatency = tokenClaimsValidationLatency;
         this.redisRateLimiter = new RedisRateLimiter(redisTemplate, tokenConfigurationService);
         this.objectMapper = objectMapper;
         this.keyManagementService = keyManagementService;
@@ -180,13 +161,8 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         this.pasetoPropertyResolver = pasetoPropertyResolver;
         this.tokenConfigurationService = tokenConfigurationService;
         this.tokenValidationCounter = tokenValidationCounter;
-        this.tokenValidationTimer = tokenValidationTimer;
         this.tokenValidationLatency = tokenValidationLatency;
-        // Initialize Semaphores with the configured permits
-        this.tokenValidationSemaphore = new Semaphore((int) tokenConfigurationService.getValidationRateLimitPermitsPerSecond(), true); // Fair mode
-        this.claimsValidationSemaphore = new Semaphore((int) tokenConfigurationService.getClaimsValidationRateLimitPermitsPerSecond(), true); // Fair mode
     }
-
 
     private Timer createTokenValidationTimer(MeterRegistry registry) {
         return Timer.builder("paseto.token.validation")
@@ -228,12 +204,13 @@ public class TokenValidationServiceImpl implements TokenValidationService {
 
     @Override
     public Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException, SignatureException {
-        // Acquire a permit from the semaphore
-        if (!tokenValidationSemaphore.tryAcquire()) {
+        // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.TOKEN_VALIDATION)) {
             throw new TooManyRequestsException("Token validation rate limit exceeded");
         }
 
-        DistributionSummary.Sample timer = DistributionSummary.start(meterRegistry);
+        tokenValidationCounter.increment();
+        Timer.Sample sample = Timer.start(meterRegistry);
         try {
             log.debug("Validating public access token");
             validateTokenStringLength(token);
@@ -255,13 +232,22 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         } catch (SignatureException e) {
             throw new SignatureException(INVALID_PASETO_SIGNATURE, e); // Use the constant
         } finally {
-            timer.stop(tokenValidationLatency);
-            tokenValidationSemaphore.release(); // Release the permit
+            sample.stop(tokenValidationLatency);
+
+
         }
     }
 
     @Override
     public Map<String, Object> validateLocalAccessToken(String token) throws TokenValidationFailureException {
+                // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.TOKEN_VALIDATION)) {
+            throw new TooManyRequestsException("Token validation rate limit exceeded");
+        }
+
+        tokenValidationCounter.increment();
+        Timer.Sample sample = Timer.start(meterRegistry);
+
         try {
             validateTokenStringLength(token);
 
@@ -291,16 +277,21 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         } catch (Exception e) { // Catch other exceptions (e.g., during claim validation)
             log.error("Failed to validate local access PASETO token", e);
             throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e);
+        } finally {
+            sample.stop(tokenValidationLatency);
         }
     }
 
 
     @Override
     public Map<String, Object> validateLocalRefreshToken(String token) throws TokenValidationFailureException { // Separate refresh token validation
-        // Acquire a permit from the semaphore
-        if (!tokenValidationSemaphore.tryAcquire()) {
+        // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.TOKEN_VALIDATION)) {
             throw new TooManyRequestsException("Token validation rate limit exceeded");
         }
+
+        tokenValidationCounter.increment();
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
             validateTokenStringLength(token);
@@ -335,7 +326,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             log.error("Unexpected error during token validation: {}", e.getMessage(), e);
             throw new TokenValidationFailureException(TOKEN_VALIDATION_FAILED, e);
         } finally {
-            tokenValidationSemaphore.release(); // Release the permit
+            sample.stop(tokenValidationLatency);
         }
     }
 
@@ -477,10 +468,12 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validatePublicAccessTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
-        // Acquire a permit from the semaphore
-        if (!claimsValidationSemaphore.tryAcquire()) {
+        // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.CLAIMS_VALIDATION)) {
             throw new TooManyRequestsException("Claims validation rate limit exceeded");
         }
+
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
             validateClaimsSize(claims);
@@ -490,7 +483,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             validateTokenTiming(claims);
             validateTokenIdentity(claims);
         } finally {
-            claimsValidationSemaphore.release(); // Release the permit
+            sample.stop(tokenClaimsValidationLatency);
         }
     }
 
@@ -503,20 +496,22 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validateLocalAccessTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
-        // Acquire a permit from the semaphore
-        if (!claimsValidationSemaphore.tryAcquire()) {
+        // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.CLAIMS_VALIDATION)) {
             throw new TooManyRequestsException("Claims validation rate limit exceeded");
         }
+
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
             validateClaimsSize(claims);
             validateTokenSessionId(claims);
-            validateServiceStatus(claims);
+//            validateServiceStatus(claims);
             validateTokenMetadata(claims, expectedType);
             validateTokenTiming(claims);
             validateTokenIdentity(claims);
         } finally {
-            claimsValidationSemaphore.release(); // Release the permit
+            sample.stop(tokenClaimsValidationLatency);
         }
     }
 
@@ -529,10 +524,12 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      */
     public void validateLocalRefreshTokenClaims(Map<String, Object> claims, String expectedType)
             throws TokenValidationFailureException {
-        // Acquire a permit from the semaphore
-        if (!claimsValidationSemaphore.tryAcquire()) {
+        // Apply rate limiting
+        if (!redisRateLimiter.tryAcquire(TokenConstants.CLAIMS_VALIDATION)) {
             throw new TooManyRequestsException("Claims validation rate limit exceeded");
         }
+
+        Timer.Sample sample = Timer.start(meterRegistry);
 
         try {
             validateClaimsSize(claims);
@@ -541,7 +538,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             validateTokenTiming(claims);
             validateTokenIdentity(claims);
         } finally {
-            claimsValidationSemaphore.release(); // Release the permit
+            sample.stop(tokenClaimsValidationLatency);
         }
     }
 
@@ -607,13 +604,26 @@ public class TokenValidationServiceImpl implements TokenValidationService {
         }
     }
 
-    /**
-     * Validates service status and existence
-     * Local access token validation
-     * For Kubernetes, this method should be modified to check the Kubernetes API for service status and authorization
-     */
-    private void validateServiceStatus(Map<String, Object> claims) throws TokenValidationFailureException {
-    }
+//    /**
+//     * Validates service status and existence
+//     * Local access token validation
+//     * For Kubernetes, this method should be modified to check the Kubernetes API for service status and authorization
+//     */
+//    private void validateServiceStatus(Map<String, Object> claims) throws TokenValidationFailureException {
+//        log.debug("Validating service status for token");
+//        try {
+//            String serviceId = tokenUtilService.extractServiceId(claims);
+//            if (serviceId == null || serviceId.isBlank()) {
+//                throw new TokenValidationFailureException("Service ID is missing");
+//            }
+//            // Implement service status validation logic here
+//            // E.g. check if the service is enabled or exists in the system
+//            log.debug("Service status validation successful");
+//        } catch (TokenValidationFailureException e) {
+//            log.warn("Service status validation failed: {}", e.getMessage());
+//            throw e;
+//        }
+//    }
 
     /**
      * Validates token metadata including type and audience
