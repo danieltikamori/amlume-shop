@@ -50,5 +50,5 @@ public interface RevokedTokenRepository extends JpaRepository<RevokedToken, Stri
     @Query("UPDATE RevokedToken rt SET rt.revokedAt = :revokedAt, rt.reason = :reason WHERE rt.username = :username AND rt.revokedAt IS NULL")
     void updateRevokedAtAndReasonByUsernameAndRevokedAtIsNull(String username, Instant revokedAt, String reason);
 
-    void deleteByRevokedAtBefore(Instant instant);
+    long deleteByRevokedAtBefore(Instant instant);
 }

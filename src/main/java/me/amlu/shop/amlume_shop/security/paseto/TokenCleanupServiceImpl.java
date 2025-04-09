@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import com.google.common.cache.Cache;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
 import org.springframework.scheduling.annotation.Async;
@@ -19,62 +18,69 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 @Slf4j
 @Service
 public class TokenCleanupServiceImpl implements TokenCleanupService {
 
     private final RevokedTokenRepository revokedTokenRepository;
-    private final Cache<String, Boolean> revokedTokensCache;
-    private final Cache<String, Object> userCache;
+    private final TokenCleanupService self; // Keep for self-injection for @Async/@Transactional
 
-    private final TokenCleanupService self;
-
-    public TokenCleanupServiceImpl(RevokedTokenRepository revokedTokenRepository, Cache<String, Boolean> revokedTokensCache, Cache<String, Object> userCache, TokenCleanupService self) {
+    // Updated constructor - Removed Cache parameters
+    public TokenCleanupServiceImpl(RevokedTokenRepository revokedTokenRepository,
+                                   TokenCleanupService self) {
         this.revokedTokenRepository = revokedTokenRepository;
-        this.revokedTokensCache = revokedTokensCache;
-        this.userCache = userCache;
         this.self = self;
     }
 
-    @Scheduled(cron = "0 0 * * * *")
+    /**
+     * Scheduled task to trigger the cleanup of old revoked token database records.
+     * Runs every hour at the start of the hour.
+     */
+    @Scheduled(cron = "0 0 * * * *") // Runs hourly
     @Override
     public void cleanupExpiredTokens() {
+        log.info("Starting scheduled cleanup of old revoked token database records.");
+        // Call the async, transactional method
         self.cleanupExpiredTokensAsync();
     }
-    @Async
+
+    /**
+     * Asynchronously cleans up old revoked token records from the database.
+     * Records older than 30 days (based on revocation time) are deleted.
+     * Cache cleanup for Redis/Valkey is handled automatically by TTL.
+     */
+    @Async // Consider specifying a task executor bean name if you have one configured: @Async("taskExecutor")
     @Transactional
     public void cleanupExpiredTokensAsync() {
         try {
-            Instant now = Instant.now();
-            revokedTokenRepository.deleteByExpirationDateBefore(now);
-            revokedTokenRepository.deleteByRevokedAtBefore(now.minusSeconds(60 * 60 * 24 * 30)); // 30 days
-            revokedTokensCache.cleanUp();
-            userCache.cleanUp();
-            log.debug("Cleaned up expired tokens");
+            // Define the cutoff time for old records (e.g., 30 days ago)
+            Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
+            log.debug("Deleting revoked token records from database where revokedAt is before {}", cutoff);
+
+            // Delete old revocation records from the database based on when they were revoked
+            long deletedCount = revokedTokenRepository.deleteByRevokedAtBefore(cutoff);
+
+            // NOTE: The Redis/Valkey entries for revoked tokens expire automatically
+            // based on the TTL set in TokenRevocationServiceImpl.
+            // No explicit cache cleanup (like cache.cleanUp()) is needed here.
+
+            // Optional: If RevokedToken had an 'expirationDate' field representing the *original*
+            // token's expiry, you might want to delete based on that too, but it seems less likely.
+            // The current logic focuses on removing *old revocation records*.
+            // Commenting out the potentially incorrect/unnecessary line:
+            // revokedTokenRepository.deleteByExpirationDateBefore(Instant.now());
+
+            if (deletedCount > 0) {
+                log.info("Finished cleanup task. Deleted {} revoked token records older than 30 days from the database.", deletedCount);
+            } else {
+                log.info("Finished cleanup task. No old revoked token records found to delete from the database.");
+            }
+
         } catch (Exception e) {
-            log.error("Error cleaning up expired tokens", e);
+            log.error("Error during asynchronous cleanup of revoked token database records", e);
+            // Consider adding monitoring/alerting here if the cleanup fails repeatedly
         }
     }
-
-    // Use CompletableFuture if the asynchronous cleanup operations become more complex
-//    @Async
-//    @Transactional
-//    public CompletableFuture<Void> cleanupExpiredTokensAsync() {
-//        return CompletableFuture.runAsync(() -> {
-//            try {
-//                Instant now = Instant.now();
-//                revokedTokenRepository.deleteByExpirationDateBefore(now);
-//                revokedTokensCache.cleanUp();
-//                userCache.cleanUp();
-//                log.debug("Cleaned up expired tokens");
-//            } catch (Exception e) {
-//                log.error("Error cleaning up expired tokens", e);
-//                throw new RuntimeException("Error cleaning up expired tokens", e); // Re-throw for CompletableFuture
-//            }
-//        }).exceptionally(ex -> {
-//            log.error("Async cleanup failed: {}", ex.getMessage());
-//            return null; // Handle the exception
-//        });
-//    }
 }
