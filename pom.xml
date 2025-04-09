@@ -622,6 +622,12 @@
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
+        <!-- Micrometer for metrics in Prometheus simpleclient -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus-simpleclient</artifactId>
+        </dependency>
+
         <!--        <dependency>-->
         <!--            <groupId>io.micrometer</groupId>-->
         <!--            <artifactId>micrometer-prometheus-metrics</artifactId>-->
