@@ -12,17 +12,15 @@ package me.amlu.shop.amlume_shop.security.paseto;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
-import io.prometheus.client.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.repositories.RefreshTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.EnhancedAuthenticationService;
 import me.amlu.shop.amlume_shop.security.service.util.BLAKE3;
+import me.amlu.shop.amlume_shop.user_management.User;
 import org.paseto4j.commons.PasetoException;
 import org.paseto4j.version4.Paseto;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,23 +38,15 @@ import static me.amlu.shop.amlume_shop.exceptions.ErrorMessages.FAILED_TO_SERIAL
  * Uses PASETO for token generation
  */
 
-@RequiredArgsConstructor
 @Slf4j
 @Service
 public class TokenGenerationServiceImpl implements TokenGenerationService {
 
-    // Metrics
-    private final PrometheusMeterRegistry meterRegistry;
-
-    private final Counter tokenGenerationCounter = Counter.build()
-            .name("paseto_token_generation_total")
-            .help("Total number of PASETO tokens generated")
-            .labelNames("status") // Add labels for better metrics granularity
-            .register();
+    // Use Micrometer MeterRegistry
+    private final MeterRegistry meterRegistry;
 
     private final KeyManagementService keyManagementService;
     private final ObjectMapper objectMapper;
-    private final TokenCacheService tokenCacheService;
     private final RefreshTokenRepository refreshTokenRepository;
     private final EnhancedAuthenticationService enhancedAuthenticationService;
     private final TokenClaimsService tokenClaimsService;
@@ -71,6 +61,25 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     @Value("${paseto.refresh.local.kid}")
     private String pasetoRefreshLocalKid;
 
+    // Constructor updated to inject MeterRegistry and remove PrometheusMeterRegistry/TokenCacheService
+    public TokenGenerationServiceImpl(
+            MeterRegistry meterRegistry,
+            KeyManagementService keyManagementService,
+            ObjectMapper objectMapper,
+            RefreshTokenRepository refreshTokenRepository,
+            EnhancedAuthenticationService enhancedAuthenticationService,
+            TokenClaimsService tokenClaimsService,
+            HttpServletRequest httpServletRequest) {
+        this.meterRegistry = meterRegistry;
+        this.keyManagementService = keyManagementService;
+        this.objectMapper = objectMapper;
+        this.refreshTokenRepository = refreshTokenRepository;
+        this.enhancedAuthenticationService = enhancedAuthenticationService;
+        this.tokenClaimsService = tokenClaimsService;
+        this.httpServletRequest = httpServletRequest;
+    }
+
+
     /**
      * Generates a public access token
      *
@@ -80,34 +89,41 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
      */
     @Override
     public String generatePublicAccessToken(PasetoClaims claims) throws TokenGenerationFailureException {
+        String generatedToken = null;
         try {
             String payload = objectMapper.writeValueAsString(claims);
-
-            tokenCacheService.validatePayload(payload);
 
             PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoAccessPublicKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
-            return Paseto.sign(keyManagementService.getAccessPrivateKey(), payload, footer);
+            generatedToken = Paseto.sign(keyManagementService.getAccessPrivateKey(), payload, footer);
+
+            // Increment success counter
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "success").increment();
+            log.debug("Successfully generated public access token.");
+            return generatedToken;
+
         } catch (JsonProcessingException e) {
             log.error(String.valueOf(FAILED_TO_SERIALIZE_CLAIMS), e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "failure", "reason", "serialization").increment();
             throw new TokenGenerationFailureException(String.valueOf(FAILED_TO_SERIALIZE_CLAIMS), e);
         } catch (PasetoException e) {
             log.error("Failed to sign PASETO token", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "failure", "reason", "paseto_sign").increment();
             throw new TokenGenerationFailureException("Failed to sign PASETO token", e);
         } catch (IllegalArgumentException | NullPointerException e) {
             log.error("Invalid argument or null pointer during PASETO token generation", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "failure", "reason", "invalid_argument").increment();
             throw new TokenGenerationFailureException("Invalid argument or null pointer during token generation", e);
         } catch (SecurityException e) {
             log.error("Security violation during PASETO token generation", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "failure", "reason", "security").increment();
             throw new TokenGenerationFailureException("Security violation during token generation", e);
         } catch (Exception e) {
             log.error("Unexpected error during PASETO token generation", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "public_access", "status", "failure", "reason", "unknown").increment();
             throw new TokenGenerationFailureException("Token generation failed", e);
         }
-//        finally {
-//            log.info("Token generation completed successfully");
-//        }
     }
 
     /**
@@ -117,26 +133,33 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
      * @return The generated token
      * @throws TokenGenerationFailureException If token generation fails
      */
-
     @Override
     public String generateLocalAccessToken(PasetoClaims claims) throws TokenGenerationFailureException {
+        String generatedToken = null;
         try {
             String payload = objectMapper.writeValueAsString(claims);
-
-            tokenCacheService.validatePayload(payload);
 
             PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoAccessLocalKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
-            return Paseto.encrypt(keyManagementService.getAccessSecretKey(), payload, footer);
+            generatedToken = Paseto.encrypt(keyManagementService.getAccessSecretKey(), payload, footer);
+
+            // Increment success counter
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_access", "status", "success").increment();
+            log.debug("Successfully generated local access token.");
+            return generatedToken;
+
         } catch (JsonProcessingException e) {
             log.error(String.valueOf(FAILED_TO_SERIALIZE_CLAIMS), e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_access", "status", "failure", "reason", "serialization").increment();
             throw new TokenGenerationFailureException(String.valueOf(FAILED_TO_SERIALIZE_CLAIMS), e);
         } catch (PasetoException e) {
             log.error("Failed to encrypt PASETO token", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_access", "status", "failure", "reason", "paseto_encrypt").increment();
             throw new TokenGenerationFailureException("Failed to encrypt PASETO token", e);
-        } catch (Exception e) {
-            log.error("Unexpected error during PASETO token generation", e);
+        } catch (Exception e) { // Catch broader exceptions for local encryption
+            log.error("Unexpected error during local PASETO token generation", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_access", "status", "failure", "reason", "unknown").increment();
             throw new TokenGenerationFailureException("Token generation failed", e);
         }
     }
@@ -151,46 +174,49 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
      */
     @Override
     public String generateLocalRefreshToken(User user) throws TokenGenerationFailureException {
+        String refreshToken = null;
         try {
             PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), enhancedAuthenticationService.getRefreshTokenDuration());
             String payload = objectMapper.writeValueAsString(claims);
 
-            tokenCacheService.validatePayload(payload);
-
             PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoRefreshLocalKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
-            String refreshToken = Paseto.encrypt(keyManagementService.getRefreshSecretKey(), payload, footer);
+            refreshToken = Paseto.encrypt(keyManagementService.getRefreshSecretKey(), payload, footer);
 
             // Hash and store the refresh token in the database
-            String hashedRefreshToken = BLAKE3.hash(refreshToken.getBytes()); // Hash the refresh token using BLAKE3 // import org.bouncycastle.crypto.digests.BLAKE3Digest;
+            String hashedRefreshToken = BLAKE3.hash(refreshToken.getBytes());
             RefreshToken refreshTokenEntity = new RefreshToken();
             refreshTokenEntity.setToken(hashedRefreshToken);
             refreshTokenEntity.setUser(user);
-            refreshTokenEntity.setExpiryDate(Instant.now().plus(enhancedAuthenticationService.getRefreshTokenDuration())); // Set expiry date
-            refreshTokenEntity.setDeviceFingerprint(httpServletRequest.getHeader("User-Agent"));
+            refreshTokenEntity.setExpiryDate(Instant.now().plus(enhancedAuthenticationService.getRefreshTokenDuration()));
+            refreshTokenEntity.setDeviceFingerprint(httpServletRequest.getHeader("User-Agent")); // Consider making fingerprinting more robust
             refreshTokenEntity.setRevoked(false);
 
             // Save the RefreshToken entity to the database
             refreshTokenRepository.save(refreshTokenEntity);
 
+            // Increment success counter
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_refresh", "status", "success").increment();
+            log.debug("Successfully generated and stored local refresh token for user ID: {}", user.getUserId());
             return refreshToken; // Return the *unhashed* refresh token to the client
 
         } catch (JsonProcessingException e) {
             log.error("Failed to generate refresh token due to JSON processing error", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_refresh", "status", "failure", "reason", "serialization").increment();
             throw new TokenGenerationFailureException("Failed to generate refresh token due to JSON processing error", e);
         } catch (PasetoException e) {
             log.error("Failed to generate refresh token due to PASETO encryption error", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_refresh", "status", "failure", "reason", "paseto_encrypt").increment();
             throw new TokenGenerationFailureException("Failed to generate refresh token due to PASETO encryption error", e);
-        } catch (IllegalArgumentException e) {
-            log.error("Failed to generate refresh token due to invalid argument", e);
+        } catch (IllegalArgumentException e) { // Catch specific DB/hashing related errors if possible
+            log.error("Failed to generate refresh token due to invalid argument (potentially during hashing/saving)", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_refresh", "status", "failure", "reason", "invalid_argument").increment();
             throw new TokenGenerationFailureException("Failed to generate refresh token due to invalid argument", e);
-        } catch (Exception e) {
+        } catch (Exception e) { // Catch broader exceptions
             log.error("Unexpected error occurred while generating refresh token", e);
+            meterRegistry.counter("paseto_token_generation_total", "type", "local_refresh", "status", "failure", "reason", "unknown").increment();
             throw new TokenGenerationFailureException("Unexpected error occurred while generating refresh token", e);
         }
-//        finally {
-//            log.info("Token generation completed successfully");
-//        }
     }
 }
