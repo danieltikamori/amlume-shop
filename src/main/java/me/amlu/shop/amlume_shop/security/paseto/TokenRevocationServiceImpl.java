@@ -17,9 +17,12 @@ import me.amlu.shop.amlume_shop.exceptions.TokenRevokedException;
 import me.amlu.shop.amlume_shop.security.model.RevokedToken;
 import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
 import org.paseto4j.commons.PasetoException;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 
@@ -28,161 +31,139 @@ import java.util.Map;
 @Service
 public class TokenRevocationServiceImpl implements TokenRevocationService {
 
-//    private static final long TOKEN_CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-//    public static final String YYYY_MM_DD_T_HH_MM_SS_Z = "yyyy-MM-dd'T'HH:mm:ss'Z'";
 
-    //    private final Executor tokenBackgroundTasksExecutor;
+    private static final String REVOKED_TOKEN_PREFIX = "revoked_tokens:"; // Prefix for Valkey keys
+
     private final RevokedTokenRepository revokedTokenRepository;
-    private final Cache<String, Boolean> revokedTokensCache;
-    private final Cache<String, Object> userCache;
+    private final RedisTemplate<String, Object> redisTemplate;
     private final TokenRevocationService self;
-    private final TokenValidationService tokenValidationService;
 
-    //    Async token revocation implementation, use the tokenBackgroundTasksExecutor. The code below should be in the constructor.
-//    @Qualifier("tokenBackgroundTasksExecutor") Executor tokenBackgroundTasksExecutor
-    public TokenRevocationServiceImpl(RevokedTokenRepository revokedTokenRepository, Cache<String, Boolean> revokedTokensCache, Cache<String, Object> userCache, TokenRevocationService self, TokenValidationService tokenValidationService) {
-//        this.tokenBackgroundTasksExecutor = tokenBackgroundTasksExecutor;
+    @Value("${cache.revoked-token.ttl-seconds:3600}") // Default to 1 hour
+    private long revokedTokenCacheTtlSeconds;
+
+    // Modify constructor
+    public TokenRevocationServiceImpl(
+            RevokedTokenRepository revokedTokenRepository,
+            RedisTemplate<String, Object> redisTemplate, // Inject RedisTemplate
+            TokenRevocationService self
+    ) {
         this.revokedTokenRepository = revokedTokenRepository;
-        this.revokedTokensCache = revokedTokensCache;
-        this.userCache = userCache;
+        this.redisTemplate = redisTemplate; // Assign injected RedisTemplate
         this.self = self;
-        this.tokenValidationService = tokenValidationService;
     }
-
-    // Methods to revoke tokens
 
     @Transactional
     @Override
     public void revokeToken(String tokenId, String reason) throws TokenRevocationException {
         log.info("Revoking token with ID: {}, Reason: {}", tokenId, reason);
-        try {
-//            // Parse token to get its ID and expiration
-//            Map<String, Object> claims = tokenValidationService.extractClaimsFromPublicAccessToken(token);
-//            String tokenId = (String) claims.get("jti");
-//            if (tokenId == null) {
-//                throw new SecurityException("Token ID missing");
-//            }
-//
-//            String username = (String) claims.get("sub");
-//            if (username == null) {
-//                throw new SecurityException("Subject missing");
-//            }
-//            // Calculate remaining time until token expiration(Get)
-//            Instant expiration = Instant.from(DateTimeFormatter.ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z).withZone(ZoneOffset.UTC).parse((String) claims.get("exp")));
+        if (tokenId == null || tokenId.isBlank()) {
+            log.warn("Attempted to revoke token with null or blank ID.");
+            // Depending on requirements, either return or throw an exception
+            // throw new TokenRevocationException("Token ID cannot be null or blank");
+            return;
+        }
+        String redisKey = REVOKED_TOKEN_PREFIX + tokenId;
 
-            // Check if token is already revoked
-            if (isTokenRevoked(tokenId)) {
-                //Verify the database.
+        try {
+            // Check if token is already revoked (using the isTokenRevoked method)
+            if (isTokenRevoked(tokenId)) { // isTokenRevoked now handles cache check
+                // Verify the database consistency
+                // (optional but good practice)
                 if (revokedTokenRepository.existsByTokenId(tokenId)) {
-                    log.info("Token already revoked in database: {}", tokenId);
+                    log.info("Token already revoked (verified in DB): {}", tokenId);
                     return;
                 } else {
-                    log.warn("Token was in cache, but not in database, attempting to revoke again. TokenId: {}", tokenId);
+                    log.warn("Token was considered revoked (possibly cached), but not in database. Attempting to revoke again. TokenId: {}", tokenId);
+                    // Proceed to save to DB and update cache anyway
                 }
             }
 
             // Save revoked token to database
             RevokedToken revokedToken = new RevokedToken();
             revokedToken.setTokenId(tokenId);
-//            revokedToken.setUsername(username);
-//            revokedToken.setExpirationDate(expiration);
             revokedToken.setRevokedAt(Instant.now());
             revokedToken.setReason(reason);
-
             revokedTokenRepository.save(revokedToken);
 
-            // Add to revoked tokens cache with remaining time until expiration
-            revokedTokensCache.put(tokenId, true);
-            log.info("Token with ID {} successfully revoked.", tokenId);
+            // Add to revoked tokens cache using RedisTemplate with TTL
+            Duration ttl = Duration.ofSeconds(revokedTokenCacheTtlSeconds);
+            redisTemplate.opsForValue().set(redisKey, Boolean.TRUE, ttl); // Store TRUE
+            log.info("Token with ID {} successfully revoked and cached.", tokenId);
 
-        } catch (PasetoException e) {
+        } catch (PasetoException e) { // Catch specific exceptions if possible
             log.error("Failed to revoke token with ID: {}", tokenId, e);
-            throw new SecurityException("Could not revoke token", e);
+            // Consider throwing a more specific exception if PasetoException isn't right
+            throw new TokenRevocationException("Could not revoke token due to PASETO error", e);
+        } catch (Exception e) { // Catch broader exceptions
+            log.error("Unexpected error during token revocation for ID: {}", tokenId, e);
+            throw new TokenRevocationException("Unexpected error revoking token", e);
         }
     }
 
-//    @Transactional
-//    @Override
-//    public void revokeAllUserTokens(String username, String reason) {
-//        try {
-//            List<RevokedToken> userTokens = revokedTokenRepository.findByUsername(username);
-//            for (RevokedToken token : userTokens) {
-//                token.setRevokedAt(Instant.now());
-//                token.setReason(reason);
-//                revokedTokensCache.put(token.getTokenId(), true);
-//            }
-//            revokedTokenRepository.saveAll(userTokens);
-//            log.info("Revoked all tokens for user: {}", username);
-//        } catch (Exception e) {
-//            log.error("Error revoking tokens for user: {}", username, e);
-//            throw new SecurityException("Could not revoke tokens for user", e);
-//        }
-//    }
-
-    // TODO: Async revokeAllUserTokens with AuthController class
-//    @Async("tokenBackgroundTasksExecutor")
-//    @Transactional
-//    @Override
-//    public CompletableFuture<Void> revokeAllUserTokens(String username, String reason) {
-//        return CompletableFuture.runAsync(() -> {
-//            try {
-//                String tokenId =
-//                revokedTokenRepository.updateRevokedAtAndReasonByUsernameAndRevokedAtIsNull(username, Instant.now(), reason);
-//                List<RevokedToken> userTokens = revokedTokenRepository.findByUsername(username);
-//                for (RevokedToken token : userTokens) {
-//                    revokedTokensCache.put(token.getTokenId(), true); // Consider bulk updates, although the put method overhead is minimal. Guava cache does not support bulk operations.
-//                }
-//                log.info("Revoked all tokens for user: {}", username);
-//            } catch (Exception e) {
-//                log.error("Error revoking tokens for user: {}", username, e);
-//                throw new SecurityException("Could not revoke tokens for user", e);
-//            }
-//        }, tokenBackgroundTasksExecutor).exceptionally(ex -> {
-//            log.error("Error revoking tokens for user: {}", username, ex);
-//            return null;
-//        });
-//    }
-
-
+    // Method to check revocation status using RedisTemplate
+    // This method now encapsulates cache checking, DB fallback, and cache updates (including negative caching)
     private boolean isTokenRevoked(String tokenId) {
+        if (tokenId == null || tokenId.isBlank()) {
+            log.warn("Attempted to check revocation for null or blank token ID.");
+            return true; // Fail-safe: Treat invalid ID as potentially revoked
+        }
+        String redisKey = REVOKED_TOKEN_PREFIX + tokenId;
         try {
-            // First check cache
-            Boolean cachedResult = revokedTokensCache.getIfPresent(tokenId);
-            if (cachedResult != null) {
-                return cachedResult;
-            }
+            // 1. Check Redis cache
+            Object cachedResult = redisTemplate.opsForValue().get(redisKey);
 
-            // If not in cache, check database
-            boolean isRevoked = revokedTokenRepository.existsByTokenId(tokenId);
-            if (isRevoked) {
-                revokedTokensCache.put(tokenId, true);
+            if (cachedResult != null) {
+                // Found in cache, return the cached value
+                // Ensure it's actually a Boolean before casting
+                if (cachedResult instanceof Boolean) {
+                    log.trace("Revocation status for token {} found in cache: {}", tokenId, cachedResult);
+                    return (Boolean) cachedResult;
+                } else {
+                    // Data in cache is corrupted or unexpected type
+                    log.warn("Unexpected data type found in cache for key {}. Expected Boolean, got {}. Re-fetching from DB.", redisKey, cachedResult.getClass().getName());
+                    // Proceed to DB check, cache will be overwritten
+                }
             }
-            return isRevoked;
+            log.trace("Revocation status for token {} not found in cache. Checking database.", tokenId);
+
+            // 2. If not in cache, check database
+            boolean isRevokedInDb = revokedTokenRepository.existsByTokenId(tokenId);
+            Duration ttl = Duration.ofSeconds(revokedTokenCacheTtlSeconds);
+
+            // 3. Update cache based on DB result
+            if (isRevokedInDb) {
+                log.debug("Token {} found revoked in database. Caching status.", tokenId);
+                // Store 'true' in cache indicating it IS revoked
+                redisTemplate.opsForValue().set(redisKey, Boolean.TRUE, ttl);
+                return true;
+            } else {
+                log.debug("Token {} not found revoked in database. Caching negative status.", tokenId);
+                // Store 'false' in cache indicating it is NOT revoked (negative caching)
+                redisTemplate.opsForValue().set(redisKey, Boolean.FALSE, ttl);
+                return false;
+            }
         } catch (Exception e) {
-            log.error("Error checking token revocation status for tokenId: {}", tokenId, e);
-            return true; // Fail-safe: assume token is revoked if there's an error
+            log.error("Error checking token revocation status for tokenId: {}. Assuming revoked as fail-safe.", tokenId, e);
+            // Fail-safe: In case of error accessing cache/DB, assume token might be revoked.
+            return true;
         }
     }
 
     @Override
     public void validateNotRevoked(Map<String, Object> claims) throws TokenRevokedException {
+        Object tokenIdClaim = claims.get("jti"); // Get claim as Object first
+        if (tokenIdClaim == null) {
+            log.warn("Attempted to validate revocation for token without 'jti' claim.");
+            throw new TokenRevokedException("Token invalid: Missing 'jti' claim."); // Or a different exception type
+        }
+        String tokenId = tokenIdClaim.toString();
 
-        // Extract the token ID from the claims
-        String tokenId = claims.get("jti").toString();
-        // First check the cache
-        Boolean isRevoked = revokedTokensCache.getIfPresent(tokenId);
-        if (Boolean.TRUE.equals(isRevoked)) {
+        // Delegate check to the isTokenRevoked method which handles caching
+        if (isTokenRevoked(tokenId)) {
+            log.warn("Token validation failed: Token with ID {} has been revoked.", tokenId);
             throw new TokenRevokedException("Token has been revoked");
         }
-
-        // If not in cache, check the database
-        if (revokedTokenRepository.existsByTokenId(tokenId)) {
-            // Add to cache for future checks
-            revokedTokensCache.put(tokenId, true);
-            throw new TokenRevokedException("Token has been revoked");
-        }
-
-        // Add to negative cache if not revoked
-        revokedTokensCache.put(tokenId, false);
+        log.trace("Token validation successful: Token with ID {} is not revoked.", tokenId);
+        // No need to explicitly put 'false' here anymore, isTokenRevoked handles caching.
     }
 }
