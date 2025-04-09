@@ -10,222 +10,135 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.cache.*;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
-import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
-import me.amlu.shop.amlume_shop.exceptions.TokenProcessingException;
-import me.amlu.shop.amlume_shop.exceptions.TokenValidationException;
-import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
-import me.amlu.shop.amlume_shop.security.model.TokenData;
-import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRepository;
-import org.jetbrains.annotations.NotNull;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.util.HashMap;
+import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.TimeUnit;
-
-import static me.amlu.shop.amlume_shop.config.CacheConfig.CACHE_REFRESH_MINUTES;
-import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.MAX_PAYLOAD_SIZE;
-import static me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilServiceImpl.INSTANT_FORMATTER;
+import java.util.Set;
 
 @Slf4j
 @Service
 public class TokenCacheServiceImpl implements TokenCacheService {
 
-    private final RevokedTokenRepository revokedTokenRepository;
-    private final UserRepository userRepository;
-    private final TokenCacheProperties cacheProperties;
-    private final ObjectMapper objectMapper;
-    private final TokenValidationService tokenValidationService;
-    private final MetricRegistry metricRegistry;
+    private static final String TOKEN_CACHE_PREFIX = "token_cache:"; // Prefix for individual token keys
+    private static final String TOKEN_CACHE_KEYS_SET = "token_cache_keys"; // Key for the Set tracking all cache keys
 
-    // Add caching
-    private final LoadingCache<String, TokenData> tokenCache;
-    private final LoadingCache<String, Optional<User>> userCache;
-    private final Cache<String, Boolean> revokedTokensCache;
+    private final RedisTemplate<String, Object> redisTemplate;
+    private final TokenCacheProperties tokenCacheProperties;
 
-    public TokenCacheServiceImpl(RevokedTokenRepository revokedTokenRepository, UserRepository userRepository, TokenCacheProperties cacheProperties, ObjectMapper objectMapper, TokenValidationService tokenValidationService, MetricRegistry metricRegistry, LoadingCache<String, TokenData> tokenCache, LoadingCache<String, Optional<User>> userCache, Cache<String, Boolean> revokedTokensCache) {
-        this.revokedTokenRepository = revokedTokenRepository;
-        this.userRepository = userRepository;
-        this.cacheProperties = cacheProperties;
-        this.objectMapper = objectMapper;
-        this.tokenValidationService = tokenValidationService;
-        this.metricRegistry = metricRegistry;
-
-        // Initialize token cache
-        this.tokenCache = CacheBuilder.newBuilder()
-                .initialCapacity(cacheProperties.getInitialCapacity())
-                .concurrencyLevel(TokenCacheProperties.CACHE_CONCURRENCY_LEVEL)
-                .maximumSize(getConfigurableCacheSize())
-                .expireAfterWrite(cacheProperties.getExpirationMinutes(), TimeUnit.MINUTES)
-                .refreshAfterWrite(CACHE_REFRESH_MINUTES, TimeUnit.MINUTES)
-                .recordStats()
-                .build(new CacheLoader<String, TokenData>() {
-                    @NotNull
-                    @Override
-                    public TokenData load(@NotNull String token) {
-                        return loadTokenData(token);
-                    }
-
-                    @NotNull
-                    @Override
-                    public Map<String, TokenData> loadAll(@NotNull Iterable<? extends String> keys) {
-                        return batchLoadTokens(keys);
-                    }
-                });
-
-        // Initialize user cache
-        this.userCache = CacheBuilder.newBuilder()
-                .maximumSize(1000)
-                .expireAfterWrite(15, TimeUnit.MINUTES)
-                .build(new CacheLoader<String, Optional<User>>() {
-                    @NotNull
-                    @Override
-                    public Optional<User> load(@NotNull String userId) {
-                        return userRepository.findById(Long.valueOf(userId));
-                    }
-                });
-
-        // Initialize revoked tokens cache
-        this.revokedTokensCache = CacheBuilder.newBuilder()
-                .maximumSize(10000)
-                .expireAfterWrite(cacheProperties.getExpirationMinutes(), TimeUnit.MINUTES)
-                .build();
-    }
-
-
-    private static final Cache<String, Instant> timeCache = CacheBuilder.newBuilder()
-            .concurrencyLevel(Runtime.getRuntime().availableProcessors())
-            .maximumSize(1000)
-            .expireAfterWrite(5, TimeUnit.MINUTES)
-            .build();
-
-    public Optional<TokenData> getTokenData(String token) {
-        try {
-            return Optional.of(tokenCache.get(token));
-//            return tokenCache.get(token, () -> loadTokenData(token));
-        } catch (ExecutionException e) {
-            log.error("Error retrieving token data from cache", e);
-            return Optional.empty();
-//            throw new TokenProcessingException("Failed to load token data", e);
-        }
-    }
-
-    public TokenData getTokenWithFallback(String token) {
-        try {
-            return tokenCache.get(token, () -> loadTokenData(token));
-        } catch (ExecutionException e) {
-            log.warn("Cache load failed, falling back to direct load", e);
-            return loadTokenData(token);
-        }
-    }
-
-    private TokenData loadTokenData(String token) {
-        Timer.Context timer = metricRegistry.timer("token.load.time").time();
-        try {
-            // Token loading logic here
-            return parseAndValidateToken(token);
-        } finally {
-            timer.stop();
-        }
-    }
-
-//    public TokenData loadTokenData(String token) {
-//        return new TokenData(token);
-//    }
-
-
-    private Instant parseAndCacheIssuanceTime(String iatString) throws ExecutionException {
-        return timeCache.get(iatString, () ->
-                Instant.from(INSTANT_FORMATTER.parse(iatString)));
-    }
-
-    public boolean isTokenRevoked(String tokenId) {
-        return revokedTokensCache.getIfPresent(tokenId) != null || revokedTokenRepository.existsByTokenId(tokenId);
-    }
-
-    public void revokeToken(String token) {
-        revokedTokensCache.put(token, Boolean.TRUE);
-        tokenCache.invalidate(token);
-    }
-
-    public Map<String, TokenData> batchLoadTokens(Iterable<? extends String> keys) {
-        // Implement token loading logic here
-        // This could involve querying the database or an external service
-        // Replace the following with actual logic if needed
-        Map<String, TokenData> loadedTokens = new HashMap<>();
-        for (String key : keys) {
-            try {
-                loadedTokens.put(key, loadTokenData(key));
-            } catch (Exception e) {
-                log.error("Failed to load token data for key: {}", key, e);
-            }
-        }
-        return loadedTokens;
-    }
-
-    public TokenData parseAndValidateToken(String token) {
-        // Implement token loading logic here
-        // This could involve querying the database or an external service
-        // Replace the following with actual logic if needed
-        Map<String, Object> tokenClaims = null;
-        try {
-            tokenClaims = tokenValidationService.validatePublicAccessToken(token);
-        } catch (TokenValidationFailureException e) {
-            log.error("Token validation failed for token: {}", token, e);
-            throw new TokenProcessingException(e);
-        } catch (Exception e) {
-            log.error("Unexpected error during token validation for token: {}", token, e);
-            throw new TokenValidationException(e);
-        }
-        return new TokenData(token, tokenClaims, (Instant) tokenClaims.get(PasetoClaims.EXPIRATION)); // Dummy data, replace with real logic
-//        return new TokenData(tokenClaims.get(PasetoClaims.PASETO_ID).toString()); // Dummy data, replace with real logic
+    public TokenCacheServiceImpl(RedisTemplate<String, Object> redisTemplate,
+                                 TokenCacheProperties tokenCacheProperties) {
+        this.redisTemplate = redisTemplate;
+        this.tokenCacheProperties = tokenCacheProperties;
     }
 
     @Override
-    public void validatePayload(String payload) throws TokenGenerationFailureException {
-        if (payload.getBytes(StandardCharsets.UTF_8).length > MAX_PAYLOAD_SIZE) {
-            throw new TokenGenerationFailureException("Payload size exceeds maximum allowed size.");
+    public void putToken(String token, Map<String, Object> claims) {
+        if (token == null || token.isBlank() || claims == null) {
+            log.warn("Attempted to cache token with null/blank token string or null claims.");
+            return;
         }
-    }
-
-
-    public int getConfigurableCacheSize() {
-        return cacheProperties.getMaximumSize() +
-                ThreadLocalRandom.current().nextInt(TokenCacheProperties.CACHE_WEIGHTED_MAXIMUM_WEIGHT_JITTER);
-//        return (int) (Runtime.getRuntime().maxMemory() * 0.1 / ESTIMATED_ENTRY_SIZE); // Adjust ratio as needed
-
-    }
-
-    private boolean neverNeedsRefresh(String key) {
-        // Add your logic here to determine if a refresh is never needed for the given key
-        return key.startsWith("immutable:");
-//        return false; // Default: always allow refresh
-    }
-
-    public Optional<User> getUser(String userId) {
+        String redisKey = TOKEN_CACHE_PREFIX + token;
         try {
-            return userCache.get(userId);
-        } catch (ExecutionException e) {
-            log.error("Error retrieving user from cache", e);
-            return Optional.empty();
+            Duration ttl = Duration.ofMinutes(tokenCacheProperties.getExpirationMinutes());
+            // Store the claims map in Redis with TTL
+            redisTemplate.opsForValue().set(redisKey, claims, ttl);
+            // Add the key to our tracking Set
+            redisTemplate.opsForSet().add(TOKEN_CACHE_KEYS_SET, redisKey);
+            log.trace("Cached claims for token prefix: {}", token.substring(0, Math.min(token.length(), 10))); // Log prefix for brevity
+        } catch (Exception e) {
+            log.error("Failed to cache token claims for key: {}", redisKey, e);
+            // Optionally remove from tracking set if put failed? Depends on desired consistency.
+            // redisTemplate.opsForSet().remove(TOKEN_CACHE_KEYS_SET, redisKey);
         }
     }
 
-    public CacheStats getTokenCacheStats() {
-        return tokenCache.stats();
+    @Override
+    @SuppressWarnings("unchecked") // Suppress warning for casting Object to Map
+    public Map<String, Object> getTokenClaims(String token) {
+        if (token == null || token.isBlank()) {
+            log.trace("Attempted to get claims for null/blank token string.");
+            return null;
+        }
+        String redisKey = TOKEN_CACHE_PREFIX + token;
+        try {
+            Object cachedObject = redisTemplate.opsForValue().get(redisKey);
+            if (cachedObject instanceof Map) {
+                log.trace("Retrieved claims from cache for token prefix: {}", token.substring(0, Math.min(token.length(), 10)));
+                return (Map<String, Object>) cachedObject;
+            } else if (cachedObject != null) {
+                // Log if we get something unexpected
+                log.warn("Unexpected data type found in token cache for key {}. Expected Map, got {}. Returning null.",
+                        redisKey, cachedObject.getClass().getName());
+                return null;
+            } else {
+                log.trace("Claims not found in cache for token prefix: {}", token.substring(0, Math.min(token.length(), 10)));
+                return null; // Not in cache or expired
+            }
+        } catch (Exception e) {
+            log.error("Failed to retrieve token claims from cache for key: {}", redisKey, e);
+            return null; // Return null on error
+        }
+    }
+
+    @Override
+    public void removeToken(String token) {
+        if (token == null || token.isBlank()) {
+            log.warn("Attempted to remove token with null/blank token string.");
+            return;
+        }
+        String redisKey = TOKEN_CACHE_PREFIX + token;
+        try {
+            // Delete the token key itself
+            Boolean deleted = redisTemplate.delete(redisKey);
+            // Remove the key from our tracking Set
+            Long removedFromSet = redisTemplate.opsForSet().remove(TOKEN_CACHE_KEYS_SET, redisKey);
+            if (Boolean.TRUE.equals(deleted) || (removedFromSet != null && removedFromSet > 0)) {
+                log.trace("Removed token from cache (and tracking set) for prefix: {}", token.substring(0, Math.min(token.length(), 10)));
+            } else {
+                log.trace("Attempted to remove token not found in cache/tracking set for prefix: {}", token.substring(0, Math.min(token.length(), 10)));
+            }
+        } catch (Exception e) {
+            log.error("Failed to remove token from cache for key: {}", redisKey, e);
+        }
+    }
+
+    @Override
+    public void clearCache() {
+        log.warn("Clearing entire token cache from Redis!"); // Log as warning as this can be impactful
+        try {
+            // Get all keys tracked in our Set
+            Set<Object> keysObject = redisTemplate.opsForSet().members(TOKEN_CACHE_KEYS_SET);
+
+            if (keysObject != null && !keysObject.isEmpty()) {
+                // Convert Set<Object> to Set<String> - necessary because RedisTemplate is <String, Object>
+                // but the keys themselves are Strings.
+                Set<String> keysToDelete = keysObject.stream()
+                        .filter(String.class::isInstance)
+                        .map(String.class::cast)
+                        .collect(java.util.stream.Collectors.toSet());
+
+                if (!keysToDelete.isEmpty()) {
+                    // Delete all the token keys
+                    Long deletedKeysCount = redisTemplate.delete(keysToDelete);
+                    log.debug("Deleted {} token entries from Redis.", deletedKeysCount);
+                } else {
+                    log.debug("Tracking set contained non-string keys, no token entries deleted based on set content.");
+                }
+            } else {
+                log.debug("Token cache tracking set is empty or null. No entries to delete based on set.");
+            }
+
+            // Delete the tracking Set itself
+            redisTemplate.delete(TOKEN_CACHE_KEYS_SET);
+            log.info("Token cache cleared (including tracking set).");
+
+        } catch (Exception e) {
+            log.error("Failed to clear token cache from Redis.", e);
+        }
     }
 
 }
