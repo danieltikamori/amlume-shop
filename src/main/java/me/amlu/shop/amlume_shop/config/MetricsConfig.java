@@ -10,10 +10,7 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import io.micrometer.core.instrument.Clock;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.*;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -25,6 +22,8 @@ import org.jetbrains.annotations.NotNull;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
 
 
 @Configuration
@@ -82,6 +81,36 @@ public class MetricsConfig implements io.micrometer.prometheusmetrics.Prometheus
                     .tag("type", "validation")
                     .register(registry);
         };
+    }
+
+    @Bean
+    public Counter tokenValidationCounter(MeterRegistry meterRegistry) {
+        return Counter.builder("paseto_token_validation_total")
+                .description("Total number of PASETO token validations")
+                .register(meterRegistry);
+    }
+
+    @Bean
+    public Timer tokenValidationTimer(MeterRegistry meterRegistry) {
+        return Timer.builder("paseto.token.validation")
+                .description("Time spent validating PASETO tokens")
+                .tags("type", "validation")
+                .publishPercentiles(0.5, 0.95, 0.99) // Add percentiles
+                .publishPercentileHistogram()
+                .minimumExpectedValue(Duration.ofMillis(1))
+                .maximumExpectedValue(Duration.ofSeconds(10))
+                .register(meterRegistry);
+    }
+
+    @Bean
+    public DistributionSummary tokenValidationLatency(MeterRegistry meterRegistry) {
+        return DistributionSummary.builder("paseto_token_validation_seconds")
+                .description("Time spent validating PASETO tokens")
+                .publishPercentiles(0.5, 0.95, 0.99)
+                .publishPercentileHistogram()
+                .distributionStatisticExpiry(Duration.ofMinutes(5))
+                .distributionStatisticBufferLength(5)
+                .register(meterRegistry);
     }
 
     @Override
