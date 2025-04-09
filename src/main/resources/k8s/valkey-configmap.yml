@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: valkey-config
+data:
+  valkey.conf: |
+    port 7000
+    bind 0.0.0.0
+    maxmemory 256mb
+    maxmemory-policy allkeys-lru
