@@ -1,0 +1,68 @@
+# src/main/resources/k8s/valkey-statefulset.yml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: valkey
+spec:
+  serviceName: valkey
+  replicas: 1 # Start with 1 replica for testing. Increase to 3 or more as needed.
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey # Avoid valkey:latest
+#          imagePullPolicy: IfNotPresent # or Never or Always
+#          command: ["valkey-server"]
+#          args: ["--requirepass", "$(VALKEY_PASSWORD)"]
+#          env:
+#            - name: VALKEY_PASSWORD
+#              valueFrom:
+#                secretKeyRef:
+#                  name: valkey-secret
+#                  key: valkey-password
+          ports:
+            - containerPort: 7000 # or 6379
+          livenessProbe:
+            tcpSocket:
+              port: 7000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 7000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "128Mi" # or "128Mi" or "1Gi"
+              cpu: "100m" # or "250m", "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - valkey
+              topologyKey: "kubernetes.io/hostname"
+  volumeClaimTemplates:
+    - metadata:
+        name: valkey-data
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi # or "10Gi"

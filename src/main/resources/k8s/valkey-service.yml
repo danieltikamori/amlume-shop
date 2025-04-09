@@ -1,0 +1,14 @@
+# src/main/resources/k8s/valkey-service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  labels:
+    app: valkey
+spec:
+  selector:
+    app: valkey
+  ports:
+    - port: 7000 # or 6379 as it's the default
+      targetPort: 7000
+  clusterIP: None  # Headless service for StatefulSet. Headless service for better network partition handling. Headless service is a service that has no public IP address.
