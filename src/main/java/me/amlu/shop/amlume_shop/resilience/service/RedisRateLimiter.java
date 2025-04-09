@@ -10,50 +10,55 @@
 
 package me.amlu.shop.amlume_shop.resilience.service;
 
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.security.paseto.TokenConfigurationService;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisOperations;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.scripting.support.ResourceScriptSource;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-@Service
+@Slf4j
+@Component
 public class RedisRateLimiter {
-    private final StringRedisTemplate redisTemplate;
-    private final int maxRequests;
-    private final int windowSeconds;
-    
-    public RedisRateLimiter(
-            StringRedisTemplate redisTemplate,
-            @Value("${rate.limit.max-requests}") int maxRequests,
-            @Value("${rate.limit.window-seconds}") int windowSeconds) {
+
+    private final RedisTemplate<String, String> redisTemplate;
+    private final DefaultRedisScript<Boolean> rateLimiterScript;
+//    private final StringRedisTemplate stringRedisTemplate;
+    private final int windowSizeInSeconds;
+    private final int maxRequestsPerWindow;
+
+    public RedisRateLimiter(RedisTemplate<String, String> redisTemplate, TokenConfigurationService tokenConfigurationService) {
         this.redisTemplate = redisTemplate;
-        this.maxRequests = maxRequests;
-        this.windowSeconds = windowSeconds;
+        this.windowSizeInSeconds = tokenConfigurationService.getValidationRateLimitWindowSizeInSeconds();
+        this.maxRequestsPerWindow = (int) tokenConfigurationService.getValidationRateLimitPermitsPerSecond();
+        this.rateLimiterScript = new DefaultRedisScript<>();
+        rateLimiterScript.setScriptSource(new ResourceScriptSource(new ClassPathResource("rate_limiter.lua")));
+        rateLimiterScript.setResultType(Boolean.class);
     }
-    
+
     public boolean tryAcquire(String key) {
-        String redisKey = "ratelimit:" + key;
+        long currentTime = Instant.now().toEpochMilli();
+        String redisKey = "rate-limit:" + key;
 
-        return Boolean.TRUE.equals(redisTemplate.execute(new SessionCallback<Boolean>() {
-            @Override
-            public Boolean execute(@NotNull RedisOperations operations) throws DataAccessException {
-                operations.multi();
+        List<String> keys = List.of(redisKey);
+        List<String> args = List.of(String.valueOf(currentTime), String.valueOf(windowSizeInSeconds * 1000L), String.valueOf(maxRequestsPerWindow));
 
-                operations.opsForValue().increment(redisKey, 1);
-                operations.expire(redisKey, windowSeconds, TimeUnit.SECONDS);
-
-                List<Object> results = operations.exec();
-                Long count = (Long) results.getFirst();
-
-                return count <= maxRequests;
-            }
-        }));
+        Boolean result = redisTemplate.execute(rateLimiterScript, keys, args.toArray());
+        return result != null && result;
     }
+}
 
 //    public boolean tryAcquire(String key) {
 //        String redisKey = "ratelimit:" + key;
@@ -73,4 +78,4 @@ public class RedisRateLimiter {
 //            }
 //        });
 //    }
-}
+
