@@ -19,6 +19,8 @@ asn:
     schedule: 0 0 0 * * *
 
 cache:
+  revoked-token:
+    ttl-seconds: 3600 # TTL in seconds (e.g., 3600 for 1 hour)
   token:
     initial-capacity: ${CACHE_INITIAL_CAPACITY:100}
     maximum-size: ${CACHE_MAXIMUM_SIZE:10000}
@@ -49,6 +51,13 @@ hcp:
   HCP_ORGANIZATION_ID: ${HCP_ORGANIZATION_ID}
   HCP_PROJECT_ID: ${HCP_PROJECT_ID}
   HCP_APP_NAME: ${HCP_APP_NAME}
+
+jti:
+  bloomfilter:
+    expected-insertions: 1000000
+    false-positive-probability: 0.01
+  cleanup:
+    rate-ms: 300000 # Cleanup every 5 minutes (300,000 ms)
 
 logging:
   level:
