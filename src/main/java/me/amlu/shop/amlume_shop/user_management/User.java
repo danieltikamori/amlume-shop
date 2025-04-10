@@ -130,6 +130,17 @@ public class User extends BaseEntity implements UserDetails {
     }
 
     @Override
+    public Long getId() {
+        return this.userId;
+    }
+
+    @Override
+    @Transient
+    public Long getAuditableId() {
+        return this.userId;
+    }
+
+    @Override
     public String getPassword() {
         return authenticationInfo.getPassword();
     }
@@ -200,23 +211,33 @@ public class User extends BaseEntity implements UserDetails {
         );
     }
 
+    // Proxy-aware implementation of equals()
     @Override
     public final boolean equals(Object o) {
         if (this == o) return true;
         if (o == null) return false;
+        // Gets the underlying class even if 'o' is a proxy
         HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
         Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        // Gets the underlying class even if 'this' is a proxy
         HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
         Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        // Compares the effective classes
         if (thisEffectiveClass != oEffectiveClass) return false;
+        // Now safe to cast (though instanceof check is slightly redundant now)
         if (!(o instanceof User user)) return false;
+        // Finally, compare by ID
         return getUserId() != null && Objects.equals(getUserId(), user.getUserId());
     }
 
+    // Proxy-awareness is needed for hashCode if it uses getClass()
     @Override
     public final int hashCode() {
         HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        // Uses the effective class for the hash code base
         return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+        // NOTE: A better hashCode for entities usually relies on the ID:
+        // return userId == null ? 31 : userId.hashCode(); // Or Objects.hash(userId) if ID can be null transiently
     }
 
 }
