@@ -41,10 +41,10 @@ import java.util.concurrent.CopyOnWriteArrayList;
 //        @Index(name = "idx_user_orders", columnList = "user_orders")
 })
 @Getter
-@Setter
-@NoArgsConstructor
-@SuperBuilder
-@ToString
+@Setter // Added Setter for JPA/Hibernate and potential controlled modifications
+@NoArgsConstructor // Required by JPA
+@SuperBuilder // Use Lombok's builder
+@ToString // Be mindful of performance impact if logging frequently
 public class User extends BaseEntity implements UserDetails {
 
     @Serial
@@ -73,142 +73,109 @@ public class User extends BaseEntity implements UserDetails {
     @Embedded
     private LocationInfo locationInfo;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.EAGER) // EAGER fetch for roles is often acceptable
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
-    private @NotBlank Set<UserRole> roles = new HashSet<>();
+
+    private Set<UserRole> roles = new HashSet<>(); // Initialize collection
 
     @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
     @JoinTable(name = "user_address",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "address_id"))
     @ToString.Exclude
-    private transient List<Address> addresses = new CopyOnWriteArrayList<>();
+    private List<Address> addresses = new ArrayList<>(); // Initialize collection
 
     @OneToMany(mappedBy = "categoryManager", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
     @ToString.Exclude
-    private transient List<Category> categories = new CopyOnWriteArrayList<>();
+    private List<Category> categories = new ArrayList<>(); // Initialize collection
 
     @OneToMany(mappedBy = "seller", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
     @ToString.Exclude
-    private transient Set<Product> products;
+    private Set<Product> products = new HashSet<>(); // Initialize collection
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    @ToString.Exclude // CascadeType.ALL is important
-    private List<RefreshToken> refreshTokens;
+    // Initialized collection
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true) // Added orphanRemoval=true for consistency
+    @ToString.Exclude
+    private List<RefreshToken> refreshTokens = new ArrayList<>(); // Initialize collection
 
-    public User(AuthenticationInfo authenticationInfo, ContactInfo contactInfo, AccountStatus accountStatus, MfaInfo mfaInfo, DeviceFingerprintingInfo deviceFingerprintingInfo, LocationInfo locationInfo, Set<UserRole> roles, List<Address> addresses, List<Category> categories, Set<Product> products, List<RefreshToken> refreshTokens) {
-        this.authenticationInfo = authenticationInfo;
-        this.contactInfo = contactInfo;
-        this.accountStatus = accountStatus;
-        this.mfaInfo = mfaInfo;
-        this.deviceFingerprintingInfo = deviceFingerprintingInfo;
-        this.locationInfo = locationInfo;
-        this.roles = roles;
-        this.addresses = addresses;
-        this.categories = categories;
-        this.products = products;
-        this.refreshTokens = refreshTokens;
-    }
 
-    public User(AuthenticationInfo authenticationInfo, ContactInfo contactInfo, AccountStatus accountStatus, MfaInfo mfaInfo, LocationInfo locationInfo, Set<UserRole> roles) {
-        this.authenticationInfo = authenticationInfo;
-        this.contactInfo = contactInfo;
-        this.accountStatus = accountStatus;
-        this.mfaInfo = mfaInfo;
-        this.deviceFingerprintingInfo = new DeviceFingerprintingInfo(true); // Default to true for new users
-        this.locationInfo = locationInfo;
-        this.roles = roles;
-    }
+    // --- UserDetails Implementation ---
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles.stream()  // Assuming 'roles' is a Set<UserRole> and Role has a 'name' attribute
-                .map(role -> new SimpleGrantedAuthority(role.getRoleName().name())) // Convert Role to GrantedAuthority. Call name() method on the enum
+                .map(role -> {
+                    assert role.getRoleName() != null;
+                    return new SimpleGrantedAuthority(role.getRoleName().name());
+                }) // Convert Role to GrantedAuthority. Call name() method on the enum
 //                .collect(Collectors.toList());
                 .toList();
 //        return roles;
     }
 
     @Override
-    public Long getId() {
-        return this.userId;
+    public String getPassword() {
+        // Ensure authenticationInfo is not null for safety, though it shouldn't be with @Embedded
+        return (authenticationInfo != null) ? authenticationInfo.getPassword() : null;
     }
 
+    @Override
+    public String getUsername() {
+        // Ensure authenticationInfo is not null
+        return (authenticationInfo != null) ? authenticationInfo.getUsername() : null;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        // Ensure accountStatus is not null
+        return (accountStatus != null) && accountStatus.isAccountNonExpired();
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        // Ensure accountStatus is not null
+        return (accountStatus != null) && accountStatus.isAccountNonLocked();
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        // Ensure accountStatus is not null
+        return (accountStatus != null) && accountStatus.isCredentialsNonExpired();
+    }
+
+    @Override
+    public boolean isEnabled() {
+        // Ensure accountStatus is not null
+        return (accountStatus != null) && accountStatus.isEnabled();
+    }
+    // --- End UserDetails ---
+
+
+    // --- Auditable Implementation ---
+    // Method required by BaseEntity's isNew() logic
     @Override
     @Transient
     public Long getAuditableId() {
         return this.userId;
     }
+    // --- End Auditable ---
 
-    @Override
-    public String getPassword() {
-        return authenticationInfo.getPassword();
+
+    // --- Other Methods ---
+
+    // Optional convenience getter for ID
+    public Long getId() {
+        return this.userId;
     }
 
-    @Override
-    public String getUsername() {
-        return authenticationInfo.getUsername();
-    }
-
+    // Simple role check helper
     public boolean hasRole(UserRole role) {
-        return roles.contains(role);
+        return roles != null && roles.contains(role);
     }
 
-    @Override
-    public boolean isAccountNonExpired() {
-        return accountStatus.isAccountNonExpired();
-    }
-
-    @Override
-    public boolean isAccountNonLocked() {
-        return accountStatus.isAccountNonLocked();
-    }
-
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return accountStatus.isCredentialsNonExpired();
-    }
-
-    @Override
-    public boolean isEnabled() {
-        return accountStatus.isEnabled();
-    }
-
-
+    // Check device fingerprinting status
     public boolean isDeviceFingerprintingEnabled() {
         return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
-    }
-
-    public void enableDeviceFingerprinting() {
-        new User(
-                this.authenticationInfo,
-                this.contactInfo,
-                this.accountStatus,
-                this.mfaInfo,
-                this.deviceFingerprintingInfo.enableFingerprinting(),
-                this.locationInfo,
-                this.roles,
-                this.addresses,
-                this.categories,
-                this.products,
-                this.refreshTokens
-        );
-    }
-
-    public void disableDeviceFingerprinting() {
-        new User(
-                this.authenticationInfo,
-                this.contactInfo,
-                this.accountStatus,
-                this.mfaInfo,
-                this.deviceFingerprintingInfo.disableFingerprinting(),
-                this.locationInfo,
-                this.roles,
-                this.addresses,
-                this.categories,
-                this.products,
-                this.refreshTokens
-        );
     }
 
     // Proxy-aware implementation of equals()
