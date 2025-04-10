@@ -8,43 +8,41 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.user_management;
+package me.amlu.shop.amlume_shop.payload.user;
 
-import jakarta.persistence.Embeddable;
-import jakarta.persistence.Embedded;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
+import me.amlu.shop.amlume_shop.user_management.Username;
 
-import java.io.Serial;
-import java.io.Serializable;
-
-@Embeddable
 @AllArgsConstructor
-@Getter
-@EqualsAndHashCode
 @NoArgsConstructor
+@Data
 @Builder
-public final class AuthenticationInfo implements Serializable {
+public class UserRegistrationRequest {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+//    private String firstname;
+//    private String lastname;
 
-    @Embedded
-    Username username;
+    private Username username;
 
-    @Embedded
-    UserPassword password;
+    @NotBlank
+    @Size(min = 12, max = 120)
+    private String password;
 
-    public AuthenticationInfo(@NotBlank @Size(min = 3, max = 20) Username username, String encode) {
-    }
+    @Email
+    @Size(min = 5, max = 50)
+    private String userEmail;
 
-    public String getUsername() {
-        return username.getUsername();
-    }
+    private UserRole roles;
 
-    public String getPassword() {
-        return password.getPassword();
-    }
+    private boolean mfaEnabled;
+
+    private String captchaResponse;
 
 }

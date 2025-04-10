@@ -29,6 +29,14 @@ import java.io.Serializable;
 @EqualsAndHashCode
 public class ContactInfo implements Serializable {
 
+    @Column(name = "first_name")
+    @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters")
+    private String firstName;
+
+    @Column(name = "last_name")
+    @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters")
+    private String lastName;
+
     @Embedded
     private UserEmail userEmail;
 
@@ -45,7 +53,9 @@ public class ContactInfo implements Serializable {
     protected ContactInfo() {
     } // Required by JPA
 
-    public ContactInfo(UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
+    public ContactInfo(String firstName, String lastName, UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
+        this.firstName = firstName;
+        this.lastName = lastName;
         this.userEmail = userEmail;
         this.emailVerified = emailVerified;
         this.phoneNumber = phoneNumber;
@@ -59,4 +69,12 @@ public class ContactInfo implements Serializable {
         return userEmail.getEmail();
     }
 
+    public ContactInfo withFirstName(String firstName) {
+
+        return new ContactInfo(firstName, lastName, userEmail, emailVerified, phoneNumber);
+    }
+
+    public ContactInfo withLastName(String lastName) {
+
+    }
 }

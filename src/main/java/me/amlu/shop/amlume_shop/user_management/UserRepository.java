@@ -10,6 +10,9 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -18,6 +21,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.lang.ScopedValue;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -96,4 +100,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
             "WHERE u.username = :username")
     void updateAuthenticationInfo(@Param("username") String username,
                                   @Param("newInfo") AuthenticationInfo newInfo);
+
+    boolean existsByAuthenticationInfoUsername(@NotBlank @Size(min = 3, max = 20) String username);
+
+    boolean existsByContactInfoUserEmailEmail(@Email @Size(min = 5, max = 50) String userEmail);
+
+    Optional<User> findByAuthenticationInfoUsername(String username);
+
+    Optional<User> findByContactInfoUserEmailEmail(String email);
+
+    Optional<User> findByAuthenticationInfoUsernameOrContactInfoUserEmailEmail(String usernameOrEmail, String usernameOrEmail1);
 }

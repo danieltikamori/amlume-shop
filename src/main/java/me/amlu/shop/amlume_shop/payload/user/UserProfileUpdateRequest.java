@@ -8,25 +8,16 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.payload;
+package me.amlu.shop.amlume_shop.payload.user;
 
-import me.amlu.shop.amlume_shop.user_management.User;
+public record UserProfileUpdateRequest(String firstName, String lastName) {
 
-public record UserDTO(Long userId, String username, String userEmail) {
+    public String getFirstName() {
+        return firstName;
 
-    public static UserDTO fromUser(User user) {
-        return new UserDTO(user.getUserId(), user.getUsername(), user.getContactInfo().getEmail());
     }
 
-    public Object getUserId() {
-        return userId;
-    }
-
-    public Object getUsername() {
-        return username;
-    }
-
-    public Object getUserEmail() {
-        return userEmail;
+    public String getLastName() {
+        return lastName;
     }
 }

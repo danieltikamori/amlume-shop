@@ -11,12 +11,22 @@
 package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
+import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.transaction.annotation.Transactional;
 
-import javax.management.relation.RoleNotFoundException;
+import static me.amlu.shop.amlume_shop.commons.Constants.CURRENT_USER_CACHE;
+import static me.amlu.shop.amlume_shop.commons.Constants.USER_CACHE;
 
 public interface UserService {
+
+    // Consider if this should return UserDetails or a specific UserProfileDTO
+    // Caching strategy depends on return type and frequency of access
+    UserDetails loadUserByUsername(String username) throws UsernameNotFoundException;
 
     User getCurrentUser();
 
@@ -24,19 +34,24 @@ public interface UserService {
 
     User getUserById(Long userId);
 
-    User getUserByUsername(String username);
+//    User getUserByUsername(String username);
 
     User getUserByEmail(String email);
 
     User getUserByUsernameOrEmail(String usernameOrEmail);
 
-    User getUserProfile(Long userId);
+//    User getUserProfile(Long userId);
 
-    UserDetails getUserDetails(String userId);
+//    UserDetails getUserDetails(String userId);
 
-    User createUser(User user);
+//    User createUser(User user);
 
-    User updateUser(User user);
+//    User updateUser(User user);
+
+    UserDetails getUserDetails(Long userId);
+
+    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict relevant caches
+    User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest);
 
     void deleteUser(Long userId);
 
@@ -57,4 +72,24 @@ public interface UserService {
 //    boolean hasRole(User user, UserRole role);
 
     boolean hasRole(User user, String role);
+
+    @Transactional
+        // Ensure atomicity
+    void incrementFailedLogins(String username);
+
+    @Transactional
+    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    void lockUserAccount(Long userId);
+
+    @Transactional
+    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    boolean unlockAccountIfExpired(Long userId);
+
+    @Transactional
+    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    void resetFailedLoginAttempts(Long userId);
+
+    @Transactional
+    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    void updateLastLoginTime(Long userId);
 }

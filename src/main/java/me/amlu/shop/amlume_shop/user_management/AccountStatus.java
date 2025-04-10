@@ -12,10 +12,7 @@ package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
+import lombok.*;
 
 import java.io.Serializable;
 import java.time.Instant;
@@ -25,6 +22,7 @@ import java.time.Instant;
 @Getter
 @AllArgsConstructor
 @EqualsAndHashCode
+@NoArgsConstructor(force = true)
 public class AccountStatus implements Serializable {
 
     @Column(name = "user_locked", nullable = false)
@@ -55,4 +53,8 @@ public class AccountStatus implements Serializable {
     @Column(name = "enabled", nullable = false)
     @Builder.Default
     private final boolean enabled = true;
+
+    @Column(name = "creation_time", nullable = false)
+    private final Instant creationTime;
+
 }
