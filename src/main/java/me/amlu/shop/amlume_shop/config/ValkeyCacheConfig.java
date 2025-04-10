@@ -28,6 +28,9 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 
+import static me.amlu.shop.amlume_shop.commons.Constants.PRODUCT_CACHE;
+import static me.amlu.shop.amlume_shop.commons.Constants.USER_CACHE;
+
 /**
  * Configuration class for setting up caching and Redis/Valkey connection
  * using Spring Data Redis with Lettuce connector.
@@ -89,7 +92,7 @@ public class ValkeyCacheConfig {
 
         return factory;
     }
-    
+
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
         // Standard StringRedisTemplate for simple String key/value operations
@@ -137,9 +140,9 @@ public class ValkeyCacheConfig {
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig)
                 // Add specific configurations for named caches if needed
-                .withCacheConfiguration("userCache",
+                .withCacheConfiguration(USER_CACHE,
                         defaultConfig.entryTtl(Duration.ofMinutes(10))) // Override TTL for userCache
-                .withCacheConfiguration("productCache",
+                .withCacheConfiguration(PRODUCT_CACHE,
                         defaultConfig.entryTtl(Duration.ofHours(1))) // Override TTL for productCache
                 // Add more cache configurations as needed
                 // .withCacheConfiguration("anotherCache", ...)
