@@ -21,15 +21,18 @@ import java.util.Optional;
 @Repository
 public interface UserDeviceFingerprintRepository extends JpaRepository<UserDeviceFingerprint, Long> {
     List<UserDeviceFingerprint> findByUser(User user);
+
     long countByUser(User user);
 
-    Optional <UserDeviceFingerprint> findByUserAndDeviceFingerprint(User user, String deviceFingerprint);
+    Optional<UserDeviceFingerprint> findByUserAndDeviceFingerprint(User user, String deviceFingerprint);
 
     void deleteByUserAndFingerprint(User user, String fingerprint);
 
     Optional<UserDeviceFingerprint> findByUserIdAndFingerprint(Long aLong, String fingerprint);
 
     boolean existsByUserAndFingerprint(User user, String fingerprint);
+
+    List<UserDeviceFingerprint> findByUserAndIsActiveTrue(User user);
 
     List<UserDeviceFingerprint> findByUserIdAndDeviceFingerprintNot(String userId, String exceptFingerprint);
 }

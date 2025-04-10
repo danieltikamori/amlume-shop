@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import me.amlu.shop.amlume_shop.user_management.DeviceFingerprintingInfo;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
@@ -728,24 +729,76 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     @Override
+    @Transactional
     public void disableDeviceFingerprinting(User user) {
-        user.disableDeviceFingerprinting();
-        userDeviceFingerprintRepository.findByUser(user)
-                .forEach(device -> {
-                    device.setActive(false);
-                    device.setDeactivatedAt(Instant.now());
-                    userDeviceFingerprintRepository.save(device);
-                });
-        userRepository.save(user);
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
+        }
+
+        // 1. Create the new disabled state for DeviceFingerprintingInfo
+        // Use the existing method on the embeddable which returns a new instance
+        DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
+        DeviceFingerprintingInfo disabledInfo;
+        if (currentInfo != null) {
+            disabledInfo = currentInfo.disableFingerprinting(); // Creates new instance with enabled=false, fingerprints=null
+        } else {
+            // Handle case where info might be null (though unlikely with @Embedded)
+            disabledInfo = DeviceFingerprintingInfo.builder()
+                    .deviceFingerprintingEnabled(false)
+                    .build();
+        }
+
+        // 2. Update the User entity with the new immutable embeddable
+        user.setDeviceFingerprintingInfo(disabledInfo);
+        userRepository.save(user); // Save the user with the updated embedded object
+
+        // 3. Find and deactivate associated *active* device fingerprints
+        List<UserDeviceFingerprint> activeDevices = userDeviceFingerprintRepository.findByUserAndIsActiveTrue(user);
+        if (!activeDevices.isEmpty()) {
+            Instant now = Instant.now();
+            for (UserDeviceFingerprint device : activeDevices) {
+                device.setActive(false);
+                device.setDeactivatedAt(now);
+                // Don't save inside the loop for efficiency
+            }
+            userDeviceFingerprintRepository.saveAll(activeDevices); // Save all changes at once
+            log.info("Deactivated {} active device fingerprints for user: {}", activeDevices.size(), user.getUserId());
+        }
+
+        // 4. Logging
         auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_DISABLED", String.valueOf(user.getUserId()), null);
-        log.warn("Device fingerprinting disabled for user: {}", user.getUserId());
+        log.info("Device fingerprinting disabled for user: {}", user.getUserId()); // Use INFO level
     }
 
     @Override
+    @Transactional
     public void enableDeviceFingerprinting(User user) {
-        user.enableDeviceFingerprinting();
-        userRepository.save(user);
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null");
+        }
+
+        // 1. Get current info (handle potential null)
+        DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
+        DeviceFingerprintingInfo enabledInfo;
+
+        if (currentInfo != null) {
+            // Use the existing method which returns a new instance, preserving existing fingerprints
+            enabledInfo = currentInfo.enableFingerprinting();
+        } else {
+            // If it was somehow null, create a new enabled one from scratch
+            enabledInfo = DeviceFingerprintingInfo.builder()
+                    .deviceFingerprintingEnabled(true)
+                    // No existing fingerprints to preserve if currentInfo was null
+                    .build();
+        }
+
+        // 2. Update the User entity with the new immutable embeddable
+        user.setDeviceFingerprintingInfo(enabledInfo);
+        userRepository.save(user); // Save the user with the updated embedded object
+
+        // 3. Logging
+        // Note: We don't automatically reactivate devices here. They remain inactive.
         auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_ENABLED", String.valueOf(user.getUserId()), null);
-        log.warn("Device fingerprinting enabled for user: {}", user.getUserId());
+        log.info("Device fingerprinting enabled for user: {}", user.getUserId()); // Use INFO level
     }
 }
