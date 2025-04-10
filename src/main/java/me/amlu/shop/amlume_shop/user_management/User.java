@@ -233,11 +233,12 @@ public class User extends BaseEntity implements UserDetails {
     // Proxy-awareness is needed for hashCode if it uses getClass()
     @Override
     public final int hashCode() {
-        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        // Uses the effective class for the hash code base
-        return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
-        // NOTE: A better hashCode for entities usually relies on the ID:
-        // return userId == null ? 31 : userId.hashCode(); // Or Objects.hash(userId) if ID can be null transiently
+        // Base the hashCode primarily on the unique identifier (userId)
+        // Objects.hash() handles null correctly if the entity is new (ID not yet assigned)
+        return Objects.hash(userId);
+
+        // --- Alternative using a constant for null ID (also common) ---
+        // return userId == null ? 31 : userId.hashCode();
     }
 
 }
