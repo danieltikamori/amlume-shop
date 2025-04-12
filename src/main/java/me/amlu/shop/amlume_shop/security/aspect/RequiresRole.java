@@ -10,8 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.aspect;
 
-import me.amlu.shop.amlume_shop.model.AppRole;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
+import me.amlu.shop.amlume_shop.user_management.AppRole;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -47,13 +46,19 @@ import java.lang.annotation.Inherited;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RequiresRole {
-    /**
-     * @return the required role name for method access
-     */
-    String value();
+//    /**
+//     * @return the required role name for method access
+//     */
+//    String value();
 
     /**
      * @return whether to allow multiple roles (default: false)
      */
     boolean allowMultiple() default false;
+
+    /**
+     * The roles required to execute the annotated method.
+     * If multiple roles are specified, the user must have at least one of them.
+     */
+    AppRole[] value(); // Takes an array of AppRole enums
 }

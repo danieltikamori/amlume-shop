@@ -16,7 +16,7 @@ import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
 import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator;
 import me.amlu.shop.amlume_shop.config.SecurityValidator;
-import me.amlu.shop.amlume_shop.model.AppRole;
+import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.model.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.product_management.ProductService;

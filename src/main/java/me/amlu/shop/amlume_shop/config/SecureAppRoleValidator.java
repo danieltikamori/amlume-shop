@@ -12,12 +12,14 @@ package me.amlu.shop.amlume_shop.config;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.SecurityConfigurationException;
 import me.amlu.shop.amlume_shop.security.service.RoleAuditService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.Set;
@@ -42,13 +44,15 @@ import java.util.stream.Collectors;
  * Implementing role-based access control at the API gateway level
  */
 
-@Slf4j
+@Component
 public class SecureAppRoleValidator implements ConstraintValidator<SensitiveData, Object> {
-    //    private static final Logger logger = LoggerFactory.getLogger(SecurAppRoleValidator.class);
-    private RoleAuditService auditService;
 
     private Set<String> rolesAllowed;
     private static final int MAX_ROLES = 20; // Prevent role explosion
+
+    private static final Logger log = LoggerFactory.getLogger(SecureAppRoleValidator.class);
+
+    private RoleAuditService auditService;
 
     @Override
     public void initialize(SensitiveData constraintAnnotation) {

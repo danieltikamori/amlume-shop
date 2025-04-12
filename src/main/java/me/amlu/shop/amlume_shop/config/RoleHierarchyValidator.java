@@ -10,9 +10,10 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.model.AppRole;
+import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
@@ -30,8 +31,9 @@ import java.util.stream.Collectors;
  */
 
 @Component
-@Slf4j
 public class RoleHierarchyValidator {
+
+    private static final Logger log = LoggerFactory.getLogger(RoleHierarchyValidator.class);
 
 //    private RoleHierarchy roleHierarchy;
 
