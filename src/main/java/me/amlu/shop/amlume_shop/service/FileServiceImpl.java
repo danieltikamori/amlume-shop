@@ -52,4 +52,17 @@ public class FileServiceImpl implements FileService {
             return fileName;
         }
     }
+
+    @Override
+    public void deleteImage(String path, String oldImageName) throws IOException {
+        String filePath = path + File.separator + oldImageName;
+        File file = new File(filePath);
+        if (file.exists() && !file.isDirectory()) {
+            if (file.delete()) {
+                System.out.println("Image deleted successfully");
+            } else {
+                throw new IOException("Failed to delete image");
+            }
+        }
+    }
 }

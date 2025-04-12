@@ -21,4 +21,8 @@ public class ProductDataValidationException extends RuntimeException {
         super(validationMessage);
     }
 
+    public ProductDataValidationException(String validationMessage, Throwable cause) {
+        super(validationMessage, cause);
+    }
+
 }

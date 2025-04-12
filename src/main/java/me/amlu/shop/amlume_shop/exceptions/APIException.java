@@ -24,5 +24,8 @@ public class APIException extends RuntimeException {
         super(message);
     }
 
+    public APIException(String message, Throwable cause) {
+        super(message, cause);
+    }
 
 }

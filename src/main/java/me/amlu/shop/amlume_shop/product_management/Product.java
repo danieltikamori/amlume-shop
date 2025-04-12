@@ -13,9 +13,6 @@ package me.amlu.shop.amlume_shop.product_management;
 import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.model.Order;
@@ -25,16 +22,16 @@ import org.hibernate.proxy.HibernateProxy;
 
 import java.math.BigDecimal;
 import java.util.Objects;
+import java.util.StringJoiner;
 
-@Getter
-@Setter
-@ToString(exclude = {"category", "seller", "order"}) // Exclude relationships from toString
 @Entity
 @Table(name = "products")
+// Add unique constraint at DB level for product name (optional but recommended)
+// @Table(name = "products", uniqueConstraints = {
+//    @UniqueConstraint(name = "uk_product_name", columnNames = {"productName_name"}) // Adjust column name if needed
+// })
 public class Product extends BaseEntity {
 
-    //    @Tsid
-//    @GeneratedValue(generator = "tsid_generator")
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "product_id", nullable = false, updatable = false, unique = true)
@@ -42,6 +39,8 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
+    // Optional: Override column name if Hibernate doesn't generate 'productName_name' as desired
+    // @AttributeOverride(name = "name", column = @Column(name = "product_name_value", nullable = false, unique = true))
     private ProductName productName;
 
     @Column(name = "product_image")
@@ -49,6 +48,8 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
+    // Optional: Override column name if needed
+    // @AttributeOverride(name = "description", column = @Column(name = "product_description_value", length = 2000))
     private ProductDescription productDescription;
 
     @Column(name = "product_quantity", nullable = false)
@@ -68,46 +69,156 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
-    @AttributeOverride(name = "amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2))
+    // Mark as not directly updatable via standard setters if calculation is always enforced
+    @AttributeOverride(name = "amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2 /*, updatable = false ??? */))
     private Money productSpecialPrice;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id") // Changed name to category_id
+    @JoinColumn(name = "category_id")
     private Category category;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "order_id")
-    private transient Order order;
+     @ManyToOne(fetch = FetchType.LAZY)
+     @JoinColumn(name = "order_id")
+     private Order order;
 
-    @Override
-    @PrePersist
-    public void prePersist() {
-        if (productDiscountPercentage == null) {
-            productDiscountPercentage = new DiscountPercentage(BigDecimal.ZERO);
-        }
-        if (productSpecialPrice == null) {
-            productSpecialPrice = productPrice;
-        }
+    // --- JPA Required No-Arg Constructor ---
+    public Product() {
+        // JPA requires a no-arg constructor
     }
 
+    // --- Getters ---
+
+    public Long getProductId() {
+        return productId;
+    }
+
+    public ProductName getProductName() {
+        return productName;
+    }
+
+    public String getProductImage() {
+        return productImage;
+    }
+
+    public ProductDescription getProductDescription() {
+        return productDescription;
+    }
+
+    public Integer getProductQuantity() {
+        return productQuantity;
+    }
+
+    public Money getProductPrice() {
+        return productPrice;
+    }
+
+    public DiscountPercentage getProductDiscountPercentage() {
+        return productDiscountPercentage;
+    }
+
+    public Money getProductSpecialPrice() {
+        return productSpecialPrice;
+    }
+
+    public Category getCategory() {
+        return category;
+    }
+
+    public User getSeller() {
+        return seller;
+    }
+
+    // --- Setters ---
+
+    // No setter for productId as it's generated and updatable=false
+
+    public void setProductName(ProductName productName) {
+        this.productName = productName;
+    }
+
+    public void setProductImage(String productImage) {
+        this.productImage = productImage;
+    }
+
+    public void setProductDescription(ProductDescription productDescription) {
+        this.productDescription = productDescription;
+    }
+
+    public void setProductQuantity(Integer productQuantity) {
+        this.productQuantity = productQuantity;
+    }
+
+    public void setProductPrice(Money productPrice) {
+        this.productPrice = productPrice;
+    }
+
+    public void setProductDiscountPercentage(DiscountPercentage productDiscountPercentage) {
+        this.productDiscountPercentage = productDiscountPercentage;
+    }
+
+    public void setProductSpecialPrice(Money productSpecialPrice) {
+        this.productSpecialPrice = productSpecialPrice;
+    }
+
+    public void setCategory(Category category) {
+        this.category = category;
+    }
+
+    public void setSeller(User seller) {
+        this.seller = seller;
+    }
+
+    // --- Business Logic Methods ---
+
     public User getCategoryManager() {
-        return category != null ? category.getCategoryManager() : null; // Handle null category
+        return category != null ? category.getCategoryManager() : null;
     }
 
     public boolean isHighValue() {
-        return productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) > 0;
+        return productPrice != null && productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) > 0;
     }
 
     public boolean isLowValue() {
-        return productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) < 0;
+        return productPrice != null && productPrice.getAmount().compareTo(BigDecimal.valueOf(1000)) < 0;
     }
 
     public boolean isRestricted() {
-        return category != null && category.hasSpecialRestrictions(); // Handle null category
+        return category != null && category.hasSpecialRestrictions();
+    }
+
+    /**
+     * Recalculates and sets the special price based on the current price and discount.
+     * Should be called whenever price or discount percentage changes.
+     */
+    public void recalculateSpecialPrice() {
+        if (this.productPrice != null && this.productDiscountPercentage != null) {
+            // Use the logic from DiscountPercentage for consistency
+            this.productSpecialPrice = this.productDiscountPercentage.applyToPrice(this.productPrice);
+        } else if (this.productPrice != null) {
+            // If no discount, special price is the same as regular price
+            this.productSpecialPrice = this.productPrice;
+        } else {
+            // Handle case where price is null (shouldn't happen with nullable=false)
+            this.productSpecialPrice = null; // Or maybe new Money(BigDecimal.ZERO)? Depends on requirements.
+        }
+    }
+
+    // --- BaseEntity Implementation ---
+
+    @Override
+    @Transient // Exclude from persistence mapping
+    public Long getAuditableId() {
+        return this.productId;
+    }
+
+    // Optional: Keep getId() for convenience
+    @Transient // Exclude from persistence mapping if only for convenience
+    public Long getId() {
+        return this.productId;
     }
 
     @Override
@@ -119,14 +230,35 @@ public class Product extends BaseEntity {
         HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
         Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
-        if (!(o instanceof Product product)) return false;
+        // Cast is safe now after class check
+        Product product = (Product) o;
+        // Compare by ID, handle null ID for transient entities
         return getProductId() != null && Objects.equals(getProductId(), product.getProductId());
     }
 
     @Override
     public final int hashCode() {
-        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        return thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+        // Base hash code on the primary key
+        return Objects.hash(productId);
     }
 
+    @Override
+    public String toString() {
+        // Basic toString implementation, excluding lazy relationships by default
+        // to avoid accidental loading. Add more fields if needed for debugging.
+        return new StringJoiner(", ", Product.class.getSimpleName() + "[", "]")
+                .add("productId=" + productId)
+                .add("productName=" + productName)
+                .add("productImage='" + productImage + "'")
+                .add("productDescription=" + productDescription)
+                .add("productQuantity=" + productQuantity)
+                .add("productPrice=" + productPrice)
+                .add("productDiscountPercentage=" + productDiscountPercentage)
+                .add("productSpecialPrice=" + productSpecialPrice)
+                // Excluded: category, seller (as per original @ToString.exclude)
+                // Add inherited fields from BaseEntity if desired, e.g.,
+                // .add("version=" + getVersion())
+                // .add("deleted=" + isDeleted())
+                .toString();
+    }
 }

@@ -18,10 +18,14 @@ import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
 import me.amlu.shop.amlume_shop.payload.ProductResponse;
 import me.amlu.shop.amlume_shop.resilience.ExponentialBackoffRateLimiter;
-import me.amlu.shop.amlume_shop.service.CacheService;
 import me.amlu.shop.amlume_shop.service.FileService;
-import org.modelmapper.ModelMapper;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
+import me.amlu.shop.amlume_shop.user_management.UserService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -30,16 +34,19 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
+// import me.amlu.shop.amlume_shop.service.CacheService; // Keep if used elsewhere, otherwise remove if only for updateProductPrice
 
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class ProductServiceImpl implements ProductService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductServiceImpl.class);
 
     @Value("${project.image.path}")
     private String path;
@@ -47,245 +54,446 @@ public class ProductServiceImpl implements ProductService {
     private final ExponentialBackoffRateLimiter backoffRateLimiter;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
-    private final ModelMapper modelMapper;
+    // private final ModelMapper modelMapper; // Removed, using manual mapping
     private final FileService fileService;
-    private final CacheService cacheService;
+    // private final CacheService cacheService; // Removed, using @CacheEvict
+    private final UserService userService; // Inject UserService to get current user
 
-    public ProductServiceImpl(ExponentialBackoffRateLimiter backoffRateLimiter, CategoryRepository categoryRepository, ProductRepository productRepository, ModelMapper modelMapper, FileService fileService, CacheService cacheService) {
+    public ProductServiceImpl(ExponentialBackoffRateLimiter backoffRateLimiter,
+                              CategoryRepository categoryRepository,
+                              ProductRepository productRepository,
+                              FileService fileService,
+                              UserService userService) {
         this.backoffRateLimiter = backoffRateLimiter;
         this.categoryRepository = categoryRepository;
         this.productRepository = productRepository;
-        this.modelMapper = modelMapper;
         this.fileService = fileService;
-        this.cacheService = cacheService;
+        this.userService = userService;
     }
 
     @Override
     @Transactional
-    public ProductDTO addProduct(ProductDTO productDTO, Long categoryId) throws IllegalArgumentException, ResourceNotFoundException, ProductAlreadyExistsException, APIException {
+    // Evict relevant list caches if applicable (e.g., all products, category products)
+    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true)
+    public ProductDTO addProduct(ProductDTO productDTO, Long categoryId)
+            throws ResourceNotFoundException, ProductAlreadyExistsException, APIException, ProductDataValidationException {
+
+        // --- Preconditions ---
+        Assert.notNull(productDTO, "ProductDTO cannot be null");
+        Assert.notNull(categoryId, "Category ID cannot be null");
+        validateProductData(productDTO); // Basic DTO validation
+
+        log.debug("Attempting to add product '{}' to category ID {}", productDTO.getProductName(), categoryId);
+
+        // --- Check Existence ---
+        if (productRepository.existsByProductName_NameIgnoreCase(productDTO.getProductName())) {
+            log.warn("Product already exists with name: {}", productDTO.getProductName());
+            throw new ProductAlreadyExistsException(productDTO.getProductName());
+        }
+
+        // --- Fetch Dependencies ---
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> {
+                    log.error("Category not found with ID: {}", categoryId);
+                    return new ResourceNotFoundException("Category", "categoryId", categoryId);
+                });
+
+        User currentSeller = userService.getCurrentUser(); // Get the seller
+
         try {
-            if (productDTO == null) {
-                throw new IllegalArgumentException("ProductDTO cannot be null");
-            }
-            if (categoryId == null) {
-                throw new IllegalArgumentException("Category ID cannot be null");
-            }
+            // --- Create Value Objects (Leverages validation in constructors) ---
+            ProductName productName = new ProductName(productDTO.getProductName());
+            ProductDescription productDescription = new ProductDescription(productDTO.getProductDescription());
+            Money productPrice = new Money(productDTO.getProductPrice());
+            // Handle potentially null discount, default to 0? Or require it in DTO? Assuming required for now.
+            DiscountPercentage discountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.getProductDiscountPercentage(), java.math.BigDecimal.ZERO));
 
-            validateProductData(productDTO); // Call the product data validation method
-
-//            if (productRepository.existsByProductNameIgnoreCase(productDTO.getProductName())) {
-//                throw new ProductAlreadyExistsException(productDTO.getProductName());
-//            }
-
-            // Check if product name exists
-            if (productRepository.existsByProductNameIgnoreCase(
-                    Objects.requireNonNull(productDTO.getProductName()))) {
-                throw new ProductAlreadyExistsException(productDTO.getProductName());
-            }
-
-            Category category = categoryRepository.findById(categoryId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
-
-            Product product = modelMapper.map(productDTO, Product.class);
-            product.setProductImage("default.png");
+            // --- Create Product Entity ---
+            Product product = new Product(); // Use no-arg constructor
+            product.setProductName(productName);
+            product.setProductDescription(productDescription);
+            product.setProductPrice(productPrice);
+            product.setProductDiscountPercentage(discountPercentage);
+            product.setProductQuantity(Objects.requireNonNullElse(productDTO.getProductQuantity(), 0));
+            product.setProductImage("default.png"); // Set default image
             product.setCategory(category);
+            product.setSeller(currentSeller); // Set the seller
 
-            calculateSpecialPrice(product);
+            // --- Calculate Special Price ---
+            product.recalculateSpecialPrice(); // Use the method on the entity
 
+            // --- Save ---
             Product savedProduct = productRepository.save(product);
-            return modelMapper.map(savedProduct, ProductDTO.class);
+            log.info("Successfully added product ID: {} with name '{}'", savedProduct.getProductId(), savedProduct.getProductName().getName());
 
-        } catch (
-                DataIntegrityViolationException e) {
-            throw new APIException("Error saving product: " + e.getMessage());
+            // --- Map to DTO (Manual) ---
+            return mapEntityToDto(savedProduct);
+
+        } catch (DataIntegrityViolationException e) {
+            log.error("Data integrity violation while saving product: {}", e.getMessage());
+            throw new APIException("Error saving product due to data integrity issue: " + e.getMessage(), e);
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Catch exceptions from Value Object constructors or Assert checks
+            log.error("Validation error creating product: {}", e.getMessage());
+            throw new ProductDataValidationException("Invalid product data: " + e.getMessage(), e);
         }
     }
 
 
     @Override
-    @Cacheable(value = "product", key = "#productId")
+    // Consider a more specific cache name if needed, e.g., "productsPage"
+    @Cacheable(value = "product", key = "'all_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir") // More specific key
     @RateLimiter(name = "defaultRateLimiter")
     @Transactional(readOnly = true)
     public ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
-
+        log.debug("Fetching all products page: {}, size: {}, sort: {}, dir: {}", pageNumber, pageSize, sortBy, sortDir);
         try {
             return backoffRateLimiter.executeWithBackoff(() -> {
                 Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
                 Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
                 Page<Product> pageProducts = productRepository.findAll(pageDetails);
 
-                List<Product> products = pageProducts.getContent();
+                List<ProductDTO> productDTOList = pageProducts.getContent().stream()
+                        .map(this::mapEntityToDto) // Use manual mapping
+                        .collect(Collectors.toList());
 
-                List<ProductDTO> productDTOList = products.stream()
-                        .map(product -> modelMapper.map(product, ProductDTO.class))
-                        .toList();
-
-                ProductResponse productResponse = new ProductResponse();
-                productResponse.setContent(productDTOList);
-                productResponse.setPageNumber(pageProducts.getNumber());
-                productResponse.setPageSize(pageProducts.getSize());
-                productResponse.setTotalElements(pageProducts.getTotalElements());
-                productResponse.setTotalPages(pageProducts.getTotalPages());
-                productResponse.setLastPage(pageProducts.isLast());
-                return productResponse;
+                return createProductResponse(pageProducts, productDTOList);
             });
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.error("Request interrupted while getting all products", e);
             throw new RequestInterruptionException("Request interrupted while getting products", e);
         }
-
     }
 
     @Override
-    @Cacheable(value = "product", key = "#categoryId")
+    // Cache key includes category ID and pagination
+    @Cacheable(value = "product", key = "'cat_' + #categoryId + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
-    public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir) {
+    public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir)
+            throws ResourceNotFoundException, NotFoundException { // Added NotFoundException
+
+        Assert.notNull(categoryId, "Category ID cannot be null");
+        log.debug("Searching products by category ID: {}, page: {}, size: {}", categoryId, pageNumber, pageSize);
 
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Category", "categoryId", categoryId));
+                .orElseThrow(() -> {
+                    log.warn("Category not found for search: {}", categoryId);
+                    return new ResourceNotFoundException("Category", "categoryId", categoryId);
+                });
 
         Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
         Page<Product> productPage = productRepository.findByCategory(category, pageDetails);
 
-        List<Product> products = productPage.getContent();
-        if (!productPage.getContent().isEmpty()) {
-            List<ProductDTO> productDTOList = products.stream().map(product -> modelMapper.map(product, ProductDTO.class)).toList();
+        List<ProductDTO> productDTOList = productPage.getContent().stream()
+                .map(this::mapEntityToDto) // Use manual mapping
+                .collect(Collectors.toList());
 
-            ProductResponse productResponse = new ProductResponse();
-            productResponse.setContent(productDTOList);
-            productResponse.setPageNumber(productPage.getNumber());
-            productResponse.setPageSize(productPage.getSize());
-            productResponse.setTotalElements(productPage.getTotalElements());
-            productResponse.setTotalPages(productPage.getTotalPages());
-            productResponse.setLastPage(productPage.isLast());
-            return productResponse;
-        } else {
+        if (productDTOList.isEmpty() && productPage.getTotalElements() == 0) {
+            // Distinguish between category not found (handled above) and category having no products
+            log.info("No products found for category ID: {}", categoryId);
+            // Throwing NotFoundException as per original logic, could also return empty response
             throw new NotFoundException("Category " + category.getCategoryName() + " has no products");
         }
+
+        return createProductResponse(productPage, productDTOList);
     }
 
     @Override
-    @Cacheable(value = "product", key = "#keyword")
+    // Cache key includes keyword and pagination
+    @Cacheable(value = "product", key = "'kw_' + #keyword + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
-    public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String
-            sortBy, String sortDir) {
+    public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir)
+            throws ResourceNotFoundException {
+
+        Assert.hasText(keyword, "Keyword cannot be empty");
+        log.debug("Searching products by keyword: '{}', page: {}, size: {}", keyword, pageNumber, pageSize);
 
         Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
         Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
-        Page<Product> productPage = productRepository.findByProductNameContainingIgnoreCase(keyword, pageDetails);
 
-        List<Product> products = productPage.getContent();
-        List<ProductDTO> productDTOList = products.stream()
-                .map(product -> modelMapper.map(product, ProductDTO.class))
-                .toList();
+        Page<Product> productPage = productRepository.findByProductName_NameContainingIgnoreCase(keyword, pageDetails);
 
-        if (products.isEmpty()) throw new ResourceNotFoundException(Constants.PRODUCT, "keyword", keyword);
+        List<ProductDTO> productDTOList = productPage.getContent().stream()
+                .map(this::mapEntityToDto) // Use manual mapping
+                .collect(Collectors.toList());
 
-        ProductResponse productResponse = new ProductResponse();
-        productResponse.setContent(productDTOList);
-        productResponse.setPageNumber(productPage.getNumber());
-        productResponse.setPageSize(productPage.getSize());
-        productResponse.setTotalElements(productPage.getTotalElements());
-        productResponse.setTotalPages(productPage.getTotalPages());
-        productResponse.setLastPage(productPage.isLast());
-        return productResponse;
+        if (productDTOList.isEmpty() && productPage.getTotalElements() == 0) {
+            log.info("No products found matching keyword: {}", keyword);
+            throw new ResourceNotFoundException(Constants.PRODUCT, "keyword", keyword);
+        }
+
+        return createProductResponse(productPage, productDTOList);
     }
 
     @Override
     @Transactional
-    public ProductDTO updateProduct(ProductDTO productDTO, Long productId) {
+    // Evict specific product cache and potentially list caches
+    @CacheEvict(value = "product", key = "#productId")
+    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    public ProductDTO updateProduct(ProductDTO productDTO, Long productId)
+            throws ResourceNotFoundException, ProductDataValidationException {
 
+        // --- Preconditions ---
+        Assert.notNull(productDTO, "ProductDTO cannot be null");
+        Assert.notNull(productId, "Product ID cannot be null");
+        validateProductData(productDTO); // Basic DTO validation
+
+        log.debug("Attempting to update product ID: {}", productId);
+
+        // --- Fetch Existing Entity ---
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
+                .orElseThrow(() -> {
+                    log.error("Product not found for update: {}", productId);
+                    return new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, productId);
+                });
 
-        Product product = modelMapper.map(productDTO, Product.class);
+        // --- Authorization Check (Example: Only seller or admin can update?) ---
+        // User currentUser = userService.getCurrentUser();
+        // if (!currentUser.getUserId().equals(productFromDB.getSeller().getUserId()) && !currentUser.hasRole("ADMIN")) {
+        //     log.warn("User {} unauthorized to update product ID {}", currentUser.getUsername(), productId);
+        //     throw new UnauthorizedException("User not authorized to update this product");
+        // }
 
-        productFromDB.setProductName(product.getProductName());
-        productFromDB.setProductDescription(product.getProductDescription());
-        productFromDB.setProductQuantity(product.getProductQuantity());
-        productFromDB.setProductPrice(product.getProductPrice());
-        productFromDB.setProductDiscountPercentage(product.getProductDiscountPercentage());
-        productFromDB.setProductSpecialPrice(product.getProductSpecialPrice());
+        try {
+            // --- Create *New* Value Objects from DTO (Leverages validation) ---
+            ProductName newProductName = new ProductName(productDTO.getProductName());
+            ProductDescription newProductDescription = new ProductDescription(productDTO.getProductDescription());
+            Money newProductPrice = new Money(productDTO.getProductPrice());
+            DiscountPercentage newDiscountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.getProductDiscountPercentage(), java.math.BigDecimal.ZERO));
 
-        Product updatedProduct = productRepository.save(productFromDB);
-        return modelMapper.map(updatedProduct, ProductDTO.class);
+            // --- Check if Name Changed and Conflicts ---
+            if (!productFromDB.getProductName().equals(newProductName) &&
+                    productRepository.existsByProductName_NameIgnoreCase(newProductName.getName())) {
+                log.warn("Update failed: New product name '{}' already exists.", newProductName.getName());
+                throw new ProductAlreadyExistsException(newProductName.getName());
+            }
+
+            // --- Update Entity Fields with *New* Value Objects ---
+            productFromDB.setProductName(newProductName);
+            productFromDB.setProductDescription(newProductDescription);
+            productFromDB.setProductPrice(newProductPrice);
+            productFromDB.setProductDiscountPercentage(newDiscountPercentage);
+            productFromDB.setProductQuantity(Objects.requireNonNullElse(productDTO.getProductQuantity(), 0));
+            // Note: Category and Seller are generally not updated here unless specifically intended
+
+            // --- Recalculate Special Price ---
+            productFromDB.recalculateSpecialPrice();
+
+            // --- Save ---
+            Product updatedProduct = productRepository.save(productFromDB);
+            log.info("Successfully updated product ID: {}", updatedProduct.getProductId());
+
+            // --- Map to DTO (Manual) ---
+            return mapEntityToDto(updatedProduct);
+
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // Catch exceptions from Value Object constructors
+            log.error("Validation error updating product ID {}: {}", productId, e.getMessage());
+            throw new ProductDataValidationException("Invalid product data for update: " + e.getMessage(), e);
+        } catch (DataIntegrityViolationException e) {
+            log.error("Data integrity violation while updating product ID {}: {}", productId, e.getMessage());
+            throw new APIException("Error updating product due to data integrity issue: " + e.getMessage(), e);
+        }
     }
 
+    // Removed updateProductPrice method as the repository method was removed.
+    // Price updates should go through the main updateProduct method.
+    /*
     @Transactional
     public void updateProductPrice(String productId, BigDecimal newPrice) {
-        productRepository.updatePrice(productId, newPrice);
-        // Ensure cache reflects the new price
-        cacheService.invalidate("productCache", "product:" + productId);
-    }
+        // This logic is flawed due to removed repository method and incorrect cache key
+        // productRepository.updatePrice(productId, newPrice);
+        // cacheService.invalidate("productCache", "product:" + productId);
 
+        // Correct approach (if a dedicated method is needed):
+        Long prodId = Long.parseLong(productId); // Convert String ID
+        Product product = productRepository.findById(prodId)
+                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, prodId));
+        product.setProductPrice(new Money(newPrice));
+        product.recalculateSpecialPrice();
+        productRepository.save(product);
+        // Invalidate using @CacheEvict on the method instead
+    }
+    */
 
     @Override
     @Transactional
-    public ProductDTO deleteProduct(Long productId) {
+    @RateLimiter(name = "defaultRateLimiter")
+    // Evict specific product cache and potentially list caches
+    @CacheEvict(value = "product", key = "#productId")
+    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    public ProductDTO deleteProduct(Long productId) throws ResourceNotFoundException {
+        Assert.notNull(productId, "Product ID cannot be null");
+        log.debug("Attempting to delete product ID: {}", productId);
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
+                .orElseThrow(() -> {
+                    log.error("Product not found for deletion: {}", productId);
+                    return new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, productId);
+                });
 
-        productRepository.delete(product);
-        return modelMapper.map(product, ProductDTO.class);
+        // --- Authorization Check (Optional but recommended) ---
+         User currentUser = userService.getCurrentUser();
+         if (!currentUser.getUserId().equals(product.getSeller().getUserId()) && !currentUser.hasRole(UserRole.builder().roleName(AppRole.ADMIN).build())) {
+             log.warn("User {} unauthorized to delete product ID {}", currentUser.getUsername(), productId);
+             throw new UnauthorizedException("User not authorized to delete this product");
+         }
+
+        ProductDTO deletedProductDTO = mapEntityToDto(product); // Map before deleting
+
+        productRepository.delete(product); // Performs soft delete via BaseEntity/Hibernate listener
+        log.info("Successfully soft-deleted product ID: {}", productId);
+
+        return deletedProductDTO;
     }
 
     @Override
     @Transactional
-    public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException {
-        // Get the product from the database
+    // Evict specific product cache and potentially list caches
+    @CacheEvict(value = "product", key = "#productId")
+    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException {
+        Assert.notNull(productId, "Product ID cannot be null");
+        Assert.notNull(image, "Image file cannot be null");
+        Assert.isTrue(!image.isEmpty(), "Image file cannot be empty");
+
+        log.debug("Attempting to update image for product ID: {}", productId);
+
         Product productFromDB = productRepository.findById(productId)
-                .orElseThrow(() -> new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, String.valueOf(productId)));
+                .orElseThrow(() -> {
+                    log.error("Product not found for image update: {}", productId);
+                    return new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, productId);
+                });
 
-        // Upload the product image to server
-        // Get the file name of the new image
+        // --- Authorization Check (Example) ---
+        // User currentUser = userService.getCurrentUser();
+        // if (!currentUser.getUserId().equals(productFromDB.getSeller().getUserId()) && !currentUser.hasRole("ADMIN")) {
+        //     log.warn("User {} unauthorized to update image for product ID {}", currentUser.getUsername(), productId);
+        //     throw new UnauthorizedException("User not authorized to update image for this product");
+        // }
+
+        // --- Delete Old Image (Optional but recommended) ---
+        String oldImageName = productFromDB.getProductImage();
+        if (oldImageName != null && !oldImageName.equals("default.png")) {
+            try {
+                fileService.deleteImage(path, oldImageName);
+                log.debug("Deleted old image '{}' for product ID {}", oldImageName, productId);
+            } catch (IOException e) {
+                // Log the error but proceed with uploading the new image
+                log.error("Failed to delete old image '{}' for product ID {}: {}", oldImageName, productId, e.getMessage());
+            }
+        }
+
+        // --- Upload New Image ---
         String fileName = fileService.uploadImage(path, image);
+        log.debug("Uploaded new image '{}' for product ID {}", fileName, productId);
 
-        // Update the product image
+        // --- Update Entity ---
         productFromDB.setProductImage(fileName);
-
-        // Save the updated product
         Product updatedProduct = productRepository.save(productFromDB);
+        log.info("Successfully updated image for product ID: {}", updatedProduct.getProductId());
 
-        return modelMapper.map(updatedProduct, ProductDTO.class);
+        // --- Map to DTO (Manual) ---
+        return mapEntityToDto(updatedProduct);
     }
 
-    // TOCHECK: Finish this
+    // Removed isValidProduct method as it's no longer in the interface
+    /*
     @Override
     public boolean isValidProduct(Product product) {
-        return product != null && product.getProductName() != null && !product.getProductName().isEmpty();
+        // This logic is too basic and was removed from the interface.
+        // Validation happens via DTO constraints and Value Object constructors.
+        return product != null && product.getProductName() != null && product.getProductName().getName() != null && !product.getProductName().getName().isEmpty();
     }
+    */
 
+    // --- Helper Methods ---
+
+    /**
+     * Performs basic validation on the incoming ProductDTO.
+     * More complex validation is handled by Value Object constructors.
+     */
     private void validateProductData(ProductDTO productDTO) throws ProductDataValidationException {
-        if (productDTO.getProductName() == null || productDTO.getProductName().isEmpty()) {
+        // These checks are somewhat redundant if VOs are used correctly, but act as an early fail
+        if (productDTO.getProductName() == null || productDTO.getProductName().trim().isEmpty()) {
             throw new ProductDataValidationException("Product name is required");
         }
-        if (productDTO.getProductDescription() == null || productDTO.getProductDescription().isEmpty()) {
+        if (productDTO.getProductDescription() == null || productDTO.getProductDescription().trim().isEmpty()) {
             throw new ProductDataValidationException("Product description is required");
         }
         if (productDTO.getProductPrice() == null) {
             throw new ProductDataValidationException("Product price is required");
         }
-        if (productDTO.getProductQuantity() == null) {
-            throw new ProductDataValidationException("Product quantity is required");
-        }
+        // Quantity and Discount are handled by Objects.requireNonNullElse or VO constructors
     }
 
-    private void calculateSpecialPrice(Product product) {
-        if (product.getProductPrice() != null && product.getProductDiscountPercentage() != null) {
-            if (product.getProductDiscountPercentage().compareTo(BigDecimal.ZERO) >= 0) {
-                BigDecimal discount = product.getProductPrice()
-                        .multiply(product.getProductDiscountPercentage())
-                        .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+    // Removed calculateSpecialPrice as logic moved to Product.recalculateSpecialPrice()
+    /*
+    private void calculateSpecialPrice(Product product) { ... }
+    */
 
-                BigDecimal specialPrice = product.getProductPrice().subtract(discount);
-                product.setProductSpecialPrice(specialPrice);
-            } else {
-                throw new IllegalArgumentException("Product discount percentage must be positive.");
-            }
+    /**
+     * Manually maps a Product entity to a ProductDTO.
+     * Handles extraction of values from Value Objects.
+     */
+    private ProductDTO mapEntityToDto(Product product) {
+        if (product == null) {
+            return null;
         }
+        ProductDTO dto = new ProductDTO();
+        dto.setProductId(product.getProductId());
+
+        // Extract values from Value Objects safely
+        if (product.getProductName() != null) {
+            dto.setProductName(product.getProductName().getName());
+        }
+        if (product.getProductDescription() != null) {
+            dto.setProductDescription(product.getProductDescription().getDescription());
+        }
+        if (product.getProductPrice() != null) {
+            dto.setProductPrice(product.getProductPrice().getAmount());
+        }
+        if (product.getProductDiscountPercentage() != null) {
+            dto.setProductDiscountPercentage(product.getProductDiscountPercentage().getPercentage());
+        }
+        if (product.getProductSpecialPrice() != null) {
+            dto.setSpecialPrice(product.getProductSpecialPrice().getAmount()); // Assuming DTO has specialPrice field
+        }
+
+        dto.setProductQuantity(product.getProductQuantity());
+        dto.setProductImage(product.getProductImage());
+
+        // Map associated object IDs
+        if (product.getCategory() != null) {
+            dto.setCategoryId(product.getCategory().getCategoryId());
+            dto.setCategoryName(product.getCategory().getCategoryName()); // Assuming DTO has categoryName
+        }
+        if (product.getSeller() != null) {
+            dto.setSellerId(product.getSeller().getUserId()); // Assuming DTO has sellerId
+            dto.setSellerName(product.getSeller().getUsername()); // Assuming DTO has sellerName
+        }
+
+        // Map BaseEntity fields if needed in DTO
+        // dto.setCreatedAt(product.getCreatedAt());
+        // dto.setUpdatedAt(product.getUpdatedAt());
+        // dto.setVersion(product.getVersion());
+
+        return dto;
     }
 
+    /**
+     * Helper to create ProductResponse from Page and DTO list.
+     */
+    private ProductResponse createProductResponse(Page<Product> page, List<ProductDTO> dtoList) {
+        ProductResponse productResponse = new ProductResponse();
+        productResponse.setContent(dtoList);
+        productResponse.setPageNumber(page.getNumber());
+        productResponse.setPageSize(page.getSize());
+        productResponse.setTotalElements(page.getTotalElements());
+        productResponse.setTotalPages(page.getTotalPages());
+        productResponse.setLastPage(page.isLast());
+        return productResponse;
+    }
 }
-

@@ -14,23 +14,44 @@ import me.amlu.shop.amlume_shop.category_management.Category;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-
-import java.math.BigDecimal;
 
 @Repository
 public interface ProductRepository extends JpaRepository<Product, Long> {
 
-    //    @Query(value = "SELECT CASE WHEN COUNT(p) > 0 THEN true ELSE false END FROM products p WHERE UPPER(p.product_name) = UPPER(:name)", nativeQuery = true)
-//@Query(value = "SELECT COUNT(*) > 0 FROM products WHERE UPPER(product_name) = UPPER(:name)", nativeQuery = true)
-    boolean existsByProductNameIgnoreCase(@Param("name") String name);
+    /**
+     * Checks if a product exists with the given name (case-insensitive),
+     * traversing the embedded ProductName object.
+     *
+     * @param name The product name to check.
+     * @return true if a product with the name exists, false otherwise.
+     */
+    boolean existsByProductName_NameIgnoreCase(String name);
 
-    Page<Product> findByProductNameContainingIgnoreCase(String keyword, Pageable pageable);
+    /**
+     * Finds products whose names contain the given keyword (case-insensitive),
+     * traversing the embedded ProductName object.
+     *
+     * @param keyword  The keyword to search for within product names.
+     * @param pageable Pagination and sorting information.
+     * @return A page of matching products.
+     */
+    Page<Product> findByProductName_NameContainingIgnoreCase(String keyword, Pageable pageable);
 
-    Page<Product> findByCategory(Category category, Pageable pageDetails);
+    /**
+     * Finds products belonging to the specified category.
+     *
+     * @param category The category to search within.
+     * @param pageable Pagination and sorting information (renamed from pageDetails for convention).
+     * @return A page of products in the given category.
+     */
+    Page<Product> findByCategory(Category category, Pageable pageable); // Renamed parameter for convention
 
-    void updatePrice(String productId, BigDecimal newPrice);
-
+    // Removed updatePrice method.
+    // Updates involving Value Objects (like Money)
+    // should be handled in the service layer by fetching the entity,
+    // creating and setting the new Value Object instance, and saving the entity.
+    // This ensures validation and lifecycle hooks are correctly applied.
+    // void updatePrice(String productId, BigDecimal newPrice);
 //    Page<Product> findByCategoryOrderByProductPriceAsc(Category category, Pageable pageDetails);
 }

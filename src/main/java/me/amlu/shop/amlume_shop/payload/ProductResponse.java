@@ -10,20 +10,20 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.util.List;
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class ProductResponse {
-    private List<ProductDTO> content;
-    private int pageNumber;
-    private int pageSize;
-    private long totalElements;
-    private int totalPages;
-    private boolean isLastPage;
+
+/**
+ * Represents a paginated response containing a list of products and pagination metadata.
+ * Implemented as an immutable record.
+ */
+public record ProductResponse(
+        List<ProductDTO> content,
+        int pageNumber,
+        int pageSize,
+        long totalElements,
+        int totalPages,
+        boolean isLastPage
+) {
+    // No explicit fields, constructor, getters, equals, hashCode, or toString needed.
 }
