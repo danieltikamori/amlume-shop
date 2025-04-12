@@ -32,6 +32,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
@@ -39,6 +40,7 @@ import org.springframework.web.multipart.MultipartFile;
 // import me.amlu.shop.amlume_shop.service.CacheService; // Keep if used elsewhere, otherwise remove if only for updateProductPrice
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -83,12 +85,12 @@ public class ProductServiceImpl implements ProductService {
         Assert.notNull(categoryId, "Category ID cannot be null");
         validateProductData(productDTO); // Basic DTO validation
 
-        log.debug("Attempting to add product '{}' to category ID {}", productDTO.getProductName(), categoryId);
+        log.debug("Attempting to add product '{}' to category ID {}", productDTO.productName(), categoryId);
 
         // --- Check Existence ---
-        if (productRepository.existsByProductName_NameIgnoreCase(productDTO.getProductName())) {
-            log.warn("Product already exists with name: {}", productDTO.getProductName());
-            throw new ProductAlreadyExistsException(productDTO.getProductName());
+        if (productRepository.existsByProductName_NameIgnoreCase(productDTO.productName())) {
+            log.warn("Product already exists with name: {}", productDTO.productName());
+            throw new ProductAlreadyExistsException(productDTO.productName());
         }
 
         // --- Fetch Dependencies ---
@@ -102,11 +104,11 @@ public class ProductServiceImpl implements ProductService {
 
         try {
             // --- Create Value Objects (Leverages validation in constructors) ---
-            ProductName productName = new ProductName(productDTO.getProductName());
-            ProductDescription productDescription = new ProductDescription(productDTO.getProductDescription());
-            Money productPrice = new Money(productDTO.getProductPrice());
+            ProductName productName = new ProductName(productDTO.productName());
+            ProductDescription productDescription = new ProductDescription(productDTO.productDescription());
+            Money productPrice = new Money(productDTO.productPrice());
             // Handle potentially null discount, default to 0? Or require it in DTO? Assuming required for now.
-            DiscountPercentage discountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.getProductDiscountPercentage(), java.math.BigDecimal.ZERO));
+            DiscountPercentage discountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.productDiscountPercentage(), java.math.BigDecimal.ZERO));
 
             // --- Create Product Entity ---
             Product product = new Product(); // Use no-arg constructor
@@ -114,7 +116,7 @@ public class ProductServiceImpl implements ProductService {
             product.setProductDescription(productDescription);
             product.setProductPrice(productPrice);
             product.setProductDiscountPercentage(discountPercentage);
-            product.setProductQuantity(Objects.requireNonNullElse(productDTO.getProductQuantity(), 0));
+            product.setProductQuantity(Objects.requireNonNullElse(productDTO.productQuantity(), 0));
             product.setProductImage("default.png"); // Set default image
             product.setCategory(category);
             product.setSeller(currentSeller); // Set the seller
@@ -258,10 +260,10 @@ public class ProductServiceImpl implements ProductService {
 
         try {
             // --- Create *New* Value Objects from DTO (Leverages validation) ---
-            ProductName newProductName = new ProductName(productDTO.getProductName());
-            ProductDescription newProductDescription = new ProductDescription(productDTO.getProductDescription());
-            Money newProductPrice = new Money(productDTO.getProductPrice());
-            DiscountPercentage newDiscountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.getProductDiscountPercentage(), java.math.BigDecimal.ZERO));
+            ProductName newProductName = new ProductName(productDTO.productName());
+            ProductDescription newProductDescription = new ProductDescription(productDTO.productDescription());
+            Money newProductPrice = new Money(productDTO.productPrice());
+            DiscountPercentage newDiscountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.productDiscountPercentage(), java.math.BigDecimal.ZERO));
 
             // --- Check if Name Changed and Conflicts ---
             if (!productFromDB.getProductName().equals(newProductName) &&
@@ -275,7 +277,7 @@ public class ProductServiceImpl implements ProductService {
             productFromDB.setProductDescription(newProductDescription);
             productFromDB.setProductPrice(newProductPrice);
             productFromDB.setProductDiscountPercentage(newDiscountPercentage);
-            productFromDB.setProductQuantity(Objects.requireNonNullElse(productDTO.getProductQuantity(), 0));
+            productFromDB.setProductQuantity(Objects.requireNonNullElse(productDTO.productQuantity(), 0));
             // Note: Category and Seller are generally not updated here unless specifically intended
 
             // --- Recalculate Special Price ---
@@ -321,25 +323,25 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     @RateLimiter(name = "defaultRateLimiter")
-    // Evict specific product cache and potentially list caches
     @CacheEvict(value = "product", key = "#productId")
-    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
-    public ProductDTO deleteProduct(Long productId) throws ResourceNotFoundException {
+    // Use Spring Security's @PreAuthorize for combined check
+    @PreAuthorize("hasRole('ROLE_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
+    // Assumes:
+    // 1. 'ADMIN' is the role name Spring Security expects (might need 'ROLE_ADMIN').
+    // 2. productRepository bean is accessible via '@'.
+    // 3. authentication.principal has an 'id' field matching the User ID type (adjust if using UserDetails differently).
+    // 4. The User entity linked from Principal has an 'id' field/getter.
+    public ProductDTO deleteProduct(Long productId) throws ResourceNotFoundException { // No UnauthorizedException needed here, PreAuthorize handles it
         Assert.notNull(productId, "Product ID cannot be null");
         log.debug("Attempting to delete product ID: {}", productId);
+
+        // No manual authorization check needed here - @PreAuthorize handles it BEFORE the method runs
 
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> {
                     log.error("Product not found for deletion: {}", productId);
                     return new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, productId);
                 });
-
-        // --- Authorization Check (Optional but recommended) ---
-         User currentUser = userService.getCurrentUser();
-         if (!currentUser.getUserId().equals(product.getSeller().getUserId()) && !currentUser.hasRole(UserRole.builder().roleName(AppRole.ADMIN).build())) {
-             log.warn("User {} unauthorized to delete product ID {}", currentUser.getUsername(), productId);
-             throw new UnauthorizedException("User not authorized to delete this product");
-         }
 
         ProductDTO deletedProductDTO = mapEntityToDto(product); // Map before deleting
 
@@ -416,14 +418,16 @@ public class ProductServiceImpl implements ProductService {
      * More complex validation is handled by Value Object constructors.
      */
     private void validateProductData(ProductDTO productDTO) throws ProductDataValidationException {
-        // These checks are somewhat redundant if VOs are used correctly, but act as an early fail
-        if (productDTO.getProductName() == null || productDTO.getProductName().trim().isEmpty()) {
+        // These checks are somewhat redundant if VOs are used correctly, but act as early fail
+
+        // Use record accessors (fieldName() instead of getFieldName())
+        if (productDTO.productName() == null || productDTO.productName().trim().isEmpty()) {
             throw new ProductDataValidationException("Product name is required");
         }
-        if (productDTO.getProductDescription() == null || productDTO.getProductDescription().trim().isEmpty()) {
+        if (productDTO.productDescription() == null || productDTO.productDescription().trim().isEmpty()) {
             throw new ProductDataValidationException("Product description is required");
         }
-        if (productDTO.getProductPrice() == null) {
+        if (productDTO.productPrice() == null) {
             throw new ProductDataValidationException("Product price is required");
         }
         // Quantity and Discount are handled by Objects.requireNonNullElse or VO constructors
@@ -442,58 +446,53 @@ public class ProductServiceImpl implements ProductService {
         if (product == null) {
             return null;
         }
-        ProductDTO dto = new ProductDTO();
-        dto.setProductId(product.getProductId());
 
-        // Extract values from Value Objects safely
-        if (product.getProductName() != null) {
-            dto.setProductName(product.getProductName().getName());
-        }
-        if (product.getProductDescription() != null) {
-            dto.setProductDescription(product.getProductDescription().getDescription());
-        }
-        if (product.getProductPrice() != null) {
-            dto.setProductPrice(product.getProductPrice().getAmount());
-        }
-        if (product.getProductDiscountPercentage() != null) {
-            dto.setProductDiscountPercentage(product.getProductDiscountPercentage().getPercentage());
-        }
-        if (product.getProductSpecialPrice() != null) {
-            dto.setSpecialPrice(product.getProductSpecialPrice().getAmount()); // Assuming DTO has specialPrice field
-        }
+        // Extract values safely
+        Long productId = product.getProductId();
+        String productName = (product.getProductName() != null) ? product.getProductName().getName() : null;
+        String productImage = product.getProductImage();
+        String productDescription = (product.getProductDescription() != null) ? product.getProductDescription().getDescription() : null;
+        Integer productQuantity = product.getProductQuantity();
+        BigDecimal productPrice = (product.getProductPrice() != null) ? product.getProductPrice().getAmount() : null;
+        BigDecimal discountPercentage = (product.getProductDiscountPercentage() != null) ? product.getProductDiscountPercentage().getPercentage() : null;
+        BigDecimal specialPrice = (product.getProductSpecialPrice() != null) ? product.getProductSpecialPrice().getAmount() : null;
+        Long categoryId = (product.getCategory() != null) ? product.getCategory().getCategoryId() : null;
+        String categoryName = (product.getCategory() != null && product.getCategory().getCategoryName() != null)
+                ? product.getCategory().getCategoryName().getName() // Call .getName() on the CategoryName object
+                : null;
+        Long sellerId = (product.getSeller() != null) ? product.getSeller().getUserId() : null;
+        String sellerName = (product.getSeller() != null) ? product.getSeller().getUsername() : null;
 
-        dto.setProductQuantity(product.getProductQuantity());
-        dto.setProductImage(product.getProductImage());
-
-        // Map associated object IDs
-        if (product.getCategory() != null) {
-            dto.setCategoryId(product.getCategory().getCategoryId());
-            dto.setCategoryName(product.getCategory().getCategoryName()); // Assuming DTO has categoryName
-        }
-        if (product.getSeller() != null) {
-            dto.setSellerId(product.getSeller().getUserId()); // Assuming DTO has sellerId
-            dto.setSellerName(product.getSeller().getUsername()); // Assuming DTO has sellerName
-        }
-
-        // Map BaseEntity fields if needed in DTO
-        // dto.setCreatedAt(product.getCreatedAt());
-        // dto.setUpdatedAt(product.getUpdatedAt());
-        // dto.setVersion(product.getVersion());
-
-        return dto;
+        // Use the record's canonical constructor
+        return new ProductDTO(
+                productId,
+                productName,
+                productImage,
+                productDescription,
+                productQuantity,
+                productPrice,
+                discountPercentage,
+                specialPrice,
+                categoryId,
+                categoryName,
+                sellerId,
+                sellerName
+        );
     }
 
     /**
      * Helper to create ProductResponse from Page and DTO list.
      */
     private ProductResponse createProductResponse(Page<Product> page, List<ProductDTO> dtoList) {
-        ProductResponse productResponse = new ProductResponse();
-        productResponse.setContent(dtoList);
-        productResponse.setPageNumber(page.getNumber());
-        productResponse.setPageSize(page.getSize());
-        productResponse.setTotalElements(page.getTotalElements());
-        productResponse.setTotalPages(page.getTotalPages());
-        productResponse.setLastPage(page.isLast());
-        return productResponse;
+        // Use the record's canonical constructor
+        return new ProductResponse(
+                dtoList,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast()
+        );
     }
+
 }
