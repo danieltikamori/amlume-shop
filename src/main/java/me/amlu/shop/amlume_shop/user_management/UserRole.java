@@ -14,7 +14,6 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import lombok.*;
-import me.amlu.shop.amlume_shop.model.AppRole;
 
 import java.io.Serial;
 import java.io.Serializable;

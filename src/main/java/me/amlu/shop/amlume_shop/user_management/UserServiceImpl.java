@@ -15,8 +15,6 @@ import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException; // Custom exception
-import me.amlu.shop.amlume_shop.model.AppRole;
-import me.amlu.shop.amlume_shop.payload.UserDTO; // Assuming this exists for isValidUser
 import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest; // Example DTO for profile update
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.service.CacheService; // Keep if custom cache logic is essential
