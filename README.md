@@ -2,11 +2,11 @@
 
 [![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE) <!-- Adjust if license changes -->
 
-UNDER DEVELOPMENT and testing techniques
+UNDER DEVELOPMENT (see dev branch) and testing techniques
 
 ## Overview
 
-This project is the Spring Boot backend application for Amlume Shop. It provides RESTful APIs with a strong focus on security using PASETO tokens, efficient caching, rate limiting leveraging Valkey/Redis, and observability through Micrometer metrics.
+This project is the Spring Boot backend application for Amlume Shop. It provides RESTful APIs with a strong focus on security using PASETO tokens, efficient caching, resilience, rate limiting leveraging Valkey/Redis, and observability through Micrometer metrics.
 
 ## Features
 
@@ -72,7 +72,7 @@ This project is the Spring Boot backend application for Amlume Shop. It provides
 mvn clean install
 ```
 
-  *   **Gradle:**
+*   **Gradle:**
 
 ```Bash
 ./gradlew clean build
@@ -117,11 +117,17 @@ Key configuration properties are typically found in `src/main/resources/applicat
 
 ## API Documentation
 
-*(Optional: Add details here if you use Swagger/OpenAPI)*
+Documentation will be available in HTML format, using the official swagger-ui jars.
 
-API documentation can be accessed via Swagger UI at `/swagger-ui.html` once the application is running (if configured).
+The Swagger UI page will then be available at http://server:port/context-path/swagger-ui.html and the OpenAPI description will be available at the following url for json format: http://server:port/context-path/v3/api-docs
 
-*Or: API documentation is maintained separately at [Link to Docs].*
+*   **server:** The server name or IP
+
+*   **port:** The server port
+
+*   **context-path:** The context path of the application
+
+Documentation can be available in yaml format as well, on the following path : /v3/api-docs.yaml
 
 ## Testing
 
