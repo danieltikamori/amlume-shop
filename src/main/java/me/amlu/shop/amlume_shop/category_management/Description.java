@@ -13,16 +13,13 @@ package me.amlu.shop.amlume_shop.category_management;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.ToString;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.StringJoiner;
 
-@Getter
 @Embeddable
-@ToString
 public class Description implements Serializable {
 
     @Serial
@@ -30,21 +27,29 @@ public class Description implements Serializable {
 
     @NotBlank(message = "Description is required")
     @Size(min = 2, max = 2000, message = "Description must be between 2 and 2000 characters")
-    private final String value;
+    private final String value; // Keep final
 
+    // Constructor
     public Description(String value) {
         Objects.requireNonNull(value, "Description cannot be null");
-        if (value.trim().length() < 2 || value.trim().length() > 2000) {
-            throw new IllegalArgumentException("Description must be between 2 and 2000 characters");
+        String trimmedValue = value.trim();
+        if (trimmedValue.length() < 2 || trimmedValue.length() > 2000) {
+            throw new IllegalArgumentException("Description must be between 2 and 2000 characters after trimming");
         }
-        this.value = value.trim();
+        this.value = trimmedValue;
     }
 
-    // Required for JPA
+    // JPA constructor
     protected Description() {
         this.value = null;
     }
 
+    // --- Getter ---
+    public String getValue() {
+        return value;
+    }
+
+    // equals/hashCode
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -56,5 +61,13 @@ public class Description implements Serializable {
     @Override
     public int hashCode() {
         return Objects.hash(value);
+    }
+
+    // --- toString ---
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", Description.class.getSimpleName() + "[", "]")
+                .add("value='" + value + "'")
+                .toString();
     }
 }

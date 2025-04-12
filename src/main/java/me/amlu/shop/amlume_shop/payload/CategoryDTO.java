@@ -10,15 +10,24 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CategoryDTO {
-
-    private Long categoryId;
-    private String categoryName;
+/**
+ * Represents category data for transfer (API requests/responses).
+ * Implemented as an immutable record.
+ */
+public record CategoryDTO(
+        Long categoryId,
+        String categoryName,
+        String description,
+        Long parentId,
+        // Fields derived/mapped from entity VOs
+        Integer level,
+        String path,
+        String status,
+        Boolean active,
+        String reason,
+        Long managerId
+        // Add other fields like productCount, subCategoryCount if needed
+) {
+    // We can add validation annotations here if desired
+    // e.g., @NotBlank String categoryName, ...
 }

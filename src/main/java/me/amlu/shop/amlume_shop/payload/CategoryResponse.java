@@ -10,21 +10,18 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.util.List;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class CategoryResponse {
-private List<CategoryDTO> categories;
-private int pageNumber;
-private int pageSize;
-private long totalElements;
-private int totalPages;
-private boolean isLastPage;
-
+/**
+ * Represents a paginated response containing a list of categories and pagination metadata.
+ * Implemented as an immutable record.
+ */
+public record CategoryResponse(
+        List<CategoryDTO> content, // Changed field name to content for consistency
+        int pageNumber,
+        int pageSize,
+        long totalElements,
+        int totalPages,
+        boolean isLastPage // Changed field name for consistency
+) {
 }

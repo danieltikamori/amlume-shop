@@ -13,16 +13,13 @@ package me.amlu.shop.amlume_shop.category_management;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
-import lombok.ToString;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.StringJoiner;
 
-@Getter
 @Embeddable
-@ToString
 public class CategoryName implements Serializable {
 
     @Serial
@@ -30,31 +27,49 @@ public class CategoryName implements Serializable {
 
     @NotBlank(message = "Category name is required")
     @Size(min = 2, max = 200, message = "Category name must be between 2 and 200 characters")
-    private final String value;
+    private final String name;
 
-    public CategoryName(String value) {
-        Objects.requireNonNull(value, "Category name cannot be null");
-        if (value.trim().length() < 2 || value.trim().length() > 200) {
-            throw new IllegalArgumentException("Category name must be between 2 and 200 characters");
+    // --- Constructor ---
+
+    public CategoryName(String name) {
+        Objects.requireNonNull(name, "Category name cannot be null");
+        String trimmedName = name.trim();
+        if (trimmedName.length() < 2 || trimmedName.length() > 200) {
+            throw new IllegalArgumentException("Category name must be between 2 and 200 characters after trimming");
         }
-        this.value = value.trim();
+        this.name = trimmedName;
     }
 
-    // Required for JPA
+    // JPA constructor
     protected CategoryName() {
-        this.value = null;
+        this.name = null;
     }
 
+    // --- Getter ---
+    public String getName() {
+        return name;
+    }
+
+    // equals/hashCode
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         CategoryName that = (CategoryName) o;
-        return value.equalsIgnoreCase(that.value);
+        // Case-insensitive comparison is good here
+        return name != null && name.equalsIgnoreCase(that.name);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(value.toLowerCase());
+        return name != null ? Objects.hash(name.toLowerCase()) : 0;
+    }
+
+    // --- toString ---
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", CategoryName.class.getSimpleName() + "[", "]")
+                .add("name='" + name + "'")
+                .toString();
     }
 }

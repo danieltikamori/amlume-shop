@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
-import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.payload.CategoryDTO;
 import me.amlu.shop.amlume_shop.payload.CategoryResponse;
 

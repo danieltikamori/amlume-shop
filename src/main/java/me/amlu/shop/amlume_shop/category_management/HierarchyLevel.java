@@ -11,27 +11,22 @@
 package me.amlu.shop.amlume_shop.category_management;
 
 import jakarta.persistence.Embeddable;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.StringJoiner;
 
-@Getter
 @Embeddable
-@ToString
-@EqualsAndHashCode
 public class HierarchyLevel implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Getter
-    private final int level;
-    private final String path;
+    private final int level; // Keep final
+    private final String path; // Keep final
 
+    // Constructor
     public HierarchyLevel(int level, String path) {
         Objects.requireNonNull(path, "Path cannot be null");
         if (level < 0) {
@@ -41,14 +36,42 @@ public class HierarchyLevel implements Serializable {
         this.path = path;
     }
 
-    // Required for JPA
+    // JPA constructor
     protected HierarchyLevel() {
-        this.level = 0;
-        this.path = null;
+        this.level = 0; // Default level
+        this.path = "?"; // Default path placeholder
     }
 
+    // --- Getters ---
+    public int getLevel() {
+        return level;
+    }
+
+    // Return the actual path field
     public String getPath() {
-        return "0".repeat(Math.max(0, level));
+        return path;
     }
 
+    // --- equals/hashCode ---
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        HierarchyLevel that = (HierarchyLevel) o;
+        return level == that.level && Objects.equals(path, that.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(level, path);
+    }
+
+    // --- toString ---
+    @Override
+    public String toString() {
+        return new StringJoiner(", ", HierarchyLevel.class.getSimpleName() + "[", "]")
+                .add("level=" + level)
+                .add("path='" + path + "'")
+                .toString();
+    }
 }
