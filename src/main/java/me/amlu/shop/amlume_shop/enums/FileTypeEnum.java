@@ -10,6 +10,11 @@
 
 package me.amlu.shop.amlume_shop.enums;
 
+import java.util.Arrays;
+
+/**
+ * Enumerates supported file types with their common extensions.
+ */
 public enum FileTypeEnum {
 
     CSV(".csv"),
@@ -23,12 +28,27 @@ public enum FileTypeEnum {
         this.value = value;
     }
 
+    /**
+     * Returns the file extension associated with this file type (e.g., ".csv").
+     *
+     * @return The file extension string.
+     */
     @Override
     public String toString() {
         return value;
     }
 
-    public String getType() {
-        return value;
+    /**
+     * Finds a FileTypeEnum by its extension value.
+     *
+     * @param value The extension string (e.g., ".csv").
+     * @return The matching FileTypeEnum.
+     * @throws IllegalArgumentException if no matching enum constant is found.
+     */
+    public static FileTypeEnum fromValue(String value) {
+        return Arrays.stream(FileTypeEnum.values())
+                .filter(enumVal -> enumVal.value.equalsIgnoreCase(value))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Unknown file type value: " + value));
     }
 }
