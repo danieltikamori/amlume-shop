@@ -33,14 +33,9 @@ public class AsnSimpleCacheServiceImpl implements AsnSimpleCacheService {
     @Cacheable(value = Constants.ASN_CACHE, key = "#ip")
     public String getAsn(String ip) {
         log.debug("Cache miss for ASN lookup for IP: {}. Calling lookup service.", ip);
-        try {
-            // Directly call the lookup service. Spring handles caching.
-            return lookupService.lookupAsn(ip);
-        } catch (Exception e) {
-            // Log the error from the underlying service
-            log.error("ASN lookup failed for IP: {}", ip, e);
-            // Depending on requirements, return null, empty string, or rethrow a specific exception
-            return null; // Or "" or throw new AsnLookupFailedException(...)
-        }
+
+        // Directly call the lookup service. Spring handles caching.
+        // Let exceptions propagate naturally.
+        return lookupService.lookupAsn(ip);
     }
 }
