@@ -15,13 +15,14 @@ import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.category_management.CategoryRepository;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
+import me.amlu.shop.amlume_shop.payload.FileUploadResult;
 import me.amlu.shop.amlume_shop.payload.ProductDTO;
 import me.amlu.shop.amlume_shop.payload.ProductResponse;
 import me.amlu.shop.amlume_shop.resilience.ExponentialBackoffRateLimiter;
 import me.amlu.shop.amlume_shop.service.FileService;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.user_management.UserService;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,7 +38,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
-// import me.amlu.shop.amlume_shop.service.CacheService; // Keep if used elsewhere, otherwise remove if only for updateProductPrice
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -56,7 +56,6 @@ public class ProductServiceImpl implements ProductService {
     private final ExponentialBackoffRateLimiter backoffRateLimiter;
     private final CategoryRepository categoryRepository;
     private final ProductRepository productRepository;
-    // private final ModelMapper modelMapper; // Removed, using manual mapping
     private final FileService fileService;
     // private final CacheService cacheService; // Removed, using @CacheEvict
     private final UserService userService; // Inject UserService to get current user
@@ -77,6 +76,8 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     // Evict relevant list caches if applicable (e.g., all products, category products)
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true)
+    // Use Spring Security's @PreAuthorize for combined check
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN')")
     public ProductDTO addProduct(ProductDTO productDTO, Long categoryId)
             throws ResourceNotFoundException, ProductAlreadyExistsException, APIException, ProductDataValidationException {
 
@@ -104,25 +105,7 @@ public class ProductServiceImpl implements ProductService {
 
         try {
             // --- Create Value Objects (Leverages validation in constructors) ---
-            ProductName productName = new ProductName(productDTO.productName());
-            ProductDescription productDescription = new ProductDescription(productDTO.productDescription());
-            Money productPrice = new Money(productDTO.productPrice());
-            // Handle potentially null discount, default to 0? Or require it in DTO? Assuming required for now.
-            DiscountPercentage discountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.productDiscountPercentage(), java.math.BigDecimal.ZERO));
-
-            // --- Create Product Entity ---
-            Product product = new Product(); // Use no-arg constructor
-            product.setProductName(productName);
-            product.setProductDescription(productDescription);
-            product.setProductPrice(productPrice);
-            product.setProductDiscountPercentage(discountPercentage);
-            product.setProductQuantity(Objects.requireNonNullElse(productDTO.productQuantity(), 0));
-            product.setProductImage("default.png"); // Set default image
-            product.setCategory(category);
-            product.setSeller(currentSeller); // Set the seller
-
-            // --- Calculate Special Price ---
-            product.recalculateSpecialPrice(); // Use the method on the entity
+            Product product = getProduct(productDTO, category, currentSeller);
 
             // --- Save ---
             Product savedProduct = productRepository.save(product);
@@ -141,10 +124,34 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
+    @NotNull
+    private static Product getProduct(ProductDTO productDTO, Category category, User currentSeller) {
+        ProductName productName = new ProductName(productDTO.productName());
+        ProductDescription productDescription = new ProductDescription(productDTO.productDescription());
+        Money productPrice = new Money(productDTO.productPrice());
+        // Handle potentially null discount, default to 0? Or require it in DTO? Assuming required for now.
+        DiscountPercentage discountPercentage = new DiscountPercentage(Objects.requireNonNullElse(productDTO.productDiscountPercentage(), BigDecimal.ZERO));
+
+        // --- Create Product Entity ---
+        Product product = new Product(); // Use no-arg constructor
+        product.setProductName(productName);
+        product.setProductDescription(productDescription);
+        product.setProductPrice(productPrice);
+        product.setProductDiscountPercentage(discountPercentage);
+        product.setProductQuantity(Objects.requireNonNullElse(productDTO.productQuantity(), 0));
+        product.setProductImage("default.png"); // Set default image
+        product.setCategory(category);
+        product.setSeller(currentSeller); // Set the seller
+
+        // --- Calculate Special Price ---
+        product.recalculateSpecialPrice(); // Use the method on the entity
+        return product;
+    }
 
     @Override
     // Consider a more specific cache name if needed, e.g., "productsPage"
-    @Cacheable(value = "product", key = "'all_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir") // More specific key
+    @Cacheable(value = "product", key = "'all_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
+    // More specific key
     @RateLimiter(name = "defaultRateLimiter")
     @Transactional(readOnly = true)
     public ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
@@ -195,8 +202,8 @@ public class ProductServiceImpl implements ProductService {
         if (productDTOList.isEmpty() && productPage.getTotalElements() == 0) {
             // Distinguish between category not found (handled above) and category having no products
             log.info("No products found for category ID: {}", categoryId);
-            // Throwing NotFoundException as per original logic, could also return empty response
-            throw new NotFoundException("Category " + category.getCategoryName() + " has no products");
+            // Throwing NotFoundException as per original logic, we could also return empty response
+//            throw new NotFoundException("Category " + category.getCategoryName() + " has no products");
         }
 
         return createProductResponse(productPage, productDTOList);
@@ -234,6 +241,13 @@ public class ProductServiceImpl implements ProductService {
     // Evict specific product cache and potentially list caches
     @CacheEvict(value = "product", key = "#productId")
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    // Use Spring Security's @PreAuthorize for combined check
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
+    // Assumes:
+    // 1. 'ADMIN' is the role name Spring Security expects (might need 'ROLE_ADMIN').
+    // 2. productRepository bean is accessible via '@'.
+    // 3. authentication.principal has an 'id' field matching the User ID type (adjust if using UserDetails differently).
+    // 4. The User entity linked from Principal has an 'id' field/getter.
     public ProductDTO updateProduct(ProductDTO productDTO, Long productId)
             throws ResourceNotFoundException, ProductDataValidationException {
 
@@ -325,7 +339,7 @@ public class ProductServiceImpl implements ProductService {
     @RateLimiter(name = "defaultRateLimiter")
     @CacheEvict(value = "product", key = "#productId")
     // Use Spring Security's @PreAuthorize for combined check
-    @PreAuthorize("hasRole('ROLE_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
     // Assumes:
     // 1. 'ADMIN' is the role name Spring Security expects (might need 'ROLE_ADMIN').
     // 2. productRepository bean is accessible via '@'.
@@ -356,6 +370,8 @@ public class ProductServiceImpl implements ProductService {
     // Evict specific product cache and potentially list caches
     @CacheEvict(value = "product", key = "#productId")
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    // Use Spring Security's @PreAuthorize for combined check
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
     public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException {
         Assert.notNull(productId, "Product ID cannot be null");
         Assert.notNull(image, "Image file cannot be null");
@@ -377,7 +393,7 @@ public class ProductServiceImpl implements ProductService {
         // }
 
         // --- Delete Old Image (Optional but recommended) ---
-        String oldImageName = productFromDB.getProductImage();
+        String oldImageName = productFromDB.getProductImage(); // Get the old GENERATED name
         if (oldImageName != null && !oldImageName.equals("default.png")) {
             try {
                 fileService.deleteImage(path, oldImageName);
@@ -389,11 +405,14 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // --- Upload New Image ---
-        String fileName = fileService.uploadImage(path, image);
-        log.debug("Uploaded new image '{}' for product ID {}", fileName, productId);
+        FileUploadResult uploadResult = fileService.uploadImage(path, image); // GET RESULT OBJECT
+        String generatedFileName = uploadResult.generatedFilename();
+        String originalFileName = uploadResult.originalFilename();
+        log.debug("Uploaded new image '{}' (original: '{}') for product ID {}", generatedFileName, originalFileName, productId);
 
         // --- Update Entity ---
-        productFromDB.setProductImage(fileName);
+        productFromDB.setProductImage(generatedFileName);         // Store the GENERATED name
+        productFromDB.setOriginalImageFilename(originalFileName); // Store the ORIGINAL name
         Product updatedProduct = productRepository.save(productFromDB);
         log.info("Successfully updated image for product ID: {}", updatedProduct.getProductId());
 
@@ -450,7 +469,8 @@ public class ProductServiceImpl implements ProductService {
         // Extract values safely
         Long productId = product.getProductId();
         String productName = (product.getProductName() != null) ? product.getProductName().getName() : null;
-        String productImage = product.getProductImage();
+        String productImage = product.getProductImage(); // Generated filename
+        String originalImageFilename = product.getOriginalImageFilename(); // Original filename
         String productDescription = (product.getProductDescription() != null) ? product.getProductDescription().getDescription() : null;
         Integer productQuantity = product.getProductQuantity();
         BigDecimal productPrice = (product.getProductPrice() != null) ? product.getProductPrice().getAmount() : null;
@@ -468,6 +488,7 @@ public class ProductServiceImpl implements ProductService {
                 productId,
                 productName,
                 productImage,
+                originalImageFilename, // ADDED
                 productDescription,
                 productQuantity,
                 productPrice,

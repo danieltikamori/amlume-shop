@@ -19,7 +19,8 @@ import java.math.BigDecimal;
 public record ProductDTO(
         Long productId,
         String productName,
-        String productImage,
+        String productImage, // Will hold the GENERATED filename (for constructing image URLs)
+        String originalImageFilename, // For reference (for display/download purposes)
         String productDescription,
         Integer productQuantity,
         BigDecimal productPrice,

@@ -15,7 +15,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.Order;
+import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.proxy.HibernateProxy;
@@ -43,8 +43,11 @@ public class Product extends BaseEntity {
     // @AttributeOverride(name = "name", column = @Column(name = "product_name_value", nullable = false, unique = true))
     private ProductName productName;
 
-    @Column(name = "product_image")
+    @Column(name = "product_image") // This will store the GENERATED (UUID) filename
     private String productImage;
+
+    @Column(name = "original_image_filename") // For reference
+    private String originalImageFilename;     // Stores the original uploaded filename
 
     @Embedded
     @Valid
@@ -104,6 +107,10 @@ public class Product extends BaseEntity {
         return productImage;
     }
 
+    public String getOriginalImageFilename() {
+        return originalImageFilename;
+    }
+
     public ProductDescription getProductDescription() {
         return productDescription;
     }
@@ -140,8 +147,12 @@ public class Product extends BaseEntity {
         this.productName = productName;
     }
 
-    public void setProductImage(String productImage) {
+    public void setProductImage(String productImage) { // Sets the GENERATED filename
         this.productImage = productImage;
+    }
+
+    public void setOriginalImageFilename(String originalImageFilename) { // For reference
+        this.originalImageFilename = originalImageFilename;
     }
 
     public void setProductDescription(ProductDescription productDescription) {
@@ -249,7 +260,8 @@ public class Product extends BaseEntity {
         return new StringJoiner(", ", Product.class.getSimpleName() + "[", "]")
                 .add("productId=" + productId)
                 .add("productName=" + productName)
-                .add("productImage='" + productImage + "'")
+                .add("productImage='" + productImage + "'") // Generated name
+                .add("originalImageFilename='" + originalImageFilename + "'") // Original name
                 .add("productDescription=" + productDescription)
                 .add("productQuantity=" + productQuantity)
                 .add("productPrice=" + productPrice)
