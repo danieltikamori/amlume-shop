@@ -17,7 +17,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
-import static me.amlu.shop.amlume_shop.config.CacheConfig.ESTIMATED_ENTRY_SIZE;
+import static me.amlu.shop.amlume_shop.commons.Constants.ESTIMATED_ENTRY_SIZE;
 
 @ConfigurationProperties(prefix = "cache.token")
 @Component

@@ -10,45 +10,37 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import lombok.extern.slf4j.Slf4j;
-import org.jetbrains.annotations.NotNull;
+import me.amlu.shop.amlume_shop.commons.Constants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-
-@Slf4j
 @Service
 public class AsnSimpleCacheServiceImpl implements AsnSimpleCacheService {
-    private final LoadingCache<String, String> cache;
+
+    private static final Logger log = LoggerFactory.getLogger(AsnSimpleCacheServiceImpl.class);
+
     private final AsnLookupService lookupService;
 
-    // TOFINISH
-    public AsnSimpleCacheServiceImpl(AsnLookupService lookupService) {
+    public AsnSimpleCacheServiceImpl(@Qualifier("retryingAsnLookup") AsnLookupService lookupService) {
         this.lookupService = lookupService;
-        this.cache = CacheBuilder.newBuilder()
-                .maximumSize(10000)
-                .expireAfterWrite(24, TimeUnit.HOURS)
-                .build(new CacheLoader<String, String>() {
-                    @NotNull
-                    @Override
-                    public String load(@NotNull String ip) {
-                        return lookupService.lookupAsn(ip);
-                    }
-                });
     }
 
     @Override
+    // Use Spring's @Cacheable with the cache name defined in Constants
+    @Cacheable(value = Constants.ASN_CACHE, key = "#ip")
     public String getAsn(String ip) {
+        log.debug("Cache miss for ASN lookup for IP: {}. Calling lookup service.", ip);
         try {
-            return cache.get(ip);
-        } catch (ExecutionException e) {
-            log.error("Cache retrieval failed for IP: {}", ip, e);
-            return null;
+            // Directly call the lookup service. Spring handles caching.
+            return lookupService.lookupAsn(ip);
+        } catch (Exception e) {
+            // Log the error from the underlying service
+            log.error("ASN lookup failed for IP: {}", ip, e);
+            // Depending on requirements, return null, empty string, or rethrow a specific exception
+            return null; // Or "" or throw new AsnLookupFailedException(...)
         }
     }
-
 }

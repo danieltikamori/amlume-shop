@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import me.amlu.shop.amlume_shop.commons.Constants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -27,27 +28,35 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
-import static me.amlu.shop.amlume_shop.commons.Constants.PRODUCT_CACHE;
-import static me.amlu.shop.amlume_shop.commons.Constants.USER_CACHE;
+import static me.amlu.shop.amlume_shop.commons.Constants.PRODUCTS_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.CATEGORIES_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.USERS_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.ROLES_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.ASN_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.TOKENS_CACHE_TTL;
+import static me.amlu.shop.amlume_shop.commons.Constants.TEMPORARY_CACHE_TTL;
+
 
 /**
  * Configuration class for setting up caching and Redis/Valkey connection
  * using Spring Data Redis with Lettuce connector.
- * Configures RedisTemplate, StringRedisTemplate, and CacheManager beans.
+ * Configures RedisTemplate, StringRedisTemplate, and the primary CacheManager beans.
  */
 @Configuration
 @EnableCaching // Enables Spring's caching annotations like @Cacheable
 public class ValkeyCacheConfig {
 
     // Inject properties using @Value
-    @Value("${valkey.host:localhost}") // Default to localhost if property not set
+    @Value("${valkey.host:localhost}")
     private String redisHost;
 
-    @Value("${valkey.port:6379}") // Default to 6379
+    @Value("${valkey.port:6379}")
     private int redisPort;
 
-    @Value("${valkey.password:#{null}}") // Default to null if property not set
+    @Value("${valkey.password:#{null}}")
     private String redisPassword;
 
     // Optional: Make SSL configurable
@@ -127,7 +136,7 @@ public class ValkeyCacheConfig {
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         // Default cache configuration
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(30)) // Default TTL for caches without specific config
+                .entryTtl(Duration.ofMinutes(30)) // Default TTL for caches without a specific config
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer())
                 )
@@ -136,16 +145,41 @@ public class ValkeyCacheConfig {
                 )
                 .disableCachingNullValues(); // Prevent caching null values
 
+        // Specific configurations for different caches
+        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
+
+        // Product lists/searches - maybe longer TTL?
+        cacheConfigurations.put(Constants.PRODUCTS_CACHE, defaultConfig.entryTtl(PRODUCTS_CACHE_TTL));
+        // Category lists/searches
+        cacheConfigurations.put(Constants.CATEGORIES_CACHE, defaultConfig.entryTtl(CATEGORIES_CACHE_TTL));
+        // User details - shorter TTL?
+        cacheConfigurations.put(Constants.USERS_CACHE, defaultConfig.entryTtl(USERS_CACHE_TTL));
+        // Roles - relatively static, maybe longer TTL
+        cacheConfigurations.put(Constants.ROLES_CACHE, defaultConfig.entryTtl(ROLES_CACHE_TTL));
+        // ASN - very static, long TTL
+        cacheConfigurations.put(Constants.ASN_CACHE, defaultConfig.entryTtl(ASN_CACHE_TTL));
+        // Tokens - TTL should match token validity, often handled differently (e.g., direct Redis ops)
+        // but if using @Cacheable, set a reasonable TTL like 1 hour or less.
+        cacheConfigurations.put(Constants.TOKENS_CACHE, defaultConfig.entryTtl(TOKENS_CACHE_TTL));
+        // Temporary cache - short TTL, maybe cleaned by maintenance anyway
+        cacheConfigurations.put(Constants.TEMPORARY_CACHE, defaultConfig.entryTtl(TEMPORARY_CACHE_TTL));
+
+        // Add configurations from Constants if they exist and need specific TTLs
+        // cacheConfigurations.put(Constants.PRODUCT_CACHE, defaultConfig.entryTtl(Duration.ofHours(1)));
+        // cacheConfigurations.put(Constants.USERS_CACHE, defaultConfig.entryTtl(Duration.ofMinutes(10)));
+
         // Build the cache manager with default and specific configurations
         return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(defaultConfig)
+                .cacheDefaults(defaultConfig) // Apply default config to any cache not explicitly configured
                 // Add specific configurations for named caches if needed
-                .withCacheConfiguration(USER_CACHE,
-                        defaultConfig.entryTtl(Duration.ofMinutes(10))) // Override TTL for userCache
-                .withCacheConfiguration(PRODUCT_CACHE,
-                        defaultConfig.entryTtl(Duration.ofHours(1))) // Override TTL for productCache
+//                .withCacheConfiguration(USERS_CACHE,
+//                        defaultConfig.entryTtl(Duration.ofMinutes(10))) // Override TTL for userCache
+//                .withCacheConfiguration(PRODUCT_CACHE,
+//                        defaultConfig.entryTtl(Duration.ofHours(1))) // Override TTL for productCache
                 // Add more cache configurations as needed
                 // .withCacheConfiguration("anotherCache", ...)
+                .withInitialCacheConfigurations(cacheConfigurations) // Apply specific configurations
+                .transactionAware() // Enable if you need cache operations to be aware of Spring transactions
                 .build();
     }
 

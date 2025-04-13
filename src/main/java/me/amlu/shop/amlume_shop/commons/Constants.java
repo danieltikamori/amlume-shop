@@ -27,14 +27,23 @@ public final class Constants {
 
     // --- Cache constants ---
     public static final String CACHE = "cache";
+    public static final int ESTIMATED_ENTRY_SIZE = 1024;
     private static final String CACHE_VERSION = "v1";
+    private static final double MAX_HEAP_RATIO = 0.1; // Use max 10% of heap
+    private static final long CACHE_MAXIMUM_SIZE =
+            (long) (Runtime.getRuntime().maxMemory() * MAX_HEAP_RATIO / ESTIMATED_ENTRY_SIZE);
 
     // --- Cache Names ---
-//    public static final String USER_CACHE = "users";
-    public static final String USER_CACHE = "userCache";
+    // Define constants for cache names used in the application
+    public static final String USERS_CACHE = "users";
     public static final String CURRENT_USER_CACHE = "currentUser";
-    public static final String AUTH_CACHE = "authCache";
-    public static final String PRODUCT_CACHE = "productCache";
+    public static final String AUTH_CACHE = "auth";
+    public static final String PRODUCTS_CACHE = "products";
+    public static final String CATEGORIES_CACHE = "categories";
+    public static final String ROLES_CACHE = "roles";
+    public static final String ASN_CACHE = "asn";
+    public static final String TOKENS_CACHE = "tokens";
+    public static final String TEMPORARY_CACHE = "temporaryCache"; // Used by CacheMaintenanceService
 
 
     // --- Cache Keys ---
@@ -48,6 +57,16 @@ public final class Constants {
     public static final Duration ANNOTATION_CACHE_DURATION = Duration.ofHours(24);
     public static final Duration USER_CACHE_DURATION = Duration.ofMinutes(30);
     public static final Duration LOCK_TIMEOUT = Duration.ofSeconds(10);
+    public static final Duration USERS_CACHE_TTL = Duration.ofMinutes(15); // User details - shorter TTL
+    public static final Duration ROLES_CACHE_TTL = Duration.ofHours(4);
+    public static final Duration TOKENS_CACHE_TTL = Duration.ofHours(1); // Tokens - TTL should match token validity
+    public static final Duration AUTH_CACHE_TTL = Duration.ofHours(6);
+    public static final Duration PRODUCTS_CACHE_TTL = Duration.ofDays(3);
+    public static final Duration CATEGORIES_CACHE_TTL = Duration.ofDays(7);
+    public static final Duration ASN_CACHE_TTL = Duration.ofDays(15);
+    public static final Duration TEMPORARY_CACHE_TTL = Duration.ofMinutes(10); // Cleaned by maintenance service
+
+
 
     // --- Compression constants ---
     public static final int COMPRESSION_THRESHOLD_BYTES = 1024;
