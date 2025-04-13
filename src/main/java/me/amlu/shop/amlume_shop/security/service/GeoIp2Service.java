@@ -14,10 +14,13 @@ import com.maxmind.geoip2.exception.GeoIp2Exception;
 import com.maxmind.geoip2.model.AsnResponse;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 
+import java.util.Optional;
+
 public interface GeoIp2Service {
     AsnResponse lookupAsn(String ip) throws GeoIp2Exception;
 
-    String lookupAsnString(String ip) throws GeoIp2Exception;
+    // REMOVED lookupAsnString method - caller should format the result from lookupAsn
+//    String lookupAsnString(String ip) throws GeoIp2Exception;
 
-    GeoLocation lookupLocation(String ip);
+    Optional<GeoLocation> lookupLocation(String ip);
 }

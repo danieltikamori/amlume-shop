@@ -10,52 +10,58 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
 import me.amlu.shop.amlume_shop.resilience.service.SlidingWindowValkeyRateLimiter;
-import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
+@Qualifier("valkeyRateLimitedAsnLookup")
 public class ValkeySlidingWindowRateLimitedAsnLookupService implements AsnLookupService {
-    private final SlidingWindowValkeyRateLimiter rateLimiter;
+
+    private static final Logger log = LoggerFactory.getLogger(ValkeySlidingWindowRateLimitedAsnLookupService.class);
+
+    private final SlidingWindowValkeyRateLimiter rateLimiter; // Inject the bean
     private final AsnLookupService delegate;
 
+    // Constructor updated to inject the rate limiter bean
     public ValkeySlidingWindowRateLimitedAsnLookupService(
-            @Value("${asn.ratelimit.window-seconds:60}") int windowSeconds,
-            @Value("${asn.ratelimit.max-requests:100}") int maxRequests,
-            AsnLookupService delegate) {
-        this.rateLimiter = new SlidingWindowValkeyRateLimiter(windowSeconds, maxRequests);
+            SlidingWindowValkeyRateLimiter rateLimiter,
+            @Qualifier("coreAsnLookup") AsnLookupService delegate) {
+        this.rateLimiter = rateLimiter;
         this.delegate = delegate;
     }
 
     @Override
     public String lookupAsn(String ip) {
+        // Use the injected rate limiter instance
         if (!rateLimiter.tryAcquire(ip)) {
             log.warn("Rate limit exceeded for IP: {}", ip);
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded");
+            throw new RateLimitExceededException("ASN lookup rate limit exceeded for IP: " + ip); // Add IP to message
         }
+        log.trace("Rate limit check passed for ASN lookup for IP: {}", ip);
         return delegate.lookupAsn(ip);
     }
 
     @Override
     public String lookupAsnWithGeoIp2(String ip) {
-        return "";
+        return delegate.lookupAsnWithGeoIp2(ip);
     }
 
     @Override
     public String lookupAsnUncached(String ip) {
-        return "";
+        return delegate.lookupAsnUncached(ip);
     }
 
     @Override
     public String lookupAsnViaDns(String ip) {
-        return "";
+        return delegate.lookupAsnViaDns(ip);
     }
 
     @Override
     public String lookupAsnViaWhois(String ip) {
-        return "";
+        return delegate.lookupAsnViaWhois(ip);
     }
 }

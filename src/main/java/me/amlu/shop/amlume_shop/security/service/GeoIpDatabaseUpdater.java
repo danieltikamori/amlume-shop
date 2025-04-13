@@ -32,6 +32,11 @@ import java.time.Instant;
 @Service
 @Slf4j
 public class GeoIpDatabaseUpdater {
+
+//    // Check if accountId is needed
+//    @Value("${geoip.license.account-id}")
+//    private String accountId;
+
     @Value("${geoip.license.key}")
     private String licenseKey;
 

@@ -11,7 +11,9 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import io.github.resilience4j.retry.Retry;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,12 +22,15 @@ import org.springframework.stereotype.Service;
  * @since 2025-02-16
  * Implementing backoff and retry mechanism for ASN lookup service
  */
-@Slf4j
 @Service
-public class RetryingAsnLookupServiceImpl implements RetryingAsnLookupService {
+@Qualifier("retryingAsnLookup")
+public class RetryingAsnLookupServiceImpl implements AsnLookupService {
+
+    private static final Logger log = LoggerFactory.getLogger(RetryingAsnLookupServiceImpl.class);
+
     private final AsnLookupService delegate;
 
-    public RetryingAsnLookupServiceImpl(AsnLookupService delegate) {
+    public RetryingAsnLookupServiceImpl(@Qualifier("valkeyRateLimitedAsnLookup") AsnLookupService delegate) {
         this.delegate = delegate;
     }
 
@@ -33,5 +38,29 @@ public class RetryingAsnLookupServiceImpl implements RetryingAsnLookupService {
     public String lookupAsn(String ip) {
         return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
                 () -> delegate.lookupAsn(ip)).get();
+    }
+
+    @Override
+    public String lookupAsnWithGeoIp2(String ip) {
+        return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
+                () -> delegate.lookupAsnWithGeoIp2(ip)).get();
+    }
+
+    @Override
+    public String lookupAsnUncached(String ip) {
+        return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
+                () -> delegate.lookupAsnUncached(ip)).get();
+    }
+
+    @Override
+    public String lookupAsnViaDns(String ip) {
+        return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
+                () -> delegate.lookupAsnViaDns(ip)).get();
+    }
+
+    @Override
+    public String lookupAsnViaWhois(String ip) {
+        return Retry.decorateSupplier(Retry.ofDefaults("asnLookup"),
+                () -> delegate.lookupAsnViaWhois(ip)).get();
     }
 }
