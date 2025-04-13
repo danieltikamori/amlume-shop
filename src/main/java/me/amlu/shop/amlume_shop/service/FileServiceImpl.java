@@ -10,17 +10,21 @@
 
 package me.amlu.shop.amlume_shop.service;
 
+import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
+import me.amlu.shop.amlume_shop.payload.FileUploadResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -29,14 +33,14 @@ public class FileServiceImpl implements FileService {
     private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
 
     @Override
-    public String uploadImage(String path, MultipartFile imageFile) throws IOException {
+    public FileUploadResult uploadImage(String path, MultipartFile imageFile) throws IOException {
         // --- Input Validation ---
         if (imageFile == null || imageFile.isEmpty()) {
             log.warn("Attempted to upload an empty or null image file.");
             throw new IllegalArgumentException("Image file cannot be null or empty.");
         }
 
-        String originalFilename = imageFile.getOriginalFilename();
+        String originalFilename = imageFile.getOriginalFilename(); // Keep the original name
         if (!StringUtils.hasText(originalFilename)) {
             log.warn("Attempted to upload a file with no original filename.");
             throw new IllegalArgumentException("Image file must have an original filename.");
@@ -46,20 +50,18 @@ public class FileServiceImpl implements FileService {
         String fileExtension = "";
         int lastDotIndex = originalFilename.lastIndexOf(".");
         if (lastDotIndex >= 0) {
-            fileExtension = originalFilename.substring(lastDotIndex); // Includes the dot (e.g., ".jpg")
+            fileExtension = originalFilename.substring(lastDotIndex);
         } else {
             log.warn("File '{}' has no extension. Upload might proceed without one.", originalFilename);
-            // Decide if we want to throw an error or allow files without extensions
-            // throw new IllegalArgumentException("Image file must have a valid extension.");
         }
 
         // Use UUID for better uniqueness
         String uniqueFileNameBase = UUID.randomUUID().toString();
-        String finalFileName = uniqueFileNameBase + fileExtension;
+        String generatedFileName = uniqueFileNameBase + fileExtension; // This is the name for storage
         Path targetDirectory = Paths.get(path);
-        Path targetFilePath = targetDirectory.resolve(finalFileName); // Use resolve for path construction
+        Path targetFilePath = targetDirectory.resolve(generatedFileName); // Use resolve for path construction
 
-        log.debug("Attempting to upload file '{}' as '{}' to path '{}'", originalFilename, finalFileName, targetFilePath);
+        log.debug("Attempting to upload file '{}' as '{}' to path '{}'", originalFilename, generatedFileName, targetFilePath);
 
         // --- Ensure Directory Exists ---
         if (!Files.exists(targetDirectory)) {
@@ -75,17 +77,18 @@ public class FileServiceImpl implements FileService {
         // --- Upload File ---
         try {
             Files.copy(imageFile.getInputStream(), targetFilePath);
-            log.info("Successfully uploaded file '{}' to '{}'", finalFileName, targetFilePath);
-            return finalFileName; // Return the generated unique filename
+            log.info("Successfully uploaded file '{}' to '{}'", generatedFileName, targetFilePath);
+            // Return both names
+            return new FileUploadResult(generatedFileName, originalFilename); // Return the generated unique filename
         } catch (IOException e) {
-            log.error("Failed to upload file '{}' to '{}'", finalFileName, targetFilePath, e);
-            // Consider deleting the partially uploaded file if possible/necessary
+            log.error("Failed to upload file '{}' to '{}'", generatedFileName, targetFilePath, e);
+            // Delete the partially uploaded file if possible/necessary
             try {
                 Files.deleteIfExists(targetFilePath);
             } catch (IOException delEx) {
-                log.warn(delEx.getMessage());
+                log.warn("Failed to delete partial file after upload error: {}", delEx.getMessage());
             }
-            throw new IOException("Failed to save uploaded file: " + finalFileName, e);
+            throw new IOException("Failed to save uploaded file: " + generatedFileName, e);
         }
     }
 
@@ -116,6 +119,47 @@ public class FileServiceImpl implements FileService {
         } catch (IOException e) {
             log.error("Failed to delete file: {}", targetFilePath, e);
             throw new IOException("Could not delete file: " + imageNameToDelete, e);
+        }
+    }
+
+    // --- Download file Method Implementation ---
+    @Override
+    public Resource downloadFile(String path, String fileName) throws ResourceNotFoundException, MalformedURLException {
+        // --- Input Validation ---
+        if (!StringUtils.hasText(path)) {
+            throw new IllegalArgumentException("File path cannot be empty.");
+        }
+        if (!StringUtils.hasText(fileName)) {
+            throw new IllegalArgumentException("Filename cannot be empty.");
+        }
+
+        try {
+            Path fileDirectory = Paths.get(path);
+            Path filePath = fileDirectory.resolve(fileName).normalize(); // Normalize a path
+
+            log.debug("Attempting to load file for download: {}", filePath);
+
+            Resource resource = new UrlResource(filePath.toUri());
+
+            if (resource.exists() && resource.isReadable()) {
+                log.info("File found and readable: {}", filePath);
+                return resource;
+            } else {
+                log.error("File not found or not readable: {}", filePath);
+                // Throw specific exception if a file doesn't exist or isn't readable
+                throw new ResourceNotFoundException("File", "fileName", fileName);
+            }
+        } catch (MalformedURLException e) {
+            // This indicates an issue converting the file path to a URI, likely an internal error
+            log.error("Error creating URL resource for path: {}/{}", path, fileName, e);
+            // Re-throw as MalformedURLException as declared in the interface,
+            // or wrap in a runtime exception if preferred (e.g., APIException)
+            throw new MalformedURLException("Could not create URL resource for file: " + fileName);
+            // Alternative: throw new APIException("Internal error creating file resource URL", e);
+        } catch (Exception e) {
+            // Catch unexpected errors during path resolution or resource access
+            log.error("Unexpected error downloading file {} from path {}: {}", fileName, path, e.getMessage(), e);
+            throw new ResourceNotFoundException("File", "fileName", fileName);
         }
     }
 }
