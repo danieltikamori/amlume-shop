@@ -13,8 +13,10 @@ alert:
 
 asn:
   ratelimit:
+    window-seconds: 60
+    max-requests: 100
     capacity: 100
-    refill-rate: 10
+
   update:
     schedule: 0 0 0 * * *
 
@@ -38,10 +40,16 @@ geoip:
   database:
     #    path: classpath:GeoLite2-Country.mmdb
     path: classpath:/project/geoip/GeoLite2-City.mmdb
+  license:
+    account-id: ${GEOIP2_ACCOUNT_ID}
+    key: ${GEOIP2_LICENSE_KEY}
 
 geoip2:
   database:
     path: /project/geoip/GeoLite2-ASN.mmdb
+#    path: classpath:geolite2/GeoLite2-ASN.mmdb
+#    Or if using City database
+#    path: classpath:geolite2/GeoLite2-City.mmdb
   account-id: ${GEOIP2_ACCOUNT_ID}
   license-key: ${GEOIP2_LICENSE_KEY}
 
@@ -61,6 +69,9 @@ jti:
 
 logging:
   level:
+    org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
+#    root: DEBUG
+    me.amlu.shop.amlume_shop: DEBUG
     me.amlu.shop.amlume_shop.config: DEBUG
     me.amlu.shop.amlume_shop.service: DEBUG
     me.amlu.shop.amlume_shop.controller: DEBUG
@@ -69,6 +80,43 @@ logging:
     me.amlu.shop.amlume_shop.util: DEBUG
     me.amlu.shop.amlume_shop.exception: DEBUG
     me.amlu.shop.amlume_shop.model: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+    show-details: when_authorized # always
+  metrics:
+    cache:
+      instrument: true
+    enabled: true
+    enable:
+      all: true
+      cache: true
+      redis: true
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        valkey.operation.duration: true
+        paseto.token.validation: true
+        percentiles:
+          paseto.token.validation: 0.5,0.95,0.99
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+        step: 10s
+#          valkey.operation.duration: 0.5,0.95,0.99
+#          http.server.requests: 0.5,0.95,0.99
+
 
 notification:
   email:
@@ -121,7 +169,14 @@ project:
   geoip:
     path: /project/geoip
 
-ratelimit:
+rate-limiting:
+  ip:
+    limit: 100
+    window-seconds: 60
+  username:
+    limit: 20
+    window-seconds: 60
+
   token:
     validation: 200.0
   claims:
@@ -133,6 +188,18 @@ ratelimit:
 resilience4j:
   retry:
     instances:
+      asnLookup:
+        maxAttempts: 3
+        waitDuration: 500ms # Start with 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate limited
+          - jakarta.validation.ValidationException
+
       captchaValidation:
         maxAttempts: 3
         waitDuration: 1s
@@ -221,13 +288,6 @@ service:
   environment: ${SERVICE_ENVIRONMENT}
 
 spring:
-#  hazelcast:
-#    config: classpath:hazelcast.xml
-#  data:
-#    redis:
-#      host: localhost       # Or your Redis server's hostname/IP
-#      port: 6379            # Default Redis port
-#      # password: your_redis_password # If you have a password
   application:
     name: ${SERVICE_NAME}
     version: ${SERVICE_VERSION}
@@ -456,35 +516,10 @@ web:
     max-age: ${CORS_MAX_AGE}
   whois:
     server: ${WHOIS_SERVER}
+    port: ${WHOIS_PORT}
+    timeout: ${WHOIS_TIMEOUT}
 
-
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health, prometheus,metrics
-  health:
-    livenessState:
-      enabled: true
-    readinessState:
-      enabled: true
-    show-details: always
-  metrics:
-    enable:
-      all: true
-    export:
-      prometheus:
-        enabled: true
-        step: 10s
-    tags:
-      application: ${spring.application.name}
-    distribution:
-      percentiles-histogram:
-        http.server.requests: true
-        valkey.operation.duration: true
-        paseto.token.validation: true
-        percentiles:
-          paseto.token.validation: 0.5,0.95,0.99
-#          valkey.operation.duration: 0.5,0.95,0.99
-#          http.server.requests: 0.5,0.95,0.99
+#whois:
+#  server: ${WHOIS_SERVER}
+#  port: ${WHOIS_PORT}
+#  timeout: ${WHOIS_TIMEOUT}
