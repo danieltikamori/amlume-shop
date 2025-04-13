@@ -10,26 +10,19 @@
 
 package me.amlu.shop.amlume_shop.resilience.service;
 
-import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import org.redisson.api.RRateLimiter;
-
-import java.time.Duration;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
 
 public interface ResilienceService {
-    void setRateLimiter(RRateLimiter rateLimiter, int maxRequests, Duration refreshPeriod);
 
-    boolean allowRequestByIpPerInstance(String ipAddress) throws TooManyAttemptsException;
+    boolean allowRequestByIp(String ipAddress) throws RateLimitExceededException;
 
-    boolean allowRequestByIp(String ipAddress) throws TooManyAttemptsException;
+    boolean allowRequestByUsername(String userId) throws RateLimitExceededException;
 
-    boolean allowRequestByUsername(String userId) throws TooManyAttemptsException;
-
-//    boolean allowRequestByUserId(String userId) throws TooManyAttemptsException;
+//    boolean allowRequestByUserId(String userId) throws RateLimitExceededException;
 
     // Per instance of application
-    boolean allowRequestByUserPerInstance(String username) throws TooManyAttemptsException;
-
-    boolean tryAcquireWithTimeout(RRateLimiter rateLimiter, Duration timeout);
+//    boolean allowRequestByIpPerInstance(String ipAddress) throws RateLimitExceededException;
+//    boolean allowRequestByUserPerInstance(String username) throws RateLimitExceededException;
 
     boolean isRateLimitExceeded(String username);
 }

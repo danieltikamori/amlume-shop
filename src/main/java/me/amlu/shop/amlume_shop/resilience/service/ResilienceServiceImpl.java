@@ -11,150 +11,142 @@
 package me.amlu.shop.amlume_shop.resilience.service;
 
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import org.redisson.api.*;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
-@Transactional
-@Slf4j
+
 @Service
 public class ResilienceServiceImpl implements ResilienceService {
 
-    private static final int IP_MAX_REQUESTS = 100; // Permissions limit for refresh period
-    private static final Duration ipRefreshPeriod = java.time.Duration.ofMinutes(1); //After each period rate limiter sets its permissions count to RateLimiterConfig
-    private static final Duration ipLockTimeoutDuration = java.time.Duration.ofSeconds(5); // Default wait for permission duration. Default value is 5 seconds.
-    private static final int USER_MAX_REQUESTS = 5;
-    private static final Duration userRefreshPeriod = java.time.Duration.ofMinutes(1);
-    private static final Duration userLockTimeoutDuration = Duration.ofSeconds(5);
+    // --- Configuration Properties ---
+    @Value("${rate-limiting.ip.limit:100}") // Default 100 requests
+    private long ipRequestLimit;
 
+    @Value("${rate-limiting.ip.window-seconds:60}") // Default 60 second window
+    private long ipWindowSeconds;
 
-    private final RRateLimiter ipRateLimiter;
-    private final RRateLimiter userRateLimiter;
-    private final RedissonClient redissonClient;
+    @Value("${rate-limiting.username.limit:20}") // Default 20 requests per user
+    private long usernameRequestLimit;
 
-    // RateType.OVERALL or RateType.PER_CLIENT
+    @Value("${rate-limiting.username.window-seconds:60}") // Default 60 second window
+    private long usernameWindowSeconds;
 
-    public ResilienceServiceImpl(RedissonClient redissonClient) {
-        this.ipRateLimiter = redissonClient.getRateLimiter("ipRateLimiter");
-        this.userRateLimiter = redissonClient.getRateLimiter("userRateLimiter");
-        this.redissonClient = redissonClient;
+    // --- Dependencies ---
+    private static final Logger log = LoggerFactory.getLogger(ResilienceServiceImpl.class);
 
-        // Initialize or update rate limits
-        setRateLimiter(ipRateLimiter, IP_MAX_REQUESTS, ipRefreshPeriod);
-        setRateLimiter(userRateLimiter, USER_MAX_REQUESTS, userRefreshPeriod);
+    private final StringRedisTemplate redisTemplate;
+
+    // --- Constructor ---
+    public ResilienceServiceImpl(StringRedisTemplate redisTemplate) {
+        this.redisTemplate = redisTemplate;
     }
 
+    // --- IP Rate Limiting (Fixed Window Counter) ---
     @Override
-    public void setRateLimiter(RRateLimiter rateLimiter, int maxRequests, Duration refreshPeriod) {
-        // Set the rate limit (overwrites existing configuration)
-        rateLimiter.setRate(RateType.OVERALL, maxRequests, refreshPeriod);
-    }
-
-    // Per instance of application
-    @Override
-    public boolean allowRequestByIpPerInstance(String ipAddress) throws TooManyAttemptsException {
-        if (!tryAcquireWithTimeout(ipRateLimiter, ipLockTimeoutDuration)) {
-            throw new TooManyAttemptsException("Too many requests from this IP address."); // Throw exception
+    public boolean allowRequestByIp(String ipAddress) throws RateLimitExceededException {
+        if (ipAddress == null || ipAddress.isBlank()) {
+            log.warn("Attempted IP rate limiting with null or blank IP.");
+            return false; // Deny requests with no IP
         }
-        return true; // Return true if permit acquired
-    }
 
-    // Distributed environment. Use the RAtomicLong and RLock (or RSemaphore) approach
-    @Override
-    public boolean allowRequestByIp(String ipAddress) throws TooManyAttemptsException {
-        String counterKey = "rateLimit:ip:" + ipAddress; // Unique key per IP
-        String lockKey = counterKey + ":lock"; // Lock key associated with the counter
-
-        RAtomicLong counter = redissonClient.getAtomicLong(counterKey);
-        RLock lock = redissonClient.getLock(lockKey);
+        String redisKey = "rate_limit:ip:" + ipAddress;
+        Long currentCount = null;
 
         try {
-            if (lock.tryLock(ipLockTimeoutDuration.toMillis(), TimeUnit.MILLISECONDS)) { // Acquire lock with timeout
-                try {
-                    long count = counter.get();
-                    long now = System.currentTimeMillis();
+            // Increment the count for the IP address. This is atomic.
+            currentCount = redisTemplate.opsForValue().increment(redisKey);
 
-                    if (count == 0 || (now - count) > ipRefreshPeriod.toMillis()) {
-                        counter.set(1); // Reset and set to 1
-                        return true;
-                    } else if (count < IP_MAX_REQUESTS) {
-                        counter.incrementAndGet();
-                        return true;
-                    } else {
-                        throw new TooManyAttemptsException("Too many requests from this IP.");
-                    }
-                } finally {
-                    lock.unlock(); // Always release the lock
-                }
-            } else {
-                // Return false if lock cannot be acquired
-                return false;
-//                throw new TooManyAttemptsException("Could not acquire lock for IP rate limiting.");
+            // If it's the first request in the window (count is 1), set the expiry.
+            if (currentCount != null && currentCount == 1) {
+                // Set the key to expire after the window duration.
+                redisTemplate.expire(redisKey, ipWindowSeconds, TimeUnit.SECONDS);
+                log.trace("Set expiry for IP rate limit key: {} to {} seconds", redisKey, ipWindowSeconds);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new TooManyAttemptsException("IP rate limiting operation interrupted.");
+
+        } catch (DataAccessException e) { // Catch specific Redis exceptions
+            // Log Redis errors,
+            // would potentially allow the request in case of failure?
+            // (Fail-open)
+            log.error("Redis error during IP rate limiting check for IP [{}]: {}", ipAddress, e.getMessage());
+            // Fail-open strategy: Allow request if Redis is down. Adjust if fail-closed is needed.
+            return true;
         }
+
+        if (currentCount == null) {
+            // Should not happen if Redis is working, but handle defensively
+            log.warn("Redis increment returned null for IP rate limiting key: {}", redisKey);
+            return true; // Fail-open
+        }
+
+        // Check if the count exceeds the limit
+        boolean allowed = currentCount <= ipRequestLimit;
+        if (!allowed) {
+            log.warn("IP Rate limit exceeded for IP [{}]. Count: {}/{}, Window: {}s", ipAddress, currentCount, ipRequestLimit, ipWindowSeconds);
+            throw new RateLimitExceededException("Too many requests from this IP address."); // Throw exception as per previous logic
+            // return false; // Alternative: just return false
+        }
+
+        log.trace("IP Rate limit check passed for IP [{}]. Count: {}/{}", ipAddress, currentCount, ipRequestLimit);
+        return true; // Request allowed
     }
 
-    // Distributed environment
+    // --- Username Rate Limiting (Fixed Window Counter) ---
     @Override
-    public boolean allowRequestByUsername(String username) throws TooManyAttemptsException {
-        String counterKey = "rateLimit:user:" + username; // Unique key per user
-        String lockKey = counterKey + ":lock"; // Lock key associated with the counter
+    public boolean allowRequestByUsername(String username) throws RateLimitExceededException {
+        if (username == null || username.isBlank()) {
+            log.warn("Attempted Username rate limiting with null or blank username.");
+            // Allow anonymous actions? Or deny? Assuming allow for now, adjust if needed.
+//            return true;
+            return false; // Deny requests with no username
+        }
 
-        RAtomicLong counter = redissonClient.getAtomicLong(counterKey);
-        RLock lock = redissonClient.getLock(lockKey);
+        String redisKey = "rate_limit:user:" + username;
+        Long currentCount = null;
 
         try {
-            if (lock.tryLock(userLockTimeoutDuration.toMillis(), TimeUnit.MILLISECONDS)) { // Acquire lock with timeout
-                try {
-                    long count = counter.get();
-                    long now = System.currentTimeMillis();
+            currentCount = redisTemplate.opsForValue().increment(redisKey);
 
-                    if (count == 0 || (now - counter.get()) > userRefreshPeriod.toMillis()) {
-                        counter.set(1); // Reset and set to 1
-                        return true;
-                    } else if (count < USER_MAX_REQUESTS) {
-                        counter.incrementAndGet();
-                        return true;
-                    } else {
-                        log.warn("Too many requests from user: {}", username);
-                        return false; // Return false when count is equal to USER_MAX_REQUESTS
-//                        throw new TooManyAttemptsException("Too many requests from this user.");
-                    }
-                } finally {
-                    lock.unlock(); // Always release the lock
-                }
-            } else {
-                throw new TooManyAttemptsException("Could not acquire lock for rate limiting."); // Lock timeout
-//                return false; // Return false when lock cannot be acquired
+            if (currentCount != null && currentCount == 1) {
+                redisTemplate.expire(redisKey, usernameWindowSeconds, TimeUnit.SECONDS);
+                log.trace("Set expiry for Username rate limit key: {} to {} seconds", redisKey, usernameWindowSeconds);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // Restore interrupt status
-            throw new TooManyAttemptsException("Rate limiting operation interrupted.");
+
+        } catch (DataAccessException e) {
+            log.error("Redis error during Username rate limiting check for User [{}]: {}", username, e.getMessage());
+            // Fail-open strategy
+            return true;
         }
-    }
 
-    // Per instance of application
-    @Override
-    public boolean allowRequestByUserPerInstance(String username) throws TooManyAttemptsException {
-        if (!tryAcquireWithTimeout(userRateLimiter, userLockTimeoutDuration)) {
-            throw new TooManyAttemptsException("Too many requests from this user.");
+        if (currentCount == null) {
+            log.warn("Redis increment returned null for Username rate limiting key: {}", redisKey);
+            return true; // Fail-open
         }
-        return true; // Return true if permit acquired
+
+        boolean allowed = currentCount <= usernameRequestLimit;
+        if (!allowed) {
+            log.warn("Username Rate limit exceeded for User [{}]. Count: {}/{}, Window: {}s", username, currentCount, usernameRequestLimit, usernameWindowSeconds);
+            throw new RateLimitExceededException("Too many requests for this user."); // Throw exception
+            // return false; // Alternative: just return false
+        }
+
+        log.trace("Username Rate limit check passed for User [{}]. Count: {}/{}", username, currentCount, usernameRequestLimit);
+        return true; // Request allowed
     }
 
+    // --- Kept for potential compatibility if used elsewhere, but now calls the Redis-based method ---
     @Override
-    public boolean tryAcquireWithTimeout(RRateLimiter rateLimiter, Duration timeout) {
-            return rateLimiter.tryAcquire(timeout);
-    }
-
-    public boolean isRateLimitExceeded(String username) {
+    public boolean isRateLimitExceeded(String username) throws RateLimitExceededException {
+        // This method now reflects the behavior of allowRequestByUsername
+        // It returns true if *allowed*, false if *exceeded* (or throws exception)
+        // The name is misleading. Consider renaming or removing if not used externally.
+        // For now, it calls the main method which throws on exceedance.
         return allowRequestByUsername(username);
     }
 }
