@@ -45,6 +45,33 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static me.amlu.shop.amlume_shop.commons.Constants.PRODUCT_LIST_CACHE;
+
+/**
+ * @author Daniel Itiro Tikamori
+ * @version 1.0
+ * <p>
+ * CacheEvict on all modification methods, here is why:
+ * 1. Addresses Stale List Caches
+ * -•Problem with key = "#productId":
+ * The @Cacheable methods (getAllProducts, searchByCategory, searchProductByKeyword)
+ * cache ProductResponse objects (which contain lists) using keys based on pagination,
+ * category, keywords, etc.
+ * (e.g., 'all_p' + #pageNumber + ...).
+ * Evicting only the entry for a single product ID (key = "#productId") does not remove these cached lists.
+ * This means users could see stale lists (e.g., a deleted product still appearing, an updated price not reflected) until the list cache entries expire naturally.•Solution with allEntries = true: By evicting all entries from the PRODUCT_LIST_CACHE (which you've correctly identified as "product"), you guarantee that any potentially stale list is removed whenever a product is added, updated, or deleted.
+ * The next request for any product list will be a cache miss, forcing a fetch of fresh data from the database.
+ * <p>
+ * 2. Simplicity vs. Granularity
+ * <p>
+ * 3. Correctness
+ * <p>
+ * Trade-off:
+ * - The main trade-off is performance vs. simplicity/correctness
+ * <p>
+ * This implementation prioritizes data consistency over fine-grained eviction complexity.
+ */
+
 @Service
 public class ProductServiceImpl implements ProductService {
 
@@ -74,8 +101,10 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional
+    // Evict all entries from the product list cache when a new product is added.
+    @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
     // Evict relevant list caches if applicable (e.g., all products, category products)
-    // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true)
+//     @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true)
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN')")
     public ProductDTO addProduct(ProductDTO productDTO, Long categoryId)
@@ -176,6 +205,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    // Cache pages of products by category
     // Cache key includes category ID and pagination
     @Cacheable(value = "product", key = "'cat_' + #categoryId + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
@@ -210,6 +240,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    // Cache pages of products by keyword
     // Cache key includes keyword and pagination
     @Cacheable(value = "product", key = "'kw_' + #keyword + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
@@ -239,8 +270,10 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     // Evict specific product cache and potentially list caches
-    @CacheEvict(value = "product", key = "#productId")
+//    @CacheEvict(value = "product", key = "#productId")
+    @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
+    @RateLimiter(name = "defaultRateLimiter")
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
     // Assumes:
@@ -337,7 +370,8 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     @RateLimiter(name = "defaultRateLimiter")
-    @CacheEvict(value = "product", key = "#productId")
+    @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
+//    @CacheEvict(value = "product", key = "#productId")
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
     // Assumes:
@@ -368,7 +402,8 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     // Evict specific product cache and potentially list caches
-    @CacheEvict(value = "product", key = "#productId")
+//    @CacheEvict(value = "product", key = "#productId")
+    @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")

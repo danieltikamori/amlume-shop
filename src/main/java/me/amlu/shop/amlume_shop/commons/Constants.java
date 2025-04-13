@@ -39,6 +39,7 @@ public final class Constants {
     public static final String CURRENT_USER_CACHE = "currentUser";
     public static final String AUTH_CACHE = "auth";
     public static final String PRODUCTS_CACHE = "products";
+    public static final String PRODUCT_LIST_CACHE = "product";
     public static final String CATEGORIES_CACHE = "categories";
     public static final String ROLES_CACHE = "roles";
     public static final String ASN_CACHE = "asn";
