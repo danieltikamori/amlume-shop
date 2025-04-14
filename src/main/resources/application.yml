@@ -352,7 +352,18 @@ spring:
   cloud:
     vault:
       enabled: true
-      fail-fast: true
+      fail-fast: false  # <<< IMPORTANT: Allow fallback if Vault fails
+      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
+      token: ${VAULT_TOKEN:} # Allow empty token for fallback testing if needed
+      kv:
+        enabled: true
+        backend: secret  # Path where KV v2 engine is mounted
+        # application-name: amlume-shop # Uses spring.application.name by default
+        default-context: mfa # Looks for secrets under secret/amlume-shop/mfa
+        # profile-separator: '/' # Usually default is fine
+  config:
+    import: "optional:vault://" # <<< IMPORTANT: Makes Vault optional at startup
+
 
     gateway:
       routes:
