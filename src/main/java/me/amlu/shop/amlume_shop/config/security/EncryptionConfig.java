@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.ConfigurableEnvironment; // Import ConfigurableEnvironment
 import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
@@ -72,8 +73,16 @@ public class EncryptionConfig {
         // Log which source is likely being used (heuristic based on Vault property source presence)
         // Note: This check confirms Vault integration is active, not necessarily that *these specific*
         // properties came from Vault (they could still be from the fallback env vars if missing in Vault).
-        boolean isVaultConfigured = environment.getPropertySources().stream()
-                .anyMatch(source -> source.getName().startsWith("vault"));
+        boolean isVaultConfigured = false; // Default to false
+        // Cast Environment to ConfigurableEnvironment to access getPropertySources()
+        if (environment instanceof ConfigurableEnvironment configurableEnvironment) {
+            isVaultConfigured = configurableEnvironment.getPropertySources().stream()
+                    .anyMatch(source -> source.getName().startsWith("vault"));
+        } else {
+            log.warn("Environment is not an instance of ConfigurableEnvironment. Cannot check for Vault property sources.");
+            // Decide how to handle this - maybe assume Vault isn't configured?
+        }
+
 
         if (isVaultConfigured) {
             log.info("Vault property source detected. Attempting to use MFA encryption secrets potentially sourced from Vault.");
