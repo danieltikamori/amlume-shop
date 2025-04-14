@@ -117,6 +117,11 @@ management:
 #          valkey.operation.duration: 0.5,0.95,0.99
 #          http.server.requests: 0.5,0.95,0.99
 
+mfa:
+  encryption:
+    password: ${MFA_ENCRYPTION_PASSWORD}
+    salt: ${MFA_ENCRYPTION_SALT}
+
 
 notification:
   email:
