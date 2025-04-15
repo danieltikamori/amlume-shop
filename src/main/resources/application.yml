@@ -548,6 +548,8 @@ valkey:
 vault:
   uri: ${VAULT_URI}
   token: ${VAULT_TOKEN}
+  secret:
+    base-path: secret/data/amlume-shop
 
 web:
   cors:
