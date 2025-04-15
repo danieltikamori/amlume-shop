@@ -20,4 +20,9 @@ public class VaultOperationException extends RuntimeException {
     public VaultOperationException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    public VaultOperationException(String message) {
+        super(message);
+    }
+
 }
