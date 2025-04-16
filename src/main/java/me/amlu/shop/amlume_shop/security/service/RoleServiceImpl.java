@@ -16,8 +16,9 @@ import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
 import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator;
 import me.amlu.shop.amlume_shop.config.SecurityValidator;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
 import me.amlu.shop.amlume_shop.user_management.AppRole;
-import me.amlu.shop.amlume_shop.model.Order;
+import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.product_management.ProductService;
 import me.amlu.shop.amlume_shop.resilience.service.ResilienceService;
@@ -70,7 +71,7 @@ public class RoleServiceImpl implements RoleService {
 
         String userId = null;
         try {
-            // Get current user
+            // --- Get current user ---
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String username = authentication != null ? authentication.getName() : null;
             userId = String.valueOf(userRepository.findByUsername(username).map(User::getUserId).orElse(null));
@@ -80,7 +81,7 @@ public class RoleServiceImpl implements RoleService {
                 return Collections.emptySet();
             }
 
-            // Input validation
+            // --- Input validation ---
             if (!inputValidator.validateResource(resource)) {
                 securityAuditService.logFailedAttempt(username, "Resource validation failed");
                 return Collections.emptySet();
@@ -89,21 +90,34 @@ public class RoleServiceImpl implements RoleService {
             log.debug("Determining dynamic roles for user {} and resource type: {}",
                     username, resource.getClass().getSimpleName());
 
-            // Rate limiting check
-            if (resilienceService.isRateLimitExceeded(username)) {
+            // --- Rate Limiting Check ---
+            try {
+                // Call the method that throws on exceedance
+                resilienceService.allowRequestByUsername(username); // Use the correct method
+                log.trace("Rate limit check passed for user {}", username);
+            } catch (RateLimitExceededException e) {
+                // Catch the exception if the limit is exceeded
+                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
                 securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
+                return Collections.emptySet(); // Return empty set if rate limited
+            } catch (Exception e) { // Catch potential Redis errors during rate limiting
+                log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
+                // Decide how to handle Redis errors - fail open (allow) or fail closed (deny)?
+                // For security, failing closed might be better here.
+                securityAuditService.logFailedAttempt(username, "Rate limit check error");
                 return Collections.emptySet();
             }
 
+            // --- Role Determination Logic (proceed if not rate-limited) ---
             // Role hierarchy validation
-            Set<UserRole> roles = determineRoles(resource);
+            Set<UserRole> roles = determineRoles(resource); // This line was moved down
             if (roleHierarchyValidator.isRoleAssignmentInvalid(roles, authentication)) {
                 securityAuditService.logFailedAttempt(username, "Role validation failed");
                 return Collections.emptySet();
             }
 //            validatAppRoleHierarchy(dynamicRoles);
 
-            // Resource-specific role determination
+            // --- Resource-specific role determination ---
             switch (resource) {
                 case Product product -> addProductRoles(product, dynamicRoles, username);
                 case Order order -> addOrderRoles(order, dynamicRoles, username);
@@ -121,7 +135,7 @@ public class RoleServiceImpl implements RoleService {
                 }
             }
 
-            // Audit logging
+            // --- Audit logging ---
             securityAuditService.logRoleAssignment(username, dynamicRoles, resource);
 
             log.debug("Assigned roles {} to user {} for resource {}",
@@ -263,11 +277,11 @@ public class RoleServiceImpl implements RoleService {
                 return;
             }
 
-            // Business logic validation
-            if (!productService.isValidProduct(product)) {
-                log.warn("Security check failed: Invalid product state");
-                return;
-            }
+//            // Business logic validation
+//            if (!productService.isValidProduct(product)) {
+//                log.warn("Security check failed: Invalid product state");
+//                return;
+//            }
 
             // Role assignment with proper checks
 
