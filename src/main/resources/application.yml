@@ -202,7 +202,7 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
         ignoreExceptions:
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate limited
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
           - jakarta.validation.ValidationException
 
       captchaValidation:
@@ -210,6 +210,24 @@ resilience4j:
         waitDuration: 1s
         enableExponentialBackoff: true
         exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+
+      vaultService:
+        maxAttempts: 3
+        waitDuration: 500ms # Wait 500 ms between entries
+        enableExponentialBackoff: false # No exponential backoff
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.vault.VaultException # Retry on Vault exceptions
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions: # Exceptions not to retry
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+#          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException # Example: Don't retry our specific exception if thrown directly
 
   circuitbreaker:
     instances:
@@ -244,6 +262,25 @@ resilience4j:
         #   - java.util.concurrent.TimeoutException
         # ignoreExceptions: # Exceptions that *don't* count as failures
         #   - me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException
+      vaultService:
+        failureRateThreshold: 50 # Percentage of failures to open
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10 # Number of calls to monitor when closed. Monitor last x calls
+        minimumNumberOfCalls: 5 # Need at least x calls before calculating failure rate
+        permittedNumberOfCallsInHalfOpenState: 3 # Allow x calls ins half-open
+#        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        waitDurationInOpenState: 10s # How long to stay open. Wait x before transitioning to half-open
+        recordExceptions:
+          - org.springframework.vault.VaultException # Retry on Vault exceptions
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions: # Exceptions that *don't* count as failures
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+#          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException
+
+
+
 
 
   timelimiter:
@@ -550,6 +587,19 @@ vault:
   token: ${VAULT_TOKEN}
   secret:
     base-path: secret/data/amlume-shop
+    database-path: secret/data/amlume-shop/database
+  kubernetes:
+    uri: http://vault.default.svc.cluster.local:8200
+    role: "vault_role" # Placeholder for now
+#    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
+  hcp:
+    uri: ${VAULT_HCP_URI}
+    token: ${VAULT_HCP_TOKEN}
+    approle: # AppRple - fetch secret-id securely
+      path: ${VAULT_HCP_APP_ROLE_PATH}
+      role-id: ${VAULT_HCP_APP_ROLE_ID}
+      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
+
 
 web:
   cors:

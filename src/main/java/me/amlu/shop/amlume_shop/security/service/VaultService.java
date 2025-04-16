@@ -26,6 +26,7 @@ import org.springframework.vault.support.Versioned;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
@@ -39,6 +40,118 @@ public class VaultService {
 
     public VaultService(VaultTemplate vaultTemplate) {
         this.vaultTemplate = vaultTemplate;
+    }
+
+    /**
+     * Retrieves a secret value of a specific version from a specific path in Vault, returning an Optional.
+     * Includes Retry and Circuit Breaker resilience patterns.
+     *
+     * @param path The Vault path (e.g., "secret/data/amlume-shop/database").
+     * @param key  The key of the secret within the path.
+     * @param version The version of the secret to retrieve.
+     * @return An Optional containing the secret value if found, otherwise empty.
+     * @throws VaultOperationException if a non-transient Vault error occurs or fallback fails.
+     */
+    @Retry(name = VAULT_RESILIENCE_CONFIG)
+    @CircuitBreaker(name = VAULT_RESILIENCE_CONFIG, fallbackMethod = "getSecretOptionalFallback")
+    public Optional<String> getSpecificSecretOptional(String path, String key, int version) {
+        validatePathAndKey(path, key);
+        try {
+            // Use versioned ops for specific reads if a version does matter
+            VaultVersionedKeyValueOperations kv2Ops = vaultTemplate.opsForVersionedKeyValue(path);
+            Versioned<Map<String, Object>> response = kv2Ops.get("", Versioned.Version.from(version)); // Read data at the specified path
+
+            if (response != null && response.getData() != null) {
+                Map<String, Object> data = response.getData();
+                log.debug("Successfully retrieved data from Vault path '{}'. with version '{}'.", path, version);
+                return Optional.ofNullable((String) data.get(key));
+            }
+            log.debug("No data found at Vault path '{}'with version '{}' or path does not exist.", path, version);
+            return Optional.empty();
+        } catch (VaultException e) {
+            log.error("Vault error retrieving secret key '{}'of version '{}' from path '{}': {}", key, version, path, e.getMessage());
+            // Let Resilience4j handle this based on configuration (retry/break circuit)
+            throw new VaultOperationException("Failed to retrieve secret: " + key + " of version: " + version + " from path: " + path, e);
+        } catch (Exception e) {
+            log.error("Unexpected error retrieving secret key '{}' of version '{}' from path '{}'", key, version, path, e);
+            throw new VaultOperationException("Unexpected error retrieving secret: " + key + " of version: " + version + " from path: " + path, e);
+        }
+    }
+
+    /**
+     * Fallback method for getSecretOptional. Returns empty Optional on failure.
+     */
+    public Optional<String> getSpecificSecretOptionalFallback(String path, String key, Throwable t, int version) {
+        log.warn("VaultService.getSecretOptional fallback triggered for path '{}', key '{}', version '{}' due to: {}", path, key, version, t.getMessage());
+        return Optional.empty(); // Fail safely for reads
+    }
+
+    /**
+     * Retrieves a secret value from a specific path in the Vault.
+     * Returns null if the secret is not found.
+     *
+     * @param path The Vault path (e.g., "secret/data/amlume-shop/database").
+     * @param key  The key of the secret within the path.
+     * @return The secret value as a String, or null if not found or on error during fallback.
+     */
+    public String getSpecificSecret(String path, String key, int version) {
+        // Uses the resilient getSecretOptional method
+        return getSpecificSecretOptional(path, key, version).orElse(null);
+    }
+
+    /**
+     * Retrieves a specific version of a secret from Vault and maps it directly to the specified type T.
+     * Includes Retry and Circuit Breaker resilience patterns.
+     * Assumes the data stored at the Vault path directly corresponds to the fields of the target class T.
+     *
+     * @param path    The Vault path (e.g., "secret/data/amlume-shop/config-object").
+     * @param version The specific version number to retrieve.
+     * @param type    The Class representing the target type to map the data to.
+     * @param <T>     The target type.
+     * @return An Optional containing the mapped object if found and mapping is successful, otherwise empty.
+     * @throws VaultOperationException      if a non-transient Vault error occurs or fallback fails.
+     * @throws IllegalArgumentException if path, type is null, or version is not positive.
+     */
+    @Retry(name = VAULT_RESILIENCE_CONFIG)
+    @CircuitBreaker(name = VAULT_RESILIENCE_CONFIG, fallbackMethod = "getSpecificVersionedSecretAsTypeFallback")
+    public <T> Optional<T> getSpecificVersionedSecretAsType(String path, int version, Class<T> type) {
+        // Validate path and type, version
+        validatePath(path); // Use a simpler validation for just the path
+        Objects.requireNonNull(type, "Target type cannot be null.");
+        if (version <= 0) {
+            throw new IllegalArgumentException("Version must be a positive integer.");
+        }
+
+        try {
+            VaultVersionedKeyValueOperations kv2Ops = vaultTemplate.opsForVersionedKeyValue(path);
+            // Use the desired overload: get(path, version, type)
+            // Note: The first argument to get() is the sub-path within the mount point, often empty ("")
+            Versioned<T> response = kv2Ops.get("", Versioned.Version.from(version), type);
+
+            if (response != null && response.hasData()) {
+                log.debug("Successfully retrieved and mapped data from Vault path '{}', version '{}' to type {}.", path, version, type.getSimpleName());
+                // getData() now returns an object of type T
+                return Optional.ofNullable(response.getData());
+            }
+            log.debug("No data found at Vault path '{}', version '{}' or mapping to type {} failed.", path, version, type.getSimpleName());
+            return Optional.empty();
+        } catch (VaultException e) {
+            // Handle Vault-specific errors
+            log.error("Vault error retrieving version '{}' from path '{}' as type {}: {}", version, path, type.getSimpleName(), e.getMessage());
+            throw new VaultOperationException("Failed to retrieve secret version: " + version + " from path: " + path + " as " + type.getSimpleName(), e);
+        } catch (Exception e) {
+            // Catch other potential errors, including mapping/deserialization issues
+            log.error("Unexpected error retrieving version '{}' from path '{}' as type {}: {}", version, path, type.getSimpleName(), e.getMessage(), e);
+            throw new VaultOperationException("Unexpected error retrieving secret version: " + version + " from path: " + path + " as " + type.getSimpleName(), e);
+        }
+    }
+
+    /**
+     * Fallback method for getSpecificVersionedSecretAsType. Returns empty Optional on failure.
+     */
+    public <T> Optional<T> getSpecificVersionedSecretAsTypeFallback(String path, int version, Class<T> type, Throwable t) {
+        log.warn("VaultService.getSpecificVersionedSecretAsType fallback triggered for path '{}', version '{}', type {} due to: {}", path, version, type.getSimpleName(), t.getMessage());
+        return Optional.empty(); // Fail safely for reads
     }
 
     /**
@@ -239,16 +352,21 @@ public class VaultService {
 
     // --- Helper Methods ---
 
-    private void validatePathAndKey(String path, String key) {
+    // Simplified validation just for a path
+    private void validatePath(String path) {
         if (path == null || path.isBlank()) {
             throw new IllegalArgumentException("Vault path cannot be null or blank.");
-        }
-        if (key == null || key.isBlank()) {
-            throw new IllegalArgumentException("Secret key cannot be null or blank.");
         }
         // Basic path validation (adjust regex as needed)
         if (!path.matches("^[a-zA-Z0-9_\\-/]+$")) {
             throw new IllegalArgumentException("Invalid Vault path format: " + path);
+        }
+    }
+
+    private void validatePathAndKey(String path, String key) {
+        validatePath(path); // Reuse path validation
+        if (key == null || key.isBlank()) {
+            throw new IllegalArgumentException("Secret key cannot be null or blank.");
         }
         // Basic key validation
         if (!key.matches("^[a-zA-Z0-9_\\-.]+$")) {
