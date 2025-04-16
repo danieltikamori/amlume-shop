@@ -140,13 +140,4 @@ public class ResilienceServiceImpl implements ResilienceService {
         return true; // Request allowed
     }
 
-    // --- Kept for potential compatibility if used elsewhere, but now calls the Redis-based method ---
-    @Override
-    public boolean isRateLimitExceeded(String username) throws RateLimitExceededException {
-        // This method now reflects the behavior of allowRequestByUsername
-        // It returns true if *allowed*, false if *exceeded* (or throws exception)
-        // The name is misleading. Consider renaming or removing if not used externally.
-        // For now, it calls the main method which throws on exceedance.
-        return allowRequestByUsername(username);
-    }
 }

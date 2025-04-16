@@ -24,5 +24,4 @@ public interface ResilienceService {
 //    boolean allowRequestByIpPerInstance(String ipAddress) throws RateLimitExceededException;
 //    boolean allowRequestByUserPerInstance(String username) throws RateLimitExceededException;
 
-    boolean isRateLimitExceeded(String username);
 }
