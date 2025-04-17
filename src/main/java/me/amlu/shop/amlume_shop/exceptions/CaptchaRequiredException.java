@@ -10,19 +10,14 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import java.io.Serial;
+public class CaptchaRequiredException extends BaseException {
 
-public class InvalidCaptchaException extends BaseException {
-
-    @Serial
-    private static final long serialVersionUID = 1L;
-
-    public InvalidCaptchaException(String message) {
-        super(message);
+    public CaptchaRequiredException(String s) {
+        super(s);
     }
 
-    public InvalidCaptchaException(String message, Throwable cause) {
-        super(message, cause);
+    public CaptchaRequiredException(String s, Throwable throwable) {
+        super(s, throwable);
     }
 
 }

@@ -249,6 +249,7 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-config-server</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-vault-config</artifactId>
@@ -454,37 +455,37 @@
         </dependency>
 
         <!-- Redisson -->
-        <dependency>
-            <groupId>org.redisson</groupId>
-            <artifactId>redisson-spring-boot-starter</artifactId>
-            <version>${redisson.version}</version>
-        </dependency>
+<!--        <dependency>-->
+<!--            <groupId>org.redisson</groupId>-->
+<!--            <artifactId>redisson-spring-boot-starter</artifactId>-->
+<!--            <version>${redisson.version}</version>-->
+<!--        </dependency>-->
 
-        <!-- https://mvnrepository.com/artifact/org.redisson/redisson -->
-        <dependency>
-            <groupId>org.redisson</groupId>
-            <artifactId>redisson</artifactId>
-            <version>${redisson.version}</version>
-        </dependency>
+<!--        &lt;!&ndash; https://mvnrepository.com/artifact/org.redisson/redisson &ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>org.redisson</groupId>-->
+<!--            <artifactId>redisson</artifactId>-->
+<!--            <version>${redisson.version}</version>-->
+<!--        </dependency>-->
 
         <!--        Valkey GLIDE-->
         <!--        Choose the appropriate classifier-->
 
-<!--        &lt;!&ndash;osx-aarch_64&ndash;&gt;-->
-<!--        <dependency>-->
-<!--            <groupId>io.valkey</groupId>-->
-<!--            <artifactId>valkey-glide</artifactId>-->
-<!--            <classifier>osx-aarch_64</classifier>-->
-<!--            <version>[1.0.0,2.0.0)</version>-->
-<!--        </dependency>-->
+        <!--        &lt;!&ndash;osx-aarch_64&ndash;&gt;-->
+        <!--        <dependency>-->
+        <!--            <groupId>io.valkey</groupId>-->
+        <!--            <artifactId>valkey-glide</artifactId>-->
+        <!--            <classifier>osx-aarch_64</classifier>-->
+        <!--            <version>[1.0.0,2.0.0)</version>-->
+        <!--        </dependency>-->
 
-<!--        &lt;!&ndash;linux-aarch_64&ndash;&gt;-->
-<!--        <dependency>-->
-<!--            <groupId>io.valkey</groupId>-->
-<!--            <artifactId>valkey-glide</artifactId>-->
-<!--            <classifier>linux-aarch_64</classifier>-->
-<!--            <version>[1.0.0,2.0.0)</version>-->
-<!--        </dependency>-->
+        <!--        &lt;!&ndash;linux-aarch_64&ndash;&gt;-->
+        <!--        <dependency>-->
+        <!--            <groupId>io.valkey</groupId>-->
+        <!--            <artifactId>valkey-glide</artifactId>-->
+        <!--            <classifier>linux-aarch_64</classifier>-->
+        <!--            <version>[1.0.0,2.0.0)</version>-->
+        <!--        </dependency>-->
 
         <!--linux-x86_64-->
         <dependency>
@@ -494,12 +495,21 @@
             <version>[1.0.0,2.0.0)</version>
         </dependency>
 
-<!--        Valkey-java Alternative to Valkey Glide-->
+        <!--        Valkey-java Alternative to Valkey Glide-->
         <dependency>
             <groupId>io.valkey</groupId>
             <artifactId>valkey-java</artifactId>
             <version>5.3.0</version>
-<!--            <version>LATEST</version>-->
+            <!--            <version>LATEST</version>-->
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.lettuce/lettuce-core -->
+        <!--Advanced and thread-safe Java Redis client for synchronous, asynchronous, and reactive usage.
+        Supports Cluster, Sentinel, Pipelining, Auto-Reconnect, Codecs and much more.
+        -->
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.github.cdimascio/dotenv-java -->
