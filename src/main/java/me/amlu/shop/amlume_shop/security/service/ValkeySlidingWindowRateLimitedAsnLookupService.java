@@ -10,8 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
-import me.amlu.shop.amlume_shop.resilience.service.SlidingWindowValkeyRateLimiter;
+import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -23,23 +24,26 @@ public class ValkeySlidingWindowRateLimitedAsnLookupService implements AsnLookup
 
     private static final Logger log = LoggerFactory.getLogger(ValkeySlidingWindowRateLimitedAsnLookupService.class);
 
-    private final SlidingWindowValkeyRateLimiter rateLimiter; // Inject the bean
+    private final RateLimiter rateLimiter;
     private final AsnLookupService delegate;
+    private final MeterRegistry meterRegistry;
 
     // Constructor updated to inject the rate limiter bean
     public ValkeySlidingWindowRateLimitedAsnLookupService(
-            SlidingWindowValkeyRateLimiter rateLimiter,
-            @Qualifier("coreAsnLookup") AsnLookupService delegate) {
+            @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
+            @Qualifier("coreAsnLookup") AsnLookupService delegate, MeterRegistry meterRegistry) {
         this.rateLimiter = rateLimiter;
         this.delegate = delegate;
+        this.meterRegistry = meterRegistry;
     }
 
     @Override
     public String lookupAsn(String ip) {
-        // Use the injected rate limiter instance
-        if (!rateLimiter.tryAcquire(ip)) {
-            log.warn("Rate limit exceeded for IP: {}", ip);
-            throw new RateLimitExceededException("ASN lookup rate limit exceeded for IP: " + ip); // Add IP to message
+        String rateLimitKey = "asnLookup:" + ip; // Construct the key
+        if (!rateLimiter.tryAcquire(rateLimitKey)) {
+            log.warn("Rate limit exceeded for ASN lookup for IP: {}", ip);
+            meterRegistry.counter("asn.lookup.ratelimit.exceeded").increment();
+            throw new RateLimitExceededException("ASN lookup rate limit exceeded for IP: " + ip);
         }
         log.trace("Rate limit check passed for ASN lookup for IP: {}", ip);
         return delegate.lookupAsn(ip);
