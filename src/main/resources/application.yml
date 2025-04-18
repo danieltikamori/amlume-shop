@@ -174,13 +174,26 @@ project:
   geoip:
     path: /project/geoip
 
-rate-limiting:
-  ip:
-    limit: 100
-    window-seconds: 60
-  username:
-    limit: 20
-    window-seconds: 60
+rate-limiter:
+  redis-key-prefix: "ratelimit:sw:"
+  fail-open: false # Default: deny requests if Redis fails
+  defaults:
+    limit: 100 # Default limit per window
+    window-duration: 1m # Default window duration (1 minute)
+  limiters:
+    captcha: # Specific config for captcha
+      limit: 50
+      window-duration: 1h
+    login: # Specific config for login
+      limit: 10
+      window-duration: 15m
+    asnLookup: # Specific config for ASN lookups
+      limit: 200
+      window-duration: 1m
+    deviceFingerprintRegister: # Specific config for device registration
+      limit: 5
+      window-duration: 1h
+    # Add other specific limiters as needed
 
   token:
     validation: 200.0
