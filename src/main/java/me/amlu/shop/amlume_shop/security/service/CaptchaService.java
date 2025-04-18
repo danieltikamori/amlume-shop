@@ -19,18 +19,14 @@ import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import io.lettuce.core.cluster.PartitionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import me.amlu.shop.amlume_shop.exceptions.CaptchaRequiredException;
-import me.amlu.shop.amlume_shop.exceptions.CaptchaServiceException;
-import me.amlu.shop.amlume_shop.exceptions.InvalidCaptchaException;
-import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
+import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.payload.RecaptchaResponse;
+import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -40,12 +36,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeoutException; // Import TimeoutException
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 @Service
@@ -70,39 +61,32 @@ public class CaptchaService {
     private String recaptchaSecret;
 
     private final RestTemplate restTemplate;
-    private final StringRedisTemplate stringRedisTemplate;
+    private final RateLimiter rateLimiter;
     private final MeterRegistry meterRegistry;
-    private final CircuitBreaker redisCircuitBreaker;
-    private final Retry redisRetry;
     private final CircuitBreaker recaptchaCircuitBreaker;
     private final Retry recaptchaRetry;
     private final TimeLimiter recaptchaTimeLimiter;
     private final Clock clock; // For handling clock sync issues
-    private final RedisScript<Long> slidingWindowScript; // Inject the Lua script bean
     private final ScheduledExecutorService scheduledExecutorService; // Inject the executor for TimeLimiter
 
     public CaptchaService(
             RestTemplate restTemplate,
-            StringRedisTemplate stringRedisTemplate,
+            @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
             MeterRegistry meterRegistry,
             // Qualify registries if multiple beans exist
             @Qualifier("circuitBreakerRegistry") CircuitBreakerRegistry circuitBreakerRegistry,
             @Qualifier("retryRegistry") RetryRegistry retryRegistry,
             @Qualifier("timeLimiterRegistry") TimeLimiterRegistry timeLimiterRegistry,
             Clock clock,
-            RedisScript<Long> slidingWindowRateLimiterScript,
             @Qualifier("captchaTimeLimiterExecutor") ScheduledExecutorService scheduledExecutorService) { // Inject the qualified executor
         this.restTemplate = restTemplate;
-        this.stringRedisTemplate = stringRedisTemplate;
+        this.rateLimiter = rateLimiter;
         this.meterRegistry = meterRegistry;
         // Get or create specific instances from registries
-        this.redisCircuitBreaker = circuitBreakerRegistry.circuitBreaker(REDIS_CIRCUIT_BREAKER);
-        this.redisRetry = retryRegistry.retry(REDIS_RETRY);
         this.recaptchaCircuitBreaker = circuitBreakerRegistry.circuitBreaker(RECAPTCHA_CIRCUIT_BREAKER);
         this.recaptchaRetry = retryRegistry.retry(RECAPTCHA_RETRY);
         this.recaptchaTimeLimiter = timeLimiterRegistry.timeLimiter(RECAPTCHA_TIME_LIMITER);
         this.clock = clock;
-        this.slidingWindowScript = slidingWindowRateLimiterScript; // Assign the injected script
         this.scheduledExecutorService = scheduledExecutorService; // Assign the injected executor
     }
 
@@ -120,23 +104,30 @@ public class CaptchaService {
             throws RateLimitExceededException, InvalidCaptchaException, CaptchaServiceException {
 
         boolean permitAcquired;
-        try {
-            // 1. Check Rate Limit using Sliding Window Lua Script
-            permitAcquired = tryAcquireSlidingWindowPermit(clientIp);
+        String rateLimitKey = "captcha:" + clientIp; // Construct the key with limiter name
 
-        } catch (Exception e) {
+        try {
+            // 1. Check Rate Limit using the injected service (Sliding Window Lua Script)
+            permitAcquired = rateLimiter.tryAcquire(rateLimitKey);
+
+        } catch (RateLimitException e) { // Catch exception if Redis failed and failOpen=false
             // Handle failure during rate limit check (e.g., Redis connection issue)
-            log.error("Rate limiting check failed for IP: {}. Allowing request (fail-open).", clientIp, e);
+            log.error("Rate limiting check failed for IP: {}. Denying request. (fail-closed).", clientIp, e);
             meterRegistry.counter("captcha.ratelimit.check.error").increment();
+            // Fail-closed by throwing an exception here.
             // Fail-open: Allow the request if rate limiting check fails.
-            // Alternatively, you could fail-closed by throwing an exception here.
-            return; // Allow request
+            throw new CaptchaServiceException("Rate limiter unavailable.", e);
+//            return; // Allow request
+        } catch (Exception e) { // Catch unexpected exceptions during acquire
+            log.error("Unexpected error during rate limit check for IP: {}.", clientIp, e);
+            meterRegistry.counter("captcha.ratelimit.check.error").increment();
+            throw new CaptchaServiceException("Unexpected error during rate limit check.", e);
         }
 
         if (permitAcquired) {
             // Rate limit OK, no CAPTCHA needed for this request
             log.trace("Rate limit check passed for IP: {}", clientIp);
-            return; // Success
+//            return; // Success
         } else {
             // Rate limit EXCEEDED
             log.warn("Rate limit exceeded for IP: {}. CAPTCHA validation required.", clientIp);
@@ -180,62 +171,6 @@ public class CaptchaService {
     }
 
     /**
-     * Tries to acquire a permit using the sliding window Lua script.
-     * Applies Resilience4j Circuit Breaker and Retry.
-     *
-     * @param clientIp The client IP address.
-     * @return true if a permit was acquired, false if the rate limit was hit.
-     * @throws Exception If an error occurs during the Redis operation after retries.
-     */
-    private boolean tryAcquireSlidingWindowPermit(String clientIp) throws Exception {
-        Supplier<Boolean> rateLimitCheckSupplier = () -> {
-            String key = RATE_LIMITER_KEY_PREFIX + clientIp;
-            long nowMillis = clock.instant().toEpochMilli();
-            long windowMillis = RATE_LIMIT_PERIOD.toMillis(); // Get window duration
-
-            List<String> keys = Collections.singletonList(key);
-
-            // Arguments for the Lua script:
-            // KEYS[1] = the rate limiter key (e.g., captcha:ratelimit:sliding:1.2.3.4)
-            // ARGV[1] = window duration in milliseconds
-            // ARGV[2] = maximum number of requests allowed in the window
-            // ARGV[3] = current timestamp in milliseconds
-            Object[] args = {
-                    String.valueOf(windowMillis),       // ARGV[1]
-                    String.valueOf(RATE_LIMIT),         // ARGV[2]
-                    String.valueOf(nowMillis),          // ARGV[3]
-            };
-
-            try {
-                // Execute the Lua script
-                Long result = stringRedisTemplate.execute(slidingWindowScript, keys, args);
-
-                // Lua script returns 1 if allowed, 0 if denied
-                return result != null && result == 1;
-
-            } catch (DataAccessException e) {
-                log.error("Redis error during sliding window rate limit check for key: {}", key, e);
-                // Let Resilience4j handle retry/circuit breaking based on this exception
-                throw new CaptchaServiceException("Redis error during rate limit check", e);
-            } catch (Exception e) { // Catch unexpected script execution errors
-                log.error("Unexpected error executing sliding window Lua script for key: {}", key, e);
-                throw new CaptchaServiceException("Unexpected error during rate limit check", e);
-            }
-        };
-
-        // Decorate with Retry and Circuit Breaker
-        Supplier<Boolean> resilientSupplier = Retry.decorateSupplier(redisRetry,
-                CircuitBreaker.decorateSupplier(redisCircuitBreaker, rateLimitCheckSupplier)
-        );
-
-        // Execute the resilient operation
-        // The supplier might throw exceptions (like CaptchaServiceException) which will be handled
-        // by the Resilience4j decorators or propagated if they occur after retries/CB is open.
-        return resilientSupplier.get();
-    }
-
-
-    /**
      * Performs the actual CAPTCHA validation by calling the Google reCAPTCHA API.
      * Applies Resilience4j Circuit Breaker, Retry, and Time Limiter to the asynchronous call.
      *
@@ -261,7 +196,7 @@ public class CaptchaService {
         // Supplier that creates the asynchronous operation (CompletableFuture)
         // This wraps the synchronous call in an async task executed by the scheduledExecutorService
         Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = () ->
-                java.util.concurrent.CompletableFuture.supplyAsync(
+                CompletableFuture.supplyAsync(
                         recaptchaApiCallSupplier,
                         scheduledExecutorService // Use the dedicated executor
                 );
@@ -367,7 +302,7 @@ public class CaptchaService {
     private boolean isRecaptchaRetryableException(Throwable e) {
         // Define which exceptions should trigger a retry for reCAPTCHA API calls
         return e instanceof RestClientException || // Spring's HTTP client exceptions
-                e instanceof java.util.concurrent.TimeoutException; // From TimeLimiter
+                e instanceof TimeoutException; // From TimeLimiter
         // DO NOT retry InvalidCaptchaException
     }
 
@@ -407,8 +342,15 @@ public class CaptchaService {
         // For simplicity and performance,
         // we can return -1 or a placeholder indicating it's not directly calculated here.
         // Alternatively, you could execute ZCARD again, but that adds overhead.
-        log.trace("getRemainingLimit is approximate for sliding window. Returning -1 for IP: {}", clientIp);
-        return -1; // Indicate not easily calculated or return an approximation if needed.
+        String rateLimitKey = "captcha:" + clientIp;
+        try {
+            return rateLimiter.getRemainingPermits(rateLimitKey);
+        } catch (Exception e) {
+            log.error("Error getting remaining captcha limit for IP: {}", clientIp, e);
+            log.trace("getRemainingLimit is approximate for sliding window. Returning -1 for IP: {}", clientIp);
+            return -1; // Indicate not easily calculated or return an approximation if needed.
+        }
+
 
         /* // Alternative: Query ZCARD again (adds overhead)
         String key = RATE_LIMITER_KEY_PREFIX + clientIp;
