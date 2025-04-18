@@ -17,12 +17,16 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
+@Configuration
 public class ResilienceConfig {
 
     @Bean
@@ -65,4 +69,13 @@ public class ResilienceConfig {
 
         return RetryRegistry.of(retryConfig);
     }
+
+    @Bean(name = "captchaTimeLimiterExecutor") // Use the specific name required by the @Qualifier
+    public ScheduledExecutorService captchaTimeLimiterExecutor() {
+        // Choose an appropriate pool size.
+        // Start with a small number and monitor.
+        // This pool is specifically for managing timeouts on captcha validation calls.
+        return Executors.newScheduledThreadPool(4); // Example: pool size of 4
+    }
 }
+
