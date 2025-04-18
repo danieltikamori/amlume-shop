@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -22,6 +23,8 @@ import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
@@ -181,6 +184,15 @@ public class ValkeyCacheConfig {
                 .withInitialCacheConfigurations(cacheConfigurations) // Apply specific configurations
                 .transactionAware() // Enable if you need cache operations to be aware of Spring transactions
                 .build();
+    }
+
+    @Bean
+    public RedisScript<Long> slidingWindowRateLimiterScript() {
+        DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
+        // Make sure the path is correct based on your project structure
+        redisScript.setLocation(new ClassPathResource("scripts/sliding_window_rate_limit_check_first.lua"));
+        redisScript.setResultType(Long.class); // Lua script returns 1 or 0 (number)
+        return redisScript;
     }
 
 }
