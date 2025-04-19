@@ -10,58 +10,128 @@
 
 package me.amlu.shop.amlume_shop.payload.user;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 
 import java.util.Collection;
 import java.util.Map;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
-@Builder
-public class AuthResponse {
-
-    private String token;
-    private String username;
-    private Collection<? extends GrantedAuthority> authorities;
-    private String refreshToken;
-    private String accessToken;
-
-    private boolean mfaEnabled;
-    private boolean mfaRequired;
-    private String message;
-    private boolean success;
-    private Map<String, Object> details;  // Map holding any MFA details
-    private String secretImageUrl;
-
+public record AuthResponse(
+        String token,
+        String username,
+        Collection<? extends GrantedAuthority> authorities,
+        String refreshToken,
+        String accessToken,
+        boolean mfaEnabled,
+        boolean mfaRequired,
+        String message,
+        boolean success,
+        Map<String, Object> details,
+        String secretImageUrl
+) {
 
     public AuthResponse(String message, String token, boolean success) {
-        this.message = message;
-        this.token = token;
-        this.success = true;
+        this(token, null, null, null, null, false, false, message, success, null, null);
     }
 
     public AuthResponse(String token, String name, Collection<? extends GrantedAuthority> authorities, boolean success, String loginSuccessful) {
-        this.token = token;
-        this.username = name;
-        this.authorities = authorities;
-        this.success = success;
-        this.message = loginSuccessful;
+        this(token, name, authorities, null, null, false, false, loginSuccessful, success, null, null);
     }
 
     public AuthResponse(String token, String refreshToken, String accessToken) {
-        this.token = token;
-        this.refreshToken = refreshToken;
-        this.accessToken = accessToken;
-        this.success = true;
+        this(token, null, null, refreshToken, accessToken, false, false, null, true, null, null);
+    }
+
+    public AuthResponse() {
+        this(null, null, null, null, null, false, false, null, false, null, null);
+    }
+
+    public static AuthResponseBuilder builder() {
+        return new AuthResponseBuilder();
     }
 
     public boolean isMfaRequired() {
         return details != null && details.containsKey("mfaRequired") && (boolean) details.get("mfaRequired");
+    }
+
+    public static class AuthResponseBuilder {
+        private String token;
+        private String username;
+        private Collection<? extends GrantedAuthority> authorities;
+        private String refreshToken;
+        private String accessToken;
+        private boolean mfaEnabled;
+        private boolean mfaRequired;
+        private String message;
+        private boolean success;
+        private Map<String, Object> details;
+        private String secretImageUrl;
+
+        AuthResponseBuilder() {
+        }
+
+        public AuthResponseBuilder token(String token) {
+            this.token = token;
+            return this;
+        }
+
+        public AuthResponseBuilder username(String username) {
+            this.username = username;
+            return this;
+        }
+
+        public AuthResponseBuilder authorities(Collection<? extends GrantedAuthority> authorities) {
+            this.authorities = authorities;
+            return this;
+        }
+
+        public AuthResponseBuilder refreshToken(String refreshToken) {
+            this.refreshToken = refreshToken;
+            return this;
+        }
+
+        public AuthResponseBuilder accessToken(String accessToken) {
+            this.accessToken = accessToken;
+            return this;
+        }
+
+        public AuthResponseBuilder mfaEnabled(boolean mfaEnabled) {
+            this.mfaEnabled = mfaEnabled;
+            return this;
+        }
+
+        public AuthResponseBuilder mfaRequired(boolean mfaRequired) {
+            this.mfaRequired = mfaRequired;
+            return this;
+        }
+
+        public AuthResponseBuilder message(String message) {
+            this.message = message;
+            return this;
+        }
+
+        public AuthResponseBuilder success(boolean success) {
+            this.success = success;
+            return this;
+        }
+
+        public AuthResponseBuilder details(Map<String, Object> details) {
+            this.details = details;
+            return this;
+        }
+
+        public AuthResponseBuilder secretImageUrl(String secretImageUrl) {
+            this.secretImageUrl = secretImageUrl;
+            return this;
+        }
+
+        public AuthResponse build() {
+            return new AuthResponse(token, username, authorities, refreshToken, accessToken, mfaEnabled, mfaRequired, message, success, details, secretImageUrl);
+        }
+
+        @Override
+        public String toString() {
+            return "AuthResponse.AuthResponseBuilder(token=" + this.token + ", username=" + this.username + ", authorities=" + this.authorities + ", refreshToken=" + this.refreshToken + ", accessToken=" + this.accessToken + ", mfaEnabled=" + this.mfaEnabled + ", mfaRequired=" + this.mfaRequired + ", message=" + this.message + ", success=" + this.success + ", details=" + this.details + ", secretImageUrl=" + this.secretImageUrl + ")";
+        }
     }
 
 
@@ -140,6 +210,5 @@ public class AuthResponse {
 //            this.details = details;
 //            this.secretImageUrl = secretImageUrl;
 //        }
-
 }
 
