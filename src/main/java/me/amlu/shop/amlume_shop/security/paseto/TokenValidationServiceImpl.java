@@ -33,6 +33,8 @@ import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.apache.commons.lang3.StringUtils;
 import org.paseto4j.commons.PasetoException;
 import org.paseto4j.version4.Paseto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -49,10 +51,10 @@ import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.*;
 
-
-@Slf4j
 @Service
 public class TokenValidationServiceImpl implements TokenValidationService {
+
+    private static final Logger log = LoggerFactory.getLogger(TokenValidationServiceImpl.class);
 
     private final ObjectMapper objectMapper;
     private final KeyManagementService keyManagementService;
