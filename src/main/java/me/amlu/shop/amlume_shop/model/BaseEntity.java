@@ -11,15 +11,11 @@
 package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.experimental.SuperBuilder;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
 import org.hibernate.annotations.SoftDelete;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -36,11 +32,8 @@ import java.util.Optional;
 @FilterDef(name = "deletedFilter", defaultCondition = "deleted = false") // Simplified condition for boolean flag
 // Example FilterDef with parameter
 @FilterDef(name = "tenantFilter", parameters = {@ParamDef(name = "tenantId", type = Long.class)})
-@Getter
-@Setter // Added Setter - needed by AuditingEntityListener to set values
-@SuperBuilder
+// Added Setter - needed by AuditingEntityListener to set values
 @MappedSuperclass
-@NoArgsConstructor
 public abstract class BaseEntity implements Serializable, Auditable<User, Long, Instant> {
     @Serial
     private static final long serialVersionUID = 1L;
@@ -48,7 +41,7 @@ public abstract class BaseEntity implements Serializable, Auditable<User, Long, 
     // Assuming ID is defined in subclasses
 
     @Version
-    @Column(nullable = false) // Ensure version is not null
+    @Column(nullable = false) // Ensure a version is not null
     private int version;
 
     @Column(name = "idempotency_key", unique = true, nullable = false, updatable = false)
@@ -74,7 +67,6 @@ public abstract class BaseEntity implements Serializable, Auditable<User, Long, 
 
     @SoftDelete // Use Hibernate's annotation for soft delete (uses boolean 'deleted' field by default)
     @Column(name = "deleted", nullable = false) // Use nullable=false
-    @Builder.Default
     private boolean deleted = false;
 
     // --- Fields for tracking *when* and *by whom* soft delete happened ---
@@ -87,48 +79,75 @@ public abstract class BaseEntity implements Serializable, Auditable<User, Long, 
     @ManyToOne(fetch = FetchType.LAZY) // Use LAZY fetch
     @JoinColumn(name = "deleted_by", nullable = true) // Nullable because it's only set when deleted
     private User deletedBy;
+
+    public BaseEntity() {
+    }
+
+    protected BaseEntity(BaseEntityBuilder<?, ?> b) {
+        this.version = b.version;
+        this.idempotencyKey = b.idempotencyKey;
+        this.createdDate = b.createdDate;
+        this.createdBy = b.createdBy;
+        this.lastModifiedDate = b.lastModifiedDate;
+        this.lastModifiedBy = b.lastModifiedBy;
+        if (b.deleted$set) {
+            this.deleted = b.deleted$value;
+        } else {
+            this.deleted = $default$deleted();
+        }
+        this.deletedAt = b.deletedAt;
+        this.deletedBy = b.deletedBy;
+    }
+
+    private static boolean $default$deleted() {
+        return false;
+    }
     // --- End of custom soft delete tracking fields ---
 
     // --- Implementation of Auditable ---
     // Setters are needed by the AuditingEntityListener
 
+    @NotNull
     @Override
     public Optional<User> getCreatedBy() {
         return Optional.ofNullable(this.createdBy);
     }
 
     @Override
-    public void setCreatedBy(User createdBy) {
+    public void setCreatedBy(@NotNull User createdBy) {
         this.createdBy = createdBy;
     }
 
+    @NotNull
     @Override
     public Optional<Instant> getCreatedDate() {
         return Optional.ofNullable(this.createdDate);
     }
 
     @Override
-    public void setCreatedDate(Instant creationDate) {
+    public void setCreatedDate(@NotNull Instant creationDate) {
         this.createdDate = creationDate;
     }
 
+    @NotNull
     @Override
     public Optional<User> getLastModifiedBy() {
         return Optional.ofNullable(this.lastModifiedBy);
     }
 
     @Override
-    public void setLastModifiedBy(User lastModifiedBy) {
+    public void setLastModifiedBy(@NotNull User lastModifiedBy) {
         this.lastModifiedBy = lastModifiedBy;
     }
 
+    @NotNull
     @Override
     public Optional<Instant> getLastModifiedDate() {
         return Optional.ofNullable(this.lastModifiedDate);
     }
 
     @Override
-    public void setLastModifiedDate(Instant lastModifiedDate) {
+    public void setLastModifiedDate(@NotNull Instant lastModifiedDate) {
         this.lastModifiedDate = lastModifiedDate;
     }
 
@@ -146,6 +165,113 @@ public abstract class BaseEntity implements Serializable, Auditable<User, Long, 
     // This is needed for the Auditable.isNew() method.
     @Transient // Exclude from persistence
     public abstract Long getAuditableId();
+
+    public int getVersion() {
+        return this.version;
+    }
+
+    public String getIdempotencyKey() {
+        return this.idempotencyKey;
+    }
+
+    public boolean isDeleted() {
+        return this.deleted;
+    }
+
+    public Instant getDeletedAt() {
+        return this.deletedAt;
+    }
+
+    public User getDeletedBy() {
+        return this.deletedBy;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
+    }
+
+    public void setIdempotencyKey(String idempotencyKey) {
+        this.idempotencyKey = idempotencyKey;
+    }
+
+    public void setDeleted(boolean deleted) {
+        this.deleted = deleted;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    public void setDeletedBy(User deletedBy) {
+        this.deletedBy = deletedBy;
+    }
+
+    public static abstract class BaseEntityBuilder<C extends BaseEntity, B extends BaseEntityBuilder<C, B>> {
+        private int version;
+        private String idempotencyKey;
+        private Instant createdDate;
+        private User createdBy;
+        private Instant lastModifiedDate;
+        private User lastModifiedBy;
+        private boolean deleted$value;
+        private boolean deleted$set;
+        private Instant deletedAt;
+        private User deletedBy;
+
+        public B version(int version) {
+            this.version = version;
+            return self();
+        }
+
+        public B idempotencyKey(String idempotencyKey) {
+            this.idempotencyKey = idempotencyKey;
+            return self();
+        }
+
+        public B createdDate(Instant createdDate) {
+            this.createdDate = createdDate;
+            return self();
+        }
+
+        public B createdBy(User createdBy) {
+            this.createdBy = createdBy;
+            return self();
+        }
+
+        public B lastModifiedDate(Instant lastModifiedDate) {
+            this.lastModifiedDate = lastModifiedDate;
+            return self();
+        }
+
+        public B lastModifiedBy(User lastModifiedBy) {
+            this.lastModifiedBy = lastModifiedBy;
+            return self();
+        }
+
+        public B deleted(boolean deleted) {
+            this.deleted$value = deleted;
+            this.deleted$set = true;
+            return self();
+        }
+
+        public B deletedAt(Instant deletedAt) {
+            this.deletedAt = deletedAt;
+            return self();
+        }
+
+        public B deletedBy(User deletedBy) {
+            this.deletedBy = deletedBy;
+            return self();
+        }
+
+        protected abstract B self();
+
+        public abstract C build();
+
+        public String toString() {
+            return "BaseEntity.BaseEntityBuilder(version=" + this.version + ", idempotencyKey=" + this.idempotencyKey + ", createdDate=" + this.createdDate + ", createdBy=" + this.createdBy + ", lastModifiedDate=" + this.lastModifiedDate + ", lastModifiedBy=" + this.lastModifiedBy + ", deleted$value=" + this.deleted$value + ", deletedAt=" + this.deletedAt + ", deletedBy=" + this.deletedBy + ")";
+        }
+    }
     // --- End of implementation of Auditable ---
 
 }
