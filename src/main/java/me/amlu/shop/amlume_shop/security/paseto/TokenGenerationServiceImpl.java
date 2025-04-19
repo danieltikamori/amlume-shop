@@ -14,15 +14,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
 import me.amlu.shop.amlume_shop.repositories.RefreshTokenRepository;
-import me.amlu.shop.amlume_shop.security.service.EnhancedAuthenticationService;
+import me.amlu.shop.amlume_shop.security.service.AuthenticationService;
 import me.amlu.shop.amlume_shop.security.service.util.BLAKE3;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.paseto4j.commons.PasetoException;
 import org.paseto4j.version4.Paseto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -38,9 +39,10 @@ import static me.amlu.shop.amlume_shop.exceptions.ErrorMessages.FAILED_TO_SERIAL
  * Uses PASETO for token generation
  */
 
-@Slf4j
 @Service
 public class TokenGenerationServiceImpl implements TokenGenerationService {
+
+    private static final Logger log = LoggerFactory.getLogger(TokenGenerationServiceImpl.class);
 
     // Use Micrometer MeterRegistry
     private final MeterRegistry meterRegistry;
@@ -48,7 +50,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     private final KeyManagementService keyManagementService;
     private final ObjectMapper objectMapper;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final EnhancedAuthenticationService enhancedAuthenticationService;
+    private final AuthenticationService authenticationService;
     private final TokenClaimsService tokenClaimsService;
     private final HttpServletRequest httpServletRequest;
 
@@ -67,14 +69,14 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
             KeyManagementService keyManagementService,
             ObjectMapper objectMapper,
             RefreshTokenRepository refreshTokenRepository,
-            EnhancedAuthenticationService enhancedAuthenticationService,
+            AuthenticationService authenticationService,
             TokenClaimsService tokenClaimsService,
             HttpServletRequest httpServletRequest) {
         this.meterRegistry = meterRegistry;
         this.keyManagementService = keyManagementService;
         this.objectMapper = objectMapper;
         this.refreshTokenRepository = refreshTokenRepository;
-        this.enhancedAuthenticationService = enhancedAuthenticationService;
+        this.authenticationService = authenticationService;
         this.tokenClaimsService = tokenClaimsService;
         this.httpServletRequest = httpServletRequest;
     }
@@ -176,7 +178,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     public String generateLocalRefreshToken(User user) throws TokenGenerationFailureException {
         String refreshToken = null;
         try {
-            PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), enhancedAuthenticationService.getRefreshTokenDuration());
+            PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), authenticationService.getRefreshTokenDuration());
             String payload = objectMapper.writeValueAsString(claims);
 
             PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoRefreshLocalKid);
@@ -189,9 +191,9 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
             RefreshToken refreshTokenEntity = new RefreshToken();
             refreshTokenEntity.setToken(hashedRefreshToken);
             refreshTokenEntity.setUser(user);
-            refreshTokenEntity.setExpiryDate(Instant.now().plus(enhancedAuthenticationService.getRefreshTokenDuration()));
+            refreshTokenEntity.setExpiryDate(Instant.now().plus(authenticationService.getRefreshTokenDuration()));
             refreshTokenEntity.setDeviceFingerprint(httpServletRequest.getHeader("User-Agent")); // Consider making fingerprinting more robust
-            refreshTokenEntity.setRevoked(false);
+//            refreshTokenEntity.setRevoked(false);
 
             // Save the RefreshToken entity to the database
             refreshTokenRepository.save(refreshTokenEntity);
