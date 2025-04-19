@@ -10,32 +10,21 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class ErrorResponse {
-
-    private int statusCode;
-    private String code;
-    private String message;
+public record ErrorResponse(int statusCode, String code, String message) {
 
     public ErrorResponse(String message, int statusCode) {
-        this.message = message;
-        this.statusCode = statusCode;
+        this(statusCode, null, message);
     }
 
     public ErrorResponse(String code, String message) {
-        this.message = message;
-        this.code = code;
+        this(0, code, message); // Assuming a default status code of 0 or you can choose a more appropriate default
     }
 
-    public ErrorResponse(String tooManyDevices, String message, int value) {
-        this.message = message;
-        this.statusCode = value;
-        this.code = tooManyDevices;
+    public ErrorResponse(String code, String message, int value) {
+        this(value, code, message);
+    }
+
+    public ErrorResponse() {
+        this(0, null, null); // Default constructor
     }
 }
