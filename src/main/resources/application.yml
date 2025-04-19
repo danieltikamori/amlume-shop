@@ -187,6 +187,10 @@ rate-limiter:
     login: # Specific config for login
       limit: 10
       window-duration: 15m
+    authentication: # Specific config for authentication
+      limit: 100
+      window-duration: 1h
+      fail-open: false
     asnLookup: # Specific config for ASN lookups
       limit: 200
       window-duration: 1m
@@ -330,6 +334,7 @@ security:
     hash-algorithm: ${HASH_ALGORITHM}
     hash-encoding: ${HASH_ENCODING}
     fingerprint-salt: ${FINGERPRINT_SALT}
+    block-unknown: true
 
     verification-timeout-seconds: 300
     storage:

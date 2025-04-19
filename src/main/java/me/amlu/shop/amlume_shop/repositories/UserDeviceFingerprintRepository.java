@@ -35,4 +35,6 @@ public interface UserDeviceFingerprintRepository extends JpaRepository<UserDevic
     List<UserDeviceFingerprint> findByUserAndIsActiveTrue(User user);
 
     List<UserDeviceFingerprint> findByUserIdAndDeviceFingerprintNot(String userId, String exceptFingerprint);
+
+    long countByUserAndIsActiveTrue(User user);
 }
