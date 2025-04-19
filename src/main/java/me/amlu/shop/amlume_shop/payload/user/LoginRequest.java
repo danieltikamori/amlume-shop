@@ -11,34 +11,79 @@
 package me.amlu.shop.amlume_shop.payload.user;
 
 import jakarta.validation.constraints.NotBlank;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
-public class LoginRequest {
+public record LoginRequest(
+        @NotBlank String username,
+        @NotBlank String password,
+        String mfaCode,
+        @NotBlank String captchaResponse,
+        String userAgent,
+        String screenWidth,
+        String screenHeight,
+        boolean rememberMe
+) {
 
-    @NotBlank
-    private String username;
+    public LoginRequest() {
+        this(null, null, null, null, null, null, null, false);
+    }
 
-    @NotBlank
-    private String password;
+    public static LoginRequestBuilder builder() {
+        return new LoginRequestBuilder();
+    }
 
-    private String mfaCode;
+    public static class LoginRequestBuilder {
+        private String username;
+        private String password;
+        private String mfaCode;
+        private String captchaResponse;
+        private String userAgent;
+        private String screenWidth;
+        private String screenHeight;
+        private boolean rememberMe = false; // Default value for boolean
 
-    @NotBlank
-    private String captchaResponse;
+        public LoginRequestBuilder username(String username) {
+            this.username = username;
+            return this;
+        }
 
-    // Device fingerprint fields
-    private String userAgent; // Add User-Agent field
-    private String screenWidth; // Add screen width
-    private String screenHeight; // Add screen height
+        public LoginRequestBuilder password(String password) {
+            this.password = password;
+            return this;
+        }
 
-    private boolean rememberMe;
+        public LoginRequestBuilder mfaCode(String mfaCode) {
+            this.mfaCode = mfaCode;
+            return this;
+        }
 
+        public LoginRequestBuilder captchaResponse(String captchaResponse) {
+            this.captchaResponse = captchaResponse;
+            return this;
+        }
 
+        public LoginRequestBuilder userAgent(String userAgent) {
+            this.userAgent = userAgent;
+            return this;
+        }
 
+        public LoginRequestBuilder screenWidth(String screenWidth) {
+            this.screenWidth = screenWidth;
+            return this;
+        }
+
+        public LoginRequestBuilder screenHeight(String screenHeight) {
+            this.screenHeight = screenHeight;
+            return this;
+        }
+
+        public LoginRequestBuilder rememberMe(boolean rememberMe) {
+            this.rememberMe = rememberMe;
+            return this;
+        }
+
+        public LoginRequest build() {
+            return new LoginRequest(username, password, mfaCode, captchaResponse, userAgent, screenWidth, screenHeight, rememberMe);
+        }
+    }
 }
 
