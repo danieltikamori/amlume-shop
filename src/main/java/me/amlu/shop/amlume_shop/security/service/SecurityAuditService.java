@@ -10,12 +10,15 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.category_management.Category;
-import me.amlu.shop.amlume_shop.model.*;
+import me.amlu.shop.amlume_shop.model.SecurityEvent;
+import me.amlu.shop.amlume_shop.model.SecurityEventType;
+import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -27,12 +30,27 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
-@Slf4j
 public class SecurityAuditService {
+
+    private static final Logger log = LoggerFactory.getLogger(SecurityAuditService.class);
+
     private final SecurityEventRepository securityEventRepository;
 
     public SecurityAuditService(SecurityEventRepository securityEventRepository) {
         this.securityEventRepository = securityEventRepository;
+    }
+
+    public void logSuccessfulRegistration(String userId, String username, String ipAddress) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.REGISTRATION_SUCCESSFUL)
+                .userId(userId)
+                .username(username)
+                .ipAddress(ipAddress)
+                .timestamp(Instant.now())
+                .build();
+
+        securityEventRepository.save(event);
+        log.info("Successful registration for user: {}", username);
     }
 
     public void logFailedLogin(String username, String ipAddress, String reason) {
@@ -72,6 +90,44 @@ public class SecurityAuditService {
 
         securityEventRepository.save(event);
         log.info("Successful login for user: {}", username);
+    }
+
+    public void logLogout(String userId, String username, String ipAddress) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.LOGOUT)
+                .userId(userId)
+                .username(username)
+                .ipAddress(ipAddress)
+                .timestamp(Instant.now())
+                .build();
+
+        securityEventRepository.save(event);
+        log.info("User logged out: {}", username);
+    }
+
+    public void logLogout(String username, String reason) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.LOGOUT)
+                .username(username)
+                .details(Map.of("reason", reason).toString())
+                .timestamp(Instant.now())
+                .build();
+
+        securityEventRepository.save(event);
+        log.info("Successful logout for user: {}", username);
+    }
+
+    public void logPasswordChange(String userId, String username, String ipAddress) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.PASSWORD_CHANGED)
+                .userId(userId)
+                .username(username)
+                .ipAddress(ipAddress)
+                .timestamp(Instant.now())
+                .build();
+
+        securityEventRepository.save(event);
+        log.info("Password changed for user: {}", username);
     }
 
     public void logMfaChallengeInitiated(String userId, String username, String ipAddress) {
