@@ -10,17 +10,20 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.user_management.DeviceFingerprintingInfo;
-import me.amlu.shop.amlume_shop.user_management.UserRepository;
-import org.apache.commons.lang3.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.user_management.DeviceFingerprintingInfo;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,12 +34,10 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.*;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
-@Slf4j
 @Service
 @Transactional
 public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
@@ -55,18 +56,31 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             "HTTP_VIA",
             "REMOTE_ADDR"
     };
+
+    private static final Logger log = LoggerFactory.getLogger(DeviceFingerprintServiceImpl.class);
+
     private final UserRepository userRepository;
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
     private final AuditLogger auditLogger;
     private final SecurityProperties securityProperties;
     private final IpValidationService ipValidationService;
     private final IpSecurityService ipSecurityService;
-    private final IpRateLimitService ipRateLimitService;
+    @Qualifier("redisSlidingWindowRateLimiter")
+    private final RateLimiter rateLimiter;
 
     private final String fingerprintSalt;
     private final int maxDevicesPerUser;
 
-    public DeviceFingerprintServiceImpl(@Value("${FINGERPRINT_SALT}") String fingerprintSalt, @Value("${security.max-devices-per-user}") int maxDevicesPerUser, UserRepository userRepository, UserDeviceFingerprintRepository userDeviceFingerprintRepository, AuditLogger auditLogger, SecurityProperties securityProperties, IpValidationService ipValidationService, IpSecurityService ipSecurityService, IpRateLimitService ipRateLimitService) {
+    // --- Constructor Updated ---
+    public DeviceFingerprintServiceImpl(@Value("${FINGERPRINT_SALT}") String fingerprintSalt,
+                                        @Value("${security.max-devices-per-user}") int maxDevicesPerUser,
+                                        UserRepository userRepository,
+                                        UserDeviceFingerprintRepository userDeviceFingerprintRepository,
+                                        AuditLogger auditLogger,
+                                        SecurityProperties securityProperties,
+                                        IpValidationService ipValidationService,
+                                        IpSecurityService ipSecurityService, @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter
+    ) {
         this.fingerprintSalt = Objects.requireNonNull(fingerprintSalt, "Fingerprint salt cannot be null");
         this.maxDevicesPerUser = maxDevicesPerUser;
         this.userRepository = Objects.requireNonNull(userRepository, "UserRepository cannot be null");
@@ -75,7 +89,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         this.securityProperties = Objects.requireNonNull(securityProperties, "SecurityProperties cannot be null");
         this.ipValidationService = Objects.requireNonNull(ipValidationService, "IpValidationService cannot be null");
         this.ipSecurityService = Objects.requireNonNull(ipSecurityService, "IpSecurityService cannot be null");
-        this.ipRateLimitService = Objects.requireNonNull(ipRateLimitService, "IpRateLimitService cannot be null");
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -83,11 +97,11 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         validateInputs(userId, request);
         String clientIp = getClientIpAddress(request);
 
-        // Validate IP and spoofing
-        ipSecurityCheck(request, clientIp);
-
-        // Apply rate limiting
+        // --- Apply rate limiting ---
         applyRateLimitingOnRegisterDevice(userId, clientIp);
+
+        // --- Validate IP and spoofing ---
+        ipSecurityCheckAtDeviceRegistration(userId, request, clientIp);
 
         logIpAddressResolution(userId, clientIp, request.getHeader(X_FORWARDED_FOR));
 
@@ -95,13 +109,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             User user = findAndValidateUser(userId);
 
             // Check if user has disabled device fingerprinting
-            validateDeviceFingerprinting(user);
+            isDeviceFingerprintingEnabled(user);
 
             // Check if user has reached maximum devices
             validateDeviceLimit(user);
 
+            // Generate fingerprint
             String fingerprint = generateDeviceFingerprint(userAgent, screenWidth, screenHeight, request);
-
             processFingerprint(user, fingerprint, clientIp);
 
         } catch (Exception e) {
@@ -109,10 +123,18 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
     }
 
-    private void ipSecurityCheck(HttpServletRequest request, String clientIp) {
+    private void ipSecurityCheckAtDeviceRegistration(String userId, HttpServletRequest request, String clientIp) {
+
+        // Check if IP is blocked
+        if (ipSecurityService.isIpBlocked(clientIp)) {
+            log.warn("Blocked IP address attempted device registration: {}", clientIp);
+            auditLogger.logSecurityEvent("BLOCKED_IP_ATTEMPT", userId, clientIp);
+            throw new BlockedIpAddressException("IP address is blocked");
+        }
         // Validate IP
         if (!ipValidationService.isValidIp(clientIp)) {
             log.warn("Invalid IP detected: {}", clientIp);
+            auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, clientIp);
         }
 
         // Check for spoofing
@@ -122,14 +144,21 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
     }
 
-    private void applyRateLimitingOnRegisterDevice(String userId, String clientIp) {
-        ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
-            if (!allowed) {
+    private void applyRateLimitingOnRegisterDevice(String userId, String clientIp) throws DeviceFingerprintRegistrationException {
+        String rateLimitKey = "deviceFingerprintRegister:" + clientIp; // Key by IP for registration attempts
+        try {
+            if (!rateLimiter.tryAcquire(rateLimitKey)) {
                 log.warn("Rate limit exceeded for IP: {} on device registration", clientIp);
-                auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId,"No yet generated fingerprint");
-                throw new RateLimitExceededException("Rate limit exceeded for IP address");
+                auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, "Device Registration", clientIp);
+                throw new DeviceFingerprintRegistrationException("Rate limit exceeded for device registration");
             }
-                });
+        } catch (RateLimitException e) { // Catch Redis failure if fail-closed
+            log.error("Rate limiting check failed for IP: {} on device registration. Denying request.", clientIp, e);
+            throw new DeviceFingerprintRegistrationException("Rate limiter unavailable.", e);
+        } catch (Exception e) { // Catch other unexpected errors
+            log.error("Unexpected error during rate limit check for IP: {} on device registration", clientIp, e);
+            throw new DeviceFingerprintRegistrationException("Error during rate limit check.", e);
+        }
     }
 
     private void validateInputs(String userId, HttpServletRequest request) {
@@ -144,7 +173,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
     }
 
-    private void validateDeviceFingerprinting(User user) {
+    private void isDeviceFingerprintingEnabled(User user) {
         if (!user.isDeviceFingerprintingEnabled()) {
             log.info("Device fingerprinting is disabled for user: {}", user.getUserId());
             throw new DeviceFingerprintingDisabledException("Device fingerprinting is disabled");
@@ -200,14 +229,14 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     public void validateDeviceFingerprint(String userId, String deviceFingerprint, HttpServletRequest request) {
         String clientIp = getClientIpAddress(request);
 
-        // Validate IP and spoofing
-        ipSecurityCheck(request, clientIp);
+        // --- Check rate limiting ---
+        rateLimiter.tryAcquire(clientIp);
 
         try {
             User user = findAndValidateUser(userId);
             UserDeviceFingerprint fingerprint = findAndValidateFingerprint(user, deviceFingerprint);
 
-            validateIpSecurity(userId, clientIp, fingerprint);
+            validateIpSecurityAtExistingDeviceFingerprintValidation(userId, clientIp, fingerprint, request);
             updateFingerprintUsage(fingerprint, clientIp);
 
             auditLogger.logDeviceValidation(user, fingerprint, true);
@@ -301,7 +330,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             return "Windows";
         }
 
-        if (userAgentLower.contains("mac")) {  // Simplified mac detection
+        if (userAgentLower.contains("mac")) {  // Simplified Mac detection
             return "macOS";
         }
 
@@ -403,20 +432,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
     }
 
-    private void validateIpSecurity(String userId, String clientIp, UserDeviceFingerprint fingerprint) {
-        if (StringUtils.isBlank(clientIp)) {
-            log.error("Empty or null client IP address");
-            throw new InvalidIpAddressException("Client IP address cannot be empty");
-        }
-
+    private void validateIpSecurityAtExistingDeviceFingerprintValidation(String userId, String clientIp, UserDeviceFingerprint fingerprint, HttpServletRequest request) {
         try {
-            // Validate IP format
-            if (!ipValidationService.isValidIp(clientIp)) {
-                log.warn("Invalid IP address detected: {}", clientIp);
-                auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUserDeviceFingerprintId()), clientIp);
-                throw new InvalidIpAddressException("Invalid IP address format");
-            }
-
             // Check if IP is blocked
             if (ipSecurityService.isIpBlocked(clientIp)) {
                 log.warn("Blocked IP address attempted access: {}", clientIp);
@@ -424,26 +441,36 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 throw new BlockedIpAddressException("IP address is blocked");
             }
 
-            // Check rate limiting
-            ipRateLimitService.checkRateLimit(clientIp).thenAccept(allowed -> {
-                if (!allowed) {
-                    log.warn("Rate limit exceeded for IP: {} on fingerprint: {}", clientIp, fingerprint);
-                    auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
-                    throw new RateLimitExceededException("Rate limit exceeded for IP address");
-                }
-            });
+            // Check for spoofing
+            if (ipSecurityService.isIpSuspicious(clientIp, request)) {
+                log.warn("Suspicious IP detected at existing fingerprint validation: {}", clientIp);
+                throw new SecurityException("Suspicious IP activity detected");
+            }
+
+            // Validate IP format
+            if (!ipValidationService.isValidIp(clientIp)) {
+                log.warn("Invalid IP address detected: {}", clientIp);
+                auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUserDeviceFingerprintId()), clientIp);
+                throw new InvalidIpAddressException("Invalid IP address format");
+            }
+
 
             // Log successful validation
             log.debug("IP security validation passed for IP: {}", clientIp);
 
+        } catch (RateLimitExceededException | TooManyAttemptsException e) { // Catch the specific exception(s)
+            // Handle rate limit exceedance specifically
+            log.warn("Rate limit exceeded for IP: {} on fingerprint validation: {}", clientIp, e.getMessage());
+            auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
+            // Re-throw the original exception as the calling method might expect it
+            throw e;
+        } catch (InvalidIpAddressException | BlockedIpAddressException e) {
+            // Re-throw specific IP validation exceptions
+            throw e;
         } catch (Exception e) {
-            if (!(e instanceof InvalidIpAddressException ||
-                    e instanceof BlockedIpAddressException ||
-                    e instanceof RateLimitExceededException)) {
-                log.error("Unexpected error during IP security validation", e);
-                throw new IpValidationException("Error during IP security validation", e);
-            }
-
+            // Catch any other unexpected errors
+            log.error("Unexpected error during IP security validation for IP {}: {}", clientIp, e.getMessage(), e);
+            throw new IpValidationException("Error during IP security validation", e);
         }
     }
 
@@ -573,7 +600,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     private boolean isValidFingerprintFormat(String fingerprint) {
-        // Implement your fingerprint validation logic
+        // Implement your fingerprint validation logic.
         // For example, checking length, allowed characters, etc.
         return fingerprint.matches("^[a-zA-Z0-9-_]{32,256}$");
     }
@@ -644,8 +671,6 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 deviceFingerprint,
                 "NEW_DEVICE_REGISTERED");
     }
-
-
 
 
     private void logIpAddressResolution(String userId, String resolvedIp, String originalHeader) {
