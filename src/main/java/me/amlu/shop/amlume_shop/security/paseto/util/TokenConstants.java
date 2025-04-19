@@ -91,8 +91,8 @@ public final class TokenConstants {
     public static final String TOKEN_REVOKED_INVALID_SUBJECT = "Token revoked because the subject is not valid (possible Subject Impersonation/Authorization Bypass, replay attack or another security issue)";
     public static final String TOKEN_REVOKED_MISSING_CLAIM = "Token revoked due to missing required claim: %s. Possible token tampering.";
     public static final String TOKEN_REVOKED_GENERIC = "Token revoked due to: %s";
-    public static final String TOKEN_VALIDATION = "token-validation";
-    public static final String CLAIMS_VALIDATION = "claims-validation";
+    public static final String TOKEN_VALIDATION_RATELIMIT_KEY = "tokenValidation:";
+    public static final String CLAIMS_VALIDATION_RATELIMIT_KEY = "claimsValidation:";
 
     private TokenConstants() {}
 }
