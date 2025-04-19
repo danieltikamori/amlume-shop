@@ -10,39 +10,15 @@
 
 package me.amlu.shop.amlume_shop.payload.user;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.user_management.Username;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
 @Builder
-public class UserRegistrationRequest {
+public record UserRegistrationRequest(Username username, String password, String userEmail, UserRole roles,
+                                      boolean mfaEnabled, String captchaResponse) {
 
 //    private String firstname;
 //    private String lastname;
-
-    private Username username;
-
-    @NotBlank
-    @Size(min = 12, max = 120)
-    private String password;
-
-    @Email
-    @Size(min = 5, max = 50)
-    private String userEmail;
-
-    private UserRole roles;
-
-    private boolean mfaEnabled;
-
-    private String captchaResponse;
 
 }
