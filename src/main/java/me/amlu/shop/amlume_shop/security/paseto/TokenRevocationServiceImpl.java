@@ -79,15 +79,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
             }
 
             // Save revoked token to database
-            RevokedToken revokedToken = new RevokedToken();
-            revokedToken.setTokenId(tokenId);
-            revokedToken.setRevokedAt(Instant.now());
-            revokedToken.setReason(reason);
-            revokedTokenRepository.save(revokedToken);
-
-            // Add to revoked tokens cache using RedisTemplate with TTL
-            Duration ttl = Duration.ofSeconds(revokedTokenCacheTtlSeconds);
-            redisTemplate.opsForValue().set(redisKey, Boolean.TRUE, ttl); // Store TRUE
+            saveRevokedTokenToDatabaseAndCache(tokenId, reason, redisKey);
             log.info("Token with ID {} successfully revoked and cached.", tokenId);
 
         } catch (PasetoException e) { // Catch specific exceptions if possible
@@ -126,7 +118,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
             }
             log.trace("Revocation status for token {} not found in cache. Checking database.", tokenId);
 
-            // 2. If not in cache, check database
+            // 2. If not in cache, check the database
             boolean isRevokedInDb = revokedTokenRepository.existsByTokenId(tokenId);
             Duration ttl = Duration.ofSeconds(revokedTokenCacheTtlSeconds);
 
@@ -166,4 +158,96 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         log.trace("Token validation successful: Token with ID {} is not revoked.", tokenId);
         // No need to explicitly put 'false' here anymore, isTokenRevoked handles caching.
     }
+
+    @Override
+    public void revokeAccessToken(String accessToken, Duration accessTokenDuration, String reason) {
+        log.info("Revoking access token with ID: {}, Reason: {}", accessToken, reason);
+        if (accessToken == null || accessToken.isBlank()) {
+            log.warn("Attempted to revoke access token with null or blank ID.");
+            // Depending on requirements, either return or throw an exception
+            // throw new TokenRevocationException("Token ID cannot be null or blank");
+            return;
+        }
+        String redisKey = REVOKED_TOKEN_PREFIX + accessToken;
+
+        try {
+            // Check if token is already revoked (using the isTokenRevoked method)
+            if (isTokenRevoked(accessToken)) { // isTokenRevoked now handles cache check
+                // Verify the database consistency
+                // (optional but good practice)
+                if (revokedTokenRepository.existsByTokenId(accessToken)) {
+                    log.info("Access Token already revoked (verified in DB): {}", accessToken);
+                    return;
+                } else {
+                    log.warn("Access Token was considered revoked (possibly cached), but not in database. Attempting to revoke again. TokenId: {}", accessToken);
+                    // Proceed to save to DB and update cache anyway
+                }
+            }
+
+            // Save revoked token to database
+            saveRevokedTokenToDatabaseAndCache(accessToken, reason, redisKey);
+            log.info("Access Token with ID {} successfully revoked and cached.", accessToken);
+
+        } catch (PasetoException e) { // Catch specific exceptions if possible
+            log.error("Failed to revoke access token with ID: {}", accessToken, e);
+            // Consider throwing a more specific exception if PasetoException isn't right
+            throw new TokenRevocationException("Could not revoke access token due to PASETO error", e);
+        } catch (Exception e) { // Catch broader exceptions
+            log.error("Unexpected error during access token revocation for ID: {}", accessToken, e);
+            throw new TokenRevocationException("Unexpected error revoking access token", e);
+        }
+    }
+
+    @Override
+    public void revokeRefreshToken(String refreshToken, Duration refreshTokenDuration, String reason) {
+        log.info("Revoking refresh token with ID: {}, Reason: {}", refreshToken, reason);
+        if (refreshToken == null || refreshToken.isBlank()) {
+            log.warn("Attempted to revoke refresh token with null or blank ID.");
+            // Depending on requirements, either return or throw an exception
+            // throw new TokenRevocationException("Token ID cannot be null or blank");
+            return;
+        }
+        String redisKey = REVOKED_TOKEN_PREFIX + refreshToken;
+
+        try {
+            // Check if token is already revoked (using the isTokenRevoked method)
+            if (isTokenRevoked(refreshToken)) { // isTokenRevoked now handles cache check
+                // Verify the database consistency
+                // (optional but good practice)
+                if (revokedTokenRepository.existsByTokenId(refreshToken)) {
+                    log.info("Refresh Token already revoked (verified in DB): {}", refreshToken);
+                    return;
+                } else {
+                    log.warn("Refresh Token was considered revoked (possibly cached), but not in database. Attempting to revoke again. TokenId: {}", refreshToken);
+                    // Proceed to save to DB and update cache anyway
+                }
+            }
+
+            // Save revoked token to database
+            saveRevokedTokenToDatabaseAndCache(refreshToken, reason, redisKey);
+            log.info("Refresh Token with ID {} successfully revoked and cached.", refreshToken);
+
+        } catch (PasetoException e) { // Catch specific exceptions if possible
+            log.error("Failed to revoke refresh token with ID: {}", refreshToken, e);
+            // Consider throwing a more specific exception if PasetoException isn't right
+            throw new TokenRevocationException("Could not revoke refresh token due to PASETO error", e);
+        } catch (Exception e) { // Catch broader exceptions
+            log.error("Unexpected error during refresh token revocation for ID: {}", refreshToken, e);
+            throw new TokenRevocationException("Unexpected error revoking refresh token", e);
+        }
+
+    }
+
+    private void saveRevokedTokenToDatabaseAndCache(String refreshToken, String reason, String redisKey) {
+        RevokedToken revokedToken = new RevokedToken();
+        revokedToken.setTokenId(refreshToken);
+        revokedToken.setRevokedAt(Instant.now());
+        revokedToken.setReason(reason);
+        revokedTokenRepository.save(revokedToken);
+
+        // Add to revoked tokens cache using RedisTemplate with TTL
+        Duration ttl = Duration.ofSeconds(revokedTokenCacheTtlSeconds);
+        redisTemplate.opsForValue().set(redisKey, Boolean.TRUE, ttl); // Store TRUE
+    }
+
 }

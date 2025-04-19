@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.security.paseto;
 
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.Map;
 
 public interface TokenRevocationService {
@@ -23,4 +24,8 @@ public interface TokenRevocationService {
 //    CompletableFuture<Void> revokeAllUserTokens(String username, String reason);
 
     void validateNotRevoked(Map<String, Object> claims);
+
+    void revokeAccessToken(String accessToken, Duration accessTokenDuration, String reason);
+
+    void revokeRefreshToken(String refreshToken, Duration refreshTokenDuration, String reason);
 }
