@@ -10,25 +10,37 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.exceptions.InvalidCaptchaException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
+import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
+import me.amlu.shop.amlume_shop.exceptions.UserRegistrationException;
 import me.amlu.shop.amlume_shop.model.MfaToken;
+import me.amlu.shop.amlume_shop.payload.user.*;
+import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
-import me.amlu.shop.amlume_shop.payload.user.AuthenticationRequest;
-import me.amlu.shop.amlume_shop.payload.user.LoginRequest;
-import me.amlu.shop.amlume_shop.payload.user.MfaVerificationRequest;
-import org.springframework.security.core.Authentication;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.concurrent.ExecutionException;
 
-public interface EnhancedAuthenticationService {
+import static me.amlu.shop.amlume_shop.commons.Constants.AUTH_CACHE;
 
+public interface AuthenticationInterface {
+
+
+    // --- Registration ---
+    AuthResponse register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException;
 
     AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, ExecutionException, InvalidCaptchaException;
 
-    AuthResponse handleMfaAuthentication(User user, AuthenticationRequest request, String ipAddress) throws TooManyAttemptsException, ExecutionException;
+//    AuthResponse handleMfaAuthentication(User user, AuthenticationRequest request, String ipAddress) throws TooManyAttemptsException, ExecutionException;
+
+    // --- Logout ---
+    @Transactional
+    // Ensure Redis operations are transactional if needed
+    void logout(String accessToken, String refreshToken);
 
     MfaToken initializeMfaToken(User user);
 
@@ -52,7 +64,7 @@ public interface EnhancedAuthenticationService {
 
     boolean unlockWhenTimeExpired(User user);
 
-    Authentication createSuccessfulAuthentication(User user);
+//    Authentication createSuccessfulAuthentication(User user);
 
 //    String generateDeviceFingerprint(LoginRequest request);
 
@@ -65,4 +77,12 @@ public interface EnhancedAuthenticationService {
     Duration getRefreshTokenDuration();
 
     Duration getJtiDuration();
+
+    // --- Authentication Info Caching ---
+    @Transactional(readOnly = true)
+    AuthenticationInfo getAuthenticationInfo(String username);
+
+    @Transactional(noRollbackFor = Exception.class) // Allow commit even if cache eviction fails? Review this.
+    @CacheEvict(value = AUTH_CACHE, key = "'auth:' + #username") // Use SpEL for key prefix
+    void updateAuthenticationInfo(String username, AuthenticationInfo newInfo);
 }
