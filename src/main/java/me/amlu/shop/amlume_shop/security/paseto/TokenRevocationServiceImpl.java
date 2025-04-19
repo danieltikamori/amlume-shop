@@ -11,12 +11,13 @@
 package me.amlu.shop.amlume_shop.security.paseto;
 
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenRevocationException;
 import me.amlu.shop.amlume_shop.exceptions.TokenRevokedException;
 import me.amlu.shop.amlume_shop.security.model.RevokedToken;
 import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
 import org.paseto4j.commons.PasetoException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -27,10 +28,10 @@ import java.time.Instant;
 import java.util.Map;
 
 
-@Slf4j
 @Service
 public class TokenRevocationServiceImpl implements TokenRevocationService {
 
+    private static final Logger log = LoggerFactory.getLogger(TokenRevocationServiceImpl.class);
 
     private static final String REVOKED_TOKEN_PREFIX = "revoked_tokens:"; // Prefix for Valkey keys
 
