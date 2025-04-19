@@ -93,6 +93,20 @@ public final class Constants {
     public static final String ACCEPT_LANGUAGE = "Accept-Language";
     public static final String TIME_ZONE = "X-Time-Zone";
     public static final String X_FORWARDED_FOR = "X-Forwarded-For";
+    public static final String[] IP_HEADERS = {
+            X_FORWARDED_FOR,
+            "Proxy-Client-IP",
+            "WL-Proxy-Client-IP",
+            "HTTP_X_FORWARDED_FOR",
+            "HTTP_X_FORWARDED",
+            "HTTP_CLIENT_IP",
+            "HTTP_X_CLUSTER_CLIENT_IP",
+            "HTTP_CLIENT_IP",
+            "HTTP_FORWARDED_FOR",
+            "HTTP_FORWARDED",
+            "HTTP_VIA",
+            "REMOTE_ADDR"
+    };
 //    public static final String X_FORWARDED_PROTO = "X-Forwarded-Proto";
 //    public static final String X_FORWARDED_PORT = "X-Forwarded-Port";
 //    public static final String X_FORWARDED_HOST = "X-Forwarded-Host";

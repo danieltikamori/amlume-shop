@@ -42,21 +42,6 @@ import static me.amlu.shop.amlume_shop.commons.Constants.*;
 @Transactional
 public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
-    protected static final String[] IP_HEADERS = {
-            X_FORWARDED_FOR,
-            "Proxy-Client-IP",
-            "WL-Proxy-Client-IP",
-            "HTTP_X_FORWARDED_FOR",
-            "HTTP_X_FORWARDED",
-            "HTTP_CLIENT_IP",
-            "HTTP_X_CLUSTER_CLIENT_IP",
-            "HTTP_CLIENT_IP",
-            "HTTP_FORWARDED_FOR",
-            "HTTP_FORWARDED",
-            "HTTP_VIA",
-            "REMOTE_ADDR"
-    };
-
     private static final Logger log = LoggerFactory.getLogger(DeviceFingerprintServiceImpl.class);
 
     private final UserRepository userRepository;
@@ -65,14 +50,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private final SecurityProperties securityProperties;
     private final IpValidationService ipValidationService;
     private final IpSecurityService ipSecurityService;
-    @Qualifier("redisSlidingWindowRateLimiter")
     private final RateLimiter rateLimiter;
 
     private final String fingerprintSalt;
     private final int maxDevicesPerUser;
 
     // --- Constructor Updated ---
-    public DeviceFingerprintServiceImpl(@Value("${FINGERPRINT_SALT}") String fingerprintSalt,
+    public DeviceFingerprintServiceImpl(@Value("${security.fingerprint-salt}") String fingerprintSalt,
                                         @Value("${security.max-devices-per-user}") int maxDevicesPerUser,
                                         UserRepository userRepository,
                                         UserDeviceFingerprintRepository userDeviceFingerprintRepository,
