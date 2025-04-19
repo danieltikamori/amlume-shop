@@ -10,14 +10,35 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.Getter;
-import lombok.Setter;
 import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
 
-@Getter
-@Setter
-public class LoginResponse {
-    private AuthResponse authResponse;
-    private ErrorResponse errorResponse;
 
+public record LoginResponse(AuthResponse authResponse, ErrorResponse errorResponse) {
+
+    public LoginResponse() {
+        this(null, null);
+    }
+
+    public static LoginResponseBuilder builder() {
+        return new LoginResponseBuilder();
+    }
+
+    public static class LoginResponseBuilder {
+        private AuthResponse authResponse;
+        private ErrorResponse errorResponse;
+
+        public LoginResponseBuilder authResponse(AuthResponse authResponse) {
+            this.authResponse = authResponse;
+            return this;
+        }
+
+        public LoginResponseBuilder errorResponse(ErrorResponse errorResponse) {
+            this.errorResponse = errorResponse;
+            return this;
+        }
+
+        public LoginResponse build() {
+            return new LoginResponse(this.authResponse, this.errorResponse);
+        }
+    }
 }
