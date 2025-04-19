@@ -130,6 +130,8 @@ public final class Constants {
     public static final int MAX_RETRY_ATTEMPTS = 3;
     public static final long RETRY_INTERVAL = 1000L;
     public static final Long MAX_REQUESTS_PER_MINUTE = 100L;
+    public static final String CAPTCHA_RATELIMIT_KEY = "captcha:";
+    public static final String AUTH_SW_RATELIMIT_KEY = "auth-sw:";
 
     // --- User constants ---
     public static final String USER_ID = "userId";
@@ -154,6 +156,7 @@ public final class Constants {
 
     public static final String PRODUCT = "Product";
     public static final String PRODUCT_ID = "productId";
+
 
     // Private constructor to prevent instantiation
     private Constants() {
