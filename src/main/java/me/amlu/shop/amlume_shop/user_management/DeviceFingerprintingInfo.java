@@ -13,27 +13,22 @@ package me.amlu.shop.amlume_shop.user_management;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Embedded;
-import lombok.*;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-@Builder
 @Embeddable
-@Getter
-@ToString
-@EqualsAndHashCode
 public class DeviceFingerprintingInfo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @Column(name = "device_fingerprinting_enabled")
-    private final boolean deviceFingerprintingEnabled;
+    private boolean deviceFingerprintingEnabled;
 
     @Embedded
-    private final UserDeviceFingerprints deviceFingerprints;
+    private UserDeviceFingerprints deviceFingerprints;
 
     public DeviceFingerprintingInfo(boolean deviceFingerprintingEnabled, UserDeviceFingerprints deviceFingerprints) {
         this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
@@ -51,6 +46,10 @@ public class DeviceFingerprintingInfo implements Serializable {
         this.deviceFingerprints = null;
     }
 
+    public static DeviceFingerprintingInfoBuilder builder() {
+        return new DeviceFingerprintingInfoBuilder();
+    }
+
     public DeviceFingerprintingInfo enableFingerprinting() {
 //        Objects.requireNonNull(deviceFingerprints, "deviceFingerprints cannot be null");
         return new DeviceFingerprintingInfo(true, deviceFingerprints);
@@ -58,5 +57,70 @@ public class DeviceFingerprintingInfo implements Serializable {
 
     public DeviceFingerprintingInfo disableFingerprinting() {
         return new DeviceFingerprintingInfo(false, null);
+    }
+
+    public boolean isDeviceFingerprintingEnabled() {
+        return this.deviceFingerprintingEnabled;
+    }
+
+    public UserDeviceFingerprints getDeviceFingerprints() {
+        return this.deviceFingerprints;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof DeviceFingerprintingInfo other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        if (this.isDeviceFingerprintingEnabled() != other.isDeviceFingerprintingEnabled()) return false;
+        final Object this$deviceFingerprints = this.getDeviceFingerprints();
+        final Object other$deviceFingerprints = other.getDeviceFingerprints();
+        return Objects.equals(this$deviceFingerprints, other$deviceFingerprints);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof DeviceFingerprintingInfo;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        result = result * PRIME + (this.isDeviceFingerprintingEnabled() ? 79 : 97);
+        final Object $deviceFingerprints = this.getDeviceFingerprints();
+        result = result * PRIME + ($deviceFingerprints == null ? 43 : $deviceFingerprints.hashCode());
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "DeviceFingerprintingInfo(deviceFingerprintingEnabled=" + this.isDeviceFingerprintingEnabled() + ", deviceFingerprints=" + this.getDeviceFingerprints() + ")";
+    }
+
+    public static class DeviceFingerprintingInfoBuilder {
+        private boolean deviceFingerprintingEnabled;
+        private UserDeviceFingerprints deviceFingerprints;
+
+        DeviceFingerprintingInfoBuilder() {
+        }
+
+        public DeviceFingerprintingInfoBuilder deviceFingerprintingEnabled(boolean deviceFingerprintingEnabled) {
+            this.deviceFingerprintingEnabled = deviceFingerprintingEnabled;
+            return this;
+        }
+
+        public DeviceFingerprintingInfoBuilder deviceFingerprints(UserDeviceFingerprints deviceFingerprints) {
+            this.deviceFingerprints = deviceFingerprints;
+            return this;
+        }
+
+        public DeviceFingerprintingInfo build() {
+            return new DeviceFingerprintingInfo(this.deviceFingerprintingEnabled, this.deviceFingerprints);
+        }
+
+        @Override
+        public String toString() {
+            return "DeviceFingerprintingInfo.DeviceFingerprintingInfoBuilder(deviceFingerprintingEnabled=" + this.deviceFingerprintingEnabled + ", deviceFingerprints=" + this.deviceFingerprints + ")";
+        }
     }
 }

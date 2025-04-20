@@ -19,6 +19,7 @@ import me.amlu.shop.amlume_shop.config.ValidPassword;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
 @Embeddable
 public class UserPassword implements Serializable {
@@ -46,9 +47,63 @@ public class UserPassword implements Serializable {
         this.password = password;
     }
 
-String getPassword() {
-    return password;
-}
+    public static UserPasswordBuilder builder() {
+        return new UserPasswordBuilder();
+    }
 
+    String getPassword() {
+        return password;
+    }
 
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof UserPassword other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$password = this.getPassword();
+        final Object other$password = other.getPassword();
+        return Objects.equals(this$password, other$password);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof UserPassword;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $password = this.getPassword();
+        result = result * PRIME + ($password == null ? 43 : $password.hashCode());
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "UserPassword(password=" + this.getPassword() + ")";
+    }
+
+    public static class UserPasswordBuilder {
+        private @NotBlank
+        @Size(min = 12, max = 255, message = "Password must be between 12 and 255 characters") String password;
+
+        UserPasswordBuilder() {
+        }
+
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+        public UserPasswordBuilder password(@NotBlank @Size(min = 12, max = 255, message = "Password must be between 12 and 255 characters") String password) {
+            this.password = password;
+            return this;
+        }
+
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+        public UserPassword build() {
+            return new UserPassword(this.password);
+        }
+
+        @Override
+        public String toString() {
+            return "UserPassword.UserPasswordBuilder(password=" + this.password + ")";
+        }
+    }
 }

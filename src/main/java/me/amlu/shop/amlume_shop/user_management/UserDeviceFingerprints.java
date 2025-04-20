@@ -14,9 +14,6 @@ import jakarta.persistence.CascadeType;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.OneToMany;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
 
@@ -25,22 +22,18 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import java.util.Objects;
 
 @Embeddable
-@Getter
-@EqualsAndHashCode
-@ToString
-public final class UserDeviceFingerprints implements Serializable {
+public class UserDeviceFingerprints implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    @ToString.Exclude
-    private final List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
+    private List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
 
-    private UserDeviceFingerprints() {
+    protected UserDeviceFingerprints() { // Required by JPA
     }
 
     public UserDeviceFingerprints(List<UserDeviceFingerprint> deviceFingerprints) {
@@ -49,6 +42,10 @@ public final class UserDeviceFingerprints implements Serializable {
         }
         this.deviceFingerprints.addAll(deviceFingerprints);
 //        this.deviceFingerprints.addAll(Optional.ofNullable(deviceFingerprints).orElseGet(ArrayList::new));
+    }
+
+    public static UserDeviceFingerprintsBuilder builder() {
+        return new UserDeviceFingerprintsBuilder();
     }
 
     public List<UserDeviceFingerprint> getDeviceFingerprints() {
@@ -248,38 +245,90 @@ public final class UserDeviceFingerprints implements Serializable {
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndLastKnownIp(String deviceFingerprint, String lastKnownIp) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getLastKnownIp().equals(lastKnownIp)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndLocation(String deviceFingerprint, String location) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getLocation().equals(location)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndLastKnownCountry(String deviceFingerprint, String lastKnownCountry) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getLastKnownCountry().equals(lastKnownCountry)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndBrowserInfo(String deviceFingerprint, String browserInfo) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getBrowserInfo().equals(browserInfo)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndAccessToken(String deviceFingerprint, String accessToken) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getAccessToken().equals(accessToken)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndRefreshToken(String deviceFingerprint, String refreshToken) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getRefreshToken().equals(refreshToken)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndLastUsedAt(String deviceFingerprint, java.time.Instant lastUsedAt) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getLastUsedAt().equals(lastUsedAt)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndDeactivatedAt(String deviceFingerprint, java.time.Instant deactivatedAt) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getDeactivatedAt().equals(deactivatedAt)).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndFailedAttempts(String deviceFingerprint, int failedAttempts) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getFailedAttempts() == failedAttempts).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndTrusted(String deviceFingerprint, boolean trusted) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.isTrusted() == trusted).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndActive(String deviceFingerprint, boolean active) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.isActive() == active).toList();
     }
+
     public List<UserDeviceFingerprint> getDeviceFingerprintsByDeviceFingerprintAndUpdateCount(String deviceFingerprint, int updateCount) {
         return deviceFingerprints.stream().filter(d -> d.getDeviceFingerprint().equals(deviceFingerprint) && d.getUpdateCount() == updateCount).toList();
     }
 
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof UserDeviceFingerprints other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$deviceFingerprints = this.getDeviceFingerprints();
+        final Object other$deviceFingerprints = other.getDeviceFingerprints();
+        return Objects.equals(this$deviceFingerprints, other$deviceFingerprints);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof UserDeviceFingerprints;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $deviceFingerprints = this.getDeviceFingerprints();
+        result = result * PRIME + ($deviceFingerprints == null ? 43 : $deviceFingerprints.hashCode());
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "UserDeviceFingerprints()";
+    }
+
+    public static class UserDeviceFingerprintsBuilder {
+        UserDeviceFingerprintsBuilder() {
+        }
+
+        public UserDeviceFingerprints build() {
+            return new UserDeviceFingerprints();
+        }
+
+        @Override
+        public String toString() {
+            return "UserDeviceFingerprints.UserDeviceFingerprintsBuilder()";
+        }
+    }
 }

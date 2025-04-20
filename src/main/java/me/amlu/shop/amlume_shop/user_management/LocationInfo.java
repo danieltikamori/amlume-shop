@@ -12,29 +12,22 @@ package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.ToString;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Getter
-@EqualsAndHashCode
-@ToString
 @Embeddable
-@NoArgsConstructor(force = true)
 public class LocationInfo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @Column(name = "department")
-    private final String department;
+    private String department;
 
     @Column(name = "region")
-    private final String region;
+    private String region;
 
 
     public LocationInfo(String department, String region) {
@@ -42,4 +35,79 @@ public class LocationInfo implements Serializable {
         this.region = region == null || region.isBlank() ? "DefaultRegion" : region;
     }
 
+    public LocationInfo() {
+    }
+
+    public static LocationInfoBuilder builder() {
+        return new LocationInfoBuilder();
+    }
+
+    public String getDepartment() {
+        return this.department;
+    }
+
+    public String getRegion() {
+        return this.region;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof LocationInfo other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$department = this.getDepartment();
+        final Object other$department = other.getDepartment();
+        if (!Objects.equals(this$department, other$department))
+            return false;
+        final Object this$region = this.getRegion();
+        final Object other$region = other.getRegion();
+        return Objects.equals(this$region, other$region);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof LocationInfo;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $department = this.getDepartment();
+        result = result * PRIME + ($department == null ? 43 : $department.hashCode());
+        final Object $region = this.getRegion();
+        result = result * PRIME + ($region == null ? 43 : $region.hashCode());
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "LocationInfo(department=" + this.getDepartment() + ", region=" + this.getRegion() + ")";
+    }
+
+    public static class LocationInfoBuilder {
+        private String department;
+        private String region;
+
+        LocationInfoBuilder() {
+        }
+
+        public LocationInfoBuilder department(String department) {
+            this.department = department;
+            return this;
+        }
+
+        public LocationInfoBuilder region(String region) {
+            this.region = region;
+            return this;
+        }
+
+        public LocationInfo build() {
+            return new LocationInfo(this.department, this.region);
+        }
+
+        @Override
+        public String toString() {
+            return "LocationInfo.LocationInfoBuilder(department=" + this.department + ", region=" + this.region + ")";
+        }
+    }
 }

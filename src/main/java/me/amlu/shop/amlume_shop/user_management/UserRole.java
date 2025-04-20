@@ -13,24 +13,85 @@ package me.amlu.shop.amlume_shop.user_management;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import lombok.*;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Builder
 @Embeddable
-@Getter
-@NoArgsConstructor(force = true)
-@AllArgsConstructor
-@EqualsAndHashCode
-@ToString
-public final class UserRole implements Serializable {
+public class UserRole implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @Enumerated(EnumType.STRING)
-    private final AppRole roleName;
+    private AppRole roleName;
 
+    protected UserRole() { // Required by JPA
+    }
+
+    public UserRole(AppRole roleName) {
+        this.roleName = roleName;
+    }
+
+//    public UserRole() {
+//        this.roleName = null;
+//    }
+
+    public static UserRoleBuilder builder() {
+        return new UserRoleBuilder();
+    }
+
+    public AppRole getRoleName() {
+        return this.roleName;
+    }
+
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof UserRole other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$roleName = this.getRoleName();
+        final Object other$roleName = other.getRoleName();
+        return Objects.equals(this$roleName, other$roleName);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof UserRole;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $roleName = this.getRoleName();
+        result = result * PRIME + ($roleName == null ? 43 : $roleName.hashCode());
+        return result;
+    }
+
+    @Override
+    public String toString() {
+        return "UserRole(roleName=" + this.getRoleName() + ")";
+    }
+
+    public static class UserRoleBuilder {
+        private AppRole roleName;
+
+        UserRoleBuilder() {
+        }
+
+        public UserRoleBuilder roleName(AppRole roleName) {
+            this.roleName = roleName;
+            return this;
+        }
+
+        public UserRole build() {
+            return new UserRole(this.roleName);
+        }
+
+        @Override
+        public String toString() {
+            return "UserRole.UserRoleBuilder(roleName=" + this.roleName + ")";
+        }
+    }
 }

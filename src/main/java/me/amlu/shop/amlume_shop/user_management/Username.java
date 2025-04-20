@@ -14,13 +14,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Builder;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-@Builder
 @Embeddable
 public class Username implements Serializable {
 
@@ -40,6 +38,10 @@ public class Username implements Serializable {
             throw new IllegalArgumentException("Username must be between 3 and 20 characters");
         }
         this.valueOfUsername = value;
+    }
+
+    public static UsernameBuilder builder() {
+        return new UsernameBuilder();
     }
 
     public String getUsername() {
@@ -65,4 +67,25 @@ public class Username implements Serializable {
         return valueOfUsername;
     }
 
+    public static class UsernameBuilder {
+        private @NotBlank
+        @Size(min = 3, max = 20) String valueOfUsername;
+
+        UsernameBuilder() {
+        }
+
+        public UsernameBuilder valueOfUsername(@NotBlank @Size(min = 3, max = 20) String valueOfUsername) {
+            this.valueOfUsername = valueOfUsername;
+            return this;
+        }
+
+        public Username build() {
+            return new Username(this.valueOfUsername);
+        }
+
+        @Override
+        public String toString() {
+            return "Username.UsernameBuilder(valueOfUsername=" + this.valueOfUsername + ")";
+        }
+    }
 }

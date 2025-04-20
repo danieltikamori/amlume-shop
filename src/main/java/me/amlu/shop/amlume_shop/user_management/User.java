@@ -11,17 +11,11 @@
 package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
-import lombok.experimental.SuperBuilder;
-import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.category_management.Category;
-import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
 import me.amlu.shop.amlume_shop.model.address.Address;
+import me.amlu.shop.amlume_shop.product_management.Product;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -29,7 +23,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.io.Serial;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @Entity
 @Table(name = "_users", uniqueConstraints = {
@@ -40,11 +33,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
         @Index(name = "idx_user_email", columnList = "user_email"),
 //        @Index(name = "idx_user_orders", columnList = "user_orders")
 })
-@Getter
-@Setter // Added Setter for JPA/Hibernate and potential controlled modifications
-@NoArgsConstructor // Required by JPA
-@SuperBuilder // Use Lombok's builder
-@ToString // Be mindful of performance impact if logging frequently
 public class User extends BaseEntity implements UserDetails {
 
     @Serial
@@ -75,28 +63,47 @@ public class User extends BaseEntity implements UserDetails {
 
     @ElementCollection(fetch = FetchType.EAGER) // EAGER fetch for roles is often acceptable
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
-
     private Set<UserRole> roles = new HashSet<>(); // Initialize collection
 
     @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
     @JoinTable(name = "user_address",
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "address_id"))
-    @ToString.Exclude
     private List<Address> addresses = new ArrayList<>(); // Initialize collection
 
     @OneToMany(mappedBy = "categoryManager", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    @ToString.Exclude
     private List<Category> categories = new ArrayList<>(); // Initialize collection
 
     @OneToMany(mappedBy = "seller", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    @ToString.Exclude
     private Set<Product> products = new HashSet<>(); // Initialize collection
 
     // Initialized collection
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true) // Added orphanRemoval=true for consistency
-    @ToString.Exclude
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    // Added orphanRemoval=true for consistency
     private List<RefreshToken> refreshTokens = new ArrayList<>(); // Initialize collection
+
+    protected User() {
+    }
+
+    protected User(UserBuilder<?, ?> b) {
+        super(b);
+        this.userId = b.userId;
+        this.authenticationInfo = b.authenticationInfo;
+        this.contactInfo = b.contactInfo;
+        this.accountStatus = b.accountStatus;
+        this.mfaInfo = b.mfaInfo;
+        this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
+        this.locationInfo = b.locationInfo;
+        this.roles = b.roles;
+        this.addresses = b.addresses;
+        this.categories = b.categories;
+        this.products = b.products;
+        this.refreshTokens = b.refreshTokens;
+    }
+
+    public static UserBuilder<?, ?> builder() {
+        return new UserBuilderImpl();
+    }
 
 
     // --- UserDetails Implementation ---
@@ -178,6 +185,11 @@ public class User extends BaseEntity implements UserDetails {
         return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
     }
 
+    // Check MFA status
+    public boolean isMfaEnabled() {
+        return mfaInfo != null && mfaInfo.isMfaEnabled();
+    }
+
     // Proxy-aware implementation of equals()
     @Override
     public final boolean equals(Object o) {
@@ -208,4 +220,200 @@ public class User extends BaseEntity implements UserDetails {
         // return userId == null ? 31 : userId.hashCode();
     }
 
+    public Long getUserId() {
+        return this.userId;
+    }
+
+    public AuthenticationInfo getAuthenticationInfo() {
+        return this.authenticationInfo;
+    }
+
+    public ContactInfo getContactInfo() {
+        return this.contactInfo;
+    }
+
+    public AccountStatus getAccountStatus() {
+        return this.accountStatus;
+    }
+
+    public MfaInfo getMfaInfo() {
+        return this.mfaInfo;
+    }
+
+    public DeviceFingerprintingInfo getDeviceFingerprintingInfo() {
+        return this.deviceFingerprintingInfo;
+    }
+
+    public LocationInfo getLocationInfo() {
+        return this.locationInfo;
+    }
+
+    public Set<UserRole> getRoles() {
+        return this.roles;
+    }
+
+    public List<Address> getAddresses() {
+        return this.addresses;
+    }
+
+    public List<Category> getCategories() {
+        return this.categories;
+    }
+
+    public Set<Product> getProducts() {
+        return this.products;
+    }
+
+    public List<RefreshToken> getRefreshTokens() {
+        return this.refreshTokens;
+    }
+
+    public void setUserId(Long userId) {
+        this.userId = userId;
+    }
+
+    public void setAuthenticationInfo(AuthenticationInfo authenticationInfo) {
+        this.authenticationInfo = authenticationInfo;
+    }
+
+    public void setContactInfo(ContactInfo contactInfo) {
+        this.contactInfo = contactInfo;
+    }
+
+    public void setAccountStatus(AccountStatus accountStatus) {
+        this.accountStatus = accountStatus;
+    }
+
+    public void setMfaInfo(MfaInfo mfaInfo) {
+        this.mfaInfo = mfaInfo;
+    }
+
+    public void setDeviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
+        this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+    }
+
+    public void setLocationInfo(LocationInfo locationInfo) {
+        this.locationInfo = locationInfo;
+    }
+
+    public void setRoles(Set<UserRole> roles) {
+        this.roles = roles;
+    }
+
+    public void setAddresses(List<Address> addresses) {
+        this.addresses = addresses;
+    }
+
+    public void setCategories(List<Category> categories) {
+        this.categories = categories;
+    }
+
+    public void setProducts(Set<Product> products) {
+        this.products = products;
+    }
+
+    public void setRefreshTokens(List<RefreshToken> refreshTokens) {
+        this.refreshTokens = refreshTokens;
+    }
+
+    public String toString() {
+        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
+    }
+
+    public static abstract class UserBuilder<C extends User, B extends UserBuilder<C, B>> extends BaseEntityBuilder<C, B> {
+        private Long userId;
+        private AuthenticationInfo authenticationInfo;
+        private ContactInfo contactInfo;
+        private AccountStatus accountStatus;
+        private MfaInfo mfaInfo;
+        private DeviceFingerprintingInfo deviceFingerprintingInfo;
+        private LocationInfo locationInfo;
+        private Set<UserRole> roles;
+        private List<Address> addresses;
+        private List<Category> categories;
+        private Set<Product> products;
+        private List<RefreshToken> refreshTokens;
+
+        public B userId(Long userId) {
+            this.userId = userId;
+            return self();
+        }
+
+        public B authenticationInfo(AuthenticationInfo authenticationInfo) {
+            this.authenticationInfo = authenticationInfo;
+            return self();
+        }
+
+        public B contactInfo(ContactInfo contactInfo) {
+            this.contactInfo = contactInfo;
+            return self();
+        }
+
+        public B accountStatus(AccountStatus accountStatus) {
+            this.accountStatus = accountStatus;
+            return self();
+        }
+
+        public B mfaInfo(MfaInfo mfaInfo) {
+            this.mfaInfo = mfaInfo;
+            return self();
+        }
+
+        public B deviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
+            this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+            return self();
+        }
+
+        public B locationInfo(LocationInfo locationInfo) {
+            this.locationInfo = locationInfo;
+            return self();
+        }
+
+        public B roles(Set<UserRole> roles) {
+            this.roles = roles;
+            return self();
+        }
+
+        public B addresses(List<Address> addresses) {
+            this.addresses = addresses;
+            return self();
+        }
+
+        public B categories(List<Category> categories) {
+            this.categories = categories;
+            return self();
+        }
+
+        public B products(Set<Product> products) {
+            this.products = products;
+            return self();
+        }
+
+        public B refreshTokens(List<RefreshToken> refreshTokens) {
+            this.refreshTokens = refreshTokens;
+            return self();
+        }
+
+        protected abstract B self();
+
+        public abstract C build();
+
+        @Override
+        public String toString() {
+            return "User.UserBuilder(super=" + super.toString() + ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo + ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus + ", mfaInfo=" + this.mfaInfo + ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo + ", locationInfo=" + this.locationInfo + ", roles=" + this.roles + ", addresses=" + this.addresses + ", categories=" + this.categories + ", products=" + this.products + ", refreshTokens=" + this.refreshTokens + ")";
+        }
+    }
+
+    private static final class UserBuilderImpl extends UserBuilder<User, UserBuilderImpl> {
+        private UserBuilderImpl() {
+        }
+
+        protected UserBuilderImpl self() {
+            return this;
+        }
+
+        public User build() {
+            return new User(this);
+        }
+    }
 }

@@ -14,29 +14,36 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.Embedded;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.*;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
 @Embeddable
-@AllArgsConstructor
-@Getter
-@EqualsAndHashCode
-@NoArgsConstructor
-@Builder
-public final class AuthenticationInfo implements Serializable {
+public class AuthenticationInfo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @Embedded
-    Username username;
+    private Username username;
 
     @Embedded
-    UserPassword password;
+    private UserPassword password;
 
     public AuthenticationInfo(@NotBlank @Size(min = 3, max = 20) Username username, String encode) {
+    }
+
+    public AuthenticationInfo(Username username, UserPassword password) {
+        this.username = username;
+        this.password = password;
+    }
+
+    protected AuthenticationInfo() {
+    }
+
+    public static AuthenticationInfoBuilder builder() {
+        return new AuthenticationInfoBuilder();
     }
 
     public String getUsername() {
@@ -47,4 +54,58 @@ public final class AuthenticationInfo implements Serializable {
         return password.getPassword();
     }
 
+    @Override
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof AuthenticationInfo other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$username = this.getUsername();
+        final Object other$username = other.getUsername();
+        if (!Objects.equals(this$username, other$username)) return false;
+        final Object this$password = this.getPassword();
+        final Object other$password = other.getPassword();
+        return Objects.equals(this$password, other$password);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof AuthenticationInfo;
+    }
+
+    @Override
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $username = this.getUsername();
+        result = result * PRIME + ($username == null ? 43 : $username.hashCode());
+        final Object $password = this.getPassword();
+        result = result * PRIME + ($password == null ? 43 : $password.hashCode());
+        return result;
+    }
+
+    public static class AuthenticationInfoBuilder {
+        private Username username;
+        private UserPassword password;
+
+        AuthenticationInfoBuilder() {
+        }
+
+        public AuthenticationInfoBuilder username(Username username) {
+            this.username = username;
+            return this;
+        }
+
+        public AuthenticationInfoBuilder password(UserPassword password) {
+            this.password = password;
+            return this;
+        }
+
+        public AuthenticationInfo build() {
+            return new AuthenticationInfo(this.username, this.password);
+        }
+
+        @Override
+        public String toString() {
+            return "AuthenticationInfo.AuthenticationInfoBuilder(username=" + this.username + ", password=" + this.password + ")";
+        }
+    }
 }

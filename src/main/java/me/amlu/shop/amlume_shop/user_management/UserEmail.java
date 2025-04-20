@@ -15,13 +15,11 @@ import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Builder;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
-@Builder
 @Embeddable
 public class UserEmail implements Serializable {
 
@@ -44,6 +42,10 @@ public class UserEmail implements Serializable {
     protected UserEmail() { // Required by JPA
     }
 
+    public static UserEmailBuilder builder() {
+        return new UserEmailBuilder();
+    }
+
     public String getEmail() {
         return email;
     }
@@ -63,5 +65,28 @@ public class UserEmail implements Serializable {
     @Override
     public String toString() {
         return email;
+    }
+
+    public static class UserEmailBuilder {
+        private @NotBlank
+        @Size(min = 5, max = 50)
+        @Email String email;
+
+        UserEmailBuilder() {
+        }
+
+        public UserEmailBuilder email(@NotBlank @Size(min = 5, max = 50) @Email String email) {
+            this.email = email;
+            return this;
+        }
+
+        public UserEmail build() {
+            return new UserEmail(this.email);
+        }
+
+        @Override
+        public String toString() {
+            return "UserEmail.UserEmailBuilder(email=" + this.email + ")";
+        }
     }
 }

@@ -20,7 +20,7 @@ import java.io.Serializable;
 import java.util.Objects;
 
 @Embeddable
-public final class MfaQrCodeUrl implements Serializable {
+public class MfaQrCodeUrl implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -30,7 +30,7 @@ public final class MfaQrCodeUrl implements Serializable {
     @EqualsAndHashCode.Exclude
     private String mfaQrCodeUrlValue;
 
-    private MfaQrCodeUrl() {
+    protected MfaQrCodeUrl() { // Required by JPA
     }
 
     public MfaQrCodeUrl(String mfaQrCodeUrl) {
