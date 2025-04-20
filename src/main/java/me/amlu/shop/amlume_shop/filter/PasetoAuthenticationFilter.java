@@ -14,18 +14,15 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
-import me.amlu.shop.amlume_shop.security.paseto.TokenPayload;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -39,23 +36,48 @@ import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.BEARER_TOKEN_PREFIX;
 
-@Slf4j
+/**
+ * Purpose: Authenticate users based on a PASETO token in the Authorization: Bearer header.
+ * •Placement: addFilterBefore(..., UsernamePasswordAuthenticationFilter.class) -
+ * Correctly placed early to handle token-based authentication attempts.
+ * •Logic:•Extracts token from header.
+ * •Validates token using pasetoTokenService.validatePublicAccessToken(token).
+ * •Extracts claims (sub, scope) from validated token.
+ * •Creates UsernamePasswordAuthenticationToken and sets context: Standard practice.
+ * •Error Handling: Catches TokenValidationFailureException and SignatureException, sets status 401, clears context.
+ */
+
 @Component
 public class PasetoAuthenticationFilter extends OncePerRequestFilter {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(PasetoAuthenticationFilter.class);
     private final PasetoTokenService pasetoTokenService;
-//    private static final String BEARER_PREFIX = "Bearer ";
 
     public PasetoAuthenticationFilter(PasetoTokenService pasetoTokenService) {
         this.pasetoTokenService = pasetoTokenService;
     }
 
+    /**
+     * Filter
+     *
+     * @param request from client
+     * @param response to client
+     * @param filterChain A FilterChain is an object provided by the servlet container to the developer giving a view into the invocation chain of a filtered request for a resource. Filters use the FilterChain to invoke the next filter in the chain, or if the calling filter is the last filter in the chain, to invoke the resource at the end of the chain.
+     * @throws ServletException thrown by doFilter
+     * @throws IOException thrown by doFilter
+     */
     @Override
     protected void doFilterInternal(@NotNull HttpServletRequest request,
                                     @NotNull HttpServletResponse response,
                                     @NotNull FilterChain filterChain) throws ServletException, IOException {
         try {
             String token = extractTokenFromRequest(request);
+
+            // Null check for token
+            if (token == null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
 
             // Extract claims from the validated token
             Map<String, Object> claims = pasetoTokenService.validatePublicAccessToken(token); // Directly get the claims map
@@ -84,19 +106,20 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 SecurityContextHolder.clearContext();
                 // Consider returning here if you want to stop the chain on invalid token
-                 return;
+                return;
             }
         } catch (TokenValidationFailureException e) {
             log.error("Cannot set user authentication", e);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             SecurityContextHolder.clearContext();
+            return;
         } catch (SignatureException e) {
             log.error("Invalid token signature", e); // Log specific error
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             SecurityContextHolder.clearContext();
             // No re-throw, let filterChain.doFilter run below
             // OR add 'return;' if you want to stop the chain here.
-             return;
+            return;
         }
 
         filterChain.doFilter(request, response);
