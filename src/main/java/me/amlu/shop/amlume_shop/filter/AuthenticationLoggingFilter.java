@@ -16,6 +16,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -24,9 +27,27 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-@Slf4j
+/**
+ * •Purpose: Logs authentication success/failure after the filter chain completes.
+ * <p>
+ * •Placement: As a standard @Component filter,
+ * its order relative to the explicitly configured chain isn't guaranteed without @Order.
+ * It likely runs after the SecurityFilterChain bean's filters.
+ * This is generally acceptable for logging the outcome.
+ * <p>
+ * •Logic: Checks SecurityContextHolder after the chain.
+ * Catches AuthenticationException.
+ * <p>
+ * •Issues/Improvements:•If an earlier filter catches AuthenticationException
+ * and handles the response without re-throwing,
+ * this filter's catch block won't execute.
+ */
+
+@DependsOn("springSecurityFilterChain") // Or @Order
 @Component
 public class AuthenticationLoggingFilter extends OncePerRequestFilter {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AuthenticationLoggingFilter.class);
 
     @Override
     protected void doFilterInternal(@NotNull HttpServletRequest request,
