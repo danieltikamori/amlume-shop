@@ -320,6 +320,10 @@ public class User extends BaseEntity implements UserDetails {
         }
     }
 
+    public void createRoleSet(Set<UserRole> roles) {
+        this.roles = roles;
+    }
+
     public void addAddress(Address address) {
         if (this.addresses == null) { // Paranoid check
             this.addresses = new ArrayList<>();
