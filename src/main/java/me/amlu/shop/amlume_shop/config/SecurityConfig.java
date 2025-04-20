@@ -25,7 +25,6 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -104,15 +103,34 @@ public class SecurityConfig {
                         .sessionAuthenticationErrorUrl("/login?error") // Authentication error redirect
                         .invalidSessionUrl("/login?invalid")) // Redirect for invalid sessions
                 .authenticationProvider(mfaAuthenticationProvider)
-                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(deviceFingerprintVerificationFilter, UsernamePasswordAuthenticationFilter.class) // Fingerprint filter FIRST
-                .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class) // Then Paseto
-                .addFilterBefore(customAuthenticationFilter,
-                        UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(mfaAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-//                .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class) // Rate limiting early
+
+                // --- Authentication Filters ---
+                // Run Paseto token auth first if applicable
+                .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class)
+                // Then your custom username/password (if used alongside Paseto) or MFA filter
+                .addFilterBefore(customAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(mfaAuthenticationFilter, UsernamePasswordAuthenticationFilter.class) // Or adjust placement relative to customAuthenticationFilter
+
+                // --- Post-Authentication Filters ---
+                // *** Run Device Fingerprint Verification AFTER successful authentication ***
+                .addFilterAfter(deviceFingerprintVerificationFilter, PasetoAuthenticationFilter.class) // Or after UsernamePasswordAuthenticationFilter/MfaAuthenticationFilter depending on your primary auth method
+
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/api/auth/register",
+                                "/api/auth/logout",
+                                "/api/auth/v1/register",
+                                "/api/auth/v1/login",
+                                "/api/auth/v1/qrcode",
+                                "/api/auth/v1/mfa/enable",
+                                "/api/auth/v1/mfa/validate", // Ensure MFA validation endpoint is permitted before this filter runs if placed early
+                                "/public/**",
+                                "/error",
+                                "/actuator/**" // Permit actuator endpoints if needed
+                                // Add other public paths
+                        ).permitAll()
                         .anyRequest().authenticated()
                 );
 
