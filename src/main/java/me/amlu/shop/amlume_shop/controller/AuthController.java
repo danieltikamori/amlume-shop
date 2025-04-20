@@ -19,10 +19,8 @@ import me.amlu.shop.amlume_shop.payload.RegisterResponse;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.payload.user.UserResponse;
 import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
-import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService;
-import me.amlu.shop.amlume_shop.security.service.AuthenticationInterface;
 import me.amlu.shop.amlume_shop.security.service.MfaService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
@@ -45,21 +43,17 @@ public class AuthController {
 
     // --- Constructors ---
     private final UserService userService;
-    private final AuthenticationInterface authService;
     private final MfaService mfaService;
     private final MfaTokenRepository mfaTokenRepository;
-    private final PasetoTokenService pasetoTokenService;
     private final TokenValidationService tokenValidationService;
     private final TokenRevocationService tokenRevocationService;
 
     private final GlobalExceptionHandler globalExceptionHandler;
 
-    public AuthController(UserService userService, AuthenticationInterface authService, MfaService mfaService, MfaTokenRepository mfaTokenRepository, PasetoTokenService pasetoTokenService, TokenValidationService tokenValidationService, TokenRevocationService tokenRevocationService, GlobalExceptionHandler globalExceptionHandler) {
+    public AuthController(UserService userService, MfaService mfaService, MfaTokenRepository mfaTokenRepository, TokenValidationService tokenValidationService, TokenRevocationService tokenRevocationService, GlobalExceptionHandler globalExceptionHandler) {
         this.userService = userService;
-        this.authService = authService;
         this.mfaService = mfaService;
         this.mfaTokenRepository = mfaTokenRepository;
-        this.pasetoTokenService = pasetoTokenService;
         this.tokenValidationService = tokenValidationService;
         this.tokenRevocationService = tokenRevocationService;
         this.globalExceptionHandler = globalExceptionHandler;
