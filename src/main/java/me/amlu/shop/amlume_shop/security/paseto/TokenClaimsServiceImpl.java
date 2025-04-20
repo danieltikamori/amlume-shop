@@ -13,7 +13,7 @@ package me.amlu.shop.amlume_shop.security.paseto;
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.security.enums.TokenType;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
-import me.amlu.shop.amlume_shop.security.service.AuthenticationService;
+import me.amlu.shop.amlume_shop.security.service.AuthenticationInterface;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -37,13 +37,13 @@ public class TokenClaimsServiceImpl implements TokenClaimsService {
     @Value("${service.audience}")
     private String DEFAULT_AUDIENCE;
 
-    private final AuthenticationService authenticationService;
+    private final AuthenticationInterface authenticationInterface;
     private final HttpServletRequest httpServletRequest;
     private final TokenUtilService tokenUtilService;
 
 
-    public TokenClaimsServiceImpl(AuthenticationService authenticationService, HttpServletRequest httpServletRequest, TokenUtilService tokenUtilService) {
-        this.authenticationService = authenticationService;
+    public TokenClaimsServiceImpl(AuthenticationInterface authenticationInterface, HttpServletRequest httpServletRequest, TokenUtilService tokenUtilService) {
+        this.authenticationInterface = authenticationInterface;
         this.httpServletRequest = httpServletRequest;
         this.tokenUtilService = tokenUtilService;
     }
@@ -62,7 +62,7 @@ public class TokenClaimsServiceImpl implements TokenClaimsService {
 //        User user = findUserById(userId);
 //        User user = tokenUtilService.getUserId(userId);
         ZonedDateTime now = ZonedDateTime.now(ZoneOffset.UTC);
-        String userScope = authenticationService.determineUserScope();
+        String userScope = authenticationInterface.determineUserScope();
         return buildAccessPasetoClaims(userId, now, validity, userScope);
     }
 
