@@ -11,12 +11,17 @@
 package me.amlu.shop.amlume_shop.payload.user;
 
 import lombok.Builder;
+import me.amlu.shop.amlume_shop.user_management.UserPassword;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.user_management.Username;
 
 @Builder
-public record UserRegistrationRequest(Username username, String password, String userEmail, UserRole roles,
+public record UserRegistrationRequest(Username username, UserPassword password, String userEmail, UserRole roles,
                                       boolean mfaEnabled, String captchaResponse) {
+
+    public String getUsername() {
+        return username.getUsername();
+    }
 
 //    private String firstname;
 //    private String lastname;

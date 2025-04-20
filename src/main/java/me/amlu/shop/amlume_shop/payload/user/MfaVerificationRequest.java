@@ -10,24 +10,18 @@
 
 package me.amlu.shop.amlume_shop.payload.user;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+public record MfaVerificationRequest(
+        String secret,
+        String code,
+        String username,
+        String mfaCode,
+        String captchaResponse,
+        String userAgent,
+        String screenWidth,
+        String screenHeight
+) {
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Data
-public class MfaVerificationRequest {
-    private String secret;
-    private String code;
-
-    private String username;
-    private String mfaCode;
-
-    // Device fingerprinting
-    private String userAgent;
-    private String screenWidth;
-    private String screenHeight;
-
+    public MfaVerificationRequest() {
+        this(null, null, null, null, null, null, null, null);
+    }
 }
-

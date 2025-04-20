@@ -68,7 +68,6 @@ public final class Constants {
     public static final Duration TEMPORARY_CACHE_TTL = Duration.ofMinutes(10); // Cleaned by maintenance service
 
 
-
     // --- Compression constants ---
     public static final int COMPRESSION_THRESHOLD_BYTES = 1024;
 
@@ -87,6 +86,12 @@ public final class Constants {
     // --- Authentication and Authorization constants ---
     public static final String AUTHORIZATION_HEADER = "Authorization";
     public static final String BEARER_TOKEN_PREFIX = "Bearer ";
+
+    // --- Auth Message constants ---
+    public static final String ACCOUNT_LOCKED_MESSAGE = "Account is locked";
+    public static final String USER_NOT_FOUND_MESSAGE = "User not found";
+    public static final String INVALID_CREDENTIALS_MESSAGE = "Invalid username or password"; // More generic
+    public static final String INVALID_MFA_CODE_MESSAGE = "Invalid MFA code";
 
     // --- Http header constants ---
     public static final String USER_AGENT = "User-Agent";
@@ -153,9 +158,9 @@ public final class Constants {
     private static final String LINE_SEPARATOR = "\n";
 
     // --- Product constants ---
-
     public static final String PRODUCT = "Product";
     public static final String PRODUCT_ID = "productId";
+
 
 
     // Private constructor to prevent instantiation

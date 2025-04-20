@@ -22,7 +22,11 @@ public final class TokenConstants {
     public static final long REFRESH_TOKEN_VALIDITY = 86400; // 1 day in seconds
     public static final int MIN_TOKEN_LENGTH = 64;
     public static final int MAX_TOKEN_LENGTH = 700;
+    private static final int ACCESS_TOKEN_DURATION_INT = 15;
+    public static final Duration ACCESS_TOKEN_DURATION = Duration.ofMinutes(ACCESS_TOKEN_DURATION_INT);
+    public static final Duration REFRESH_TOKEN_DURATION = Duration.ofDays(7);
     public static final Duration MAX_TOKEN_LIFETIME = Duration.ofDays(7);
+    public static final Duration JTI_DURATION = Duration.ofMinutes(ACCESS_TOKEN_DURATION_INT + (long) 1); // Used for blocklist TTL
 
     // Paseto related
     public static final int PASETO_TOKEN_PARTS_LENGTH = 4;
@@ -93,6 +97,7 @@ public final class TokenConstants {
     public static final String TOKEN_REVOKED_GENERIC = "Token revoked due to: %s";
     public static final String TOKEN_VALIDATION_RATELIMIT_KEY = "tokenValidation:";
     public static final String CLAIMS_VALIDATION_RATELIMIT_KEY = "claimsValidation:";
+
 
     private TokenConstants() {}
 }
