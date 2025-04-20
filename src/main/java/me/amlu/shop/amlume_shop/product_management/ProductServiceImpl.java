@@ -179,7 +179,7 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     // Consider a more specific cache name if needed, e.g., "productsPage"
-    @Cacheable(value = "product", key = "'all_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
+    @Cacheable(value = PRODUCT_LIST_CACHE, key = "'all_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     // More specific key
     @RateLimiter(name = "defaultRateLimiter")
     @Transactional(readOnly = true)
@@ -207,7 +207,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     // Cache pages of products by category
     // Cache key includes category ID and pagination
-    @Cacheable(value = "product", key = "'cat_' + #categoryId + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
+    @Cacheable(value = PRODUCT_LIST_CACHE, key = "'cat_' + #categoryId + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
     public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir)
             throws ResourceNotFoundException, NotFoundException { // Added NotFoundException
@@ -242,7 +242,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     // Cache pages of products by keyword
     // Cache key includes keyword and pagination
-    @Cacheable(value = "product", key = "'kw_' + #keyword + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
+    @Cacheable(value = PRODUCT_LIST_CACHE, key = "'kw_' + #keyword + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
     public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir)
             throws ResourceNotFoundException {
@@ -270,7 +270,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     // Evict specific product cache and potentially list caches
-//    @CacheEvict(value = "product", key = "#productId")
+//    @CacheEvict(value = PRODUCT_LIST_CACHE, key = "#productId")
     @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
     @RateLimiter(name = "defaultRateLimiter")
@@ -371,7 +371,7 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     @RateLimiter(name = "defaultRateLimiter")
     @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
-//    @CacheEvict(value = "product", key = "#productId")
+//    @CacheEvict(value = PRODUCT_LIST_CACHE, key = "#productId")
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
     // Assumes:
@@ -402,7 +402,7 @@ public class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     // Evict specific product cache and potentially list caches
-//    @CacheEvict(value = "product", key = "#productId")
+//    @CacheEvict(value = PRODUCT_LIST_CACHE, key = "#productId")
     @CacheEvict(value = PRODUCT_LIST_CACHE, allEntries = true)
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
     // Use Spring Security's @PreAuthorize for combined check
