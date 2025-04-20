@@ -24,7 +24,6 @@ import me.amlu.shop.amlume_shop.payload.user.MfaVerificationRequest;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
-import me.amlu.shop.amlume_shop.resilience.service.ResilienceService;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
@@ -36,6 +35,7 @@ import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Value; // Import Value
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
@@ -52,6 +52,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional; // Import Optional
 import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.AUTH_CACHE;
@@ -82,13 +83,15 @@ public class UserAuthenticator implements AuthenticationInterface {
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
     private final DeviceFingerprintService deviceFingerprintService;
     private final HttpServletRequest httpServletRequest;
-    private final ResilienceService resilienceService;
     private final PasetoTokenService pasetoTokenService;
     private final FailedLoginAttemptService failedLoginAttemptService;
-    private final CaptchaService captchaService;
     private final SecurityAuditService auditService;
     private final SecurityNotificationService notificationService;
-    private final TokenRevocationService tokenRevocationService; // Inject a service to handle blocklisting
+    private final TokenRevocationService tokenRevocationService;
+
+    // Inject maxDevicesPerUser property
+    @Value("${security.max-devices-per-user}")
+    private int maxDevicesPerUser;
 
     // --- Constructor ---
     public UserAuthenticator(CacheService cacheService,
@@ -97,8 +100,6 @@ public class UserAuthenticator implements AuthenticationInterface {
                              UserDeviceFingerprintRepository userDeviceFingerprintRepository,
                              DeviceFingerprintService deviceFingerprintService,
                              HttpServletRequest httpServletRequest,
-                             ResilienceService resilienceService,
-                             CaptchaService captchaService,
                              SecurityAuditService auditService,
                              SecurityNotificationService notificationService,
                              UserRepository userRepository,
@@ -113,8 +114,6 @@ public class UserAuthenticator implements AuthenticationInterface {
         this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
         this.deviceFingerprintService = deviceFingerprintService;
         this.httpServletRequest = httpServletRequest;
-        this.resilienceService = resilienceService;
-        this.captchaService = captchaService;
         this.auditService = auditService;
         this.notificationService = notificationService;
         this.userRepository = userRepository;
@@ -130,8 +129,8 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     public AuthResponse register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException {
         try {
-            // 0. Pre-flight checks, resilience
-            performPreFlightChecks(request.username().getUsername(), request.captchaResponse(), ipAddress, "Registration");
+            // 0. Pre-flight checks
+            performPreFlightChecks(request.username().getUsername(), ipAddress, "Registration");
 
             User user = userService.registerUser(request);
 
@@ -147,6 +146,19 @@ public class UserAuthenticator implements AuthenticationInterface {
             // Generate tokens
             AuthTokenGenerator generateAuthTokens = generateAuthTokens(user);
             auditService.logSuccessfulRegistration(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
+
+            // --- Associate Fingerprint during Registration ---
+            // Generate fingerprint based on registration request details
+            String deviceFingerprint = generateAndHandleFingerprint(request.captchaResponse(), null, null); // Use available info, screen might be null
+            if (deviceFingerprint != null && user.isDeviceFingerprintingEnabled()) { // Check if enabled
+                try {
+                    associateFingerprintWithTokens(user, generateAuthTokens.accessToken(), generateAuthTokens.refreshToken(), deviceFingerprint, true); // Mark as trusted on registration
+                } catch (MaxDevicesExceededException e) {
+                    log.warn("Max devices reached during registration for user [{}]. Fingerprint not associated.", user.getUsername());
+                    // Decide policy: Fail registration? Log only? For now, log and continue.
+                }
+            }
+            // --- End Fingerprint Association ---
 
             return AuthResponse.builder()
                     .secretImageUrl(qrCodeUrl) // Send QR URL if MFA setup occurred
@@ -169,14 +181,14 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     public AuthResponse authenticateUser(@Valid LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException {
         try {
-            // 0. Pre-flight checks, resilience
+            // 0. Pre-flight checks
             validateLoginRequest(request);
-            performPreFlightChecks(request.getUsername(), request.getCaptchaResponse(), ipAddress, "Login");
+            performPreFlightChecks(request.username(), ipAddress, "Login");
 
             // 1. Fetch user
-            User user = userRepository.findByUsername(request.getUsername())
+            User user = userRepository.findByUsername(request.username())
                     .orElseThrow(() -> {
-                        auditService.logFailedLogin(request.getUsername(), ipAddress, USER_NOT_FOUND_MESSAGE);
+                        auditService.logFailedLogin(request.username(), ipAddress, USER_NOT_FOUND_MESSAGE);
                         return new UsernameNotFoundException(INVALID_CREDENTIALS_MESSAGE); // Generic message
                     });
 
@@ -184,20 +196,18 @@ public class UserAuthenticator implements AuthenticationInterface {
             checkAccountLockStatus(user, ipAddress);
 
             // 3. Check password
-            if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
                 handleFailedLogin(user, ipAddress); // Increments attempts, locks if needed
                 throw new BadCredentialsException(INVALID_CREDENTIALS_MESSAGE);
             }
 
             // 4. Handle MFA or proceed to successful login
             if (mfaService.isMfaEnabled(user) || mfaService.isMfaEnforced(user)) {
-                // MFA is required, but no code provided yet -> Initiate challenge
-                // This path assumes the initial login request doesn't include the MFA code.
-                // If it could, you'd need to check request.getMfaCode() here.
+                // MFA is required
                 return initiateMfaChallenge(user);
             } else {
                 // No MFA required, proceed to successful login
-                String deviceFingerprint = generateAndHandleFingerprint(request.getUserAgent(), request.getScreenWidth(), request.getScreenHeight());
+                String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
                 return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
             }
 
@@ -207,7 +217,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             throw e;
         } catch (Exception e) {
             // Catch unexpected errors
-            log.error("Authentication error for user [{}]: {}", request.getUsername(), e.getMessage(), e);
+            log.error("Authentication error for user [{}]: {}", request.username(), e.getMessage(), e);
             throw new AuthenticationFailException("Authentication failed due to an internal error.");
         }
     }
@@ -217,12 +227,12 @@ public class UserAuthenticator implements AuthenticationInterface {
     public AuthResponse verifyMfaAndLogin(MfaVerificationRequest request, String ipAddress) throws TooManyAttemptsException, AuthenticationFailException {
         try {
             // 0. Pre-flight checks (optional for MFA verification itself, but good practice)
-            performPreFlightChecks(request.getUsername(), null, ipAddress, "MFA Verification"); // Captcha likely not needed here
+            performPreFlightChecks(request.username(), ipAddress, "MFA Verification"); // Captcha likely not needed here
 
             // 1. Fetch user
-            User user = userRepository.findByUsername(request.getUsername())
+            User user = userRepository.findByUsername(request.username())
                     .orElseThrow(() -> {
-                        auditService.logFailedLogin(request.getUsername(), ipAddress, USER_NOT_FOUND_MESSAGE);
+                        auditService.logFailedLogin(request.username(), ipAddress, USER_NOT_FOUND_MESSAGE);
                         return new UsernameNotFoundException(INVALID_CREDENTIALS_MESSAGE); // Generic message
                     });
 
@@ -233,7 +243,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             MfaToken mfaToken = mfaTokenRepository.findByUser(user)
                     .orElseThrow(() -> new MfaException(MfaException.MfaErrorType.SETUP_FAILED, "MFA not set up for user"));
 
-            if (!mfaService.verifyCode(mfaToken.getSecret(), request.getMfaCode())) {
+            if (!mfaService.verifyCode(mfaToken.getSecret(), request.mfaCode())) {
                 auditService.logMfaVerificationFailed(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
                 // Consider incrementing failed attempts here too? Depends on security policy.
                 // handleFailedLogin(user, ipAddress); // Optionally lock after too many MFA failures
@@ -241,7 +251,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             }
 
             // 4. MFA successful, proceed to login completion
-            String deviceFingerprint = generateAndHandleFingerprint(request.getUserAgent(), request.getScreenWidth(), request.getScreenHeight());
+            String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
             return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
 
         } catch (TooManyAttemptsException | LockedException | UsernameNotFoundException | MfaException |
@@ -249,24 +259,23 @@ public class UserAuthenticator implements AuthenticationInterface {
             // Re-throw specific exceptions
             throw e;
         } catch (Exception e) {
-            log.error("MFA Verification error for user [{}]: {}", request.getUsername(), e.getMessage(), e);
+            log.error("MFA Verification error for user [{}]: {}", request.username(), e.getMessage(), e);
             throw new AuthenticationFailException("MFA verification failed due to an internal error.");
         }
     }
-
 
     // --- Logout ---
     @Transactional
     @Override
     public void logout(String accessToken, String refreshToken) { // Accept tokens to revoke
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null) {
+        if (authentication != null && authentication.isAuthenticated() && !(authentication.getPrincipal() instanceof String && authentication.getPrincipal().equals("anonymousUser"))) {
             String username = authentication.getName();
             log.info("Logging out user: {}", username);
 
-            String reason = "Manually User logged out"; // Define a reason for logging
+            String reason = "User initiated logout"; // Define a reason for logging
 
-            // Standard Spring Security logout
+            // Standard Spring Security logout (clears context, invalidates session if applicable)
             new SecurityContextLogoutHandler().logout(httpServletRequest, null, authentication);
 
             // Revoke tokens by adding them to the blocklist
@@ -278,7 +287,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             }
             auditService.logLogout(username, reason); // Assuming username is principal name
         } else {
-            log.debug("Logout called but no authentication found in context.");
+            log.debug("Logout called but no authenticated user found in context.");
         }
         // No return value needed typically
     }
@@ -287,46 +296,32 @@ public class UserAuthenticator implements AuthenticationInterface {
 
     private void validateLoginRequest(LoginRequest loginRequest) {
         if (loginRequest == null ||
-                StringUtils.isBlank(loginRequest.getUsername()) ||
-                StringUtils.isBlank(loginRequest.getPassword())) {
+                StringUtils.isBlank(loginRequest.username()) ||
+                StringUtils.isBlank(loginRequest.password())) {
             throw new IllegalArgumentException("Username and password cannot be empty.");
         }
+        // Add captcha validation if needed here or in preFlightChecks
     }
 
     /**
      * Consolidated pre-flight checks for registration and login.
      */
-    private void performPreFlightChecks(String username, String captchaResponse, String ipAddress, String actionType) throws TooManyAttemptsException, InvalidCaptchaException {
-        // Check IP rate limiting
-        if (!resilienceService.allowRequestByIp(ipAddress)) {
-            auditService.logFailedLogin(username, ipAddress, "IP Rate Limit Exceeded");
-            throw new TooManyAttemptsException("Too many requests from this IP. Please try again later.");
-        }
+    private void performPreFlightChecks(String username, String ipAddress, String actionType) throws TooManyAttemptsException {
 
-        // Check Username rate limiting (if username is provided)
-        if (StringUtils.isNotBlank(username) && !resilienceService.allowRequestByUsername(username)) {
-            auditService.logFailedLogin(username, ipAddress, "Username Rate Limit Exceeded");
-            throw new TooManyAttemptsException("Too many requests for this user. Please try again later.");
-        }
-
-        // IMPLEMENT if necessary. Check if we need to wait (exponential backoff)
-
-        // Check failed login attempts
+        // Check failed login attempts (applies to log in/MFA verify, maybe registration too)
         try {
-            failedLoginAttemptService.checkAndThrowIfBlocked(username);
+            failedLoginAttemptService.checkAndThrowIfBlocked(username); // Check by username
+            failedLoginAttemptService.checkAndThrowIfBlocked(ipAddress); // Check by IP
         } catch (TooManyAttemptsException e) {
-            auditService.logFailedLogin(username, ipAddress, "Too Many Login Attempts (Backoff)");
+            // Use the exception message which likely contains the key type information
+            auditService.logFailedLogin(username, ipAddress, "Too Many Attempts (Backoff) for " + e.getMessage());
             throw e;
         }
 
-        // Validate CAPTCHA if required (e.g., based on attempt count or always for registration)
-        // Add logic here if captcha requirement is dynamic
-        try {
-            captchaService.verifyRateLimitAndCaptcha(ipAddress, captchaResponse);
-        } catch (InvalidCaptchaException e) {
-            auditService.logFailedLogin(username, ipAddress, "Invalid CAPTCHA");
-            throw new InvalidCaptchaException("Invalid CAPTCHA");
-        }
+        // TODO: Add Captcha validation here if required for the actionType
+        // if ("Login".equals(actionType) || "Registration".equals(actionType)) {
+        //     captchaService.validateCaptcha(request.getCaptchaResponse(), ipAddress);
+        // }
 
         log.trace("Pre-flight checks passed for user [{}], action [{}]", username, actionType);
     }
@@ -334,12 +329,12 @@ public class UserAuthenticator implements AuthenticationInterface {
     private void checkAccountLockStatus(User user, String ipAddress) throws LockedException {
         if (!user.isAccountNonLocked()) {
             if (!unlockWhenTimeExpired(user)) {
-                // Account is still locked
+                // The Account is still locked
                 auditService.logAccessDeniedLockedAccount(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
                 throw new LockedException(ACCOUNT_LOCKED_MESSAGE);
             } else {
-                // Account was locked but now unlocked by time expiry
-                auditService.logAccountUnlocked(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
+                // The Account was locked but now unlocked by time expiry
+                auditService.logAccountUnlocked(String.valueOf(user.getUserId()), user.getUsername(), ipAddress + " (Automatic)");
                 log.info("Account for user [{}] automatically unlocked due to time expiry.", user.getUsername());
             }
         }
@@ -362,6 +357,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             details.put("mfaRequired", true);
             String message = "MFA verification required.";
 
+            // Check if the token is enabled (meaning setup is complete)
             if (!mfaToken.isEnabled()) {
                 // If MFA needs setup, provide QR code details
                 String qrCodeUrl = mfaService.generateQrCodeImageUrl(user, mfaToken.getSecret());
@@ -369,15 +365,21 @@ public class UserAuthenticator implements AuthenticationInterface {
                 details.put("qrCodeUrl", qrCodeUrl);
                 details.put("setupRequired", true);
                 message = "MFA setup required.";
+                log.info("Initiating MFA setup challenge for user: {}", user.getUsername());
+            } else {
+                log.info("Initiating MFA verification challenge for user: {}", user.getUsername());
+                details.put("setupRequired", false); // Explicitly state setup is not required
             }
 
             // Return an AuthResponse indicating MFA is needed, optionally with setup details
             return AuthResponse.builder()
                     .success(false) // Not fully logged in yet
                     .mfaRequired(true)
-                    .mfaSetupRequired(details.containsKey("setupRequired"))
-                    .secretImageUrl((String) details.get("qrCodeUrl"))
+                    .mfaEnabled(mfaToken.isEnabled()) // Reflects if setup is done
+                    // .mfaSetupRequired(details.containsKey("setupRequired") && (Boolean)details.get("setupRequired")) // More explicit
+                    .secretImageUrl((String) details.get("qrCodeUrl")) // Null if setup not required
                     .message(message)
+                    .details(details) // Include details map
                     .build();
         } catch (Exception e) {
             log.error("Error initiating MFA challenge for user: {}", user.getUsername(), e);
@@ -388,19 +390,27 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     @Transactional // Ensure all operations succeed or fail together
     public AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint) {
-        resetFailedAttempts(user);
-        user.setLastLoginTime(Instant.now());
-        // No need to save user here if resetFailedAttempts already saves
+        resetFailedAttempts(user); // Resets attempts in DB and cache
+        user.updateLastLoginTime(Instant.now());
+        userRepository.save(user); // Save updated last login time
 
         auditService.logSuccessfulLogin(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
 
         // Generate tokens
         AuthTokenGenerator tokens = generateAuthTokens(user);
 
-        // Associate fingerprint with tokens
-        if (deviceFingerprint != null) {
-            associateFingerprintWithTokens(user, tokens.accessToken(), tokens.refreshToken(), deviceFingerprint);
-            // REMOVED: deviceFingerprintService.storeOrUpdateFingerprint(user, accessToken, refreshToken, deviceFingerprint);
+        // Associate fingerprint with tokens if enabled and fingerprint available
+        if (user.isDeviceFingerprintingEnabled() && deviceFingerprint != null) {
+            try {
+                // Associate, marking as untrusted if it's a new device found during login
+                associateFingerprintWithTokens(user, tokens.accessToken(), tokens.refreshToken(), deviceFingerprint, false); // false = not trusted by default on login
+            } catch (MaxDevicesExceededException e) {
+                log.warn("Max devices reached during login for user [{}]. Fingerprint not associated.", user.getUsername());
+                // Decide policy: Fail login? Log only? For now, log and continue log in.
+                // throw new AuthenticationFailException("Cannot log in, maximum device limit reached."); // Option to fail
+            }
+        } else if (deviceFingerprint == null && user.isDeviceFingerprintingEnabled()) {
+            log.warn("Device fingerprint could not be generated during login for user [{}], but fingerprinting is enabled. Proceeding without association.", user.getUsername());
         }
 
         return AuthResponse.builder()
@@ -417,9 +427,10 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     @Transactional
     public void handleFailedLogin(User user, String ipAddress) {
-        increaseFailedAttempts(user); // This saves the user
+        increaseFailedAttempts(user); // This saves the user and records in cache
         auditService.logFailedLogin(user.getUsername(), ipAddress, INVALID_CREDENTIALS_MESSAGE);
 
+        // Check lock condition using the updated count from the user entity
         if (user.getFailedLoginAttempts() >= Constants.MAX_FAILED_ATTEMPTS) {
             lockUser(user); // This saves the user
             notificationService.sendAccountLockedEmail(user);
@@ -427,58 +438,113 @@ public class UserAuthenticator implements AuthenticationInterface {
         }
     }
 
+    /**
+     * @deprecated Redundant method. Logic is handled by {@link #checkAccountLockStatus(User, String)}.
+     */
+    @Deprecated(since = "2025-04-20", forRemoval = true) // Mark as deprecated
     @Override
     public void handleLockedAccount(User user, String ipAddress) throws LockedException {
         // This method seems redundant now as checkAccountLockStatus handles the logic
-        // Kept for interface compliance, but logic is in checkAccountLockStatus
+        // Kept for interface compliance, but the logic is in checkAccountLockStatus
+        log.warn("handleLockedAccount method is deprecated and should not be used directly. Use checkAccountLockStatus.");
         checkAccountLockStatus(user, ipAddress);
     }
 
-    private void associateFingerprintWithTokens(User user, String accessToken, String refreshToken, String deviceFingerprint) {
-        // Consider finding existing fingerprint record for this user/fingerprint combo first
-        // to update tokens/lastUsedAt instead of always creating new ones.
-        UserDeviceFingerprint userDeviceFingerprint = userDeviceFingerprintRepository
-                .findByUserAndDeviceFingerprint(user, deviceFingerprint)
-                .orElse(new UserDeviceFingerprint()); // Create new if not found
+    /**
+     * Associates device fingerprint with tokens, checking device limits for new devices.
+     *
+     * @param user              The user.
+     * @param accessToken       The access token.
+     * @param refreshToken      The refresh token.
+     * @param deviceFingerprint The generated device fingerprint.
+     * @param trustOnCreate     Whether to mark the device as trusted if it's being created (e.g., during registration).
+     * @throws MaxDevicesExceededException if adding a new device would exceed the limit.
+     */
+    private void associateFingerprintWithTokens(User user, String accessToken, String refreshToken, String deviceFingerprint, boolean trustOnCreate) throws MaxDevicesExceededException {
+        Optional<UserDeviceFingerprint> existingOpt = userDeviceFingerprintRepository
+                .findByUserAndDeviceFingerprint(user, deviceFingerprint);
 
-        userDeviceFingerprint.setUser(user);
-        userDeviceFingerprint.setDeviceFingerprint(deviceFingerprint);
-        userDeviceFingerprint.setAccessToken(accessToken); // Store the access token
-        userDeviceFingerprint.setRefreshToken(refreshToken); // Store the refresh token
+        UserDeviceFingerprint userDeviceFingerprint;
+        boolean isNewDevice = existingOpt.isEmpty();
+
+        if (isNewDevice) {
+            // --- New Device ---
+            log.debug("Associating new device fingerprint for user [{}]", user.getUsername());
+            // Check device limit BEFORE creating
+            long deviceCount = userDeviceFingerprintRepository.countByUserAndIsActiveTrue(user);
+            if (deviceCount >= maxDevicesPerUser) {
+                log.warn("Max device limit ({}) reached for user [{}]. Cannot associate new device fingerprint.", maxDevicesPerUser, user.getUsername());
+                throw new MaxDevicesExceededException("Maximum device limit reached, cannot add new device.");
+            }
+            userDeviceFingerprint = UserDeviceFingerprint.builder()
+                    .user(user)
+                    .deviceFingerprint(deviceFingerprint)
+                    .isActive(true)
+                    .trusted(trustOnCreate) // Set trust status based on context (e.g., true for registration, false for login)
+                    .failedAttempts(0)
+                    // .deviceName("Derived Name") // TODO: Derive if possible
+                    // .browserInfo("Derived Info") // TODO: Derive if possible
+                    .build();
+        } else {
+            // --- Existing Device ---
+            log.debug("Updating existing device fingerprint association for user [{}]", user.getUsername());
+            userDeviceFingerprint = existingOpt.get();
+            userDeviceFingerprint.setActive(true); // Ensure it's active if used successfully
+            userDeviceFingerprint.setDeactivatedAt(null); // Clear deactivation time if re-activated
+            userDeviceFingerprint.setFailedAttempts(0); // Reset failed attempts on successful association
+        }
+
+        // Update common fields
+        userDeviceFingerprint.setAccessToken(accessToken); // Store/Update the access token
+        userDeviceFingerprint.setRefreshToken(refreshToken); // Store/Update the refresh token
         userDeviceFingerprint.setLastUsedAt(Instant.now());
+        userDeviceFingerprint.setLastKnownIp(httpServletRequest.getRemoteAddr()); // Update IP
+
         userDeviceFingerprintRepository.save(userDeviceFingerprint);
-        log.debug("Associated tokens with fingerprint for user [{}]", user.getUsername());
+        log.info("Successfully associated tokens with {} fingerprint for user [{}] (Trusted: {})",
+                isNewDevice ? "new" : "existing", user.getUsername(), userDeviceFingerprint.isTrusted());
     }
+
 
     @Override
     @Transactional
     public void resetFailedAttempts(User user) {
         String username = user.getUsername();
+        // Check if there's anything to reset to avoid unnecessary DB write/cache op
         if (user.getFailedLoginAttempts() > 0 || user.getLockTime() != null) {
-            failedLoginAttemptService.resetAttempts(username);
-            user.setFailedLoginAttempts(0);
-            user.setLockTime(null);
+            failedLoginAttemptService.resetAttempts(username); // Reset cache/counter
+            user.updateFailedLoginAttempts(0);
+            user.updateLockTime(null);
+            // No need to explicitly save user here if updateAccountNonLocked does it,
+            // but saving ensures consistency if called independently.
             userRepository.save(user);
             log.debug("Reset failed login attempts for user [{}]", user.getUsername());
+        } else {
+            log.trace("No failed attempts or lock time to reset for user [{}]", user.getUsername());
         }
     }
 
     @Override
     @Transactional
     public void increaseFailedAttempts(User user) {
-        user.setFailedLoginAttempts(user.getFailedLoginAttempts() + 1);
-        userRepository.save(user);
-        failedLoginAttemptService.recordFailure(user.getUsername());
-        log.debug("Increased failed login attempts for user [{}] to {}", user.getUsername(), user.getFailedLoginAttempts());
+        int newAttemptCount = user.getFailedLoginAttempts() + 1;
+        user.updateFailedLoginAttempts(newAttemptCount);
+        userRepository.save(user); // Save updated count
+        failedLoginAttemptService.recordFailure(user.getUsername()); // Record in cache/counter
+        log.debug("Increased failed login attempts for user [{}] to {}", user.getUsername(), newAttemptCount);
     }
 
     @Override
     @Transactional
     public void lockUser(User user) {
-        user.setAccountNonLocked(false);
-        user.setLockTime(Instant.now());
-        userRepository.save(user);
-        log.warn("Locked account for user [{}] due to excessive failed attempts.", user.getUsername());
+        if (user.isAccountNonLocked()) { // Only lock if not already locked
+            user.updateAccountNonLocked(false);
+            user.updateLockTime(Instant.now());
+            userRepository.save(user);
+            log.warn("Locked account for user [{}] due to excessive failed attempts.", user.getUsername());
+        } else {
+            log.debug("Account for user [{}] is already locked.", user.getUsername());
+        }
     }
 
     @Override
@@ -487,10 +553,11 @@ public class UserAuthenticator implements AuthenticationInterface {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException(USER_NOT_FOUND_MESSAGE));
         if (!user.isAccountNonLocked()) {
-            user.setAccountNonLocked(true);
-            user.setLockTime(null);
-            user.setFailedLoginAttempts(0);
+            user.updateAccountNonLocked(true);
+            user.updateLockTime(null);
+            user.updateFailedLoginAttempts(0); // Reset attempts on manual unlock
             userRepository.save(user);
+            failedLoginAttemptService.resetAttempts(username); // Also reset cache/counter
             log.info("Manually unlocked account for user [{}]", username);
             auditService.logAccountUnlocked(String.valueOf(user.getUserId()), username, "Manual Unlock"); // Add context
         } else {
@@ -501,21 +568,24 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     @Transactional
     public boolean unlockWhenTimeExpired(User user) {
-        if (user.getLockTime() != null && !user.isAccountNonLocked()) { // Check if actually locked
+        // Check if actually locked and lock time is set
+        if (!user.isAccountNonLocked() && user.getLockTime() != null) {
             long lockTimeInMillis = user.getLockTime().toEpochMilli();
             long currentTimeInMillis = System.currentTimeMillis();
 
             if (currentTimeInMillis - lockTimeInMillis >= Constants.LOCK_DURATION_MILLIS) {
-                user.setAccountNonLocked(true);
-                user.setLockTime(null);
-                user.setFailedLoginAttempts(0);
+                user.updateAccountNonLocked(true);
+                user.updateLockTime(null);
+                user.updateFailedLoginAttempts(0); // Reset attempts on auto-unlock
                 userRepository.save(user);
+                failedLoginAttemptService.resetAttempts(user.getUsername()); // Reset cache/counter
                 log.info("Account for user [{}] automatically unlocked.", user.getUsername());
+                // Audit log is handled in checkAccountLockStatus
                 return true; // Unlocked now
             }
             return false; // Still locked
         }
-        return true; // Not locked in the first place
+        return true; // Not locked or no lock time set
     }
 
     @Override
@@ -524,22 +594,26 @@ public class UserAuthenticator implements AuthenticationInterface {
 
         if (deviceFingerprint == null) {
             log.warn("Device fingerprint could not be generated.");
-            // Decide policy: Allow login without fingerprint? For now, return null.
+            // Policy decision: Allow login without fingerprint? For now, return null.
+            // If fingerprinting is mandatory, could throw an exception here.
+            // throw new DeviceFingerprintGenerationException("Could not generate mandatory device fingerprint");
             return null;
         }
+        log.trace("Generated device fingerprint: {}", deviceFingerprint); // Log trace level
         return deviceFingerprint;
     }
 
     @Override
     public String determineUserScope() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated() || authentication.getAuthorities().isEmpty()) {
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getAuthorities() == null || authentication.getAuthorities().isEmpty()) {
             // Handle anonymous or unauthenticated users appropriately
             return "ROLE_ANONYMOUS"; // Or throw exception if authentication is strictly required here
         }
 
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
+                .filter(StringUtils::isNotBlank) // Ensure authorities are not blank
                 .collect(Collectors.joining(" "));
     }
 
@@ -581,6 +655,7 @@ public class UserAuthenticator implements AuthenticationInterface {
         io.micrometer.core.instrument.Timer.Sample sample = Timer.start(meterRegistry);
         String cacheKey = AUTH_CACHE_KEY_PREFIX + username;
         try {
+            // Use cacheService which handles cache misses and supplier execution
             AuthenticationInfo info = cacheService.getOrCache(
                     AUTH_CACHE,
                     cacheKey,
@@ -592,43 +667,47 @@ public class UserAuthenticator implements AuthenticationInterface {
         } catch (Exception e) {
             sample.stop(meterRegistry.timer("auth.info.fetch", "status", "error"));
             log.error("Failed to fetch authentication info for user [{}]: {}", username, e.getMessage(), e);
-            throw e; // Re-throw
+            // Re-throw specific exceptions if needed, or a generic one
+            if (e instanceof UsernameNotFoundException) {
+                throw e;
+            }
+            throw new RuntimeException("Failed to fetch authentication info", e); // Or custom exception
         }
     }
 
-    @Transactional(noRollbackFor = Exception.class)
-    @CacheEvict(value = AUTH_CACHE, key = "'auth:' + #username")
+    @Transactional(noRollbackFor = Exception.class) // Allow commit even if cache eviction fails? Review this.
+    @CacheEvict(value = AUTH_CACHE, key = "'" + AUTH_CACHE_KEY_PREFIX + "' + #username") // Ensure prefix is included in the key
     @Override
     public void updateAuthenticationInfo(String username, AuthenticationInfo newInfo) {
         if (username == null || newInfo == null) {
             throw new IllegalArgumentException("Username and new info cannot be null");
         }
         if (!username.equals(newInfo.getUsername())) {
-            throw new IllegalArgumentException("Username mismatch");
+            throw new IllegalArgumentException("Username mismatch in updateAuthenticationInfo");
         }
 
         // Fetch existing user to ensure they exist before updating auth info
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Cannot update auth info, user not found: " + username));
 
-        // Update logic might be more complex depending on AuthenticationInfo structure
-        // Assuming direct update is possible via repository method
-        int updatedRows = userRepository.updateAuthenticationInfo(username, newInfo); // Assuming this method exists and works
+        // Update the embedded object on the user entity
+        user.updateAuthentication(newInfo); // Assuming the User entity has a method to update the embedded object
+        userRepository.save(user); // Save the user entity with the updated embedded object
 
-        if (updatedRows == 0) {
-            // This might happen in race conditions or if the user was deleted between fetch and update
-            log.warn("Update authentication info affected 0 rows for user [{}].", username);
-            // Consider throwing an exception or handling appropriately
-        } else {
-            log.info("Updated authentication info for user [{}]", username);
-        }
-        // REMOVED: cacheService.invalidate(AUTH_CACHE, AUTH_CACHE_KEY_PREFIX + username); - Handled by @CacheEvict
+        // Log success - Cache eviction is handled by @CacheEvict
+        log.info("Updated authentication info for user [{}]", username);
+
+        // Removed manual cache invalidation - handled by @CacheEvict
+        // cacheService.invalidate(AUTH_CACHE, AUTH_CACHE_KEY_PREFIX + username);
     }
 
-    // --- REMOVED Unused Methods ---
+    // --- REMOVED Unused/Deprecated Methods ---
     // private Authentication performAuthentication(LoginRequest loginRequest) { ... }
     // public Authentication createSuccessfulAuthentication(User user) { ... }
+    // public void handleLockedAccount(User user, String ipAddress) { ... } // Removed as deprecated
 }
 
 
 // TODO: Consider backup codes for account recovery
+// TODO: Review transaction boundaries and propagation, especially around cache operations.
+// TODO: Add more specific metrics for fingerprinting success/failure/new device detection.

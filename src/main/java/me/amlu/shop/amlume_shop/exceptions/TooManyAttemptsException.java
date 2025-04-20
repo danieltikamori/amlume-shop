@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.io.Serial;
@@ -36,5 +35,10 @@ public class TooManyAttemptsException extends BaseException {
 
     public TooManyAttemptsException(String s) {
         this(s, 0);
+    }
+
+
+    public long getRetryAfterSeconds() {
+        return this.retryAfterSeconds;
     }
 }
