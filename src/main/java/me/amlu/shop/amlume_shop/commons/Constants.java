@@ -154,6 +154,7 @@ public final class Constants {
     public static final String HASH_ALGORITHM = "SHA-256";
     public static final int INITIAL_MAP_CAPACITY = 16;
     public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
+    public static final String API_AUTH_V_1_LOGIN_PATH = "/api/auth/v1/login";
 
     @Value("${security.max-concurrent-sessions:2}")
     public static int MAX_CONCURRENT_SESSIONS;
