@@ -27,6 +27,8 @@ import org.springframework.core.annotation.Order; // Import Order
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 // Removed reactive import if not used: import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -56,6 +58,7 @@ import java.util.List;
 @EnableAsync
 public class SecurityConfig {
 
+    private final AuthenticationConfiguration authenticationConfiguration;
     private final GlobalRateLimitingFilter globalRateLimitingFilter; // Assuming this is correctly configured elsewhere
     private final PasetoTokenService pasetoTokenService; // Use interface
     private final CustomAuthenticationFilter customAuthenticationFilter; // Assumes this handles user/pass
@@ -71,7 +74,7 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins}")
     private List<String> allowedOrigins;
 
-    public SecurityConfig(GlobalRateLimitingFilter globalRateLimitingFilter,
+    public SecurityConfig(AuthenticationConfiguration authenticationConfiguration, GlobalRateLimitingFilter globalRateLimitingFilter,
                           PasetoTokenService pasetoTokenService,
                           CustomAuthenticationFilter customAuthenticationFilter,
                           MfaAuthenticationFilter mfaAuthenticationFilter,
@@ -79,6 +82,7 @@ public class SecurityConfig {
                           AuthenticationFailureHandler authenticationFailureHandler,
                           DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter
             /*, AuthenticationManager authenticationManager */) {
+        this.authenticationConfiguration = authenticationConfiguration;
         this.globalRateLimitingFilter = globalRateLimitingFilter;
         this.pasetoTokenService = pasetoTokenService;
         this.customAuthenticationFilter = customAuthenticationFilter;
@@ -87,6 +91,11 @@ public class SecurityConfig {
         this.authenticationFailureHandler = authenticationFailureHandler;
         this.deviceFingerprintVerificationFilter = deviceFingerprintVerificationFilter;
         // this.authenticationManager = authenticationManager;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager() throws Exception {
+        return authenticationConfiguration.getAuthenticationManager();
     }
 
     @Bean
