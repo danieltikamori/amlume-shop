@@ -15,6 +15,7 @@ import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Embedded;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import me.amlu.shop.amlume_shop.config.Phone;
 
@@ -33,6 +34,7 @@ public class ContactInfo implements Serializable {
     private String lastName;
 
     @Embedded
+    @Email
     private UserEmail userEmail;
 
     @Column(name = "email_verified", nullable = false)
@@ -95,6 +97,18 @@ public class ContactInfo implements Serializable {
     public Phonenumber.@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") PhoneNumber getPhoneNumber() {
         return this.phoneNumber;
     }
+
+    // --- Modifying Methods ---
+
+    // Improve validation logic
+    @Email
+    public void updateEmailAddress(String newEmailAddress) {
+        if (newEmailAddress != null) {
+            this.userEmail = new UserEmail(newEmailAddress);
+        }
+    }
+
+    // --- End Modifying Methods ---
 
     @Override
     public boolean equals(final Object o) {

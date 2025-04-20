@@ -168,6 +168,25 @@ public class AccountStatus implements Serializable {
         return result;
     }
 
+    // --- Modifying methods ---
+    public void updateLastLoginTime(Instant now) {
+        this.lastLoginTime = now;
+    }
+
+    public void updateFailedLoginAttempts(int i) {
+        this.failedLoginAttempts = i;
+    }
+
+    public void updateLockTime(Instant lockedAt) {
+        this.lockTime = lockedAt;
+    }
+
+    public void updateAccountNonLocked(boolean isAccountNonLocked) {
+        this.accountNonLocked = isAccountNonLocked;
+    }
+
+    // --- End Modifying methods ---
+
     public static class AccountStatusBuilder {
         private boolean userLocked$value;
         private boolean userLocked$set;

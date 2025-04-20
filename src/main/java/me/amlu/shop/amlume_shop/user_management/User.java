@@ -22,6 +22,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.io.Serial;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -240,6 +241,66 @@ public class User extends BaseEntity implements UserDetails {
 
     // --- End Getters ---
 
+    // --- equals() and hashCode()
+
+    // Proxy-aware implementation of equals()
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        // Gets the underlying class even if 'o' is a proxy
+        HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        // Gets the underlying class even if 'this' is a proxy
+        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        // Compares the effective classes
+        if (thisEffectiveClass != oEffectiveClass) return false;
+        // Now safe to cast (though instanceof check is slightly redundant now)
+        if (!(o instanceof User user)) return false;
+        // Finally, compare by ID
+        return getUserId() != null && Objects.equals(getUserId(), user.getUserId());
+    }
+
+    // Proxy-awareness is needed for hashCode if it uses getClass()
+    @Override
+    public final int hashCode() {
+        // Base the hashCode primarily on the unique identifier (userId)
+        // Objects.hash() handles null correctly if the entity is new (ID not yet assigned)
+        return Objects.hash(userId);
+
+        // --- Alternative using a constant for null ID (also common) ---
+        // return userId == null ? 31 : userId.hashCode();
+    }
+
+    // --- End equals() and hashCode() ---
+
+    // --- toString() Updated to exclude collections for performance/cycles. (Old version (below) ---
+    @Override
+    public String toString() {
+        // Exclude collections and embedded objects from toString to avoid lazy loading issues or cycles
+        return "User(" +
+                "userId=" + this.userId +
+                ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
+                ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
+                ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
+                ", mfaInfo=" + (this.mfaInfo != null ? "present" : "null") +
+                ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
+                ", locationInfo=" + (this.locationInfo != null ? "present" : "null") +
+                ", rolesSize=" + (this.roles != null ? this.roles.size() : 0) + // Indicate size
+                ", addressesSize=" + (this.addresses != null ? this.addresses.size() : 0) +
+                ", categoriesSize=" + (this.categories != null ? this.categories.size() : 0) +
+                ", productsSize=" + (this.products != null ? this.products.size() : 0) +
+                ", refreshTokensSize=" + (this.refreshTokens != null ? this.refreshTokens.size() : 0) +
+                ')';
+    }
+
+    //    @Override
+//    public String toString() {
+//        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
+//    }
+    // --- End toString() ---
+
     // --- Methods to Modify Collections (New/Modified) ---
 
     public void addRole(UserRole role) {
@@ -331,66 +392,67 @@ public class User extends BaseEntity implements UserDetails {
         }
     }
 
-    // You could add methods here to update embedded objects, e.g.:
+    // --- Methods to update embedded objects ---
     public void updateAuthentication(AuthenticationInfo newAuthInfo) {
-        // Add validation if needed
+
         this.authenticationInfo = newAuthInfo;
     }
-    // Or methods to update specific fields within embedded objects, e.g.:
-    // public void updatePassword(String encodedPassword) {
-    //    if (this.authenticationInfo != null) {
-    //        this.authenticationInfo.updatePassword(encodedPassword); // Requires updatePassword method in AuthenticationInfo
-    //    }
-    // }
 
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
+    public void updateContactInfo(ContactInfo newContactInfo) {
+        this.contactInfo = newContactInfo;
     }
 
-    public void setAuthenticationInfo(AuthenticationInfo authenticationInfo) {
-        this.authenticationInfo = authenticationInfo;
+    public void updateAccountStatus(AccountStatus newAccountStatus) {
+        this.accountStatus = newAccountStatus;
     }
 
-    public void setContactInfo(ContactInfo contactInfo) {
-        this.contactInfo = contactInfo;
+    public void updateMfaInfo(MfaInfo newMfaInfo) {
+        this.mfaInfo = newMfaInfo;
     }
 
-    public void setAccountStatus(AccountStatus accountStatus) {
-        this.accountStatus = accountStatus;
+    public void updateDeviceFingerprintingInfo(DeviceFingerprintingInfo newDeviceFingerprintingInfo) {
+        this.deviceFingerprintingInfo = newDeviceFingerprintingInfo;
     }
 
-    public void setMfaInfo(MfaInfo mfaInfo) {
-        this.mfaInfo = mfaInfo;
+    public void updateLocationInfo(LocationInfo newLocationInfo) {
+        this.locationInfo = newLocationInfo;
     }
 
-    public void setDeviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
-        this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+    // --- End Methods to update embedded objects ---
+
+    // --- Methods to update specific fields within embedded objects ---
+    public void updatePassword(String encodedPassword) {
+        if (this.authenticationInfo != null) {
+            this.authenticationInfo.updatePassword(encodedPassword); // Requires updatePassword method in AuthenticationInfo
+        }
     }
 
-    public void setLocationInfo(LocationInfo locationInfo) {
-        this.locationInfo = locationInfo;
+    public void updateEmailAddress(String newEmailAddress) {
+        if (this.contactInfo != null) {
+            this.contactInfo.updateEmailAddress(newEmailAddress);
+        }
     }
 
-    public void setRoles(Set<UserRole> roles) {
-        this.roles = roles;
+    public void updateLastLoginTime(Instant now) {
+        if (this.accountStatus != null) {
+            this.accountStatus.updateLastLoginTime(now);
+        }
     }
 
-    public void setAddresses(List<Address> addresses) {
-        this.addresses = addresses;
+    public void updateFailedLoginAttempts(int i) {
+        accountStatus.updateFailedLoginAttempts(i);
     }
 
-    public void setCategories(List<Category> categories) {
-        this.categories = categories;
+    public void updateLockTime(Instant lockedAt) {
+        accountStatus.updateLockTime(lockedAt);
     }
 
-    public void setProducts(Set<Product> products) {
-        this.products = products;
+    public void updateAccountNonLocked(boolean isAccountNonLocked) {
+        accountStatus.updateAccountNonLocked(isAccountNonLocked);
     }
 
-    public void setRefreshTokens(List<RefreshToken> refreshTokens) {
-        this.refreshTokens = refreshTokens;
-    }
+    // --- End Methods to update specific fields within embedded objects ---
+
 
     // --- Other Methods ---
 
@@ -414,66 +476,16 @@ public class User extends BaseEntity implements UserDetails {
         return mfaInfo != null && mfaInfo.isMfaEnabled();
     }
 
+    // Account status getters
+    public int getFailedLoginAttempts() {
+        return accountStatus.getFailedLoginAttempts();
+    }
+
+    public Instant getLockTime() {
+        return accountStatus.getLockTime();
+    }
+
     // --- End Methods ---
-
-    // --- equals() and hashCode()
-
-    // Proxy-aware implementation of equals()
-    @Override
-    public final boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null) return false;
-        // Gets the underlying class even if 'o' is a proxy
-        HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
-        // Gets the underlying class even if 'this' is a proxy
-        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
-        // Compares the effective classes
-        if (thisEffectiveClass != oEffectiveClass) return false;
-        // Now safe to cast (though instanceof check is slightly redundant now)
-        if (!(o instanceof User user)) return false;
-        // Finally, compare by ID
-        return getUserId() != null && Objects.equals(getUserId(), user.getUserId());
-    }
-
-    // Proxy-awareness is needed for hashCode if it uses getClass()
-    @Override
-    public final int hashCode() {
-        // Base the hashCode primarily on the unique identifier (userId)
-        // Objects.hash() handles null correctly if the entity is new (ID not yet assigned)
-        return Objects.hash(userId);
-
-        // --- Alternative using a constant for null ID (also common) ---
-        // return userId == null ? 31 : userId.hashCode();
-    }
-
-    // --- End equals() and hashCode() ---
-
-    // --- toString() Updated to exclude collections for performance/cycles. (Old version (below) ---
-    @Override
-    public String toString() {
-        // Exclude collections and embedded objects from toString to avoid lazy loading issues or cycles
-        return "User(" +
-                "userId=" + this.userId +
-                ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
-                ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
-                ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
-                ", mfaInfo=" + (this.mfaInfo != null ? "present" : "null") +
-                ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
-                ", locationInfo=" + (this.locationInfo != null ? "present" : "null") +
-                ", rolesSize=" + (this.roles != null ? this.roles.size() : 0) + // Indicate size
-                ", addressesSize=" + (this.addresses != null ? this.addresses.size() : 0) +
-                ", categoriesSize=" + (this.categories != null ? this.categories.size() : 0) +
-                ", productsSize=" + (this.products != null ? this.products.size() : 0) +
-                ", refreshTokensSize=" + (this.refreshTokens != null ? this.refreshTokens.size() : 0) +
-                ')';
-    }
-
-//    @Override
-//    public String toString() {
-//        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
-//    }
 
     // --- Builder Class (Adjusted to reflect private constructor and removed setters) ---
     public static abstract class UserBuilder<C extends User, B extends UserBuilder<C, B>> extends BaseEntityBuilder<C, B> {

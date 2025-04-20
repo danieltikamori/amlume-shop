@@ -46,6 +46,8 @@ public class AuthenticationInfo implements Serializable {
         return new AuthenticationInfoBuilder();
     }
 
+    // --- Getters ---
+
     public String getUsername() {
         return username.getUsername();
     }
@@ -53,6 +55,18 @@ public class AuthenticationInfo implements Serializable {
     public String getPassword() {
         return password.getPassword();
     }
+
+    // --- End Getters ---
+
+    // --- Modifier methods ---
+
+    public void updatePassword(String encodedPassword) {
+        this.password = new UserPassword(encodedPassword);
+    }
+
+    // --- End Modifier methods ---
+
+    // --- equals() and hashCode() ---
 
     @Override
     public boolean equals(final Object o) {
