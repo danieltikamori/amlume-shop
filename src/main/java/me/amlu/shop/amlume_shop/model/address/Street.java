@@ -14,12 +14,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Getter
 @Embeddable
 public class Street implements Serializable {
     @Serial
@@ -30,18 +29,42 @@ public class Street implements Serializable {
     @Column(name = "street")
     private String value;
 
-    protected Street() {} // for JPA
+    protected Street() {
+    } // for JPA
 
     public Street(String value) {
+        // It's better to perform validation using Bean Validation annotations and let the framework handle it,
+        // but constructor validation is also an option. Ensure the value is not null or empty before trim.
         if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
-            throw new IllegalArgumentException("Street must be between 5 and 250 characters");
+            // Using a custom exception related to domain validation might be better than IllegalArgumentException
+            throw new IllegalArgumentException("Building value must be between 5 and 250 characters");
         }
-        this.value = value;
+        this.value = value.trim(); // Trim whitespace
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        // Use getClass() for strict value object equality
+        if (o == null || getClass() != o.getClass()) return false;
+        Street street = (Street) o;
+        // Compare the core value field using Objects.equals for null safety
+        return Objects.equals(value, street.value);
+    }
+
+    @Override
+    public int hashCode() {
+        // Use Objects.hash for concise and null-safe hashCode generation
+        return Objects.hash(value);
     }
 
     @Override
     public String toString() {
+        // This toString is reasonable for a simple value object
         return value;
     }
 
+    public @NotBlank @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters") String getValue() {
+        return this.value;
+    }
 }

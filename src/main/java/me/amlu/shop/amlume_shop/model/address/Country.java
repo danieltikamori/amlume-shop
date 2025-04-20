@@ -14,12 +14,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Getter
 @Embeddable
 public class Country implements Serializable {
     @Serial
@@ -32,15 +31,40 @@ public class Country implements Serializable {
 
     protected Country() {
     } // for JPA
+
     public Country(String value) {
+        // It's better to perform validation using Bean Validation annotations and let the framework handle it,
+        // but constructor validation is also an option. Ensure the value is not null or empty before trim.
         if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
-            throw new IllegalArgumentException("Country must be between 5 and 250 characters");
+            // Using a custom exception related to domain validation might be better than IllegalArgumentException
+            throw new IllegalArgumentException("Country value must be between 5 and 250 characters");
         }
-        this.value = value;
+        this.value = value.trim(); // Trim whitespace
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        // Use getClass() for strict value object equality
+        if (o == null || getClass() != o.getClass()) return false;
+        Country country = (Country) o;
+        // Compare the core value field using Objects.equals for null safety
+        return Objects.equals(value, country.value);
+    }
+
+    @Override
+    public int hashCode() {
+        // Use Objects.hash for concise and null-safe hashCode generation
+        return Objects.hash(value);
     }
 
     @Override
     public String toString() {
+        // This toString is reasonable for a simple value object
         return value;
+    }
+
+    public @NotBlank @Size(min = 5, max = 250, message = "Country must be between 5 and 250 characters") String getValue() {
+        return this.value;
     }
 }

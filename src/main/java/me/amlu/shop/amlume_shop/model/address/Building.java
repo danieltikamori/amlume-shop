@@ -13,12 +13,11 @@ package me.amlu.shop.amlume_shop.model.address;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.Size;
-import lombok.Getter;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Objects;
 
-@Getter
 @Embeddable
 public class Building implements Serializable {
     @Serial
@@ -26,21 +25,45 @@ public class Building implements Serializable {
 
     @Size(min = 5, max = 250, message = "Building must be between 5 and 250 characters")
     @Column(name = "building_name")
-    private String value;
+    private String buildingName;
 
+    // Protected constructor required by JPA
     protected Building() {
     }
 
-    public Building(String value) {
-        if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
-            throw new IllegalArgumentException("Building must be between 5 and 250 characters");
+    public Building(String buildingName) {
+        // It's better to perform validation using Bean Validation annotations and let the framework handle it,
+        // but constructor validation is also an option. Ensure the value is not null or empty before trim.
+        if (buildingName == null || buildingName.trim().length() < 5 || buildingName.trim().length() > 250) {
+            // Using a custom exception related to domain validation might be better than IllegalArgumentException
+            throw new IllegalArgumentException("Building value must be between 5 and 250 characters");
         }
-        this.value = value;
+        this.buildingName = buildingName.trim(); // Trim whitespace
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        // Use getClass() for strict value object equality
+        if (o == null || getClass() != o.getClass()) return false;
+        Building building = (Building) o;
+        // Compare the core value field using Objects.equals for null safety
+        return Objects.equals(buildingName, building.buildingName);
+    }
+
+    @Override
+    public int hashCode() {
+        // Use Objects.hash for concise and null-safe hashCode generation
+        return Objects.hash(buildingName);
     }
 
     @Override
     public String toString() {
-        return value;
+        // This toString is reasonable for a simple value object
+        return buildingName;
     }
-    // Constructor, getter
+
+    public @Size(min = 5, max = 250, message = "Building must be between 5 and 250 characters") String getBuildingName() {
+        return this.buildingName;
+    }
 }
