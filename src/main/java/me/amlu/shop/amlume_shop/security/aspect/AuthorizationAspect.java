@@ -26,6 +26,7 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -50,7 +51,7 @@ public class AuthorizationAspect {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
         RequiresRole requiresRole = method.getAnnotation(RequiresRole.class);
-        AppRole[] requiredRoles = requiresRole.value();
+        AppRole[] requiredRoles = Objects.requireNonNull(requiresRole).value();
 
         if (requiredRoles == null || requiredRoles.length == 0) {
             // Should not happen if annotation is used correctly, but good practice
