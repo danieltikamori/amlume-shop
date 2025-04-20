@@ -15,6 +15,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.MfaRequiredException;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.payload.ErrorResponse;
@@ -57,7 +58,7 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
                                     @NotNull HttpServletResponse response,
                                     @NotNull FilterChain filterChain) throws ServletException, IOException {
 
-        if (!request.getRequestURI().equals("/api/auth/login")) {
+        if (!request.getRequestURI().equals(Constants.API_AUTH_V_1_LOGIN_PATH)) {
             filterChain.doFilter(request, response);
             return;
         }
