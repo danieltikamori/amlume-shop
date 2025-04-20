@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.paseto;
+package me.amlu.shop.amlume_shop.filter;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -17,6 +17,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.InvalidTokenSignatureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
+import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims;
+import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
+import me.amlu.shop.amlume_shop.security.paseto.TokenPayload;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -53,38 +56,47 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
                                     @NotNull FilterChain filterChain) throws ServletException, IOException {
         try {
             String token = extractTokenFromRequest(request);
-            if (token != null) {
-                Map<String, Object> tokenPayload = pasetoTokenService.validatePublicAccessToken(token);
 
-                if (tokenPayload != null) {
-                    TokenPayload payload = (TokenPayload) tokenPayload.get(token);
+            // Extract claims from the validated token
+            Map<String, Object> claims = pasetoTokenService.validatePublicAccessToken(token); // Directly get the claims map
 
-                    // Create authentication object with user details and authorities
-                    UsernamePasswordAuthenticationToken authentication =
-                            new UsernamePasswordAuthenticationToken(
-                                    payload.getSubject(),
-                                    null,
-                                    extractAuthorities(payload.getClaims())
-                            );
-
-                    authentication.setDetails(new WebAuthenticationDetailsSource()
-                            .buildDetails(request));
-
-                    // Set the authentication in SecurityContext
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                } else {
-                    log.warn("Invalid token received");
+            if (claims != null) {
+                // Extract subject directly from the claims map (Use constants if available)
+                String subject = (String) claims.get(PasetoClaims.SUBJECT); // Use constant
+                if (subject == null || subject.isBlank()) {
+                    log.warn("Token validation failed: Missing or blank subject claim.");
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     SecurityContextHolder.clearContext();
+                    // Consider returning here if you want to stop the chain on this specific error
                     return;
+                } else {
+                    UsernamePasswordAuthenticationToken authentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    subject, // Use extracted subject
+                                    null,
+                                    extractAuthorities(claims) // Pass claims map directly
+                            );
+                    authentication.setDetails(claims); // Store the claims map
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
+            } else {
+                log.warn("Invalid token received (validation returned null)");
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                SecurityContextHolder.clearContext();
+                // Consider returning here if you want to stop the chain on invalid token
+                 return;
             }
         } catch (TokenValidationFailureException e) {
             log.error("Cannot set user authentication", e);
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             SecurityContextHolder.clearContext();
         } catch (SignatureException e) {
-            throw new InvalidTokenSignatureException("Invalid token signature", e);
+            log.error("Invalid token signature", e); // Log specific error
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            SecurityContextHolder.clearContext();
+            // No re-throw, let filterChain.doFilter run below
+            // OR add 'return;' if you want to stop the chain here.
+             return;
         }
 
         filterChain.doFilter(request, response);
@@ -93,6 +105,7 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
     /**
      * DO NOT USE Apache Commons Lang StringUtils because it doesn't check for hasText
      * Extracts the token from the request headers.
+     *
      * @param request the HTTP request
      * @return the token or null if no token is found
      */
@@ -105,7 +118,8 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private Collection<GrantedAuthority> extractAuthorities(Map<String, Object> claims) {
-        Object roles = claims.get("roles");
+//        Object roles = claims.get("roles");
+        Object roles = claims.get(PasetoClaims.SCOPE); // Use constant
         if (roles instanceof Collection) {
             return ((Collection<?>) roles)
                     .stream()
