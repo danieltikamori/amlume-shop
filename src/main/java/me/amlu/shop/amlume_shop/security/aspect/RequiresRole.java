@@ -31,7 +31,7 @@ import java.lang.annotation.Inherited;
  * <pre>
  * {@code
  * @RequiresAuthentication
- * @RequiresRole(value = "ADMIN", allowMultiple = true)
+ * @RequiresRole(value = "ROLE_ADMIN", allowMultiple = true)
  * public void adminMethod() {
  * // Method implementation
  * }

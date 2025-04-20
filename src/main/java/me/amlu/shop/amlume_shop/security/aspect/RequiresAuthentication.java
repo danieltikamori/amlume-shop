@@ -41,7 +41,7 @@ import java.lang.annotation.Inherited;
  * }
  *
  * @RequiresAuthentication
- * @RequiresRole("ADMIN")
+ * @RequiresRole("ROLE_ADMIN")
  * public void adminMethod() {
  *     // Only authenticated users with ADMIN role can access this method
  * }
