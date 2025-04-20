@@ -10,21 +10,23 @@
 
 package me.amlu.shop.amlume_shop.resilience;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.redisson.api.Node;
-import org.redisson.api.RedissonClient;
+import org.slf4j.Logger;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.Collection;
+// Removed import java.util.Collection;
 
-@Slf4j
-@RequiredArgsConstructor
 @Component
 public class ValkeyHealthIndicator implements HealthIndicator {
-    private final RedissonClient valkeyClient; // Will be injected with Valkey client
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(ValkeyHealthIndicator.class);
+    private final RedisConnectionFactory connectionFactory;
+
+    public ValkeyHealthIndicator(RedisConnectionFactory connectionFactory) {
+        this.connectionFactory = connectionFactory;
+    }
 
     @Override
     public Health health() {
@@ -32,7 +34,7 @@ public class ValkeyHealthIndicator implements HealthIndicator {
             if (checkValkeyConnection()) {
                 return Health.up()
                         .withDetail("status", "Connected")
-                        .withDetail("client", "Valkey")
+                        .withDetail("client", "Valkey (via Lettuce)")
                         .build();
             }
             return Health.down()
@@ -45,12 +47,14 @@ public class ValkeyHealthIndicator implements HealthIndicator {
     }
 
     private boolean checkValkeyConnection() {
-        try {
-            // Perform a simple Valkey operation to check connection
-            valkeyClient.getBucket("XXXXXXXXXXXX").isExists();
-            return true;
+        // Use try-with-resources for the connection
+        try (RedisConnection connection = connectionFactory.getConnection()) {
+            // Perform a simple Valkey/Redis operation like PING
+            String pingResponse = connection.ping();
+            // Check if the response is "PONG" (case-insensitive)
+            return "PONG".equalsIgnoreCase(pingResponse);
         } catch (Exception e) {
-            log.error("Failed to connect to Valkey", e);
+            log.error("Failed to connect to Valkey/Redis for health check", e);
             return false;
         }
     }
