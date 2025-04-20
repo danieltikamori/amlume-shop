@@ -10,11 +10,11 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.user_management.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.security.SignatureException;
@@ -29,23 +29,28 @@ import java.util.Map;
  */
 
 @Service
-@Slf4j
-@RequiredArgsConstructor
 public class PasetoTokenServiceImpl implements PasetoTokenService {
+
+    private static final Logger log = LoggerFactory.getLogger(PasetoTokenServiceImpl.class);
 
     private final TokenGenerationService tokenGenerationService;
     private final TokenValidationService tokenValidationService;
     private final TokenClaimsService tokenClaimsService;
 
+    public PasetoTokenServiceImpl(TokenGenerationService tokenGenerationService, TokenValidationService tokenValidationService, TokenClaimsService tokenClaimsService) {
+        this.tokenGenerationService = tokenGenerationService;
+        this.tokenValidationService = tokenValidationService;
+        this.tokenClaimsService = tokenClaimsService;
+    }
 
     /**
      * Generates a public access token
      * Uses asymmetric encryption
      *
-     * @param userId
-     * @param accessTokenDuration
-     * @return
-     * @throws TokenGenerationFailureException
+     * @param userId User userId
+     * @param accessTokenDuration duration
+     * @return public access token
+     * @throws TokenGenerationFailureException if token generation fails
      */
     @Override
     public String generatePublicAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException {
@@ -57,10 +62,10 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
      * For internal use (between microservices, e.g. between gateway and auth service)
      * Uses symmetric encryption
      *
-     * @param userId
-     * @param accessTokenDuration
-     * @return
-     * @throws TokenGenerationFailureException
+     * @param userId User userId
+     * @param accessTokenDuration duration
+     * @return Local access token - between microservices or internal use
+     * @throws TokenGenerationFailureException if token generation fails
      */
     @Override
     public String generateLocalAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException {
@@ -72,9 +77,9 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
      * Used in conjunction with the public access token
      * Uses symmetric encryption
      *
-     * @param user
-     * @return
-     * @throws TokenGenerationFailureException
+     * @param user User id
+     * @return Refresh token - the secondary token for the user, used in parallel with the main access token
+     * @throws TokenGenerationFailureException if token generation fails
      */
     @Override
     public String generateRefreshToken(User user) throws TokenGenerationFailureException {
