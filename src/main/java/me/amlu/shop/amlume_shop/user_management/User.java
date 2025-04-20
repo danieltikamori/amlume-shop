@@ -23,6 +23,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.io.Serial;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "_users", uniqueConstraints = {
@@ -44,49 +45,62 @@ public class User extends BaseEntity implements UserDetails {
     private Long userId;
 
     @Embedded
-    private AuthenticationInfo authenticationInfo;
+    private AuthenticationInfo authenticationInfo; // Set via constructor/builder
 
     @Embedded
-    private ContactInfo contactInfo;
+    private ContactInfo contactInfo; // Set via constructor/builder
 
     @Embedded
-    private AccountStatus accountStatus;
+    private AccountStatus accountStatus; // Set via constructor/builder
 
     @Embedded
-    private MfaInfo mfaInfo;
+    private MfaInfo mfaInfo; // Set via constructor/builder
 
     @Embedded
-    private DeviceFingerprintingInfo deviceFingerprintingInfo;
+    private DeviceFingerprintingInfo deviceFingerprintingInfo; // Set via constructor/builder
 
     @Embedded
-    private LocationInfo locationInfo;
+    private LocationInfo locationInfo; // Set via constructor/builder
 
+    // Initialized collection - JPA will replace this instance upon load
     @ElementCollection(fetch = FetchType.EAGER) // EAGER fetch for roles is often acceptable
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
-    private Set<UserRole> roles = new HashSet<>(); // Initialize collection
+    private Set<UserRole> roles = new HashSet<>();
 
-    @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    @JoinTable(name = "user_address",
-            joinColumns = @JoinColumn(name = "user_id"),
-            inverseJoinColumns = @JoinColumn(name = "address_id"))
-    private List<Address> addresses = new ArrayList<>(); // Initialize collection
+    // Initialized collection - JPA will replace this instance upon load
+    @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
+    // NOTE: @JoinTable is typically for @ManyToMany or unidirectional @OneToMany to a non-entity.
+    // For mappedBy = "user" on the target entity, the join column should be defined in the target entity (Address).
+    // If Address has a 'user' field:
+    // @OneToMany(mappedBy = "user", ...)
+    // private List<Address> addresses = new ArrayList<>();
+    // If Address does NOT have a 'user' field and this is unidirectional from User to Address:
+    // @OneToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
+    // @JoinColumn(name = "user_id") // This maps the foreign key column in the address table back to the user
+    // private List<Address> addresses = new ArrayList<>();
+    // Assuming 'Address' has a 'user' field and this is the bidirectional side:
+    private List<Address> addresses = new ArrayList<>();
 
+
+    // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "categoryManager", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    private List<Category> categories = new ArrayList<>(); // Initialize collection
+    private List<Category> categories = new ArrayList<>();
 
+    // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "seller", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    private Set<Product> products = new HashSet<>(); // Initialize collection
+    private Set<Product> products = new HashSet<>();
 
-    // Initialized collection
+    // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
-    // Added orphanRemoval=true for consistency
-    private List<RefreshToken> refreshTokens = new ArrayList<>(); // Initialize collection
+    private List<RefreshToken> refreshTokens = new ArrayList<>();
 
+    // Protected constructor required by JPA
     protected User() {
     }
 
-    protected User(UserBuilder<?, ?> b) {
-        super(b);
+    // Private constructor used by the builder
+    private User(UserBuilder<?, ?> b) {
+        super(b); // Call superclass constructor
         this.userId = b.userId;
         this.authenticationInfo = b.authenticationInfo;
         this.contactInfo = b.contactInfo;
@@ -94,13 +108,15 @@ public class User extends BaseEntity implements UserDetails {
         this.mfaInfo = b.mfaInfo;
         this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
         this.locationInfo = b.locationInfo;
-        this.roles = b.roles;
-        this.addresses = b.addresses;
-        this.categories = b.categories;
-        this.products = b.products;
-        this.refreshTokens = b.refreshTokens;
+        // For collections, initialize even if builder provides null, though builder should ideally provide empty collections
+        this.roles = Optional.ofNullable(b.roles).orElseGet(HashSet::new);
+        this.addresses = Optional.ofNullable(b.addresses).orElseGet(ArrayList::new);
+        this.categories = Optional.ofNullable(b.categories).orElseGet(ArrayList::new);
+        this.products = Optional.ofNullable(b.products).orElseGet(HashSet::new);
+        this.refreshTokens = Optional.ofNullable(b.refreshTokens).orElseGet(ArrayList::new);
     }
 
+    // Static factory method for the builder
     public static UserBuilder<?, ?> builder() {
         return new UserBuilderImpl();
     }
@@ -110,15 +126,16 @@ public class User extends BaseEntity implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return roles.stream()  // Assuming 'roles' is a Set<UserRole> and Role has a 'name' attribute
+        // Ensure roles is not null, although initialized, paranoid check
+        return roles != null ? roles.stream()
                 .map(role -> {
-                    assert role.getRoleName() != null;
-                    return new SimpleGrantedAuthority(role.getRoleName().name());
-                }) // Convert Role to GrantedAuthority. Call name() method on the enum
-//                .collect(Collectors.toList());
-                .toList();
-//        return roles;
+                    assert role.getRoleName() != null; // Assert enum is not null
+                    return new SimpleGrantedAuthority(role.getRoleName().name()); // Convert enum name to string authority
+                })
+                .collect(Collectors.toSet()) // Collect into a Set
+                : Collections.emptySet(); // Return an empty set if roles are null
     }
+
 
     @Override
     public String getPassword() {
@@ -168,57 +185,7 @@ public class User extends BaseEntity implements UserDetails {
     // --- End Auditable ---
 
 
-    // --- Other Methods ---
-
-    // Optional convenience getter for ID
-    public Long getId() {
-        return this.userId;
-    }
-
-    // Simple role check helper
-    public boolean hasRole(UserRole role) {
-        return roles != null && roles.contains(role);
-    }
-
-    // Check device fingerprinting status
-    public boolean isDeviceFingerprintingEnabled() {
-        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
-    }
-
-    // Check MFA status
-    public boolean isMfaEnabled() {
-        return mfaInfo != null && mfaInfo.isMfaEnabled();
-    }
-
-    // Proxy-aware implementation of equals()
-    @Override
-    public final boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null) return false;
-        // Gets the underlying class even if 'o' is a proxy
-        HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
-        // Gets the underlying class even if 'this' is a proxy
-        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
-        Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
-        // Compares the effective classes
-        if (thisEffectiveClass != oEffectiveClass) return false;
-        // Now safe to cast (though instanceof check is slightly redundant now)
-        if (!(o instanceof User user)) return false;
-        // Finally, compare by ID
-        return getUserId() != null && Objects.equals(getUserId(), user.getUserId());
-    }
-
-    // Proxy-awareness is needed for hashCode if it uses getClass()
-    @Override
-    public final int hashCode() {
-        // Base the hashCode primarily on the unique identifier (userId)
-        // Objects.hash() handles null correctly if the entity is new (ID not yet assigned)
-        return Objects.hash(userId);
-
-        // --- Alternative using a constant for null ID (also common) ---
-        // return userId == null ? 31 : userId.hashCode();
-    }
+    // --- Getters and NO setters ---
 
     public Long getUserId() {
         return this.userId;
@@ -248,25 +215,134 @@ public class User extends BaseEntity implements UserDetails {
         return this.locationInfo;
     }
 
+    // Getters for collections - return unmodifiable views is good practice for encapsulation
+    // though JPA-managed collections might behave differently. Returning the collection directly
+    // allows JPA to track changes when elements are added/removed via the add/remove methods below.
     public Set<UserRole> getRoles() {
-        return this.roles;
+        return this.roles; // Return JPA-managed collection
     }
 
     public List<Address> getAddresses() {
-        return this.addresses;
+        return this.addresses; // Return JPA-managed collection
     }
 
     public List<Category> getCategories() {
-        return this.categories;
+        return this.categories; // Return JPA-managed collection
     }
 
     public Set<Product> getProducts() {
-        return this.products;
+        return this.products; // Return JPA-managed collection
     }
 
     public List<RefreshToken> getRefreshTokens() {
-        return this.refreshTokens;
+        return this.refreshTokens; // Return JPA-managed collection
     }
+
+    // --- End Getters ---
+
+    // --- Methods to Modify Collections (New/Modified) ---
+
+    public void addRole(UserRole role) {
+        if (this.roles == null) { // Paranoid check, should be initialized
+            this.roles = new HashSet<>();
+        }
+        if (role != null && !this.roles.contains(role)) {
+            this.roles.add(role);
+            // If UserRole had a back-reference to User, set it here: role.setUser(this);
+        }
+    }
+
+    public void removeRole(UserRole role) {
+        if (this.roles != null && role != null) {
+            this.roles.remove(role);
+            // If UserRole had a back-reference to User, clear it here: role.setUser(null);
+        }
+    }
+
+    public void addAddress(Address address) {
+        if (this.addresses == null) { // Paranoid check
+            this.addresses = new ArrayList<>();
+        }
+        if (address != null && !this.addresses.contains(address)) {
+            this.addresses.add(address);
+            // Ensure bidirectional relationship is set if Address has a 'user' field
+            address.setUser(this);
+        }
+    }
+
+    public void removeAddress(Address address) {
+        if (this.addresses != null && address != null && this.addresses.remove(address)) {
+            // Clear bidirectional relationship if Address has a 'user' field
+            address.setUser(null);
+        }
+    }
+
+    public void addCategory(Category category) {
+        if (this.categories == null) { // Paranoid check
+            this.categories = new ArrayList<>();
+        }
+        if (category != null && !this.categories.contains(category)) {
+            this.categories.add(category);
+            // Ensure bidirectional relationship is set if Category has 'categoryManager' field
+            category.setCategoryManager(this);
+        }
+    }
+
+    public void removeCategory(Category category) {
+        if (this.categories != null && category != null && this.categories.remove(category)) {
+            // Clear bidirectional relationship if Category has 'categoryManager' field
+            category.setCategoryManager(null);
+        }
+    }
+
+    public void addProduct(Product product) {
+        if (this.products == null) { // Paranoid check
+            this.products = new HashSet<>();
+        }
+        if (product != null && !this.products.contains(product)) {
+            this.products.add(product);
+            // Ensure bidirectional relationship is set if Product has a 'seller' field
+            product.setSeller(this);
+        }
+    }
+
+    public void removeProduct(Product product) {
+        if (this.products != null && product != null && this.products.remove(product)) {
+            // Clear bidirectional relationship if Product has a 'seller' field
+            product.setSeller(null);
+        }
+    }
+
+    public void addRefreshToken(RefreshToken refreshToken) {
+        if (this.refreshTokens == null) { // Paranoid check
+            this.refreshTokens = new ArrayList<>();
+        }
+        if (refreshToken != null && !this.refreshTokens.contains(refreshToken)) {
+            this.refreshTokens.add(refreshToken);
+            // Ensure bidirectional relationship is set if RefreshToken has a 'user' field
+            refreshToken.setUser(this);
+        }
+    }
+
+    public void removeRefreshToken(RefreshToken refreshToken) {
+        if (this.refreshTokens != null && refreshToken != null && this.refreshTokens.remove(refreshToken)) {
+            // Clear bidirectional relationship if RefreshToken has a 'user' field
+            refreshToken.setUser(null);
+        }
+    }
+
+    // You could add methods here to update embedded objects, e.g.:
+    public void updateAuthentication(AuthenticationInfo newAuthInfo) {
+        // Add validation if needed
+        this.authenticationInfo = newAuthInfo;
+    }
+    // Or methods to update specific fields within embedded objects, e.g.:
+    // public void updatePassword(String encodedPassword) {
+    //    if (this.authenticationInfo != null) {
+    //        this.authenticationInfo.updatePassword(encodedPassword); // Requires updatePassword method in AuthenticationInfo
+    //    }
+    // }
+
 
     public void setUserId(Long userId) {
         this.userId = userId;
@@ -316,11 +392,92 @@ public class User extends BaseEntity implements UserDetails {
         this.refreshTokens = refreshTokens;
     }
 
-    public String toString() {
-        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
+    // --- Other Methods ---
+
+    // Optional convenience getter for ID
+    public Long getId() {
+        return this.userId;
     }
 
+    // Simple role check helper
+    public boolean hasRole(UserRole role) {
+        return roles != null && roles.contains(role);
+    }
+
+    // Check device fingerprinting status
+    public boolean isDeviceFingerprintingEnabled() {
+        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
+    }
+
+    // Check MFA status
+    public boolean isMfaEnabled() {
+        return mfaInfo != null && mfaInfo.isMfaEnabled();
+    }
+
+    // --- End Methods ---
+
+    // --- equals() and hashCode()
+
+    // Proxy-aware implementation of equals()
+    @Override
+    public final boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null) return false;
+        // Gets the underlying class even if 'o' is a proxy
+        HibernateProxy oHibernateProxy = o instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> oEffectiveClass = oHibernateProxy != null ? oHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        // Gets the underlying class even if 'this' is a proxy
+        HibernateProxy thisHibernateProxy = this instanceof HibernateProxy hibernateProxy ? hibernateProxy : null;
+        Class<?> thisEffectiveClass = thisHibernateProxy != null ? thisHibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        // Compares the effective classes
+        if (thisEffectiveClass != oEffectiveClass) return false;
+        // Now safe to cast (though instanceof check is slightly redundant now)
+        if (!(o instanceof User user)) return false;
+        // Finally, compare by ID
+        return getUserId() != null && Objects.equals(getUserId(), user.getUserId());
+    }
+
+    // Proxy-awareness is needed for hashCode if it uses getClass()
+    @Override
+    public final int hashCode() {
+        // Base the hashCode primarily on the unique identifier (userId)
+        // Objects.hash() handles null correctly if the entity is new (ID not yet assigned)
+        return Objects.hash(userId);
+
+        // --- Alternative using a constant for null ID (also common) ---
+        // return userId == null ? 31 : userId.hashCode();
+    }
+
+    // --- End equals() and hashCode() ---
+
+    // --- toString() Updated to exclude collections for performance/cycles. (Old version (below) ---
+    @Override
+    public String toString() {
+        // Exclude collections and embedded objects from toString to avoid lazy loading issues or cycles
+        return "User(" +
+                "userId=" + this.userId +
+                ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
+                ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
+                ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
+                ", mfaInfo=" + (this.mfaInfo != null ? "present" : "null") +
+                ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
+                ", locationInfo=" + (this.locationInfo != null ? "present" : "null") +
+                ", rolesSize=" + (this.roles != null ? this.roles.size() : 0) + // Indicate size
+                ", addressesSize=" + (this.addresses != null ? this.addresses.size() : 0) +
+                ", categoriesSize=" + (this.categories != null ? this.categories.size() : 0) +
+                ", productsSize=" + (this.products != null ? this.products.size() : 0) +
+                ", refreshTokensSize=" + (this.refreshTokens != null ? this.refreshTokens.size() : 0) +
+                ')';
+    }
+
+//    @Override
+//    public String toString() {
+//        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
+//    }
+
+    // --- Builder Class (Adjusted to reflect private constructor and removed setters) ---
     public static abstract class UserBuilder<C extends User, B extends UserBuilder<C, B>> extends BaseEntityBuilder<C, B> {
+        // Fields remain in the builder to hold values during construction
         private Long userId;
         private AuthenticationInfo authenticationInfo;
         private ContactInfo contactInfo;
@@ -328,12 +485,14 @@ public class User extends BaseEntity implements UserDetails {
         private MfaInfo mfaInfo;
         private DeviceFingerprintingInfo deviceFingerprintingInfo;
         private LocationInfo locationInfo;
-        private Set<UserRole> roles;
+        private Set<UserRole> roles; // Builder can take the initial set/list
         private List<Address> addresses;
         private List<Category> categories;
         private Set<Product> products;
         private List<RefreshToken> refreshTokens;
 
+
+        // Builder methods (Keep as is - these set values *on the builder*)
         public B userId(Long userId) {
             this.userId = userId;
             return self();
@@ -370,29 +529,35 @@ public class User extends BaseEntity implements UserDetails {
         }
 
         public B roles(Set<UserRole> roles) {
+            // Accept the collection in builder - the entity constructor will copy/handle null
             this.roles = roles;
             return self();
         }
 
         public B addresses(List<Address> addresses) {
+            // Accept the collection in builder
             this.addresses = addresses;
             return self();
         }
 
         public B categories(List<Category> categories) {
+            // Accept the collection in builder
             this.categories = categories;
             return self();
         }
 
         public B products(Set<Product> products) {
+            // Accept the collection in builder
             this.products = products;
             return self();
         }
 
         public B refreshTokens(List<RefreshToken> refreshTokens) {
+            // Accept the collection in builder
             this.refreshTokens = refreshTokens;
             return self();
         }
+
 
         protected abstract B self();
 
@@ -400,6 +565,7 @@ public class User extends BaseEntity implements UserDetails {
 
         @Override
         public String toString() {
+            // toString for builder is okay to show contained values
             return "User.UserBuilder(super=" + super.toString() + ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo + ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus + ", mfaInfo=" + this.mfaInfo + ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo + ", locationInfo=" + this.locationInfo + ", roles=" + this.roles + ", addresses=" + this.addresses + ", categories=" + this.categories + ", products=" + this.products + ", refreshTokens=" + this.refreshTokens + ")";
         }
     }
@@ -408,10 +574,12 @@ public class User extends BaseEntity implements UserDetails {
         private UserBuilderImpl() {
         }
 
+        @Override
         protected UserBuilderImpl self() {
             return this;
         }
 
+        @Override
         public User build() {
             return new User(this);
         }
