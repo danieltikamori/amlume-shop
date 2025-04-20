@@ -240,7 +240,7 @@ public class CaptchaService {
             // This includes the wrapped RuntimeExceptions from the retry lambda.
             log.error("CAPTCHA validation failed after applying resilience policies", e);
             // Rethrow the original exception type if possible, or a generic one
-            if (e instanceof RuntimeException && e.getCause() != null) {
+            if (e.getCause() != null) {
                 // Attempt to rethrow the original cause
                 if (e.getCause() instanceof Exception cause) throw cause;
             }
@@ -278,12 +278,12 @@ public class CaptchaService {
 
         // Supplier that creates the asynchronous operation (CompletableFuture)
         // This wraps the synchronous call in an async task executed by the scheduledExecutorService
-        Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = () ->
+        // Use the dedicated executor
+        return () ->
                 CompletableFuture.supplyAsync(
                         recaptchaApiCallSupplier,
                         scheduledExecutorService // Use the dedicated executor
                 );
-        return asyncOperationSupplier;
     }
 
 
