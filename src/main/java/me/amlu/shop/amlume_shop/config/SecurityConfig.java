@@ -150,10 +150,10 @@ public class SecurityConfig {
                 // This filter should attempt authentication and set SecurityContext if successful (potentially partially if MFA needed)
                 .addFilterBefore(customAuthenticationFilter, UsernamePasswordAuthenticationFilter.class) // Place before default user/pass filter
 
-                // 4. MFA Authentication Filter (Runs if prior auth succeeded but requires MFA)
-                // This filter checks for MFA requirement and validates the MFA code header/parameter.
-                // It should run AFTER the filter that establishes initial authentication (e.g., CustomAuthenticationFilter or PasetoAuthenticationFilter).
-                .addFilterAfter(mfaAuthenticationFilter, CustomAuthenticationFilter.class) // Run after custom user/pass filter
+//                // (REMOVED) 4. MFA Authentication Filter (Runs if prior auth succeeded but requires MFA)
+//                // This filter checks for MFA requirement and validates the MFA code header/parameter.
+//                // It should run AFTER the filter that establishes initial authentication (e.g., CustomAuthenticationFilter or PasetoAuthenticationFilter).
+//                .addFilterAfter(mfaAuthenticationFilter, CustomAuthenticationFilter.class) // Run after custom user/pass filter
 
                 // 5. Device Fingerprint Verification (Runs AFTER all authentication is successful)
                 // Placed after AuthorizationFilter to ensure SecurityContext is fully populated.
@@ -164,9 +164,10 @@ public class SecurityConfig {
                         .requestMatchers(
                                 // Authentication endpoints
                                 "/api/auth/v1/register",
-                                "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter?
+                                "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
+//                                "/api/auth/login", // Fallback?
                                 "/api/auth/v1/mfa/validate", // Endpoint handled by MfaAuthenticationFilter? Or controller? Needs clarity.
-                                "/api/auth/v1/mfa/enable", // Needs authentication
+//                                "/api/auth/v1/mfa/enable", // Needs authentication - Logic handled by provider during login
                                 "/api/auth/v1/qrcode", // Needs authentication
                                 "/api/auth/logout", // Needs authentication (to revoke token)
 
@@ -178,7 +179,7 @@ public class SecurityConfig {
                                 // Actuator endpoints (secure appropriately in production)
                                 "/actuator/**"
                         ).permitAll()
-                        // Example: Secure MFA enablement/QR code endpoints
+                        //Secure MFA enablement/QR code/logout endpoints
                         .requestMatchers(
                                 "/api/auth/v1/mfa/enable",
                                 "/api/auth/v1/qrcode",
