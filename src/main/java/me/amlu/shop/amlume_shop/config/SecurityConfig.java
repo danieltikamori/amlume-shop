@@ -10,31 +10,38 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.filter.CustomAuthenticationFilter;
 import me.amlu.shop.amlume_shop.filter.DeviceFingerprintVerificationFilter;
 import me.amlu.shop.amlume_shop.filter.MfaAuthenticationFilter;
 import me.amlu.shop.amlume_shop.security.auth.MfaAuthenticationProvider;
 import me.amlu.shop.amlume_shop.security.handler.AuthenticationFailureHandler;
-import me.amlu.shop.amlume_shop.security.paseto.PasetoAuthenticationFilter;
-import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenServiceImpl;
-import org.apache.catalina.filters.RateLimitFilter;
+import me.amlu.shop.amlume_shop.filter.PasetoAuthenticationFilter;
+import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService; // Use interface
+import me.amlu.shop.amlume_shop.filter.GlobalRateLimitingFilter;
+import org.springframework.beans.factory.annotation.Value; // For CORS config
 import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order; // Import Order
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+// Removed reactive import if not used: import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer; // For disabling CSRF if needed
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter; // For placing filters relative to standard filters
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler; // For SPA CSRF setup
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -45,92 +52,131 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity
+@EnableMethodSecurity(prePostEnabled = true, securedEnabled = true) // Enable method security annotations
 @EnableAsync
 public class SecurityConfig {
 
-    private final RateLimitFilter rateLimitFilter;
-    private final PasetoTokenServiceImpl pasetoTokenService;
-    private final CustomAuthenticationFilter customAuthenticationFilter;
-    private final MfaAuthenticationFilter mfaAuthenticationFilter;
-    private final MfaAuthenticationProvider mfaAuthenticationProvider;
-    private final AuthenticationFailureHandler authenticationFailureHandler;
-    private final DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter; // Inject the fingerprint filter
+    private final GlobalRateLimitingFilter globalRateLimitingFilter; // Assuming this is correctly configured elsewhere
+    private final PasetoTokenService pasetoTokenService; // Use interface
+    private final CustomAuthenticationFilter customAuthenticationFilter; // Assumes this handles user/pass
+    private final MfaAuthenticationFilter mfaAuthenticationFilter; // Handles MFA verification step
+    private final MfaAuthenticationProvider mfaAuthenticationProvider; // Provider for MFA logic
+    private final AuthenticationFailureHandler authenticationFailureHandler; // Handles login failures
+    private final DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter; // Verifies device post-auth
 
+    // Inject AuthenticationManager if custom filters need it
+    // private final AuthenticationManager authenticationManager;
 
-//    @Value("${PASETO_SECRET_KEY}")
-//    private String pasetoKey;
-//
-////    // Instead of using SecretKeyConstant class
-////    @Bean
-////    public PasetoTokenService pasetoTokenService() {
-////        return new PasetoTokenService(pasetoKey);
-////    }
+    // Inject allowed origins from properties
+    @Value("${cors.allowed-origins}")
+    private List<String> allowedOrigins;
 
-
-    public SecurityConfig(RateLimitFilter rateLimitFilter, PasetoTokenServiceImpl pasetoTokenService, CustomAuthenticationFilter customAuthenticationFilter, MfaAuthenticationFilter mfaAuthenticationFilter, MfaAuthenticationProvider mfaAuthenticationProvider, AuthenticationFailureHandler authenticationFailureHandler, DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter) {
-        this.rateLimitFilter = rateLimitFilter;
+    public SecurityConfig(GlobalRateLimitingFilter globalRateLimitingFilter,
+                          PasetoTokenService pasetoTokenService,
+                          CustomAuthenticationFilter customAuthenticationFilter,
+                          MfaAuthenticationFilter mfaAuthenticationFilter,
+                          MfaAuthenticationProvider mfaAuthenticationProvider,
+                          AuthenticationFailureHandler authenticationFailureHandler,
+                          DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter
+            /*, AuthenticationManager authenticationManager */) {
+        this.globalRateLimitingFilter = globalRateLimitingFilter;
         this.pasetoTokenService = pasetoTokenService;
         this.customAuthenticationFilter = customAuthenticationFilter;
         this.mfaAuthenticationFilter = mfaAuthenticationFilter;
         this.mfaAuthenticationProvider = mfaAuthenticationProvider;
         this.authenticationFailureHandler = authenticationFailureHandler;
         this.deviceFingerprintVerificationFilter = deviceFingerprintVerificationFilter;
+        // this.authenticationManager = authenticationManager;
     }
 
     @Bean
+    @Order(100) // Define order if multiple SecurityFilterChain beans exist
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        // Configure CSRF for SPA (if applicable)
+        CsrfTokenRequestAttributeHandler requestHandler = new CsrfTokenRequestAttributeHandler();
+        requestHandler.setCsrfRequestAttributeName(null); // Setting to null uses default "_csrf"
+
         http
-//                .cors(cors -> cors.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
-                        .ignoringRequestMatchers("/api/auth/**")) // Important: Ignore CSRF for auth endpoints
-
-//                .csrf(csrf -> csrf.disable())
-                .formLogin(formLogin -> formLogin
-                        .loginPage("/login") // Your login page
-                        .failureHandler(authenticationFailureHandler) // Use the custom authentication failure handler
-                        .permitAll()
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()) // Send CSRF token in cookie accessible by JS
+                        .csrfTokenRequestHandler(requestHandler) // Use the request handler
+                        .ignoringRequestMatchers("/api/auth/**") // Ignore CSRF for stateless auth endpoints
                 )
+                // If NOT using form login (only token/API based)
+                .formLogin(AbstractHttpConfigurer::disable) // Disable default form login
+                // If using form login (e.g., for initial login before token issuance)
+                /*
+                .formLogin(formLogin -> formLogin
+                        .loginPage("/login") // Your custom login page URL
+                        .loginProcessingUrl("/api/auth/login") // URL where login form is submitted
+                        .failureHandler(authenticationFailureHandler) // Use the custom failure handler
+                        .permitAll() // Allow access to login page and processing URL
+                )
+                */
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) // Or STATELESS if using JWTs exclusively
-                        .maximumSessions(1) // Allow only one session per user
-                        .maxSessionsPreventsLogin(true) // Prevent new login when max sessions reached
-                        .expiredUrl("/login?expired")) // Redirect when session expires
-                .sessionManagement(session -> session
-                        .sessionFixation().migrateSession() // Protect against session fixation
-                        .sessionAuthenticationErrorUrl("/login?error") // Authentication error redirect
-                        .invalidSessionUrl("/login?invalid")) // Redirect for invalid sessions
+                        // STATELESS is preferred for token-based auth.
+                        // IF_REQUIRED allows sessions but doesn't create one unless needed (e.g., by framework components or explicit use).
+                        // Choose based on whether you rely on HttpSession state anywhere.
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED) // Or STATELESS
+                        // Session fixation protection
+                        .sessionFixation().migrateSession()
+                        // Concurrent session control (only relevant if policy is not STATELESS)
+                        .maximumSessions(Constants.MAX_CONCURRENT_SESSIONS)
+                        .maxSessionsPreventsLogin(true)
+                        .sessionRegistry(sessionRegistry()) // Register the session registry
+                        .expiredUrl("/login?expired") // Redirect if session expires (relevant for IF_REQUIRED/ALWAYS)
+                )
+                // Register the custom MFA Authentication Provider
                 .authenticationProvider(mfaAuthenticationProvider)
-                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class) // Rate limiting early
 
-                // --- Authentication Filters ---
-                // Run Paseto token auth first if applicable
+                // --- Filter Chain Order ---
+                // 1. Global Rate Limiting (Very Early)
+                .addFilterBefore(globalRateLimitingFilter, UsernamePasswordAuthenticationFilter.class) // Or CsrfFilter.class if CSRF is earlier
+
+                // 2. PASETO Token Authentication (Attempt token auth first)
                 .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class)
-                // Then your custom username/password (if used alongside Paseto) or MFA filter
-                .addFilterBefore(customAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterBefore(mfaAuthenticationFilter, UsernamePasswordAuthenticationFilter.class) // Or adjust placement relative to customAuthenticationFilter
 
-                // --- Post-Authentication Filters ---
-                // *** Run Device Fingerprint Verification AFTER successful authentication ***
-                .addFilterAfter(deviceFingerprintVerificationFilter, PasetoAuthenticationFilter.class) // Or after UsernamePasswordAuthenticationFilter/MfaAuthenticationFilter depending on your primary auth method
+                // 3. Custom Username/Password Authentication (If token fails or not present)
+                // This filter should attempt authentication and set SecurityContext if successful (potentially partially if MFA needed)
+                .addFilterBefore(customAuthenticationFilter, UsernamePasswordAuthenticationFilter.class) // Place before default user/pass filter
 
+                // 4. MFA Authentication Filter (Runs if prior auth succeeded but requires MFA)
+                // This filter checks for MFA requirement and validates the MFA code header/parameter.
+                // It should run AFTER the filter that establishes initial authentication (e.g., CustomAuthenticationFilter or PasetoAuthenticationFilter).
+                .addFilterAfter(mfaAuthenticationFilter, CustomAuthenticationFilter.class) // Run after custom user/pass filter
+
+                // 5. Device Fingerprint Verification (Runs AFTER all authentication is successful)
+                // Placed after AuthorizationFilter to ensure SecurityContext is fully populated.
+                .addFilterAfter(deviceFingerprintVerificationFilter, AuthorizationFilter.class)
+
+                // --- Authorization Rules ---
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/login",
-                                "/api/auth/register",
-                                "/api/auth/logout",
+                                // Authentication endpoints
                                 "/api/auth/v1/register",
-                                "/api/auth/v1/login",
-                                "/api/auth/v1/qrcode",
-                                "/api/auth/v1/mfa/enable",
-                                "/api/auth/v1/mfa/validate", // Ensure MFA validation endpoint is permitted before this filter runs if placed early
+                                "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter?
+                                "/api/auth/v1/mfa/validate", // Endpoint handled by MfaAuthenticationFilter? Or controller? Needs clarity.
+                                "/api/auth/v1/mfa/enable", // Needs authentication
+                                "/api/auth/v1/qrcode", // Needs authentication
+                                "/api/auth/logout", // Needs authentication (to revoke token)
+
+                                // Public assets and error pages
                                 "/public/**",
                                 "/error",
-                                "/actuator/**" // Permit actuator endpoints if needed
-                                // Add other public paths
+                                "/login", // Allow access to login page if using formLogin
+
+                                // Actuator endpoints (secure appropriately in production)
+                                "/actuator/**"
                         ).permitAll()
+                        // Example: Secure MFA enablement/QR code endpoints
+                        .requestMatchers(
+                                "/api/auth/v1/mfa/enable",
+                                "/api/auth/v1/qrcode",
+                                "/api/auth/logout"
+                                // Add other authenticated-only auth endpoints if any
+                        ).authenticated()
+                        // Default is to deny - all other requests must be authenticated
                         .anyRequest().authenticated()
                 );
 
@@ -140,52 +186,72 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("https://amlu.me", "https://shop.amlu.me", "https://tikamori.com", "http://localhost:3000", "http://localhost:8080", "http://localhost:8081", "http://localhost:6379"));
+        // Use the injected allowedOrigins list
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-XSRF-TOKEN"));
-        configuration.setExposedHeaders(List.of("X-XSRF-TOKEN"));
+        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-XSRF-TOKEN", "X-MFA-Code", "User-Agent", /* Add other custom headers */ "Screen-Width", "Screen-Height"));
+        configuration.setExposedHeaders(Arrays.asList("X-XSRF-TOKEN", "Retry-After", "Mfa-Status")); // Expose the necessary headers
         configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
+        configuration.setMaxAge(3600L); // Cache CORS preflight response for 1 hour
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
+        source.registerCorsConfiguration("/**", configuration); // Apply CORS to all paths
         return source;
     }
 
-    @Bean
-    public HttpSessionEventPublisher httpSessionEventPublisher() {
-        return new HttpSessionEventPublisher();
-    }
-
+    // Bean for Session Registry (needed for concurrent session control)
     @Bean
     public SessionRegistry sessionRegistry() {
         return new SessionRegistryImpl();
     }
 
-    // Renamed to avoid duplicate bean name
+    // Bean to publish session events (needed for SessionRegistry)
     @Bean
-    public ServletListenerRegistrationBean<HttpSessionEventPublisher> sessionEventPublisher() {
+    public ServletListenerRegistrationBean<HttpSessionEventPublisher> httpSessionEventPublisher() {
         return new ServletListenerRegistrationBean<>(new HttpSessionEventPublisher());
     }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
+        // Argon2 configuration - parameters can be tuned
         return new Argon2PasswordEncoder(
                 16,    // saltLength
                 32,    // hashLength
-                1,     // parallelism
-                1 << 14, // memory
-                2       // iterations
+                1,     // parallelism (adjust based on CPU cores)
+                1 << 14, // memory cost (16MB - adjust based on available RAM)
+                3       // iterations (increase for more security, impacts performance)
         );
     }
 
     @Bean
     public RoleHierarchy roleHierarchy() {
-        // Use fromHierarchy() directly
+        // Define role hierarchy - adjust based on your actual roles
+        // Example: ADMIN can do everything a MANAGER can, MANAGER can do everything a USER can.
         String hierarchy = """
-                ROLE_ADMIN > ROLE_CATEGORY_MANAGER
-                ROLE_CATEGORY_MANAGER > ROLE_SELLER
-                ROLE_SELLER > ROLE_USER""";
+                ROLE_ROOT > ROLE_SUPER_ADMIN
+                ROLE_SUPER_ADMIN > ROLE_ADMIN
+                ROLE_ADMIN > ROLE_MANAGER
+                ROLE_MANAGER > ROLE_SELLER_MANAGER
+                ROLE_SELLER_MANAGER > ROLE_SELLER
+                ROLE_SELLER > ROLE_CUSTOMER
+                ROLE_CUSTOMER > ROLE_USER
+                """;
+        // Add other relationships as needed, e.g.:
+        // ROLE_ADMIN > ROLE_MODERATOR
+        // ROLE_SELLER_MANAGER > ROLE_SELLER_STAFF
         return RoleHierarchyImpl.fromHierarchy(hierarchy);
     }
+
+    // Optional: Expose AuthenticationManager bean if needed by custom filters
+    /*
+    @Bean
+    public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
+        AuthenticationManagerBuilder authenticationManagerBuilder =
+                http.getSharedObject(AuthenticationManagerBuilder.class);
+        // Configure providers if needed (e.g., UserDetailsService)
+        // authenticationManagerBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
+        authenticationManagerBuilder.authenticationProvider(mfaAuthenticationProvider); // Add MFA provider
+        return authenticationManagerBuilder.build();
+    }
+    */
 }
