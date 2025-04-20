@@ -45,6 +45,7 @@ public final class Constants {
     public static final String ROLES_CACHE = "roles";
     public static final String ASN_CACHE = "asn";
     public static final String TOKENS_CACHE = "tokens";
+    public static final String AUTH_ANNOTATIONS_CACHE = "authAnnotations";
     public static final String TEMPORARY_CACHE = "temporaryCache"; // Used by CacheMaintenanceService
 
 
