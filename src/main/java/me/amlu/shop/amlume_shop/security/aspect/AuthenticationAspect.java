@@ -10,10 +10,11 @@
 
 package me.amlu.shop.amlume_shop.security.aspect;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry; // Import registry
+import io.github.resilience4j.retry.RetryRegistry;
 import io.lettuce.core.RedisConnectionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
@@ -22,10 +23,11 @@ import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
+import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
-import me.amlu.shop.amlume_shop.payload.UserDTO;
-import me.amlu.shop.amlume_shop.user_management.UserServiceImpl;
+import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService; // Assuming this validates your Bearer token
 import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserService; // Use interface
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -33,20 +35,29 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.cache.annotation.Cacheable;
+import org.springframework.beans.factory.annotation.Qualifier; // Import Qualifier
+import org.springframework.classify.BinaryExceptionClassifier;
 import org.springframework.core.annotation.Order;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate; // Keep if needed for specific cache checks
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.NonNull;
+import org.springframework.retry.RetryPolicy;
+import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 import org.springframework.retry.backoff.FixedBackOffPolicy;
+import org.springframework.retry.policy.BinaryExceptionClassifierRetryPolicy;
+import org.springframework.retry.policy.CompositeRetryPolicy;
+import org.springframework.retry.policy.MaxAttemptsRetryPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -55,7 +66,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.security.SignatureException;
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -64,57 +78,55 @@ import java.util.concurrent.TimeoutException;
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
 /**
- * Aspect responsible for handling authentication and authorization.
- * Implements circuit breaker pattern for resilience and caching for performance.
+ * Aspect responsible for handling authentication based on the @RequiresAuthentication annotation.
+ * It extracts a Bearer token, validates it using TokenValidationService,
+ * fetches the user, sets the SecurityContext, and applies resilience patterns.
  *
  * @see RequiresAuthentication
- * @see CircuitBreaker
- * @see RetryTemplate
+ * @see TokenValidationService
  */
 @Slf4j
 @Aspect
 @Component
-@Order(1) // Ensure authentication check runs before other aspects
+@Order(1) // Ensure authentication check runs before other aspects like role checks
 public class AuthenticationAspect {
 
-    private final UserServiceImpl userService;
-    private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
+    private final UserService userService; // Use interface
+    private final TokenValidationService tokenValidationService; // Service to validate the token
     private final MeterRegistry meterRegistry;
     private final CircuitBreaker circuitBreaker;
     private final RetryTemplate retryTemplate;
+    // Keep RedisTemplate/ObjectMapper if needed for other caching, but removed direct user caching from aspect
+    // private final StringRedisTemplate redisTemplate;
+    // private final ObjectMapper objectMapper;
 
     public AuthenticationAspect(
-            @NonNull UserServiceImpl userService,
-            @NonNull StringRedisTemplate redisTemplate,
-            @NonNull ObjectMapper objectMapper,
-            @NonNull MeterRegistry meterRegistry) {
+            @NonNull UserService userService, // Use interface
+            @NonNull TokenValidationService tokenValidationService,
+            @NonNull MeterRegistry meterRegistry,
+            @Qualifier("circuitBreakerRegistry") CircuitBreakerRegistry circuitBreakerRegistry, // Inject registry
+            // Keep Redis/ObjectMapper if used elsewhere
+            // @NonNull StringRedisTemplate redisTemplate,
+            // @NonNull ObjectMapper objectMapper,
+            @Qualifier("retryRegistry") RetryRegistry retryRegistry // Inject registry
+    ) {
         this.userService = userService;
-        this.redisTemplate = redisTemplate;
-        this.objectMapper = objectMapper;
+        this.tokenValidationService = tokenValidationService;
         this.meterRegistry = meterRegistry;
-        this.circuitBreaker = createCircuitBreaker();
-        this.retryTemplate = createRetryTemplate();
+        // this.redisTemplate = redisTemplate;
+        // this.objectMapper = objectMapper;
+
+        // Get or create specific instances from registries
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("authenticationAspectBreaker", createCircuitBreakerConfig());
+        configureCircuitBreakerMetrics(this.circuitBreaker); // Configure metrics for the specific breaker
+
+        this.retryTemplate = createRetryTemplate(retryRegistry); // Pass registry to factory method
     }
 
-    private void recordMetrics(String methodName, long startTime) {
-        long executionTime = System.currentTimeMillis() - startTime;
-        meterRegistry.timer("authentication.execution.time",
-                        Tags.of("method", methodName))
-                .record(executionTime, TimeUnit.MILLISECONDS);
-    }
+    // --- Resilience Configuration ---
 
-    // Add circuit breaker metrics
-    private void configureCircuitBreakerMetrics(CircuitBreaker circuitBreaker) {
-        circuitBreaker.getEventPublisher()
-                .onSuccess(event -> meterRegistry.counter("circuit_breaker.success").increment())
-                .onError(event -> meterRegistry.counter("circuit_breaker.error").increment())
-                .onStateTransition(event ->
-                        meterRegistry.counter("circuit_breaker.state." + event.getStateTransition()).increment());
-    }
-
-    private CircuitBreaker createCircuitBreaker() {
-        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+    private CircuitBreakerConfig createCircuitBreakerConfig() {
+        return CircuitBreakerConfig.custom()
                 .failureRateThreshold(50)
                 .waitDurationInOpenState(Duration.ofSeconds(60))
                 .permittedNumberOfCallsInHalfOpenState(10)
@@ -122,427 +134,289 @@ public class AuthenticationAspect {
                 .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
                 .minimumNumberOfCalls(10)
                 .automaticTransitionFromOpenToHalfOpenEnabled(true)
-                .recordExceptions(
+                .recordExceptions( // Exceptions that should count towards failure rate
                         IOException.class,
                         TimeoutException.class,
-                        RedisConnectionException.class
+                        RedisConnectionException.class, // If Redis is still used elsewhere
+                        TokenValidationFailureException.class, // If token validation service throws this
+                        SignatureException.class // If token validation service throws this
                 )
-                .ignoreExceptions(
-                        IllegalArgumentException.class
+                .ignoreExceptions( // Exceptions that should NOT count (e.g., client errors)
+                        IllegalArgumentException.class,
+                        UnauthorizedException.class // Don't trip breaker for auth failures
                 )
                 .build();
-
-        CircuitBreaker authenticationCircuitBreaker = CircuitBreaker.of("authenticationCircuitBreaker", config);
-        configureCircuitBreakerMetrics(authenticationCircuitBreaker);
-        return authenticationCircuitBreaker;
     }
 
-    private RetryTemplate createRetryTemplate() {
+    private RetryTemplate createRetryTemplate(RetryRegistry retryRegistry) {
         RetryTemplate localRetryTemplate = new RetryTemplate();
 
-        SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
-        retryPolicy.setMaxAttempts(MAX_RETRY_ATTEMPTS);
+        BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
+                IOException.class, true,
+                TimeoutException.class, true,
+                RedisConnectionException.class, true // If applicable
+                // Add other transient exceptions if needed
+        ));
 
-        FixedBackOffPolicy backOffPolicy = new FixedBackOffPolicy();
-        backOffPolicy.setBackOffPeriod(RETRY_INTERVAL);
+        CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
+        BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
+        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(MAX_RETRY_ATTEMPTS);
+
+        retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
+
+        ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
+        backOffPolicy.setInitialInterval(500);
+        backOffPolicy.setMaxInterval(6000000);
+        backOffPolicy.setMultiplier(2);
 
         localRetryTemplate.setRetryPolicy(retryPolicy);
         localRetryTemplate.setBackOffPolicy(backOffPolicy);
 
+        // Optional: Add listeners from RetryRegistry if needed
+        // localRetryTemplate.registerListener(...);
+
         return localRetryTemplate;
     }
 
-    @PostConstruct
-    private void validateConfiguration() {
-        if (ANNOTATION_CACHE_DURATION.isNegative() || ANNOTATION_CACHE_DURATION.isZero()) {
-            throw new IllegalStateException("Invalid annotation cache duration");
-        }
-        if (USER_CACHE_DURATION.isNegative() || USER_CACHE_DURATION.isZero()) {
-            throw new IllegalStateException("Invalid user cache duration");
-        }
+    // --- Metrics Configuration ---
+
+    private void configureCircuitBreakerMetrics(CircuitBreaker circuitBreaker) {
+        circuitBreaker.getEventPublisher()
+                .onSuccess(event -> meterRegistry.counter("circuit_breaker.calls", "name", circuitBreaker.getName(), "type", "successful").increment())
+                .onError(event -> meterRegistry.counter("circuit_breaker.calls", "name", circuitBreaker.getName(), "type", "failed").increment())
+                .onStateTransition(event -> {
+                    log.info("Circuit breaker '{}' state changed from {} to {}", circuitBreaker.getName(), event.getStateTransition().getFromState(), event.getStateTransition().getToState());
+                    meterRegistry.counter("circuit_breaker.state.changes", "name", circuitBreaker.getName(), "state", event.getStateTransition().getToState().name().toLowerCase()).increment();
+                })
+                .onCallNotPermitted(event -> meterRegistry.counter("circuit_breaker.calls", "name", circuitBreaker.getName(), "type", "not_permitted").increment());
     }
 
-    // Metrics for monitoring cache performance
-    @Scheduled(fixedRate = 300000) // Every 5 minutes
-    public void reportCacheMetrics() {
-        try {
-            Long annotationCacheSize = (long) Objects.requireNonNull(redisTemplate.keys(ANNOTATION_CACHE_KEY_PREFIX + "*")).size();
-            Long userCacheSize = (long) Objects.requireNonNull(redisTemplate.keys(USER_CACHE_KEY_PREFIX + "*")).size();
+    // --- Core Authentication Logic ---
 
-            meterRegistry.gauge("cache.size", Tags.of("type", "annotation"), annotationCacheSize);
-            meterRegistry.gauge("cache.size", Tags.of("type", "user"), userCacheSize);
-        } catch (Exception e) {
-            log.error("Failed to report cache metrics", e);
-        }
-    }
+    @Around("@annotation(requiresAuthenticationAnnotation)")
+    public Object authenticateAndProceed(ProceedingJoinPoint joinPoint, RequiresAuthentication requiresAuthenticationAnnotation) throws Throwable {
+        long startTime = System.currentTimeMillis();
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String className = signature.getDeclaringType().getSimpleName();
+        String methodName = signature.getMethod().getName();
 
-    // Missing main aspect method for authentication
-    @Around("@annotation(requiresAuthentication)")
-    public Object authenticate(ProceedingJoinPoint joinPoint, RequiresAuthentication requiresAuthentication) throws Throwable {
+        recordAuthenticationAttempt(className, methodName);
+
         try {
-            String token = extractToken();
+            // 1. Extract Token
+            String token = extractBearerToken();
             if (token == null) {
-                throw new UnauthorizedException("No authentication token provided");
+                throw new UnauthorizedException("Authorization header missing or invalid");
             }
 
-            return circuitBreaker.executeSupplier(() ->
-                    {
+            // 2. Validate Token and Get User (with Resilience)
+            UserDetails userDetails = circuitBreaker.executeSupplier(() ->
+                    retryTemplate.execute(context -> {
                         try {
-                            return retryTemplate.execute(retryContext -> {
-                                validateToken(token);
-                                return joinPoint.proceed();
-                            });
-                        } catch (Throwable e) {
-                            throw new CircuitBreakerOpenException(e);
+                            // Call your token validation service (e.g., PasetoTokenService)
+                            // This service should parse, validate signature/expiry/claims, and check revocation
+                            Map<String, Object> claims = tokenValidationService.validatePublicAccessToken(token); // Or appropriate method
+
+                            // Extract user identifier (e.g., subject) from claims
+                            String userId = (String) claims.get("sub"); // Assuming 'sub' holds the user ID
+                            if (userId == null) {
+                                throw new TokenValidationFailureException("User identifier (sub) missing in token");
+                            }
+
+                            // Fetch UserDetails (which should be your User entity)
+                            // Caching should ideally happen within userService.loadUserByUsername or getUserById
+                            UserDetails loadedUser = userService.getUserById(Long.valueOf(userId)); // Or findByUsername if sub is username
+
+                            // Basic UserDetails checks
+                            if (!loadedUser.isEnabled()) throw new UnauthorizedException("User account is disabled");
+                            if (!loadedUser.isAccountNonLocked()) throw new UnauthorizedException("User account is locked");
+                            if (!loadedUser.isAccountNonExpired()) throw new UnauthorizedException("User account has expired");
+                            if (!loadedUser.isCredentialsNonExpired()) throw new UnauthorizedException("User credentials have expired");
+
+                            return loadedUser;
+
+                        } catch (TokenValidationFailureException | SignatureException e) {
+                            log.warn("Token validation failed during attempt {}: {}", context.getRetryCount() + 1, e.getMessage());
+                            throw new UnauthorizedException("Invalid or expired token", e); // Rethrow as Unauthorized
+                        } catch (Exception e) {
+                            // Handle other potential errors during validation/user fetch
+                            log.error("Error during authentication attempt {}: {}", context.getRetryCount() + 1, e.getMessage(), e);
+                            // Rethrow wrapped if necessary for retry policy
+                            throw new RuntimeException("Authentication failed during retry attempt", e);
                         }
-                    }
+                    })
             );
-        } catch (Exception e) {
-            log.error("Authentication failed", e);
-            meterRegistry.counter("authentication.failures").increment();
-            throw new UnauthorizedException("Authentication failed");
+
+            // 3. Set Security Context
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails, // Principal
+                    null,        // Credentials (cleared)
+                    userDetails.getAuthorities() // Authorities
+            );
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            log.debug("Authentication successful for user: {}", userDetails.getUsername());
+
+            // 4. Proceed with the original method execution
+            Object result = joinPoint.proceed();
+            recordAuthenticationSuccess(startTime, className, methodName);
+            return result;
+
+        } catch (CircuitBreakerOpenException e) {
+            log.error("Circuit breaker is open for authentication. Failing fast.", e);
+            recordAuthenticationFailure(startTime, className, methodName, "circuit_breaker_open");
+            throw new UnauthorizedException("Authentication service unavailable", e); // Or a 503 Service Unavailable
+        } catch (UnauthorizedException e) {
+            log.warn("Authentication failed for {}.{}: {}", className, methodName, e.getMessage());
+            recordAuthenticationFailure(startTime, className, methodName, "unauthorized");
+            // Check strict mode from annotation if needed, otherwise just rethrow
+            if (requiresAuthenticationAnnotation.strict()) {
+                throw new UnauthorizedException(requiresAuthenticationAnnotation.message(), e);
+            }
+            throw e; // Rethrow standard UnauthorizedException
+        } catch (Throwable e) { // Catch throwable for joinPoint.proceed()
+            log.error("Unexpected error during authenticated method execution: {}.{}", className, methodName, e);
+            recordAuthenticationFailure(startTime, className, methodName, "unexpected_error");
+            throw e; // Rethrow the original exception from the method
+        } finally {
+            // Clear context ONLY if you are managing it entirely here and not relying on Spring Security filters
+            // SecurityContextHolder.clearContext(); // Usually NOT done here if integrated with Spring Security filter chain
         }
     }
 
-    private String extractToken() {
+    private String extractBearerToken() {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes == null) {
+            log.warn("Could not retrieve request attributes to extract token.");
             return null;
         }
         HttpServletRequest request = attributes.getRequest();
-        String authHeader = request.getHeader("Authorization");
+        String authHeader = request.getHeader(AUTHORIZATION_HEADER);
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            return authHeader.substring(7);
+        if (authHeader != null && authHeader.toLowerCase().startsWith(BEARER_TOKEN_PREFIX.toLowerCase())) {
+            return authHeader.substring(BEARER_TOKEN_PREFIX.length());
         }
+        log.trace("No Bearer token found in Authorization header.");
         return null;
     }
 
-    private void validateToken(String token) {
-        String userKey = USER_CACHE_KEY_PREFIX + token;
-        String userData = redisTemplate.opsForValue().get(userKey);
+    // --- Role Check Logic ---
 
-        if (userData == null) {
-            throw new UnauthorizedException("Invalid or expired token");
+    @Before("@annotation(requiresRole)")
+    public void checkRole(JoinPoint joinPoint, RequiresRole requiresRole) throws UnauthorizedException {
+        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+        String methodName = signature.getMethod().getName();
+        String className = signature.getDeclaringType().getSimpleName();
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        // Ensure authentication happened *before* checking roles
+        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof UserDetails)) {
+            log.error("Role check attempted for method {}.{} without prior successful authentication.", className, methodName);
+            // This shouldn't happen if @Order(1) is effective and authentication runs first
+            throw new UnauthorizedException("Authentication required before checking roles.");
         }
 
-        try {
-            UserDTO user = objectMapper.readValue(userData, UserDTO.class);
-            if (!userService.isValidUser(user)) {
-                throw new UnauthorizedException("Invalid user");
-            }
-        } catch (JsonProcessingException e) {
-            log.error("Error parsing user data", e);
-            throw new UnauthorizedException("Invalid user data");
+        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
+
+        // Check if the user has the required role
+        boolean hasRole = userDetails.getAuthorities().stream()
+                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(requiresRole.value()));
+
+        // Type safe cast
+        String roleNames = Arrays.toString(requiresRole.value());
+
+        if (!hasRole) {
+            log.warn("Role check failed: User '{}' does not have required role '{}' for method {}.{}",
+                    userDetails.getUsername(), requiresRole.value(), className, methodName);
+            meterRegistry.counter("authorization.failure", "type", "role", "role", roleNames, "class", className, "method", methodName).increment();
+            throw new UnauthorizedException("Insufficient permissions. Required role: " + roleNames);
         }
+
+        log.debug("Role check successful: User '{}' has required role '{}' for method {}.{}",
+                userDetails.getUsername(), requiresRole.value(), className, methodName);
+        meterRegistry.counter("authorization.success", "type", "role", "role", roleNames, "class", className, "method", methodName).increment();
     }
 
-    @Cacheable(value = "authAnnotations",
-            key = "#method.declaringClass.name + '.' + #method.name",
-            unless = "#result == null",
-            cacheManager = "timeoutCacheManager")
-    public RequiresAuthentication getCachedAnnotation(Method method) {
-        return method.getAnnotation(RequiresAuthentication.class);
-    }
-
-    private void cacheAuthenticationResult(User user, String cacheKey) {
-        try {
-            String userJson = objectMapper.writeValueAsString(user);
-            redisTemplate.opsForValue().set(cacheKey, userJson, USER_CACHE_DURATION);
-            meterRegistry.counter("cache.stores", "type", "user").increment();
-        } catch (JsonProcessingException e) {
-            log.error("Failed to cache user authentication result", e);
-            meterRegistry.counter("cache.errors", "type", "user").increment();
-        }
-    }
-
-
-    // TODO: simplify this method
-    @Before("@annotation(requiresAuthentication) || @within(requiresAuthentication)")
-    public void checkAuthentication(JoinPoint joinPoint, RequiresAuthentication requiresAuthentication)
-            throws UnauthorizedException {
-        long startTime = System.currentTimeMillis();
-        MethodSignature signature = null;
-        Method method = null;
-        String className = "unknown";
-        String methodName = "unknown";
-
-        try {
-            // Extract method information with validation
-            // Extract and validate method signature
-            signature = extractMethodSignature(joinPoint);
-            method = signature.getMethod();
-            className = signature.getDeclaringType().getSimpleName();
-            methodName = method.getName();
-
-            // Record method invocation metric
-            meterRegistry.counter("authentication.attempts",
-                    "class", className,
-                    "method", methodName).increment();
-
-            // Get cached annotation using circuit breaker pattern
-            Method finalMethod = method;
-            RequiresAuthentication authAnnotation = circuitBreaker.executeSupplier(() ->
-                    retryTemplate.execute(context -> getOrCacheAnnotation(finalMethod)));
-
-            // Validate user authentication with circuit breaker and retry
-            User user = circuitBreaker.executeSupplier(() ->
-                    retryTemplate.execute(context -> getOrFetchAuthenticatedUser()));
-
-            // Log success and record metrics
-            logAuthenticationSuccess(className, methodName);
-            recordAuthenticationMetrics(startTime, className, methodName, true);
-
-        } catch (UnauthorizedException e) {
-            handleAuthenticationFailure(
-                    signature != null ? signature.getDeclaringType().getSimpleName() : "unknown",
-                    method != null ? method.getName() : "unknown",
-                    e,
-                    requiresAuthentication
-            );
-            recordAuthenticationMetrics(startTime,
-                    signature != null ? signature.getDeclaringType().getSimpleName() : "unknown",
-                    method != null ? method.getName() : "unknown",
-                    false);
-            throw e;
-        } catch (Exception e) {
-            handleUnexpectedError(
-                    signature != null ? signature.getDeclaringType().getSimpleName() : "unknown",
-                    method != null ? method.getName() : "unknown",
-                    e,
-                    requiresAuthentication
-            );
-            recordAuthenticationMetrics(startTime,
-                    signature != null ? signature.getDeclaringType().getSimpleName() : "unknown",
-                    method != null ? method.getName() : "unknown",
-                    false);
-            throw new UnauthorizedException("Authentication failed due to unexpected error", e);
-        }
-    }
-
-    private MethodSignature extractMethodSignature(JoinPoint joinPoint) throws UnauthorizedException {
-        try {
-            return (MethodSignature) joinPoint.getSignature();
-        } catch (ClassCastException e) {
-            log.error("Failed to cast join point signature to MethodSignature", e);
-            meterRegistry.counter("authentication.errors", "type", "signature_cast_error").increment();
-            throw new UnauthorizedException("Invalid method signature");
-        }
-    }
-
-    private void logAuthenticationSuccess(String className, String methodName) {
-        if (log.isDebugEnabled()) {
-            log.debug("Authentication successful for method: {}.{}", className, methodName);
-        }
-    }
+    // --- Metrics Recording Helpers ---
 
     private void recordAuthenticationAttempt(String className, String methodName) {
-        meterRegistry.counter("authentication.attempts",
-                        "class", className,
-                        "method", methodName)
-                .increment();
+        meterRegistry.counter("authentication.attempts", "class", className, "method", methodName).increment();
     }
 
     private void recordAuthenticationSuccess(long startTime, String className, String methodName) {
-        recordAuthenticationMetrics(startTime, className, methodName, true);
+        recordAuthenticationMetrics(startTime, className, methodName, true, "success");
     }
 
-    private void recordAuthenticationFailure(long startTime, String className, String methodName) {
-        recordAuthenticationMetrics(startTime, className, methodName, false);
+    private void recordAuthenticationFailure(long startTime, String className, String methodName, String reason) {
+        recordAuthenticationMetrics(startTime, className, methodName, false, reason);
     }
 
-    private void recordAuthenticationMetrics(long startTime, String className, String methodName, boolean success) {
+    private void recordAuthenticationMetrics(long startTime, String className, String methodName, boolean success, String outcome) {
         long duration = System.currentTimeMillis() - startTime;
         meterRegistry.timer("authentication.duration",
                         "class", className,
                         "method", methodName,
-                        "success", String.valueOf(success))
+                        "success", String.valueOf(success),
+                        "outcome", outcome)
                 .record(duration, TimeUnit.MILLISECONDS);
 
-        if (success) {
-            meterRegistry.counter("authentication.success",
-                            "class", className,
-                            "method", methodName)
-                    .increment();
-        } else {
-            meterRegistry.counter("authentication.failure",
-                            "class", className,
-                            "method", methodName)
-                    .increment();
-        }
+        meterRegistry.counter("authentication.outcome",
+                        "class", className,
+                        "method", methodName,
+                        "success", String.valueOf(success),
+                        "outcome", outcome)
+                .increment();
     }
 
-    @Cacheable(value = "authAnnotations",
-            key = "#method.declaringClass.name + '.' + #method.name",
-            unless = "#result == null",
-            cacheManager = "timeoutCacheManager")
-    private RequiresAuthentication getOrCacheAnnotation(Method method) {
-        String cacheKey = ANNOTATION_CACHE_KEY_PREFIX + method.toString();
+    // --- Exception Handlers (Consider moving to a @ControllerAdvice) ---
 
-        try {
-            String cachedValue = redisTemplate.opsForValue().get(cacheKey);
-            if (cachedValue != null) {
-                return objectMapper.readValue(cachedValue, RequiresAuthentication.class);
-            }
-
-            RequiresAuthentication annotation = method.getAnnotation(RequiresAuthentication.class);
-            if (annotation == null) {
-                annotation = method.getDeclaringClass().getAnnotation(RequiresAuthentication.class);
-            }
-
-            if (annotation != null) {
-                String serializedAnnotation = objectMapper.writeValueAsString(annotation);
-                redisTemplate.opsForValue().set(cacheKey, serializedAnnotation, ANNOTATION_CACHE_DURATION);
-            }
-
-            return annotation;
-        } catch (JsonProcessingException e) {
-            log.warn("Failed to process annotation cache for method: {}", method.getName(), e);
-            return method.getAnnotation(RequiresAuthentication.class);
-        } catch (RedisConnectionException e) {
-            log.warn("Redis cache unavailable for method: {}", method.getName(), e);
-            return method.getAnnotation(RequiresAuthentication.class);
-        }
-    }
-
-    private User getOrFetchAuthenticatedUser() {
-        String cacheKey = USER_CACHE_KEY_PREFIX + SecurityContextHolder.getContext().getAuthentication().getName();
-
-        return circuitBreaker.executeSupplier(() ->
-                retryTemplate.execute(context -> {
-                    try {
-                        Timer.Sample sample = Timer.start(meterRegistry);
-                        String cachedUser = redisTemplate.opsForValue().get(cacheKey);
-
-                        if (cachedUser != null) {
-                            sample.stop(meterRegistry.timer("cache.hits", "type", "user"));
-                            return objectMapper.readValue(cachedUser, User.class);
-                        }
-
-                        sample.stop(meterRegistry.timer("cache.misses", "type", "user"));
-                        User currentUser = userService.getCurrentUser();
-                        cacheAuthenticationResult(currentUser, cacheKey);
-                        return currentUser;
-
-                    } catch (Exception e) {
-                        meterRegistry.counter("cache.errors", "type", "user").increment();
-                        throw new UnauthorizedException("Failed to authenticate user", e);
-                    }
-                })
-        );
-    }
-
-    private String generateAuthCacheKey() {
-        return AUTH_CACHE_KEY_PREFIX + SecurityContextHolder.getContext().getAuthentication().getName()
-                + ":" + Thread.currentThread().threadId();
-    }
-
-    private void handleAuthenticationFailure(String className, String methodName,
-                                             UnauthorizedException e, RequiresAuthentication annotation) {
-        log.warn("Authentication failed for {}.{}: {}", className, methodName, e.getMessage());
-
-        if (annotation.strict()) {
-            throw new UnauthorizedException(annotation.message(), e);
-        }
-    }
-
-    private void handleUnexpectedError(String className, String methodName,
-                                       Exception e, RequiresAuthentication annotation) {
-        log.error("Unexpected error during authentication check for {}.{}",
-                className, methodName, e);
-
-        if (annotation.strict()) {
-            throw new UnauthorizedException(annotation.message(), e);
-        }
-    }
-
-    @ExceptionHandler(AuthenticationException.class)
+    @ExceptionHandler(AuthenticationException.class) // Spring Security's base exception
     public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex) {
         log.error("Authentication failed: {}", ex.getMessage());
-        meterRegistry.counter("authentication.failures").increment();
-        return ResponseEntity
-                .status(HttpStatus.UNAUTHORIZED)
-                .body(new ErrorResponse() {
-                    @NotNull
-                    @Override
-                    public HttpStatusCode getStatusCode() {
-                        return HttpStatus.UNAUTHORIZED;
-                    }
-
-                    @NotNull
-                    @Override
-                    public ProblemDetail getBody() {
-                        return ProblemDetail.forStatusAndDetail(
-                                HttpStatus.UNAUTHORIZED, ex.getMessage());
-                    }
-                });
+        meterRegistry.counter("authentication.handler.failures", "type", "auth_exception").increment();
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
-    @ExceptionHandler(Exception.class)
+    @ExceptionHandler(UnauthorizedException.class) // Your custom exception
+    public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex) {
+        log.warn("Authorization failed: {}", ex.getMessage()); // Log as WARN for authorization issues
+        meterRegistry.counter("authentication.handler.failures", "type", "unauthorized").increment();
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class) // Generic fallback
     public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
-        log.error("Unexpected error during authentication: {}", ex.getMessage(), ex);
-        meterRegistry.counter("authentication.errors").increment();
+        log.error("Unexpected error during authentication/authorization aspect: {}", ex.getMessage(), ex);
+        meterRegistry.counter("authentication.handler.failures", "type", "unexpected").increment();
+        return createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred during security processing.");
+    }
+
+    private ResponseEntity<ErrorResponse> createErrorResponse(HttpStatus status, String detail) {
         return ResponseEntity
-                .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .status(status)
                 .body(new ErrorResponse() {
                     @NotNull
                     @Override
                     public HttpStatusCode getStatusCode() {
-                        return HttpStatus.INTERNAL_SERVER_ERROR;
+                        return status;
                     }
 
                     @NotNull
                     @Override
                     public ProblemDetail getBody() {
-                        return ProblemDetail.forStatusAndDetail(
-                                HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+                        return ProblemDetail.forStatusAndDetail(status, detail);
                     }
                 });
     }
 
-
-    @Before("@annotation(requiresRole)")
-    public void checkRole(JoinPoint joinPoint, RequiresRole requiresRole)
-            throws UnauthorizedException {
-        try {
-            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-            String methodName = signature.getMethod().getName();
-            String className = signature.getDeclaringType().getSimpleName();
-
-            log.debug("Checking role '{}' for method: {}.{}",
-                    requiresRole.value(), className, methodName);
-
-            var user = userService.getCurrentUser();
-            if (!userService.hasRole(user, requiresRole.value())) {
-                log.warn("Role check failed for user {} accessing {}.{}",
-                        user.getUsername(), className, methodName);
-                throw new UnauthorizedException("Required role: " + requiresRole.value());
-            }
-
-            log.debug("Role check successful for method: {}.{}", className, methodName);
-        } catch (UnauthorizedException e) {
-            log.warn("Role check failed: {}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("Unexpected error during role check", e);
-            throw new UnauthorizedException("Role check failed due to system error");
-        }
-    }
-
-
-    @Scheduled(fixedRate = 3600000) // Every hour
-    public void evictExpiredCaches() {
-        try {
-            Set<String> keys = redisTemplate.keys(ANNOTATION_CACHE_KEY_PREFIX + "*");
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-                // Add metrics
-                meterRegistry.counter("cache.evictions").increment(keys.size());
-                log.info("Evicted {} expired annotation cache entries", keys.size());
-            }
-        } catch (Exception e) {
-            log.error("Failed to evict expired caches", e);
-            meterRegistry.counter("cache.eviction.failures").increment();
-        }
-    }
+    // --- Removed Methods ---
+    // - checkAuthentication (@Before advice)
+    // - validateToken (logic moved into authenticateAndProceed)
+    // - getCachedAnnotation (overly complex, read directly)
+    // - getOrFetchAuthenticatedUser (logic moved into authenticateAndProceed)
+    // - cacheAuthenticationResult (caching responsibility moved to UserService)
+    // - reportCacheMetrics (can be kept if useful, but removed for simplicity here)
+    // - evictExpiredCaches (can be kept if useful, but removed for simplicity here)
+    // - validateConfiguration (can be kept if useful)
+    // - recordMetrics (replaced by more detailed metrics helpers)
 }
