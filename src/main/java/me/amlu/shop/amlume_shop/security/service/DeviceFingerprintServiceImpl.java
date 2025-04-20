@@ -591,7 +591,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public void trustDevice(long userId, String deviceFingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(userId, deviceFingerprint)
+        userDeviceFingerprintRepository.findByUserIdAndDeviceFingerprint(userId, deviceFingerprint)
                 .ifPresent(device -> {
                     device.setTrusted(true);
                     device.setLastUsedAt(Instant.now());
@@ -666,7 +666,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public void markDeviceSuspicious(String userId, String deviceFingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), deviceFingerprint)
+        userDeviceFingerprintRepository.findByUserIdAndDeviceFingerprint(Long.valueOf(userId), deviceFingerprint)
                 .ifPresent(device -> {
                     device.setFailedAttempts(device.getFailedAttempts() + 1);
                     if (device.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
@@ -710,13 +710,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public boolean verifyDevice(User user, String fingerprint) {
-        return userDeviceFingerprintRepository.existsByUserAndFingerprint(user, fingerprint);
+        return userDeviceFingerprintRepository.existsByUserAndDeviceFingerprint(user, fingerprint);
     }
 
     @Override
     public void revokeAllDevices(String userId, String exceptFingerprint) {
         List<UserDeviceFingerprint> devices = userDeviceFingerprintRepository
-                .findByUserIdAndDeviceFingerprintNot(userId, exceptFingerprint); // TOCHECK: method
+                .findByUserIdAndDeviceFingerprintNot(Long.valueOf(userId), exceptFingerprint); // TOCHECK: method
 
         devices.forEach(device -> {
             device.setActive(false);
@@ -729,7 +729,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     @Override
     public void deactivateDevice(String userId, String deviceFingerprint) {
-        userDeviceFingerprintRepository.findByUserIdAndFingerprint(Long.valueOf(userId), deviceFingerprint)
+        userDeviceFingerprintRepository.findByUserIdAndDeviceFingerprint(Long.valueOf(userId), deviceFingerprint)
                 .ifPresent(device -> {
                     device.setActive(false);
                     device.setDeactivatedAt(Instant.now());
@@ -758,11 +758,11 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
 
         // 2. Update the User entity with the new immutable embeddable
-        user.setDeviceFingerprintingInfo(disabledInfo);
+        user.updateDeviceFingerprintingInfo(disabledInfo);
         userRepository.save(user); // Save the user with the updated embedded object
 
         // 3. Find and deactivate associated *active* device fingerprints
-        List<UserDeviceFingerprint> activeDevices = userDeviceFingerprintRepository.findByUserAndIsActiveTrue(user);
+        List<UserDeviceFingerprint> activeDevices = userDeviceFingerprintRepository.findByUserAndActiveTrue(user);
         if (!activeDevices.isEmpty()) {
             Instant now = Instant.now();
             for (UserDeviceFingerprint device : activeDevices) {
@@ -802,7 +802,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
 
         // 2. Update the User entity with the new immutable embeddable
-        user.setDeviceFingerprintingInfo(enabledInfo);
+        user.updateDeviceFingerprintingInfo(enabledInfo);
         userRepository.save(user); // Save the user with the updated embedded object
 
         // 3. Logging

@@ -26,15 +26,15 @@ public interface UserDeviceFingerprintRepository extends JpaRepository<UserDevic
 
     Optional<UserDeviceFingerprint> findByUserAndDeviceFingerprint(User user, String deviceFingerprint);
 
-    void deleteByUserAndFingerprint(User user, String fingerprint);
+    void deleteByUserAndDeviceFingerprint(User user, String fingerprint);
 
-    Optional<UserDeviceFingerprint> findByUserIdAndFingerprint(Long aLong, String fingerprint);
+    Optional<UserDeviceFingerprint> findByUserIdAndDeviceFingerprint(Long userId, String fingerprint);
 
-    boolean existsByUserAndFingerprint(User user, String fingerprint);
+    boolean existsByUserAndDeviceFingerprint(User user, String fingerprint);
 
-    List<UserDeviceFingerprint> findByUserAndIsActiveTrue(User user);
+    List<UserDeviceFingerprint> findByUserAndActiveTrue(User user);
 
-    List<UserDeviceFingerprint> findByUserIdAndDeviceFingerprintNot(String userId, String exceptFingerprint);
+    List<UserDeviceFingerprint> findByUserIdAndDeviceFingerprintNot(Long userId, String exceptFingerprint);
 
-    long countByUserAndIsActiveTrue(User user);
+    long countByUserAndActiveTrue(User user);
 }

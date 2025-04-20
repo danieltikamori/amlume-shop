@@ -99,6 +99,16 @@ public class UserDeviceFingerprint extends BaseEntity {
         return userToBeChecked != null && userToBeChecked.isDeviceFingerprintingEnabled();
     }
 
+    @Override
+    public Long getAuditableId() {
+        return getUserDeviceFingerprintId();
+    }
+
+    @Override
+    public Long getId() {
+        return getUserDeviceFingerprintId();
+    }
+
 //    @NotBlank
 //    @Column(name = "device_type")
 //    private String deviceType;
