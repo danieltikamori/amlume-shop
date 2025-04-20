@@ -24,24 +24,24 @@ import java.time.Instant;
 @Component
 public class AuthenticationLoggingAspect {
 
-//    @Around("execution(* com.yourapp.security.*.*(..)) && @annotation(Audited)")
-@Around("execution(* me.amlu.shop.amlume_shop.security.service.AuthService.*(..))") // More specific pointcut
-public Object logAuthenticationActivity(ProceedingJoinPoint joinPoint) throws Throwable {
-    String methodName = joinPoint.getSignature().getName();
-    String className = joinPoint.getTarget().getClass().getSimpleName();
-    MDC.put("className", className);
-    MDC.put("methodName", methodName);
-    MDC.put("timestamp", Instant.now().toString());
-    try {
-        log.info("Starting authentication operation: {}.{}", className, methodName);
-        Object result = joinPoint.proceed();
-        log.info("Successfully completed authentication operation");
-        return result;
-    } catch (Exception e) {
-        log.error("Authentication operation failed", e);
-        throw e;
-    } finally {
-        MDC.clear(); // Clear the MDC context
+    //    @Around("execution(* com.yourapp.security.*.*(..)) && @annotation(Audited)")
+    @Around("execution(* me.amlu.shop.amlume_shop.security.service.UserAuthenticator.*(..))") // More specific pointcut
+    public Object logAuthenticationActivity(ProceedingJoinPoint joinPoint) throws Throwable {
+        String methodName = joinPoint.getSignature().getName();
+        String className = joinPoint.getTarget().getClass().getSimpleName();
+        MDC.put("className", className);
+        MDC.put("methodName", methodName);
+        MDC.put("timestamp", Instant.now().toString());
+        try {
+            log.info("Starting authentication operation: {}.{}", className, methodName);
+            Object result = joinPoint.proceed();
+            log.info("Successfully completed authentication operation");
+            return result;
+        } catch (Exception e) {
+            log.error("Authentication operation failed", e);
+            throw e;
+        } finally {
+            MDC.clear(); // Clear the MDC context
+        }
     }
-}
 }
