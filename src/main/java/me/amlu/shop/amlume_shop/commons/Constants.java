@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.commons;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -153,6 +154,9 @@ public final class Constants {
     public static final String HASH_ALGORITHM = "SHA-256";
     public static final int INITIAL_MAP_CAPACITY = 16;
     public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
+
+    @Value("${security.max-concurrent-sessions:2}")
+    public static int MAX_CONCURRENT_SESSIONS;
 
     // --- Line separator ---
     private static final String LINE_SEPARATOR = "\n";
