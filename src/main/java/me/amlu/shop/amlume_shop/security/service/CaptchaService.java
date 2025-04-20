@@ -19,9 +19,11 @@ import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import io.lettuce.core.cluster.PartitionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.payload.RecaptchaResponse;
 import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -35,7 +37,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
@@ -45,17 +46,11 @@ public class CaptchaService {
     private static final Logger log = LoggerFactory.getLogger(CaptchaService.class);
 
     private static final String RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify";
-    private static final String RATE_LIMITER_KEY_PREFIX = "captcha:ratelimit:sliding"; // Added prefix for clarity
-    private static final long RATE_LIMIT = 100; // requests per period
-    private static final Duration RATE_LIMIT_PERIOD = Duration.ofHours(1); // Use Duration
 
     // Resilience4j instance names (ensure these match your configuration)
-    private static final String REDIS_CIRCUIT_BREAKER = "redisCircuitBreaker";
-    private static final String REDIS_RETRY = "redisRetry";
     private static final String RECAPTCHA_CIRCUIT_BREAKER = "recaptchaCircuitBreaker";
     private static final String RECAPTCHA_RETRY = "recaptchaRetry";
     private static final String RECAPTCHA_TIME_LIMITER = "recaptchaTimeLimiter";
-
 
     @Value("${recaptcha.secret}")
     private String recaptchaSecret;
@@ -96,15 +91,15 @@ public class CaptchaService {
      *
      * @param clientIp        The IP address of the client.
      * @param captchaResponse The CAPTCHA response string from the client (can be null initially).
-     * @throws RateLimitExceededException If rate limit is hit AND CAPTCHA is required but not provided.
-     * @throws InvalidCaptchaException    If rate limit is hit AND the provided CAPTCHA is invalid.
+     * @throws RateLimitExceededException If the rate limit is hit AND CAPTCHA is required but not provided.
+     * @throws InvalidCaptchaException    If the rate limit is hit AND the provided CAPTCHA is invalid.
      * @throws CaptchaServiceException    If an unexpected error occurs during validation.
      */
     public void verifyRateLimitAndCaptcha(String clientIp, String captchaResponse)
             throws RateLimitExceededException, InvalidCaptchaException, CaptchaServiceException {
 
         boolean permitAcquired;
-        String rateLimitKey = "captcha:" + clientIp; // Construct the key with limiter name
+        String rateLimitKey = Constants.CAPTCHA_RATELIMIT_KEY + clientIp; // Construct the key with limiter name
 
         try {
             // 1. Check Rate Limit using the injected service (Sliding Window Lua Script)
@@ -180,29 +175,10 @@ public class CaptchaService {
      */
     private boolean validateCaptchaInternal(String captchaResponse) throws Exception {
         // Supplier for the core synchronous API call logic
-        Supplier<RecaptchaResponse> recaptchaApiCallSupplier = () -> {
-            MultiValueMap<String, String> requestMap = new LinkedMultiValueMap<>();
-            requestMap.add("secret", recaptchaSecret);
-            requestMap.add("response", captchaResponse);
-
-            // Make the synchronous API call
-            return restTemplate.postForObject(
-                    RECAPTCHA_VERIFY_URL,
-                    requestMap,
-                    RecaptchaResponse.class
-            );
-        };
-
-        // Supplier that creates the asynchronous operation (CompletableFuture)
-        // This wraps the synchronous call in an async task executed by the scheduledExecutorService
-        Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = () ->
-                CompletableFuture.supplyAsync(
-                        recaptchaApiCallSupplier,
-                        scheduledExecutorService // Use the dedicated executor
-                );
+        Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = getCompletionStageSupplier(captchaResponse);
 
         // Decorate the *initiation and execution* of the time-limited async operation with Retry.
-        // This lambda will be called by Retry on each attempt.
+        // Retry will call this lambda on each attempt.
         Supplier<RecaptchaResponse> retryingSupplier = Retry.decorateSupplier(recaptchaRetry, () -> {
             try {
                 // Inside the retry attempt, execute the async operation with the TimeLimiter applied.
@@ -268,7 +244,7 @@ public class CaptchaService {
                 // Attempt to rethrow the original cause
                 if (e.getCause() instanceof Exception cause) throw cause;
             }
-            // If unwrapping fails or it wasn't a wrapped exception, throw a generic exception
+            // If unwrapping fails, or it wasn't a wrapped exception, throw a generic exception
             throw new CaptchaServiceException("CAPTCHA validation failed after retries/circuit breaker.", e);
         }
 
@@ -283,6 +259,31 @@ public class CaptchaService {
         }
 
         return success;
+    }
+
+    @NotNull
+    private Supplier<CompletionStage<RecaptchaResponse>> getCompletionStageSupplier(String captchaResponse) {
+        Supplier<RecaptchaResponse> recaptchaApiCallSupplier = () -> {
+            MultiValueMap<String, String> requestMap = new LinkedMultiValueMap<>();
+            requestMap.add("secret", recaptchaSecret);
+            requestMap.add("response", captchaResponse);
+
+            // Make the synchronous API call
+            return restTemplate.postForObject(
+                    RECAPTCHA_VERIFY_URL,
+                    requestMap,
+                    RecaptchaResponse.class
+            );
+        };
+
+        // Supplier that creates the asynchronous operation (CompletableFuture)
+        // This wraps the synchronous call in an async task executed by the scheduledExecutorService
+        Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = () ->
+                CompletableFuture.supplyAsync(
+                        recaptchaApiCallSupplier,
+                        scheduledExecutorService // Use the dedicated executor
+                );
+        return asyncOperationSupplier;
     }
 
 
@@ -342,7 +343,7 @@ public class CaptchaService {
         // For simplicity and performance,
         // we can return -1 or a placeholder indicating it's not directly calculated here.
         // Alternatively, you could execute ZCARD again, but that adds overhead.
-        String rateLimitKey = "captcha:" + clientIp;
+        String rateLimitKey = Constants.CAPTCHA_RATELIMIT_KEY + clientIp;
         try {
             return rateLimiter.getRemainingPermits(rateLimitKey);
         } catch (Exception e) {
