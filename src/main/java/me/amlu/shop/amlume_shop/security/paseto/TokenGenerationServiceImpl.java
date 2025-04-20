@@ -17,7 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
 import me.amlu.shop.amlume_shop.repositories.RefreshTokenRepository;
-import me.amlu.shop.amlume_shop.security.service.AuthenticationService;
+import me.amlu.shop.amlume_shop.security.service.AuthenticationInterface;
 import me.amlu.shop.amlume_shop.security.service.util.BLAKE3;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.paseto4j.commons.PasetoException;
@@ -50,7 +50,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     private final KeyManagementService keyManagementService;
     private final ObjectMapper objectMapper;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final AuthenticationService authenticationService;
+    private final AuthenticationInterface authenticationInterface;
     private final TokenClaimsService tokenClaimsService;
     private final HttpServletRequest httpServletRequest;
 
@@ -69,14 +69,14 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
             KeyManagementService keyManagementService,
             ObjectMapper objectMapper,
             RefreshTokenRepository refreshTokenRepository,
-            AuthenticationService authenticationService,
+            AuthenticationInterface authenticationInterface,
             TokenClaimsService tokenClaimsService,
             HttpServletRequest httpServletRequest) {
         this.meterRegistry = meterRegistry;
         this.keyManagementService = keyManagementService;
         this.objectMapper = objectMapper;
         this.refreshTokenRepository = refreshTokenRepository;
-        this.authenticationService = authenticationService;
+        this.authenticationInterface = authenticationInterface;
         this.tokenClaimsService = tokenClaimsService;
         this.httpServletRequest = httpServletRequest;
     }
@@ -178,7 +178,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     public String generateLocalRefreshToken(User user) throws TokenGenerationFailureException {
         String refreshToken = null;
         try {
-            PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), authenticationService.getRefreshTokenDuration());
+            PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), authenticationInterface.getRefreshTokenDuration());
             String payload = objectMapper.writeValueAsString(claims);
 
             PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoRefreshLocalKid);
@@ -191,7 +191,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
             RefreshToken refreshTokenEntity = new RefreshToken();
             refreshTokenEntity.setToken(hashedRefreshToken);
             refreshTokenEntity.setUser(user);
-            refreshTokenEntity.setExpiryDate(Instant.now().plus(authenticationService.getRefreshTokenDuration()));
+            refreshTokenEntity.setExpiryDate(Instant.now().plus(authenticationInterface.getRefreshTokenDuration()));
             refreshTokenEntity.setDeviceFingerprint(httpServletRequest.getHeader("User-Agent")); // Consider making fingerprinting more robust
 //            refreshTokenEntity.setRevoked(false);
 
