@@ -10,13 +10,22 @@
 
 package me.amlu.shop.amlume_shop.payload.user;
 
-public record UserProfileUpdateRequest(String firstName, String lastName) {
+import lombok.*;
 
-    public String getFirstName() {
-        return firstName;
-    }
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class AuthenticationRequest {
+    private String username;
+    private String password;
+    private String mfaCode;
+    private String captchaResponse;
 
-    public String getLastName() {
-        return lastName;
+    // Additional fields for device fingerprinting
+    private String userAgent;
+    private String screenWidth;
+    private String screenHeight;
+
+    public AuthenticationRequest(String username, String password, String captchaResponse) {
     }
 }
