@@ -71,9 +71,9 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
 
             // Create MFA authentication token
             MfaAuthenticationToken authRequest = new MfaAuthenticationToken(
-                    loginRequest.getUsername(),
-                    loginRequest.getPassword(),
-                    loginRequest.getMfaCode()
+                    loginRequest.username(),
+                    loginRequest.password(),
+                    loginRequest.mfaCode()
             );
 
             // Attempt authentication
