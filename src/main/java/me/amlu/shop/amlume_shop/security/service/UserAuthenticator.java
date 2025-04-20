@@ -480,7 +480,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             // --- New Device ---
             log.debug("Associating new device fingerprint for user [{}]", user.getUsername());
             // Check device limit BEFORE creating
-            long deviceCount = userDeviceFingerprintRepository.countByUserAndIsActiveTrue(user);
+            long deviceCount = userDeviceFingerprintRepository.countByUserAndActiveTrue(user);
             if (deviceCount >= maxDevicesPerUser) {
                 log.warn("Max device limit ({}) reached for user [{}]. Cannot associate new device fingerprint.", maxDevicesPerUser, user.getUsername());
                 throw new MaxDevicesExceededException("Maximum device limit reached, cannot add new device.");
