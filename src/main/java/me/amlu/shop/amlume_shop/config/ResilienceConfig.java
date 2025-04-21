@@ -10,8 +10,11 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import io.github.resilience4j.bulkhead.BulkheadConfig;
+import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
@@ -22,13 +25,24 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.SocketTimeoutException;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
+/**
+ * Configuration class for Resilience4j components and related beans.
+ * Provides configurations for Circuit Breaker, Time Limiter, Retry, Bulkhead, and other resilience patterns.
+ */
 @Configuration
 public class ResilienceConfig {
 
+    /**
+     * Configures a RestTemplate bean with custom connection and read timeouts.
+     *
+     * @return a configured RestTemplate instance.
+     */
     @Bean
     public RestTemplate restTemplate() {
         RestTemplate restTemplate = new RestTemplate();
@@ -39,37 +53,77 @@ public class ResilienceConfig {
         return restTemplate;
     }
 
+    /**
+     * Configures a CircuitBreakerRegistry bean with custom settings.
+     *
+     * @return a CircuitBreakerRegistry instance.
+     */
     @Bean
     public CircuitBreakerRegistry circuitBreakerRegistry() {
         CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
-                .failureRateThreshold(50)
-                .waitDurationInOpenState(Duration.ofSeconds(20))
-                .permittedNumberOfCallsInHalfOpenState(5)
-                .slidingWindowSize(10)
+                .failureRateThreshold(50) // Circuit opens if 50% of calls fail.
+                .waitDurationInOpenState(Duration.ofSeconds(20)) // Wait 20 seconds before transitioning to half-open state.
+                .permittedNumberOfCallsInHalfOpenState(5) // Allow 5 calls in half-open state.
+                .slidingWindowSize(10) // Use a sliding window of 10 calls for metrics.
                 .build();
 
         return CircuitBreakerRegistry.of(circuitBreakerConfig);
     }
 
+    /**
+     * Configures a TimeLimiterRegistry bean with custom timeout settings.
+     *
+     * @return a TimeLimiterRegistry instance.
+     */
     @Bean
     public TimeLimiterRegistry timeLimiterRegistry() {
         TimeLimiterConfig config = TimeLimiterConfig.custom()
-                .timeoutDuration(Duration.ofSeconds(1))
+                .timeoutDuration(Duration.ofSeconds(1)) // Set timeout duration to 1 second
                 .build();
         return TimeLimiterRegistry.of(config);
     }
 
+    /**
+     * Configures a RetryRegistry bean with custom retry settings.
+     *
+     * @return a RetryRegistry instance.
+     */
     @Bean
     public RetryRegistry retryRegistry() {
         RetryConfig retryConfig = RetryConfig.custom()
-                .maxAttempts(3)
-                .waitDuration(Duration.ofSeconds(1))
-                .retryExceptions(RestClientException.class)
+                .maxAttempts(5) // Retry up to 5 times
+                .waitDuration(Duration.ofMillis(200)) // Wait initially 200 ms between retries (exponential backoff)
+                .intervalFunction(IntervalFunction.ofExponentialBackoff()) // Use exponential backoff for retry intervals.
+//                .retryExceptions(RestClientException.class) // Simpler retry on specific exceptions
+                // t.getMessage() may throw NullPointerException if the message is null, so always check for null
+                // Simplify and avoid potential runtime errors by just handling specific exceptions
+                .retryOnException(t -> t instanceof RestClientException || (t instanceof SocketTimeoutException /*&& t.getMessage() != null && t.getMessage().toLowerCase().contains("timeout")*/)) // Retry on specific exceptions and conditions
+                // Optional: Customize retry conditions further
+                 .retryOnResult(Objects::isNull) // Retry on a specific result
+                // .retryOnPredicate(Predicate.not(response -> response.getStatusCode().is2xxSuccessful())) // Retry on non-2xx status codes
                 .build();
-
         return RetryRegistry.of(retryConfig);
     }
 
+    /**
+     * Configures a BulkheadRegistry bean with custom settings for concurrent calls.
+     *
+     * @return a BulkheadRegistry instance.
+     */
+    @Bean
+    public BulkheadRegistry bulkheadRegistry() {
+        BulkheadConfig config = BulkheadConfig.custom()
+                .maxConcurrentCalls(100) // Allow up to 100 concurrent calls
+                .maxWaitDuration(Duration.ofMillis(300)) // Wait up to 300 ms for a free slot
+                .build();
+        return BulkheadRegistry.of(config);
+    }
+
+    /**
+     * Configures a ScheduledExecutorService bean for managing timeouts on captcha validation calls.
+     *
+     * @return a ScheduledExecutorService instance with a thread pool size of 4.
+     */
     @Bean(name = "captchaTimeLimiterExecutor") // Use the specific name required by the @Qualifier
     public ScheduledExecutorService captchaTimeLimiterExecutor() {
         // Choose an appropriate pool size.
