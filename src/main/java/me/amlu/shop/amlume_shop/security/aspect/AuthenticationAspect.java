@@ -151,18 +151,7 @@ public class AuthenticationAspect {
     private RetryTemplate createRetryTemplate(RetryRegistry retryRegistry) {
         RetryTemplate localRetryTemplate = new RetryTemplate();
 
-        BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
-                IOException.class, true,
-                TimeoutException.class, true,
-                RedisConnectionException.class, true // If applicable
-                // Add other transient exceptions if needed
-        ));
-
-        CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
-        BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
-        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(MAX_RETRY_ATTEMPTS);
-
-        retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
+        CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy();
 
         ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
         backOffPolicy.setInitialInterval(500);
@@ -176,6 +165,23 @@ public class AuthenticationAspect {
         // localRetryTemplate.registerListener(...);
 
         return localRetryTemplate;
+    }
+
+    @NotNull
+    private static CompositeRetryPolicy getCompositeRetryPolicy() {
+        BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
+                IOException.class, true,
+                TimeoutException.class, true,
+                RedisConnectionException.class, true // If applicable
+                // Add other transient exceptions if needed
+        ));
+
+        CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
+        BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
+        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(MAX_RETRY_ATTEMPTS);
+
+        retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
+        return retryPolicy;
     }
 
     // --- Metrics Configuration ---
@@ -210,8 +216,8 @@ public class AuthenticationAspect {
             }
 
             // 2. Validate Token and Get User (with Resilience)
-            UserDetails userDetails = circuitBreaker.executeSupplier(() ->
-                    retryTemplate.execute(context -> {
+            UserDetails userDetails = circuitBreaker.executeSupplier(() -> // Execute within circuit breaker
+                    retryTemplate.execute(context -> { // Execute within retry policy
                         try {
                             // Call your token validation service (e.g., PasetoTokenService)
                             // This service should parse, validate signature/expiry/claims, and check revocation
@@ -242,8 +248,13 @@ public class AuthenticationAspect {
                             // Handle other potential errors during validation/user fetch
                             log.error("Error during authentication attempt {}: {}", context.getRetryCount() + 1, e.getMessage(), e);
                             // Rethrow wrapped if necessary for retry policy
-                            throw new RuntimeException("Authentication failed during retry attempt", e);
+//                            throw new RuntimeException("Authentication failed during retry attempt", e);
+                            // Decide if this exception should trigger a retry based on your RetryPolicy
+                            throw e; // Rethrow to be caught by RetryTemplate
                         }
+                    }, context -> { // Fallback within retry (optional, but good practice)
+                        log.error("Retry attempts failed for token validation and user retrieval. Circuit breaker might open soon.");
+                        throw new CircuitBreakerOpenException("Failed to validate token and retrieve user after multiple retries.");
                     })
             );
 
@@ -316,14 +327,14 @@ public class AuthenticationAspect {
             throw new UnauthorizedException("Authentication required before checking roles.");
         }
 
+        // Type safe cast
+        String roleNames = Arrays.toString(requiresRole.value());
+
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
         // Check if the user has the required role
         boolean hasRole = userDetails.getAuthorities().stream()
-                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(requiresRole.value()));
-
-        // Type safe cast
-        String roleNames = Arrays.toString(requiresRole.value());
+                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(roleNames));
 
         if (!hasRole) {
             log.warn("Role check failed: User '{}' does not have required role '{}' for method {}.{}",
