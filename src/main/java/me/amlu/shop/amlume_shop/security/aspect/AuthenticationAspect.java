@@ -10,23 +10,18 @@
 
 package me.amlu.shop.amlume_shop.security.aspect;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry; // Import registry
 import io.github.resilience4j.retry.RetryRegistry;
 import io.lettuce.core.RedisConnectionException;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Tags;
-import io.micrometer.core.instrument.Timer;
-import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.config.ResilienceConfig;
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService; // Assuming this validates your Bearer token
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService; // Use interface
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -35,10 +30,11 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier; // Import Qualifier
 import org.springframework.classify.BinaryExceptionClassifier;
 import org.springframework.core.annotation.Order;
-import org.springframework.data.redis.core.StringRedisTemplate; // Keep if needed for specific cache checks
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
@@ -46,13 +42,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.lang.NonNull;
 import org.springframework.retry.RetryPolicy;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
+import org.springframework.retry.backoff.ExponentialRandomBackOffPolicy;
 import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.policy.BinaryExceptionClassifierRetryPolicy;
 import org.springframework.retry.policy.CompositeRetryPolicy;
 import org.springframework.retry.policy.MaxAttemptsRetryPolicy;
-import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
@@ -65,13 +60,10 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.io.IOException;
-import java.lang.reflect.Method;
 import java.security.SignatureException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -85,11 +77,12 @@ import static me.amlu.shop.amlume_shop.commons.Constants.*;
  * @see RequiresAuthentication
  * @see TokenValidationService
  */
-@Slf4j
 @Aspect
 @Component
 @Order(1) // Ensure authentication check runs before other aspects like role checks
 public class AuthenticationAspect {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthenticationAspect.class);
 
     private final UserService userService; // Use interface
     private final TokenValidationService tokenValidationService; // Service to validate the token
@@ -153,15 +146,20 @@ public class AuthenticationAspect {
 
         CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy();
 
-        ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
-        backOffPolicy.setInitialInterval(500);
-        backOffPolicy.setMaxInterval(6000000);
-        backOffPolicy.setMultiplier(2);
+        // For user authentication, usually the fixed policy is more adequate.
+        FixedBackOffPolicy backOffPolicy = new FixedBackOffPolicy();
+        backOffPolicy.setBackOffPeriod(ResilienceConfig.RETRY_INTERVAL);
+
+          // For applications - sets deterministic randomization (Jitter)
+//        ExponentialRandomBackOffPolicy backOffPolicy = new ExponentialRandomBackOffPolicy();
+//        backOffPolicy.setInitialInterval(200);
+//        backOffPolicy.setMaxInterval(6000000);
+//        backOffPolicy.setMultiplier(2);
 
         localRetryTemplate.setRetryPolicy(retryPolicy);
         localRetryTemplate.setBackOffPolicy(backOffPolicy);
 
-        // Optional: Add listeners from RetryRegistry if needed
+        // Optional: Add listeners from RetryRegistry if necessary
         // localRetryTemplate.registerListener(...);
 
         return localRetryTemplate;
@@ -172,13 +170,13 @@ public class AuthenticationAspect {
         BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
                 IOException.class, true,
                 TimeoutException.class, true,
-                RedisConnectionException.class, true // If applicable
+                RedisConnectionException.class, true // If applicable.
                 // Add other transient exceptions if needed
         ));
 
         CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
         BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
-        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(MAX_RETRY_ATTEMPTS);
+        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(ResilienceConfig.MAX_RETRY_ATTEMPTS);
 
         retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
         return retryPolicy;
@@ -217,45 +215,48 @@ public class AuthenticationAspect {
 
             // 2. Validate Token and Get User (with Resilience)
             UserDetails userDetails = circuitBreaker.executeSupplier(() -> // Execute within circuit breaker
-                    retryTemplate.execute(context -> { // Execute within retry policy
-                        try {
-                            // Call your token validation service (e.g., PasetoTokenService)
-                            // This service should parse, validate signature/expiry/claims, and check revocation
-                            Map<String, Object> claims = tokenValidationService.validatePublicAccessToken(token); // Or appropriate method
+                            retryTemplate.execute(context -> { // Execute within retry policy
+                                try {
+                                    // Call your token validation service (e.g., PasetoTokenService)
+                                    // This service should parse, validate signature/expiry/claims, and check revocation
+                                    Map<String, Object> claims = tokenValidationService.validatePublicAccessToken(token); // Or appropriate method
 
-                            // Extract user identifier (e.g., subject) from claims
-                            String userId = (String) claims.get("sub"); // Assuming 'sub' holds the user ID
-                            if (userId == null) {
-                                throw new TokenValidationFailureException("User identifier (sub) missing in token");
-                            }
+                                    // Extract user identifier (e.g., subject) from claims
+                                    String userId = (String) claims.get("sub"); // Assuming 'sub' holds the user ID
+                                    if (userId == null) {
+                                        throw new TokenValidationFailureException("User identifier (sub) missing in token");
+                                    }
 
-                            // Fetch UserDetails (which should be your User entity)
-                            // Caching should ideally happen within userService.loadUserByUsername or getUserById
-                            UserDetails loadedUser = userService.getUserById(Long.valueOf(userId)); // Or findByUsername if sub is username
+                                    // Fetch UserDetails (which should be your User entity)
+                                    // Caching should ideally happen within userService.loadUserByUsername or getUserById
+                                    UserDetails loadedUser = userService.getUserById(Long.valueOf(userId)); // Or findByUsername if sub is username
 
-                            // Basic UserDetails checks
-                            if (!loadedUser.isEnabled()) throw new UnauthorizedException("User account is disabled");
-                            if (!loadedUser.isAccountNonLocked()) throw new UnauthorizedException("User account is locked");
-                            if (!loadedUser.isAccountNonExpired()) throw new UnauthorizedException("User account has expired");
-                            if (!loadedUser.isCredentialsNonExpired()) throw new UnauthorizedException("User credentials have expired");
+                                    // Basic UserDetails checks
+                                    if (!loadedUser.isEnabled()) throw new UnauthorizedException("User account is disabled");
+                                    if (!loadedUser.isAccountNonLocked())
+                                        throw new UnauthorizedException("User account is locked");
+                                    if (!loadedUser.isAccountNonExpired())
+                                        throw new UnauthorizedException("User account has expired");
+                                    if (!loadedUser.isCredentialsNonExpired())
+                                        throw new UnauthorizedException("User credentials have expired");
 
-                            return loadedUser;
+                                    return loadedUser;
 
-                        } catch (TokenValidationFailureException | SignatureException e) {
-                            log.warn("Token validation failed during attempt {}: {}", context.getRetryCount() + 1, e.getMessage());
-                            throw new UnauthorizedException("Invalid or expired token", e); // Rethrow as Unauthorized
-                        } catch (Exception e) {
-                            // Handle other potential errors during validation/user fetch
-                            log.error("Error during authentication attempt {}: {}", context.getRetryCount() + 1, e.getMessage(), e);
-                            // Rethrow wrapped if necessary for retry policy
+                                } catch (TokenValidationFailureException | SignatureException e) {
+                                    log.warn("Token validation failed during attempt {}: {}", context.getRetryCount() + 1, e.getMessage());
+                                    throw new UnauthorizedException("Invalid or expired token", e); // Rethrow as Unauthorized
+                                } catch (Exception e) {
+                                    // Handle other potential errors during validation/user fetch
+                                    log.error("Error during authentication attempt {}: {}", context.getRetryCount() + 1, e.getMessage(), e);
+                                    // Rethrow wrapped if necessary for retry policy
 //                            throw new RuntimeException("Authentication failed during retry attempt", e);
-                            // Decide if this exception should trigger a retry based on your RetryPolicy
-                            throw e; // Rethrow to be caught by RetryTemplate
-                        }
-                    }, context -> { // Fallback within retry (optional, but good practice)
-                        log.error("Retry attempts failed for token validation and user retrieval. Circuit breaker might open soon.");
-                        throw new CircuitBreakerOpenException("Failed to validate token and retrieve user after multiple retries.");
-                    })
+                                    // Decide if this exception should trigger a retry based on your RetryPolicy
+                                    throw e; // Rethrow to be caught by RetryTemplate
+                                }
+                            }, context -> { // Fallback within retry (optional, but good practice)
+                                log.error("Retry attempts failed for token validation and user retrieval. Circuit breaker might open soon.");
+                                throw new CircuitBreakerOpenException("Failed to validate token and retrieve user after multiple retries.");
+                            })
             );
 
             // 3. Set Security Context
