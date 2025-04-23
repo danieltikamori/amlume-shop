@@ -21,7 +21,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.lang.ScopedValue;
+//import java.lang.ScopedValue;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -90,7 +90,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT new me.amlu.shop.amlume_shop.model.AuthenticationInfo(" +
             "u.username, u.password, u.enabled) " +
             "FROM User u WHERE u.username = :username")
-    AuthenticationInfo findAuthenticationInfoByUsername(@Param("username") String username);
+    Optional<AuthenticationInfo> findAuthenticationInfoByUsername(@Param("username") String username);
 
     @Modifying
     @Transactional
