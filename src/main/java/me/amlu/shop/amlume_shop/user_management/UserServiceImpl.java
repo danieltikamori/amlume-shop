@@ -15,12 +15,13 @@ import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException; // Custom exception
-import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest; // Example DTO for profile update
+import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.service.CacheService; // Keep if custom cache logic is essential
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -63,25 +64,28 @@ public class UserServiceImpl implements UserService {
         Assert.notNull(request, "Registration request cannot be null");
 
         // Check if user already exists by username or email
-        if (userRepository.existsByAuthenticationInfoUsername(String.valueOf(request.getUsername()))) {
-            throw new UserAlreadyExistsException("Username '" + request.getUsername() + "' already taken");
+        if (userRepository.existsByAuthenticationInfoUsername(String.valueOf(request.username()))) {
+            throw new UserAlreadyExistsException("Username '" + request.username() + "' already taken");
         }
-        if (userRepository.existsByContactInfoUserEmailEmail(request.getUserEmail())) {
-            throw new UserAlreadyExistsException("Email '" + request.getUserEmail() + "' already registered");
+        if (userRepository.existsByContactInfoUserEmailEmail(request.userEmail())) {
+            throw new UserAlreadyExistsException("Email '" + request.userEmail() + "' already registered");
         }
 
-        // Create new user with hashed password and initial details
+        // Hash password
+        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
+
+        // Create a new user with hashed password and initial details
         User user = User.builder()
                 .authenticationInfo(AuthenticationInfo.builder()
-                        .username(request.getUsername())
-                        .password(passwordEncoder.encode(request.getPassword()))
+                        .username(request.username())
+                        .password(encodedPassword)
                         .build())
                 .contactInfo(ContactInfo.builder()
-                        .userEmail(new UserEmail(request.getUserEmail()))
+                        .userEmail(new UserEmail(request.userEmail()))
                         // Add other contact fields if available in request
                         .build())
                 .mfaInfo(MfaInfo.builder()
-                        .mfaEnabled(request.isMfaEnabled())
+                        .mfaEnabled(request.mfaEnabled())
                         // Initialize other MFA fields if necessary
                         .build())
                 .accountStatus(AccountStatus.builder()
@@ -102,7 +106,7 @@ public class UserServiceImpl implements UserService {
         Set<UserRole> roles = new HashSet<>();
         // Assuming UserRole has a constructor or static factory for AppRole
         roles.add(new UserRole(AppRole.ROLE_CUSTOMER));
-        user.setRoles(roles);
+        user.createRoleSet(roles);
 
         // TODO: Implement email verification logic if required
         // String verificationToken = generateVerificationToken(request.getEmail());
@@ -118,16 +122,32 @@ public class UserServiceImpl implements UserService {
     // --- User Retrieval ---
 
     @Override
-    // Consider caching UserDetails instead of the full User entity for security context
-    // @Cacheable(value = USER_CACHE, key = "#username") // Example caching
+    // Consider caching UserDetails instead of the full User entity for security context.
+    // However, since User implements UserDetails and uses embedded objects, caching
+    // the User object directly is a common and often acceptable approach.
+    // Ensure the User entity and all embedded objects are Serializable for cache providers like Redis.
+    @Cacheable(value = USERS_CACHE, key = "#username") // Cache name from Constants.java
     public User findUserByUsername(String username) {
+        // 1. Precondition Check: Ensure username is not null or empty.
         Assert.hasText(username, "Username must not be empty");
-        return userRepository.findByAuthenticationInfoUsername(username)
-                .orElseThrow(() -> new UserNotFoundException("User not found with username: " + username));
+        log.debug("Attempting to find user by username: {}", username); // Added debug log
+
+        // 2. Repository Call: Find user by username within the AuthenticationInfo embedded object.
+        // The repository method returns Optional<User>.
+        User user = userRepository.findByAuthenticationInfoUsername(username)
+                // 3. Handle Not Found: Throw a specific custom exception if the Optional is empty.
+                .orElseThrow(() -> {
+                    log.warn("User not found with username: {}", username); // Log warning on failure
+                    return new UserNotFoundException("User not found with username: " + username);
+                });
+
+        // 4. Log Success and Return: Log if found (optional, could be verbose) and return the user.
+        log.debug("Successfully found user by username: {}", username);
+        return user;
     }
 
     @Override
-    // @Cacheable(value = USER_CACHE, key = "#userId") // Example caching
+     @Cacheable(value = USERS_CACHE, key = "#userId")
     public User getUserById(Long userId) {
         Assert.notNull(userId, "User ID must not be null");
         return userRepository.findById(userId)
@@ -135,7 +155,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    // @Cacheable(value = USER_CACHE, key = "'email:' + #email") // Example caching key
+//     @Cacheable(value = USERS_CACHE, key = "'email:' + #email")
     public User getUserByEmail(String email) {
         Assert.hasText(email, "Email must not be empty");
         // Assuming repository method returns Optional now for consistency
@@ -193,7 +213,7 @@ public class UserServiceImpl implements UserService {
         String cacheKey = USER_CACHE_KEY_PREFIX + userId;
         // Assuming CacheService handles caching UserDetails or similar lightweight object
         return cacheService.getOrCache(
-                USER_CACHE,
+                USERS_CACHE,
                 cacheKey,
                 () -> userRepository.findById(userId) // Fetch the full User entity
                         .map(user -> (UserDetails) user) // Cast to UserDetails
@@ -203,7 +223,7 @@ public class UserServiceImpl implements UserService {
 
     // --- User Updates (Targeted and Safer) ---
 
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#result.userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId")
     @Override
     public User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest) {
         Assert.notNull(userId, "User ID must not be null");
@@ -221,7 +241,7 @@ public class UserServiceImpl implements UserService {
             updatedContactInfo = updatedContactInfo.withLastName(profileRequest.getLastName());
         }
         // Add other updatable profile fields (phone number, etc.)
-        userToUpdate.setContactInfo(updatedContactInfo); // Set the potentially new embedded instance
+        userToUpdate.updateContactInfo(updatedContactInfo); // Set the potentially new embedded instance
 
         // Updating MFA preference (if allowed in profile update)
         // MfaInfo updatedMfaInfo = userToUpdate.getMfaInfo().withMfaEnabled(profileRequest.isMfaEnabled());
@@ -243,7 +263,7 @@ public class UserServiceImpl implements UserService {
     // --- Deletion (Soft Delete) ---
 
     @Override
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     public void deleteUser(Long userId) {
         Assert.notNull(userId, "User ID must not be null");
         // Fetch user to ensure it exists before attempting delete
@@ -288,7 +308,10 @@ public class UserServiceImpl implements UserService {
         Assert.notNull(user, "User cannot be null");
         Assert.hasText(roleName, "Role name must not be empty");
         return user.getRoles().stream()
-                .anyMatch(userRole -> userRole.getRoleName().name().equals(roleName));
+                .anyMatch(userRole -> {
+                    assert userRole.getRoleName() != null;
+                    return userRole.getRoleName().name().equals(roleName);
+                });
     }
 
     // --- Account Status Management ---
@@ -310,7 +333,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
     @Override
     public void lockUserAccount(Long userId) {
         Instant lockTime = Instant.now();
@@ -320,7 +343,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
     @Override
     public boolean unlockAccountIfExpired(Long userId) {
         User user = this.getUserById(userId); // Fetch fresh state
@@ -354,7 +377,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
     @Override
     public void resetFailedLoginAttempts(Long userId) {
         // Use targeted repository update
@@ -365,7 +388,7 @@ public class UserServiceImpl implements UserService {
     // Removed redundant resetFailedLogins
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
     @Override
     public void updateLastLoginTime(Long userId) {
         // Use targeted repository update
@@ -375,10 +398,11 @@ public class UserServiceImpl implements UserService {
 
     // --- Validation Helper (Use with caution) ---
 
-//    // This is a very basic check. Consider if it's truly needed
+//    // This is a very basic check.
+//    Consider if it's truly necessary
 //    // or if DTO validation covers requirements.
 //    public boolean isValidUserDto(UserDTO user) {
-//        return user != null && user.getUserId() != null && user.getUsername() != null && user.getUserEmail() != null;
+//        return user != null && user.getUserId() != null && user.username() != null && user.userEmail() != null;
 //    }
 }
 

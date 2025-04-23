@@ -20,7 +20,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.CURRENT_USER_CACHE;
-import static me.amlu.shop.amlume_shop.commons.Constants.USER_CACHE;
+import static me.amlu.shop.amlume_shop.commons.Constants.USERS_CACHE;
 
 public interface UserService {
 
@@ -50,7 +50,7 @@ public interface UserService {
 
     UserDetails getUserDetails(Long userId);
 
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict relevant caches
+//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict relevant caches
     User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest);
 
     void deleteUser(Long userId);
@@ -78,18 +78,18 @@ public interface UserService {
     void incrementFailedLogins(String username);
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     void lockUserAccount(Long userId);
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     boolean unlockAccountIfExpired(Long userId);
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     void resetFailedLoginAttempts(Long userId);
 
     @Transactional
-    @CacheEvict(value = {USER_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     void updateLastLoginTime(Long userId);
 }
