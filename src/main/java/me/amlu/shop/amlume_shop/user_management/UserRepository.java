@@ -10,18 +10,18 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+// Removed unused validation imports for method parameters
+// import jakarta.validation.constraints.Email;
+// import jakarta.validation.constraints.NotBlank;
+// import jakarta.validation.constraints.Size;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetails; // Keep if findUserDetails is used
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Transactional; // Keep for @Modifying if needed
 
-//import java.lang.ScopedValue;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -29,85 +29,152 @@ import java.util.Set;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    Optional<User> findByUserId(Long userId);
+    // --- Standard Finders ---
+    Optional<User> findByUserId(Long userId); // Keep standard findById if preferred
 
-    boolean existsByUsername(String username);
+    // --- Finders based on Embedded Objects ---
 
-    User findByEmail(String email);
+    /**
+     * Finds a user by their username string stored within the AuthenticationInfo.Username embedded object.
+     * Uses property expression: authenticationInfo.username.username (assuming Username VO has a 'username' field)
+     *
+     * @param username The username string to search for.
+     * @return An Optional containing the User if found.
+     */
+    // Optional<User> findByAuthenticationInfoUsername(Username authenticationInfo_username); // OLD
+    Optional<User> findByAuthenticationInfoUsername_Username(String username); // NEW: Query by nested property
 
-    Optional<User> findByUsername(String username);
+    /**
+     * Finds a user by their email address stored within the ContactInfo.UserEmail embedded object.
+     *
+     * @param email The email address to search for.
+     * @return An Optional containing the User if found.
+     */
+    Optional<User> findByContactInfoUserEmailEmail(String email);
 
-    Optional<User> findByUsernameOrEmail(String username);
+    /**
+     * Finds a user by either their username string or email address.
+     * Uses property expression: authenticationInfo.username.username
+     *
+     * @param username The username string to search for.
+     * @param email    The email address to search for.
+     * @return An Optional containing the User if found by either identifier.
+     */
+    // Optional<User> findByAuthenticationInfoUsernameOrContactInfoUserEmailEmail(String username, String email); // OLD (Username part was wrong)
+    Optional<User> findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(String username, String email); // NEW: Correct username path
 
-    Optional<User> findByRefreshToken(String hashpw);
 
-//    Optional<User> findByIdWithRoles(Long id); // Possibly unnecessary because we are using fetch = FetchType.EAGER in the User class.
+    // --- Existence Checks based on Embedded Objects ---
 
-//    * **`@Modifying`:** Indicates that the query will modify data.
-//    * **`@Query`:** Defines the JPQL query to execute.
-//    * **`@Param`:** Binds the method parameters to the query parameters.
+    /**
+     * Checks if a user exists with the given username string.
+     * Uses property expression: authenticationInfo.username.username
+     *
+     * @param username The username string to check.
+     * @return true if a user with the username exists, false otherwise.
+     */
+    // boolean existsByAuthenticationInfoUsername(String username); // OLD (Ambiguous if it expected String or Username object)
+    boolean existsByAuthenticationInfoUsername_Username(String username); // NEW: Query by nested property
 
+    /**
+     * Checks if a user exists with the given email address.
+     *
+     * @param email The email address to check.
+     * @return true if a user with the email exists, false otherwise.
+     */
+    boolean existsByContactInfoUserEmailEmail(String email);
+
+    // --- Custom Queries ---
+
+    /**
+     * Fetches the roles associated with a specific user ID.
+     * Note: EAGER fetching on User.roles might make this less necessary.
+     *
+     * @param userId The ID of the user.
+     * @return A Set of UserRole objects associated with the user.
+     */
     @Query("SELECT r FROM User u JOIN u.roles r WHERE u.userId = :userId")
     Set<UserRole> findRolesByUserId(@Param("userId") Long userId);
 
-    boolean existsByContactInfoEmail(String email);
+    // --- Targeted Update Queries (@Modifying) ---
+    // These are generally more efficient than loading the full entity for simple updates.
 
-//    @Query("SELECT CASE WHEN COUNT(u) > 0 THEN true ELSE false END FROM User u WHERE u.contactInfo.email = :email")
-//    boolean existsByEmail(@Param("email") String email);
-
+    /**
+     * Updates the failed login attempt count for a user.
+     *
+     * @param userId              The ID of the user to update.
+     * @param failedLoginAttempts The new count of failed attempts.
+     */
     @Modifying
+    @Transactional // Add Transactional if called outside a transactional service method
     @Query("UPDATE User u SET u.accountStatus.failedLoginAttempts = :failedLoginAttempts WHERE u.userId = :userId")
     void updateFailedLoginAttempts(@Param("userId") Long userId, @Param("failedLoginAttempts") int failedLoginAttempts);
 
+    /**
+     * Updates the account lock status and lock time for a user.
+     *
+     * @param userId        The ID of the user to update.
+     * @param accountNonLocked The new lock status (true means NOT locked, false means locked).
+     * @param lockTime      The timestamp when the lock was applied (null if unlocking).
+     */
     @Modifying
+    @Transactional // Add Transactional if called outside a transactional service method
     @Query("UPDATE User u SET u.accountStatus.accountNonLocked = :accountNonLocked, u.accountStatus.lockTime = :lockTime WHERE u.userId = :userId")
     void updateAccountLockStatus(@Param("userId") Long userId, @Param("accountNonLocked") boolean accountNonLocked, @Param("lockTime") Instant lockTime);
 
+
+    /**
+     * Unlocks a user account by setting locked status to true (not locked), clearing lock time, and resetting failed attempts.
+     *
+     * @param userId The ID of the user to unlock.
+     */
     @Modifying
+    @Transactional // Add Transactional if called outside a transactional service method
     @Query("UPDATE User u SET u.accountStatus.accountNonLocked = true, u.accountStatus.lockTime = null, u.accountStatus.failedLoginAttempts = 0 WHERE u.userId = :userId")
     void unlockUser(@Param("userId") Long userId);
 
+    /**
+     * Updates the user's password.
+     * IMPORTANT: The newPassword provided MUST be already encoded/hashed.
+     *
+     * @param userId      The ID of the user whose password is to be updated.
+     * @param newPassword The new, encoded password (as a UserPassword object).
+     */
     @Modifying
-    @Query("UPDATE User u SET u.authenticationInfo.password = :password WHERE u.userId = :userId")
-    void updatePassword(@Param("userId") Long userId, @Param("password") String password);
+    @Transactional // Add Transactional if called outside a transactional service method
+    @Query("UPDATE User u SET u.authenticationInfo.password = :newPassword WHERE u.userId = :userId")
+    void updatePassword(@Param("userId") Long userId, @Param("newPassword") UserPassword newPassword);
 
+    /**
+     * Updates the last login timestamp for a user.
+     *
+     * @param userId The ID of the user to update.
+     * @param now    The current timestamp to set as the last login time.
+     */
     @Modifying
-    @Query("UPDATE User u SET u.refreshToken = :refreshToken WHERE u.userId = :userId")
-    void updateRefreshToken(@Param("userId") Long userId, @Param("refreshToken") String refreshToken);
-
-    @Modifying
-    @Query("UPDATE User u SET u.refreshToken = null WHERE u.userId = :userId")
-    void clearRefreshToken(@Param("userId") Long userId);
-
-    @Modifying
+    @Transactional // Add Transactional if called outside a transactional service method
     @Query("UPDATE User u SET u.accountStatus.lastLoginTime = :now WHERE u.userId = :userId")
     void updateLastLoginTime(@Param("userId") Long userId, @Param("now") Instant now);
 
-    void update(User profile);
 
-    UserDetails findUserDetails(String userId);
+    // --- Potentially Unused / To Be Reviewed ---
 
-    @Query("SELECT new me.amlu.shop.amlume_shop.model.AuthenticationInfo(" +
-            "u.username, u.password, u.enabled) " +
-            "FROM User u WHERE u.username = :username")
-    Optional<AuthenticationInfo> findAuthenticationInfoByUsername(@Param("username") String username);
+    // Optional<User> findByRefreshToken(String hashpw); // Review if refresh tokens are stored differently
 
-    @Modifying
-    @Transactional
-    @Query("UPDATE User u SET " +
-            "u.password = :#{#newInfo.password}, " +
-            "u.enabled = :#{#newInfo.enabled} " +
-            "WHERE u.username = :username")
-    void updateAuthenticationInfo(@Param("username") String username,
-                                  @Param("newInfo") AuthenticationInfo newInfo);
+    // @Modifying
+    // @Query("UPDATE User u SET u.refreshToken = :refreshToken WHERE u.userId = :userId")
+    // void updateRefreshToken(@Param("userId") Long userId, @Param("refreshToken") String refreshToken); // Review: User entity doesn't show refreshToken field
 
-    boolean existsByAuthenticationInfoUsername(@NotBlank @Size(min = 3, max = 20) String username);
+    // @Modifying
+    // @Query("UPDATE User u SET u.refreshToken = null WHERE u.userId = :userId")
+    // void clearRefreshToken(@Param("userId") Long userId); // Review: User entity doesn't show refreshToken field
 
-    boolean existsByContactInfoUserEmailEmail(@Email @Size(min = 5, max = 50) String userEmail);
+    // UserDetails findUserDetails(Long userId); // Review if needed, findById returns User which is UserDetails
 
-    Optional<User> findByAuthenticationInfoUsername(String username);
-
-    Optional<User> findByContactInfoUserEmailEmail(String email);
-
-    Optional<User> findByAuthenticationInfoUsernameOrContactInfoUserEmailEmail(String usernameOrEmail, String usernameOrEmail1);
+    // --- Removed Methods ---
+    // Removed existsByUsername, findByEmail, findByUsername, findByUsernameOrEmail (use embedded object paths)
+    // Removed existsByContactInfoEmail (use existsByContactInfoUserEmailEmail)
+    // Removed findAuthenticationInfoByUsername (conflicting AuthenticationInfo class)
+    // Removed updateAuthenticationInfo (conflicting AuthenticationInfo class)
+    // Removed update(User profile) (non-standard JPA method)
 }
