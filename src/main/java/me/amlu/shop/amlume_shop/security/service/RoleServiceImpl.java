@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.category_management.Category;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
 import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator;
@@ -20,12 +21,12 @@ import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
 import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
-import me.amlu.shop.amlume_shop.product_management.ProductService;
-import me.amlu.shop.amlume_shop.resilience.service.ResilienceService;
+import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
@@ -39,28 +40,26 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@CacheConfig(cacheNames = "roles")
+@CacheConfig(cacheNames = Constants.ROLES_CACHE)
 public class RoleServiceImpl implements RoleService {
 
     private final UserRepository userRepository;
-    private final ProductService productService;
 
     private final AlertService alertService;
     private final SecurityValidator securityValidator;
     private final InputValidator inputValidator;
     private final RoleHierarchyValidator roleHierarchyValidator;
     private final SecurityAuditService securityAuditService;
-    private final ResilienceService resilienceService;
+    private final RateLimiter rateLimiter;
 
-    public RoleServiceImpl(UserRepository userRepository, ProductService productService, AlertService alertService, SecurityValidator securityValidator, InputValidator inputValidator, RoleHierarchyValidator roleHierarchyValidator, ResilienceService resilienceService, SecurityAuditService securityAuditService) {
+    public RoleServiceImpl(UserRepository userRepository, AlertService alertService, SecurityValidator securityValidator, InputValidator inputValidator, RoleHierarchyValidator roleHierarchyValidator, SecurityAuditService securityAuditService, @Qualifier("redisSlidingWindowRateLimiter")RateLimiter rateLimiter) {
         this.userRepository = userRepository;
-        this.productService = productService;
         this.alertService = alertService;
         this.securityValidator = securityValidator;
         this.inputValidator = inputValidator;
         this.roleHierarchyValidator = roleHierarchyValidator;
-        this.resilienceService = resilienceService;
         this.securityAuditService = securityAuditService;
+        this.rateLimiter = rateLimiter;
     }
 
     @Override
@@ -74,10 +73,28 @@ public class RoleServiceImpl implements RoleService {
             // --- Get current user ---
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
             String username = authentication != null ? authentication.getName() : null;
-            userId = String.valueOf(userRepository.findByUsername(username).map(User::getUserId).orElse(null));
+            userId = String.valueOf(userRepository.findByAuthenticationInfoUsername_Username(username).map(User::getUserId).orElse(null));
 
             if (!securityValidator.validateAuthentication(authentication)) {
                 securityAuditService.logFailedAttempt(username, "Authentication validation failed");
+                return Collections.emptySet();
+            }
+
+            // --- Rate Limiting Check ---
+            try {
+                // Call the method that throws on exceedance
+                rateLimiter.tryAcquire(username); // Use the correct method
+                log.trace("Rate limit check passed for user {}", username);
+            } catch (RateLimitExceededException e) {
+                // Catch the exception if the limit is exceeded
+                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
+                securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
+                return Collections.emptySet(); // Return an empty set if rate limited
+            } catch (Exception e) { // Catch potential Redis errors during rate limiting
+                log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
+                // Decide how to handle Redis errors - fail open (allow) or fail closed (deny)?
+                // For security, failing closed might be better here.
+                securityAuditService.logFailedAttempt(username, "Rate limit check error");
                 return Collections.emptySet();
             }
 
@@ -89,24 +106,6 @@ public class RoleServiceImpl implements RoleService {
 
             log.debug("Determining dynamic roles for user {} and resource type: {}",
                     username, resource.getClass().getSimpleName());
-
-            // --- Rate Limiting Check ---
-            try {
-                // Call the method that throws on exceedance
-                resilienceService.allowRequestByUsername(username); // Use the correct method
-                log.trace("Rate limit check passed for user {}", username);
-            } catch (RateLimitExceededException e) {
-                // Catch the exception if the limit is exceeded
-                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
-                securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
-                return Collections.emptySet(); // Return empty set if rate limited
-            } catch (Exception e) { // Catch potential Redis errors during rate limiting
-                log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
-                // Decide how to handle Redis errors - fail open (allow) or fail closed (deny)?
-                // For security, failing closed might be better here.
-                securityAuditService.logFailedAttempt(username, "Rate limit check error");
-                return Collections.emptySet();
-            }
 
             // --- Role Determination Logic (proceed if not rate-limited) ---
             // Role hierarchy validation
@@ -192,7 +191,7 @@ public class RoleServiceImpl implements RoleService {
             }
 
             // If validation passes, proceed with role assignment
-            user.setRoles(newRoles);
+            user.createRoleSet(newRoles);
             return true;
 
         } catch (Exception e) {
@@ -396,7 +395,7 @@ public class RoleServiceImpl implements RoleService {
 
     private boolean isCategoryManager(String username, Long categoryManagerId) {
         try {
-            Optional<User> user = userRepository.findByUsername(username);
+            Optional<User> user = userRepository.findByAuthenticationInfoUsername_Username(username);
             return user.isPresent() && user.get().getUserId().equals(categoryManagerId);
         } catch (Exception e) {
             log.error("Error checking category manager status", e);
