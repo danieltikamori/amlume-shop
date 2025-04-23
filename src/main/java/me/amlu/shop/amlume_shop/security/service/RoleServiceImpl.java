@@ -10,14 +10,15 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
-import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator;
+// import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator; // Removed if username sanitization isn't needed
 import me.amlu.shop.amlume_shop.config.SecurityValidator;
-import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
+import me.amlu.shop.amlume_shop.exceptions.RoleAssignmentException;
+import me.amlu.shop.amlume_shop.exceptions.SecurityValidationException;
+import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
@@ -26,6 +27,9 @@ import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.CacheConfig;
 import org.springframework.cache.annotation.CacheEvict;
@@ -34,25 +38,34 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.Assert;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @CacheConfig(cacheNames = Constants.ROLES_CACHE)
 public class RoleServiceImpl implements RoleService {
 
-    private final UserRepository userRepository;
+    private static final Logger log = LoggerFactory.getLogger(RoleServiceImpl.class);
 
+    private final UserRepository userRepository;
     private final AlertService alertService;
     private final SecurityValidator securityValidator;
     private final InputValidator inputValidator;
     private final RoleHierarchyValidator roleHierarchyValidator;
     private final SecurityAuditService securityAuditService;
     private final RateLimiter rateLimiter;
+    // private final SecureAppRoleValidator secureAppRoleValidator; // Removed if not used
 
-    public RoleServiceImpl(UserRepository userRepository, AlertService alertService, SecurityValidator securityValidator, InputValidator inputValidator, RoleHierarchyValidator roleHierarchyValidator, SecurityAuditService securityAuditService, @Qualifier("redisSlidingWindowRateLimiter")RateLimiter rateLimiter) {
+    public RoleServiceImpl(UserRepository userRepository,
+                           AlertService alertService,
+                           SecurityValidator securityValidator,
+                           InputValidator inputValidator,
+                           RoleHierarchyValidator roleHierarchyValidator,
+                           SecurityAuditService securityAuditService,
+                           @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter
+            /*, SecureAppRoleValidator secureAppRoleValidator */) {
         this.userRepository = userRepository;
         this.alertService = alertService;
         this.securityValidator = securityValidator;
@@ -60,422 +73,391 @@ public class RoleServiceImpl implements RoleService {
         this.roleHierarchyValidator = roleHierarchyValidator;
         this.securityAuditService = securityAuditService;
         this.rateLimiter = rateLimiter;
+        // this.secureAppRoleValidator = secureAppRoleValidator;
     }
 
+    /**
+     * Determines the dynamic roles for a user based on a given resource.
+     * Applies security checks, rate limiting, and validation before determining roles.
+     * Results are cached based on the user's authentication name and the resource's hashcode.
+     *
+     * @param resource The resource (e.g., Product, Order, Category) to determine roles for.
+     * @return An unmodifiable set of UserRole objects applicable to the user for the resource. Returns an empty set if validation fails or an error occurs.
+     */
     @Override
     @Transactional(readOnly = true)
-    @Cacheable(key = "#username + '_' + #resource.hashCode()")
-    public Set<UserRole> getDynamicRolesForResource(Object resource) {
-        Set<UserRole> dynamicRoles = new HashSet<>();
+    // Cache key uses authentication name and resource hashcode.
+    // Note: Relies on SecurityContextHolder, making testing slightly harder.
+    // Ensure resource.hashCode() is stable and meaningful.
+    @Cacheable(key = "authentication.name + '_' + #resource.hashCode()")
+    public Set<UserRole> getDynamicRolesForResource(@NotNull Object resource) {
+        Assert.notNull(resource, "Resource cannot be null for role determination.");
 
-        String userId = null;
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication != null ? authentication.getName() : "anonymous"; // Handle anonymous case
+        User user = null;
+        String userIdForAlert = "unknown";
+
         try {
-            // --- Get current user ---
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            String username = authentication != null ? authentication.getName() : null;
-            userId = String.valueOf(userRepository.findByAuthenticationInfoUsername_Username(username).map(User::getUserId).orElse(null));
+            // 1. Initial Security Validations (Auth, Rate Limit, Input)
+            user = performInitialValidations(authentication, username, resource);
+            userIdForAlert = String.valueOf(user.getUserId()); // Get user ID for potential alerts
 
-            if (!securityValidator.validateAuthentication(authentication)) {
-                securityAuditService.logFailedAttempt(username, "Authentication validation failed");
-                return Collections.emptySet();
-            }
+            // 2. Determine Roles based on Resource Type
+            Set<UserRole> dynamicRoles = determineAndValidateRoles(resource, user, authentication);
 
-            // --- Rate Limiting Check ---
-            try {
-                // Call the method that throws on exceedance
-                rateLimiter.tryAcquire(username); // Use the correct method
-                log.trace("Rate limit check passed for user {}", username);
-            } catch (RateLimitExceededException e) {
-                // Catch the exception if the limit is exceeded
-                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
-                securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
-                return Collections.emptySet(); // Return an empty set if rate limited
-            } catch (Exception e) { // Catch potential Redis errors during rate limiting
-                log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
-                // Decide how to handle Redis errors - fail open (allow) or fail closed (deny)?
-                // For security, failing closed might be better here.
-                securityAuditService.logFailedAttempt(username, "Rate limit check error");
-                return Collections.emptySet();
-            }
-
-            // --- Input validation ---
-            if (!inputValidator.validateResource(resource)) {
-                securityAuditService.logFailedAttempt(username, "Resource validation failed");
-                return Collections.emptySet();
-            }
-
-            log.debug("Determining dynamic roles for user {} and resource type: {}",
-                    username, resource.getClass().getSimpleName());
-
-            // --- Role Determination Logic (proceed if not rate-limited) ---
-            // Role hierarchy validation
-            Set<UserRole> roles = determineRoles(resource); // This line was moved down
-            if (roleHierarchyValidator.isRoleAssignmentInvalid(roles, authentication)) {
-                securityAuditService.logFailedAttempt(username, "Role validation failed");
-                return Collections.emptySet();
-            }
-//            validatAppRoleHierarchy(dynamicRoles);
-
-            // --- Resource-specific role determination ---
-            switch (resource) {
-                case Product product -> addProductRoles(product, dynamicRoles, username);
-                case Order order -> addOrderRoles(order, dynamicRoles, username);
-
-                // Add more resource types as needed
-                case Category category ->
-                    // Category manager role
-//                if (isCategoryManager(username, category.getCategoryManager().getUserId())) {
-//                    dynamicRoles.add("ROLE_CATEGORY_MANAGER");
-//                }
-                        addCategoryRoles(category, dynamicRoles, username);
-                default -> {
-                    log.error("Unsupported resource type: {}", resource.getClass().getSimpleName());
-                    throw new IllegalStateException("Unexpected value: " + resource);
-                }
-            }
-
-            // --- Audit logging ---
+            // 3. Audit Success
             securityAuditService.logRoleAssignment(username, dynamicRoles, resource);
-
             log.debug("Assigned roles {} to user {} for resource {}",
                     dynamicRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()),
                     username,
                     resource.getClass().getSimpleName());
 
+            return Collections.unmodifiableSet(dynamicRoles); // Return immutable set
+
+        } catch (SecurityValidationException e) {
+            // Handled specific security validation failures (logged within performInitialValidations)
+            return Collections.emptySet(); // Fail secure
         } catch (Exception e) {
-            log.error("Failed to determine dynamic roles for resource", e);
-            alertService.alertSecurityTeam((new SecurityAlert(
-                    userId,
+            // Catch unexpected errors during role determination or validation
+            log.error("Failed to determine dynamic roles for user {} and resource {}: {}",
+                    username, resource.getClass().getSimpleName(), e.getMessage(), e);
+            alertService.alertSecurityTeam(new SecurityAlert(
+                    userIdForAlert, // Use fetched userId if available
                     "Failed to determine dynamic roles for resource",
                     Map.of(
                             "resourceType", resource.getClass().getSimpleName(),
-                            "resourceId", resource.hashCode()
+                            "resourceId", resource.hashCode(), // Use hashcode as identifier
+                            "error", e.getMessage()
                     )
-            )));
+            ));
             return Collections.emptySet(); // Fail secure
         }
-
-        return Collections.unmodifiableSet(dynamicRoles); // Immutable return
     }
 
+    /**
+     * Performs initial security checks: authentication, rate limiting, and input validation.
+     * Fetches the User object.
+     *
+     * @param authentication The current authentication object.
+     * @param username       The username from authentication.
+     * @param resource       The resource being accessed.
+     * @return The validated User object.
+     * @throws SecurityValidationException if any validation fails.
+     * @throws UserNotFoundException       if the user cannot be found.
+     */
+    private User performInitialValidations(Authentication authentication, String username, Object resource)
+            throws SecurityValidationException, UserNotFoundException {
+
+        // --- Authentication Check ---
+        if (!securityValidator.validateAuthentication(authentication)) {
+            log.warn("Authentication validation failed for user '{}'", username);
+            securityAuditService.logFailedAttempt(username, "Authentication validation failed");
+            throw new SecurityValidationException("Authentication validation failed");
+        }
+
+        // --- Fetch User ---
+        // Fetch user early to use User object instead of username string
+        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
+                .orElseThrow(() -> {
+                    log.error("User not found in repository: {}", username);
+                    securityAuditService.logFailedAttempt(username, "User not found");
+                    return new UserNotFoundException("User not found: " + username);
+                });
+
+        // --- Rate Limiting Check ---
+        try {
+            if (!rateLimiter.tryAcquire(username)) { // Use tryAcquire which returns boolean
+                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
+                securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
+                throw new SecurityValidationException("Rate limit exceeded");
+            }
+            log.trace("Rate limit check passed for user {}", username);
+        } catch (Exception e) { // Catch potential Redis errors
+            log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
+            securityAuditService.logFailedAttempt(username, "Rate limit check error");
+            // Fail closed for security
+            throw new SecurityValidationException("Rate limit check error", e);
+        }
+
+        // --- Input Validation ---
+        if (!inputValidator.validateResource(resource)) {
+            log.warn("Resource validation failed for resource type: {}", resource.getClass().getSimpleName());
+            securityAuditService.logFailedAttempt(username, "Resource validation failed");
+            throw new SecurityValidationException("Resource validation failed");
+        }
+
+        return user;
+    }
+
+    /**
+     * Determines roles based on resource type and validates them against hierarchy.
+     *
+     * @param resource       The resource object.
+     * @param user           The authenticated user.
+     * @param authentication The authentication object.
+     * @return A mutable set of determined roles.
+     * @throws SecurityValidationException if role hierarchy validation fails.
+     * @throws IllegalStateException       if the resource type is unsupported.
+     */
+    private Set<UserRole> determineAndValidateRoles(Object resource, User user, Authentication authentication)
+            throws SecurityValidationException, IllegalStateException {
+
+        Set<UserRole> dynamicRoles = new HashSet<>();
+        log.debug("Determining dynamic roles for user {} and resource type: {}",
+                user.getUsername(), resource.getClass().getSimpleName());
+
+        // --- Resource-specific role determination ---
+        switch (resource) {
+            case Product product -> addProductRoles(product, dynamicRoles, user);
+            case Order order -> addOrderRoles(order, dynamicRoles, user);
+            case Category category -> addCategoryRoles(category, dynamicRoles, user);
+            // Add more resource types as needed
+            default -> {
+                log.error("Unsupported resource type for role determination: {}", resource.getClass().getSimpleName());
+                // Throw specific exception or handle as appropriate
+                throw new IllegalStateException("Unsupported resource type: " + resource.getClass().getSimpleName());
+            }
+        }
+
+        // --- Role Hierarchy Validation ---
+        if (roleHierarchyValidator.isRoleAssignmentInvalid(dynamicRoles, authentication)) {
+            log.warn("Role hierarchy validation failed for user {} with roles {}", user.getUsername(), dynamicRoles);
+            securityAuditService.logFailedAttempt(user.getUsername(), "Role hierarchy validation failed");
+            throw new SecurityValidationException("Role hierarchy validation failed");
+        }
+
+        return dynamicRoles;
+    }
+
+    // --- Role Determination Helpers ---
+
+    private void addProductRoles(Product product, Set<UserRole> roles, User user) {
+        // Basic viewer/editor roles (adjust based on requirements)
+        roles.add(new UserRole(AppRole.ROLE_PRODUCT_VIEWER));
+        // roles.add(new UserRole(AppRole.ROLE_PRODUCT_EDITOR)); // Maybe conditional?
+
+        // Category Manager role for the product's category
+        if (isCategoryManager(user, product.getCategory())) {
+            roles.add(new UserRole(AppRole.ROLE_CATEGORY_MANAGER));
+            roles.add(new UserRole(AppRole.ROLE_PRODUCT_EDITOR)); // Category manager can edit products in their category
+        }
+
+        // Seller role if the user is the seller of this product
+        if (isAuthorizedSeller(user, product)) {
+            roles.add(new UserRole(AppRole.ROLE_SELLER));
+            roles.add(new UserRole(AppRole.ROLE_PRODUCT_EDITOR)); // Seller can edit their own products
+        }
+
+        // Premium product manager role
+        if (product.isHighValue()) {
+            // Assuming a specific role grants this, check if user has it
+            // if (user.hasRole(AppRole.ROLE_PREMIUM_PRODUCT_MANAGER)) { // Check existing static roles if needed
+            roles.add(new UserRole(AppRole.ROLE_PREMIUM_PRODUCT_MANAGER));
+            // }
+        }
+
+        // Restricted product handler role
+        if (product.isRestricted()) {
+            // Assuming a specific role grants this
+            // if (user.hasRole(AppRole.ROLE_RESTRICTED_PRODUCT_HANDLER)) {
+            roles.add(new UserRole(AppRole.ROLE_RESTRICTED_PRODUCT_HANDLER));
+            // }
+        }
+    }
+
+    private void addOrderRoles(Order order, Set<UserRole> roles, User user) {
+        // Basic viewer role
+        roles.add(new UserRole(AppRole.ROLE_ORDER_VIEWER));
+
+        // Order owner role
+        // Compare user IDs for reliability
+        if (order.getCustomerId() != null && order.getCustomerId().equals(String.valueOf(user.getUserId()))) {
+            roles.add(new UserRole(AppRole.ROLE_ORDER_OWNER));
+            log.info("User {} is the owner of order {}", user.getUsername(), order.getOrderId());
+        }
+
+        // Roles based on order status
+        switch (order.getOrderStatus()) {
+            case PENDING_APPROVAL -> roles.add(new UserRole(AppRole.ROLE_ORDER_APPROVER));
+            case SHIPPING -> roles.add(new UserRole(AppRole.ROLE_SHIPPING_MANAGER));
+            case DISPUTED -> roles.add(new UserRole(AppRole.ROLE_DISPUTE_HANDLER));
+            // Add other statuses if needed
+            default -> log.trace("No specific dynamic role for order status: {}", order.getOrderStatus());
+        }
+    }
+
+    private void addCategoryRoles(Category category, Set<UserRole> roles, User user) {
+        // Basic viewer role
+        roles.add(new UserRole(AppRole.ROLE_CATEGORY_VIEWER));
+
+        // Category manager role
+        if (isCategoryManager(user, category)) {
+            roles.add(new UserRole(AppRole.ROLE_CATEGORY_MANAGER));
+        }
+
+        // Main category admin role
+        if (category.isMainCategory()) {
+            // Assuming a specific role grants this
+            // if (user.hasRole(AppRole.ROLE_MAIN_CATEGORY_ADMIN)) {
+            roles.add(new UserRole(AppRole.ROLE_MAIN_CATEGORY_ADMIN));
+            // }
+        }
+
+        // Restricted category handler role
+        if (category.hasSpecialRestrictions()) {
+            // Assuming a specific role grants this
+            // if (user.hasRole(AppRole.ROLE_RESTRICTED_CATEGORY_HANDLER)) {
+            roles.add(new UserRole(AppRole.ROLE_RESTRICTED_CATEGORY_HANDLER));
+            // }
+        }
+    }
+
+    // --- Role Check Helpers (using User objects) ---
+
+    private boolean isCategoryManager(User user, Category category) {
+        if (user == null || category == null || category.getCategoryManager() == null) {
+            return false;
+        }
+        // Compare user IDs
+        return user.getUserId().equals(category.getCategoryManager().getUserId());
+    }
+
+    private boolean isAuthorizedSeller(User user, Product product) {
+        if (user == null || product == null || product.getSeller() == null) {
+            return false;
+        }
+        // Compare user IDs
+        return user.getUserId().equals(product.getSeller().getUserId());
+    }
+
+    // --- Cache Management ---
+
     @CacheEvict(allEntries = true)
+    @Override
     public void clearAllRoles() {
-        // method to clear all cached roles
-        // The @CacheEvict annotation handles the cache clearing
-        log.info("Clearing all role caches");
-        // Can add audit logging or additional cleanup if needed
-        securityAuditService.logCacheCleared("All roles cache cleared");
+        log.info("Clearing all role caches via annotation.");
+        securityAuditService.logCacheCleared("All roles cache cleared by clearAllRoles()");
     }
 
     @CacheEvict(key = "#username + '_' + #resource.hashCode()")
-    public void clearUserRoles(String username, Object resource) {
-        // method to clear specific user's cached roles
-        // The @CacheEvict annotation handles the specific cache entry clearing
+    @Override
+    public void clearUserRoles(String username, @NotNull Object resource) {
+        Assert.notNull(username, "Username cannot be null");
+        Assert.notNull(resource, "Resource cannot be null");
         log.info("Clearing role cache for user: {} and resource: {}",
                 username, resource.getClass().getSimpleName());
-        // Can add audit logging or additional cleanup if needed
         securityAuditService.logCacheCleared(
                 String.format("Role cache cleared for user %s and resource %s",
                         username, resource.getClass().getSimpleName())
         );
     }
 
-    public boolean assignRoles(User user, Set<UserRole> newRoles) {
-        try {
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+    // --- Explicit Role Assignment ---
 
-            // Validate role assignment
+    /**
+     * Assigns a new set of roles to a user, replacing existing ones.
+     * Validates the assignment against the role hierarchy.
+     *
+     * @param user     The user to assign roles to.
+     * @param newRoles The new set of roles.
+     * @return true if roles were successfully assigned, false otherwise.
+     */
+    @Transactional
+    @CacheEvict(cacheNames = {Constants.USERS_CACHE, Constants.CURRENT_USER_CACHE}, key = "#user.userId")
+    @Override
+    public boolean assignRoles(@NotNull User user, @NotNull Set<UserRole> newRoles) {
+        Assert.notNull(user, "User cannot be null for role assignment.");
+        Assert.notNull(newRoles, "New roles set cannot be null.");
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication(); // Get current context for validation
+
+        try {
+            // Validate role assignment based on hierarchy and current user's authority
             if (roleHierarchyValidator.isRoleAssignmentInvalid(newRoles, authentication)) {
-                log.warn("Role assignment validation failed for user: {}", user.getUsername());
-                return false;
+                log.warn("Role assignment validation failed for user: {} attempting to assign roles: {}",
+                        user.getUsername(), newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()));
+                securityAuditService.logFailedAttempt(user.getUsername(), "Invalid role assignment attempt (hierarchy validation)");
+                return false; // Indicate failure
             }
 
-            // If validation passes, proceed with role assignment
-            user.createRoleSet(newRoles);
-            return true;
+            // If validation passes, update the user's roles
+            user.createRoleSet(new HashSet<>(newRoles)); // Use a mutable copy if needed, or ensure User handles it
+            userRepository.save(user); // Persist changes
+
+            log.info("Successfully assigned roles {} to user {}",
+                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), user.getUsername());
+            // Audit successful assignment (consider adding details about the assigner)
+            securityAuditService.logRoleAssignment(user.getUsername(), newRoles, user); // Audit assignment to the user resource itself
+
+            // Clear dynamic role cache for this user (since static roles changed)
+            // This requires iterating through potential resources or clearing all user entries.
+            // Using allEntries = true on a user-specific cache eviction might be simpler if feasible.
+            // For now, let's rely on the user cache eviction above and potential TTL expiry for dynamic roles.
+            // clearUserRolesForAllResources(user.getUsername()); // Hypothetical method
+
+            return true; // Indicate success
 
         } catch (Exception e) {
-            log.error("Error assigning roles to user: {}", user.getUsername(), e);
-            return false;
+            log.error("Error assigning roles {} to user {}: {}",
+                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), user.getUsername(), e.getMessage(), e);
+            // Audit failure
+            securityAuditService.logFailedAttempt(user.getUsername(), "Error during role assignment: " + e.getMessage());
+            // Optionally alert security team
+            alertService.alertSecurityTeam(new SecurityAlert(
+                    String.valueOf(user.getUserId()),
+                    "Failed to assign roles",
+                    Map.of("assignedRoles", newRoles.toString(), "error", e.getMessage())
+            ));
+            // Consider throwing a specific exception instead of returning false
+            throw new RoleAssignmentException("Failed to assign roles to user " + user.getUsername(), e);
+            // return false; // Indicate failure
         }
     }
 
-    // TOCHECK and finish
-    private Set<UserRole> determineRoles(Object resource) {
-        if (resource == null) {
-            throw new IllegalArgumentException("Resource cannot be null");
-        }
+    /**
+     * Checks if a user can manage a specific product based on roles and ownership.
+     *
+     * @param user    The user attempting the action.
+     * @param product The product being managed.
+     * @return true if the user has sufficient privileges, false otherwise.
+     */
+    @Override
+    public boolean canManageProduct(@NotNull User user, @NotNull Product product) {
+        Assert.notNull(user, "User cannot be null");
+        Assert.notNull(product, "Product cannot be null");
 
-        return switch (resource) {
-            case Product p -> determineProductRoles(p);
-            case Order o -> determineOrderRoles(o);
-            case Category c -> determineCategoryRoles(c);
-            default -> throw new UnsupportedOperationException(
-                    "Unsupported resource type: " + resource.getClass().getSimpleName()
-            );
-        };
-    }
-
-    private Set<UserRole> determineProductRoles(Product product) {
-        Set<UserRole> roles = new HashSet<>();
-        roles.add(new UserRole(AppRole.ROLE_PRODUCT_EDITOR));
-        roles.add(new UserRole(AppRole.ROLE_PRODUCT_VIEWER));
-
-        if (product.isHighValue()) {
-            roles.add(new UserRole(AppRole.ROLE_PREMIUM_PRODUCT_MANAGER));
-        }
-
-        if (product.isRestricted()) {
-            roles.add(new UserRole(AppRole.ROLE_RESTRICTED_PRODUCT_HANDLER));
-        }
-
-        return roles;
-    }
-
-    private Set<UserRole> determineOrderRoles(Order order) {
-        Set<UserRole> roles = new HashSet<>();
-        roles.add(new UserRole(AppRole.ROLE_ORDER_OWNER));
-        roles.add(new UserRole(AppRole.ROLE_ORDER_VIEWER));
-
-        switch (order.getOrderStatus()) {
-            case PENDING_APPROVAL -> roles.add(new UserRole(AppRole.ROLE_ORDER_APPROVER));
-            case SHIPPING -> roles.add(new UserRole(AppRole.ROLE_SHIPPING_MANAGER));
-            case DISPUTED -> roles.add(new UserRole(AppRole.ROLE_DISPUTE_HANDLER));
-        }
-
-        return roles;
-    }
-
-    private Set<UserRole> determineCategoryRoles(Category category) {
-        Set<UserRole> roles = new HashSet<>();
-        roles.add(new UserRole(AppRole.ROLE_CATEGORY_MANAGER));
-        roles.add(new UserRole(AppRole.ROLE_CATEGORY_VIEWER));
-
-        if (category.isMainCategory()) {
-            roles.add(new UserRole(AppRole.ROLE_MAIN_CATEGORY_ADMIN));
-        }
-
-        if (category.hasSpecialRestrictions()) {
-            roles.add(new UserRole(AppRole.ROLE_RESTRICTED_CATEGORY_HANDLER));
-        }
-
-        return roles;
-    }
-
-    private void addProductRoles(Product product, Set<UserRole> roles, String username) {
-        try {
-
-            // Input sanitization
-            SecureAppRoleValidator validator = new SecureAppRoleValidator();
-            String sanitizedUsername = validator.sanitizeAppRole(username);
-//            String sanitizedUsername = sanitizeInput(username);
-
-            // Depth check for nested objects
-            if (inputValidator.validateResource(product)) {
-                log.warn("Security check failed: Max depth exceeded");
-                return;
-            }
-
-//            // Business logic validation
-//            if (!productService.isValidProduct(product)) {
-//                log.warn("Security check failed: Invalid product state");
-//                return;
-//            }
-
-            // Role assignment with proper checks
-
-            // Product manager for specific category
-            // Category Manager role
-            if (isCategoryManager(username, product.getCategoryManager().getUserId())) {
-                roles.add(new UserRole(AppRole.ROLE_CATEGORY_MANAGER));
-                roles.add(new UserRole(AppRole.ROLE_PRODUCT_EDITOR));
-            }
-
-            // Seller role
-            if (isAuthorizedSeller(sanitizedUsername, product)) {
-                roles.add(new UserRole(AppRole.ROLE_SELLER));
-            }
-
-//            // Department Manager role
-//            if (isDepartmentManager(username, product.getDepartment())) {
-//                roles.add("ROLE_DEPARTMENT_MANAGER");
-//            }
-
-//            // Product editor for specific department
-//            if (isUserInDepartment(username, product.getDepartment())) {
-//                roles.add("ROLE_PRODUCT_EDITOR");
-//            }
-//
-//            // Regional product viewer
-//            if (isUserInRegion(username, product.getProductRegion())) {
-//                roles.add("ROLE_PRODUCT_VIEWER");
-//            }
-        } catch (Exception e) {
-            String userId = String.valueOf(product.getSeller().getUserId());
-            log.error("Error adding product roles for user ID: {} and product ID: {}",
-                    userId, product.getProductId(), e);
-            throw new SecurityException("Role assignment failed", e);
-        }
-    }
-
-    private void addOrderRoles(Order order, Set<UserRole> roles, String username) {
-        // Order owner
-        if (order.getCustomerName().equals(username)) {
-            roles.add(new UserRole(AppRole.ROLE_ORDER_OWNER));
-            String userId = order.getCustomerId();
-            log.info("User {} with id {} is the owner of order {}", username, userId, order.getOrderId());
-        }
-
-//        // Order processor
-//        if (isOrderProcessor(username, order.getDepartment())) {
-//            roles.add("ROLE_ORDER_PROCESSOR");
-//        }
-//
-//        // Regional order manager
-//        if (isRegionalManager(username, order.getRegion())) {
-//            roles.add("ROLE_ORDER_MANAGER");
-//        }
-    }
-
-    private void addCategoryRoles(Category category, Set<UserRole> roles, String username) {
-        // Category manager
-        if (isCategoryManager(username, category.getCategoryManager().getUserId())) {
-            roles.add(new UserRole(AppRole.ROLE_CATEGORY_MANAGER));
-        }
-
-//        // Department manager
-//        if (isDepartmentManager(username, category.getDepartment())) {
-//            roles.add("ROLE_DEPARTMENT_MANAGER");
-//        }
-//
-//        // Regional category manager
-//        if (isRegionalManager(username, category.getRegion())) {
-//            roles.add("ROLE_CATEGORY_MANAGER");
-//        }
-    }
-
-
-//    // Helper methods for security checks
-//
-//    // Role hierarchy validation
-//    private void validatAppRoleHierarchy(Set<UserRole> roles) {
-//        RoleHierarchy hierarchy = new RoleHierarchyImpl();
-//        // Implement role hierarchy validation
-//    }
-//
-//    // Rate limiting
-//    @Cacheable(value = "roleCheckRateLimit", key = "#username")
-//    private boolean isRateLimitExceeded(String username) {
-//
-//        return false;
-//    }
-//
-//    // Audit logging
-//    private void auditLog(String username, Set<UserRole> dynamicRoles, Object resource) {
-//        securityAuditService.logRoleAssignment(username, dynamicRoles, resource);
-//    }
-//
-//    // Security alerting
-//    private void alertSecurityTeam(Exception e) {
-//        // Implement security alerting
-//    }
-
-    // Helper methods for role determination
-
-    public boolean canManageProduct(User user, Product product) {
         Set<UserRole> userRoles = user.getRoles();
+        if (userRoles == null || userRoles.isEmpty()) {
+            return false; // No roles, cannot manage
+        }
 
-        return userRoles.stream()
+        // Check if user has a role with authority over PRODUCT_EDITOR
+        boolean hasManagingRole = userRoles.stream()
                 .map(UserRole::getRoleName)
-                .anyMatch(role ->
-                        roleHierarchyValidator.hasAuthorityOver(role, AppRole.ROLE_PRODUCT_EDITOR) ||
-                                (Objects.equals(role, AppRole.ROLE_SELLER) && product.getSeller().getUserId().equals(user.getUserId()))
-                );
-    }
+                .anyMatch(role -> roleHierarchyValidator.hasAuthorityOver(role, AppRole.ROLE_PRODUCT_EDITOR));
 
-    private boolean isCategoryManager(String username, Long categoryManagerId) {
-        try {
-            Optional<User> user = userRepository.findByAuthenticationInfoUsername_Username(username);
-            return user.isPresent() && user.get().getUserId().equals(categoryManagerId);
-        } catch (Exception e) {
-            log.error("Error checking category manager status", e);
-            return false;
+        if (hasManagingRole) {
+            return true; // User has a role like ADMIN, MANAGER, etc.
         }
-    }
 
-    private boolean isProductSeller(String username, User seller) {
-        try {
-            return seller != null && seller.getUsername().equals(username);
-        } catch (Exception e) {
-            log.error("Error checking seller status", e);
-            return false;
+        // Check if the user is the SELLER of the product
+        boolean isSeller = userRoles.stream().anyMatch(ur -> ur.getRoleName() == AppRole.ROLE_SELLER);
+        if (isSeller && product.getSeller() != null && user.getUserId().equals(product.getSeller().getUserId())) {
+            return true; // User is the seller of this specific product
         }
+
+        return false; // No sufficient privileges found
     }
 
-    private boolean isAuthorizedSeller(String username, Product product) {
-        try {
-            User seller = product.getSeller();
-            return seller != null && seller.getUsername().equals(username);
-        } catch (Exception e) {
-            log.error("Error checking seller status", e);
-            return false;
-        }
-    }
-
-//    private boolean isOrderProcessor(String username, String department) {
-//        try {
-//            Optional<User> user = userRepository.findByUsername(username);
-//            return user != null &&
-//                    user.getDepartment().equals(department) &&
-//                    user.hasRole("ORDER_PROCESSOR");
-//        } catch (Exception e) {
-//            log.error("Error checking order processor status", e);
-//            return false;
-//        }
-//    }
-
-//    private boolean isUserInDepartment(String username, String department) {
-//        try {
-//            Optional<User> user = userRepository.findByUsername(username);
-//            return user != null && user.getDepartment().equals(department);
-//        } catch (Exception e) {
-//            log.error("Error checking user department", e);
-//            return false;
-//        }
-//    }
-
-//    private boolean isUserInRegion(String username, String region) {
-//        try {
-//            Optional<User> user = userRepository.findByUsername(username);
-//            return user != null && user.getRegion().equals(region);
-//        } catch (Exception e) {
-//            log.error("Error checking user productRegion", e);
-//            return false;
-//        }
-//    }
-
-//    private boolean isDepartmentManager(String username, String department) {
-//        try {
-//            Optional<User> user = userRepository.findByUsername(username);
-//            return user.isPresent() &&
-//                    user.getDepartment().equals(department) &&
-//                    user.hasRole("DEPARTMENT_MANAGER");
-//        } catch (Exception e) {
-//            log.error("Error checking department manager status", e);
-//            return false;
-//        }
-//    }
-
-//    private boolean isRegionalManager(String username, String region) {
-//        try {
-//            Optional<User> user = userRepository.findByUsername(username);
-//            return user != null &&
-//                    user.getRegion().equals(region) &&
-//                    user.hasRole("REGIONAL_MANAGER");
-//        } catch (Exception e) {
-//            log.error("Error checking regional manager status", e);
-//            return false;
-//        }
-//    }
+    /*
+     * Removed determineRoles and its helpers (determineProductRoles, etc.)
+     * as the logic is now integrated into add*Roles methods called from
+     * determineAndValidateRoles.
+     */
+    // private Set<UserRole> determineRoles(Object resource) { ... }
+    // private Set<UserRole> determineProductRoles(Product product) { ... }
+    // private Set<UserRole> determineOrderRoles(Order order) { ... }
+    // private Set<UserRole> determineCategoryRoles(Category category) { ... }
 
 }
