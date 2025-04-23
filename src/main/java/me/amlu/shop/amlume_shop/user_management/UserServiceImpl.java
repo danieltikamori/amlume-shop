@@ -63,9 +63,13 @@ public class UserServiceImpl implements UserService {
     public User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException, UserAlreadyExistsException {
         Assert.notNull(request, "Registration request cannot be null");
 
-        // Check if user already exists by username or email
-        if (userRepository.existsByAuthenticationInfoUsername(String.valueOf(request.username()))) {
-            throw new UserAlreadyExistsException("Username '" + request.username() + "' already taken");
+        // Use the specific username string getter from the request record
+        String usernameString = request.getUsername(); // Gets the String value
+
+        // Check if user already exists by username string or email
+        // Use the updated repository method name
+        if (userRepository.existsByAuthenticationInfoUsername_Username(usernameString)) {
+            throw new UserAlreadyExistsException("Username '" + usernameString + "' already taken");
         }
         if (userRepository.existsByContactInfoUserEmailEmail(request.userEmail())) {
             throw new UserAlreadyExistsException("Email '" + request.userEmail() + "' already registered");
@@ -75,9 +79,10 @@ public class UserServiceImpl implements UserService {
         UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
 
         // Create a new user with hashed password and initial details
+        // Pass the Username VO from the request to the builder
         User user = User.builder()
                 .authenticationInfo(AuthenticationInfo.builder()
-                        .username(request.username())
+                        .username(request.username()) // Pass the Username VO
                         .password(encodedPassword)
                         .build())
                 .contactInfo(ContactInfo.builder()
@@ -119,6 +124,7 @@ public class UserServiceImpl implements UserService {
         return savedUser;
     }
 
+
     // --- User Retrieval ---
 
     @Override
@@ -134,7 +140,7 @@ public class UserServiceImpl implements UserService {
 
         // 2. Repository Call: Find user by username within the AuthenticationInfo embedded object.
         // The repository method returns Optional<User>.
-        User user = userRepository.findByAuthenticationInfoUsername(username)
+        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
                 // 3. Handle Not Found: Throw a specific custom exception if the Optional is empty.
                 .orElseThrow(() -> {
                     log.warn("User not found with username: {}", username); // Log warning on failure
@@ -167,7 +173,7 @@ public class UserServiceImpl implements UserService {
     public User getUserByUsernameOrEmail(String usernameOrEmail) {
         Assert.hasText(usernameOrEmail, "Username or email must not be empty");
         // Assuming repository method handles searching both fields
-        return userRepository.findByAuthenticationInfoUsernameOrContactInfoUserEmailEmail(usernameOrEmail, usernameOrEmail)
+        return userRepository.findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(usernameOrEmail, usernameOrEmail)
                 .orElseThrow(() -> new UserNotFoundException("User not found with username or email: " + usernameOrEmail));
     }
 
@@ -186,7 +192,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     // Caching the current user can be tricky due to keying and potential staleness.
-    // Often better to fetch when needed or cache specific, less volatile data.
+    // Often better to fetch when necessary or cache specific, less volatile data.
     // @Cacheable(value = CURRENT_USER_CACHE, key = "authentication.name") // Key needs context
     public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -279,7 +285,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public boolean existsByUsername(String username) {
         Assert.hasText(username, "Username must not be empty");
-        return userRepository.existsByAuthenticationInfoUsername(username);
+        return userRepository.existsByAuthenticationInfoUsername_Username(username);
     }
 
     @Override
@@ -292,7 +298,7 @@ public class UserServiceImpl implements UserService {
     public boolean existsByUsernameOrEmail(String username, String email) {
         Assert.hasText(username, "Username must not be empty");
         Assert.hasText(email, "Email must not be empty");
-        return userRepository.existsByAuthenticationInfoUsername(username) || userRepository.existsByContactInfoUserEmailEmail(email);
+        return userRepository.existsByAuthenticationInfoUsername_Username(username) || userRepository.existsByContactInfoUserEmailEmail(email);
     }
 
     @Override
@@ -338,7 +344,7 @@ public class UserServiceImpl implements UserService {
     public void lockUserAccount(Long userId) {
         Instant lockTime = Instant.now();
         // Use targeted repository update
-        userRepository.updateAccountLockStatus(userId, true, lockTime); // Assuming true means locked
+        userRepository.updateAccountLockStatus(userId, false, lockTime); // Assuming false means locked
         log.warn("Locked account for user ID: {} at {}", userId, lockTime);
     }
 
@@ -349,21 +355,23 @@ public class UserServiceImpl implements UserService {
         User user = this.getUserById(userId); // Fetch fresh state
         AccountStatus status = user.getAccountStatus();
 
+        // Check if already unlocked (accountNonLocked is true)
         if (status.isAccountNonLocked()) {
             log.trace("Account for user ID {} is already unlocked.", userId);
             return false; // Already unlocked
         }
 
+        // Account is locked, check lock time
         Instant lockTime = status.getLockTime();
         if (lockTime != null) {
             long lockTimeMillis = lockTime.toEpochMilli();
             long currentTimeMillis = System.currentTimeMillis();
 
             if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
-                // Use targeted repository update to unlock and clear lock time
-                userRepository.updateAccountLockStatus(userId, false, null);
+                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock time
+                userRepository.updateAccountLockStatus(userId, true, null);
                 // Also reset failed attempts upon successful unlock
-                this.resetFailedLoginAttempts(userId);
+                this.resetFailedLoginAttempts(userId); // Call the existing method
                 log.info("Unlocked account for user ID: {} due to lock expiration.", userId);
                 return true;
             } else {
@@ -372,6 +380,11 @@ public class UserServiceImpl implements UserService {
         } else {
             log.warn("User ID {} is locked but has no lock time recorded.", userId);
             // Optionally unlock anyway or investigate inconsistency
+            // For safety, let's unlock if lockTime is null, but the account is locked
+            userRepository.updateAccountLockStatus(userId, true, null);
+            this.resetFailedLoginAttempts(userId);
+            log.info("Unlocked account for user ID: {} due to missing lock time.", userId);
+            return true;
         }
         return false;
     }
