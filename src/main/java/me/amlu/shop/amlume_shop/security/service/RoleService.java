@@ -10,7 +10,11 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.jetbrains.annotations.NotNull;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
 
@@ -22,5 +26,15 @@ public interface RoleService {
      * @return Set of role names including the "ROLE_" prefix
      */
     Set<UserRole> getDynamicRolesForResource(Object resource);
+
+    void clearAllRoles();
+
+    void clearUserRoles(String username, @NotNull Object resource);
+
+    @Transactional
+        // Ensure atomicity
+    boolean assignRoles(@NotNull User user, @NotNull Set<UserRole> newRoles);
+
+    boolean canManageProduct(@NotNull User user, @NotNull Product product);
 }
 
