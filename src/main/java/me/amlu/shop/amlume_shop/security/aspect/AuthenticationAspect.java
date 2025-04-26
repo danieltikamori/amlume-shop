@@ -329,7 +329,7 @@ public class AuthenticationAspect {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         // Ensure authentication happened *before* checking roles
-        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof UserDetails)) {
+        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof UserDetails userDetails)) {
             log.error("Role check attempted for method {}.{} without prior successful authentication.", className, methodName);
             // This shouldn't happen if @Order(1) is effective and authentication runs first
             throw new UnauthorizedException("Authentication required before checking roles.");
@@ -337,8 +337,6 @@ public class AuthenticationAspect {
 
         // Type safe cast
         String roleNames = Arrays.toString(requiresRole.value());
-
-        UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
         // Check if the user has the required role
         boolean hasRole = userDetails.getAuthorities().stream()
