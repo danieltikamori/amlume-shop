@@ -14,8 +14,8 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.enums.ResponseMessage;
 import me.amlu.shop.amlume_shop.exceptions.EmailSendingFailedException;
-import me.amlu.shop.amlume_shop.payload.EmailDto;
-import me.amlu.shop.amlume_shop.payload.Response;
+import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
+import me.amlu.shop.amlume_shop.payload.GetResponse;
 import me.amlu.shop.amlume_shop.security.service.EmailService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -32,21 +32,21 @@ public class EmailServiceImpl implements EmailService {
     private String fromEmail;
 
     @Override
-    public Object sendMail(EmailDto emailDto) {
+    public Object sendMail(CreateEmailRequest createEmailRequest) {
         try {
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
 
             MimeMessageHelper mimeMessageHelper = new MimeMessageHelper(mimeMessage, true);
 
             mimeMessageHelper.setFrom(fromEmail);
-            mimeMessageHelper.setTo(emailDto.getToList());
-            mimeMessageHelper.setSubject(emailDto.getSubject());
-            mimeMessageHelper.setText(emailDto.getBody());
+            mimeMessageHelper.setTo(createEmailRequest.toList());
+            mimeMessageHelper.setSubject(createEmailRequest.subject());
+            mimeMessageHelper.setText(createEmailRequest.body());
 
             javaMailSender.send(mimeMessage);
 
-            log.info("Message Sent Successfully to: {}", emailDto.getToList());
-            return new Response("Email Sent Successfully", emailDto.getToList(), ResponseMessage.SUCCESS);
+            log.info("Message Sent Successfully to: {}", createEmailRequest.toList());
+            return new GetResponse("Email Sent Successfully", createEmailRequest.toList(), ResponseMessage.SUCCESS);
         } catch (Exception e) {
             log.error("sendEmail() | Error : {}", e.getMessage());
             throw new EmailSendingFailedException(e);
