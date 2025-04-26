@@ -10,7 +10,9 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.validation.annotation.Validated;
@@ -41,6 +43,7 @@ public class Resilience4jRetryProperties {
      * before giving up. The default value is 3.
      * </p>
      */
+    @Min(value = 1, message = "maxRetryAttempts must be greater than or equal to 1")
     @NotNull
     private int maxRetryAttempts = 3;
 
@@ -51,6 +54,7 @@ public class Resilience4jRetryProperties {
      * The default value is 100 milliseconds.
      * </p>
      */
+    @Min(value = 0, message = "retryInterval must be greater than or equal to 0")
     @NotNull
     private long retryInterval = 1000L;
 
@@ -61,6 +65,7 @@ public class Resilience4jRetryProperties {
      * The default value is 100 milliseconds.
      * </p>
      */
+    @DurationMin(millis = 0, message = "retryWaitDuration must be greater than or equal to 0")
     @NotNull
     @DurationUnit(ChronoUnit.MILLIS) // Specify unit if property is just a number (e.g., 500)
     private Duration retryWaitDuration = Duration.ofMillis(500); // Default value

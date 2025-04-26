@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -32,6 +33,7 @@ public class Resilience4jExponentialBackoffProperties {
      * The default value is 200 milliseconds.
      * </p>
      */
+    @Min(value = 0, message = "initialIntervalMillis must be greater than or equal to 0")
     @NotNull
     private long initialIntervalMillis = 200L; // Default value
 
@@ -42,6 +44,7 @@ public class Resilience4jExponentialBackoffProperties {
      * The default value is 1.5.
      * </p>
      */
+    @Min(value = 1, message = "ebMultiplier must be greater than or equal to 1")
     @NotNull
     private double ebMultiplier = 1.5; // Default value
 
@@ -62,6 +65,7 @@ public class Resilience4jExponentialBackoffProperties {
      * The default value is 86400000 milliseconds (24 hours).
      * </p>
      */
+    @Min(value = 1000, message = "maxIntervalMillis must be greater than or equal to 1000")
     @NotNull
     private long maxIntervalMillis = 86_400_000L; // Yes, we can use _ here, it's a long value
 

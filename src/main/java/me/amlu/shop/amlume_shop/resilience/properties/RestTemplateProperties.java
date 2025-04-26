@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -24,11 +25,13 @@ public class RestTemplateProperties {
     /**
      * Timeout for establishing a connection.
      */
+    @Min(value = 0, message = "connectTimeout must be greater than or equal to 0")
     private int connectTimeout = 5000; // Default
 
     /**
      * Timeout for reading data from the connection.
      */
+    @Min(value = 0, message = "readTimeout must be greater than or equal to 0")
     private int readTimeout = 10000;   // Default
 
     // --- Getters ---

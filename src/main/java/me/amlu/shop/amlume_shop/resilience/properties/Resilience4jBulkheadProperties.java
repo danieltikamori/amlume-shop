@@ -10,7 +10,9 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.validation.annotation.Validated;
@@ -31,6 +33,7 @@ public class Resilience4jBulkheadProperties {
      * Maximum number of concurrent calls to the bulkhead.
      * Defaults to 25 if not specified in properties.
      */
+    @Min(value = 1, message = "maxConcurrentCalls must be greater than or equal to 1")
     @NotNull
     private int maxConcurrentCalls = 25; // Default value
 
@@ -38,6 +41,7 @@ public class Resilience4jBulkheadProperties {
      * Maximum time duration the calling thread will wait to enter the bulkhead.
      * Defaults to 300ms if not specified in properties.
      */
+    @DurationMin(millis = 0, message = "maxWaitDuration must be greater than or equal to 0")
     @NotNull
     @DurationUnit(ChronoUnit.MILLIS) // Specify unit if property is just a number (e.g., 500)
     private Duration maxWaitDuration = Duration.ofMillis(300); // Default value

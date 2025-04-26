@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.resilience.properties;
 
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.validation.annotation.Validated;
@@ -27,9 +28,16 @@ import java.time.temporal.ChronoUnit;
 @Validated
 public class Resilience4jTimeLimiterProperties {
 
+    /**
+     * The timeout duration for the time limiter.
+     * <p>
+     * This property is used to specify the maximum duration that a call can take before it is considered timed out.
+     * The default value is 5 seconds.
+     */
+    @DurationMin(seconds = 0, message = "timeoutDuration must be greater than or equal to 0")
     @NotNull
     @DurationUnit(ChronoUnit.SECONDS)
-    private Duration timeoutDuration = Duration.ofSeconds(1);
+    private Duration timeoutDuration = Duration.ofSeconds(5);
 
 // --- Getters ---
 

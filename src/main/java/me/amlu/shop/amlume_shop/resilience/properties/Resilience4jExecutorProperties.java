@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.Min;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -35,6 +36,7 @@ public class Resilience4jExecutorProperties {
      * The default value is 10.
      * </p>
      */
+    @Min(value = 1, message = "corePoolSize must be greater than or equal to 1")
     private int corePoolSize = 4;
 
     /**
@@ -44,6 +46,7 @@ public class Resilience4jExecutorProperties {
      * The default value is 10.
      * </p>
      */
+    @Min(value = 1, message = "maxConcurrentCalls must be greater than or equal to 1")
     private int maxConcurrentCalls = 100;
 
 

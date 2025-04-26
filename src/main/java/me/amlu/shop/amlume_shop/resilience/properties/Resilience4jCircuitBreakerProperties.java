@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.resilience.properties;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.validation.annotation.Validated;
@@ -32,7 +33,7 @@ public class Resilience4jCircuitBreakerProperties {
     @NotNull
     private float failureRateThreshold = 50.0f;
 
-    @Min(value = 0, message = "waitDurationInOpenState must be greater than or equal to 0")
+    @DurationMin(seconds = 0, message = "waitDurationInOpenState must be greater than or equal to 0")
     @NotNull
     @DurationUnit(ChronoUnit.SECONDS)
     private Duration waitDurationInOpenState = Duration.ofSeconds(20);
@@ -41,6 +42,7 @@ public class Resilience4jCircuitBreakerProperties {
     @NotNull
     private int permittedNumberOfCallsInHalfOpenState = 3;
 
+    @Min(value = 1, message = "slidingWindowSize must be greater than or equal to 1")
     @NotNull
     private int slidingWindowSize; // No default here, will handle in main config
 
