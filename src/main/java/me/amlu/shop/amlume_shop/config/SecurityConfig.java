@@ -10,40 +10,36 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.filter.CustomAuthenticationFilter;
-import me.amlu.shop.amlume_shop.filter.DeviceFingerprintVerificationFilter;
-import me.amlu.shop.amlume_shop.filter.MfaAuthenticationFilter;
+import me.amlu.shop.amlume_shop.filter.*;
 import me.amlu.shop.amlume_shop.security.auth.MfaAuthenticationProvider;
 import me.amlu.shop.amlume_shop.security.handler.AuthenticationFailureHandler;
-import me.amlu.shop.amlume_shop.filter.PasetoAuthenticationFilter;
-import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService; // Use interface
-import me.amlu.shop.amlume_shop.filter.GlobalRateLimitingFilter;
-import org.springframework.beans.factory.annotation.Value; // For CORS config
+import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order; // Import Order
+import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
-// Removed reactive import if not used: import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer; // For disabling CSRF if needed
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.intercept.AuthorizationFilter; // For placing filters relative to standard filters
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
-import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler; // For SPA CSRF setup
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -57,6 +53,9 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true, securedEnabled = true) // Enable method security annotations
 @EnableAsync
 public class SecurityConfig {
+
+    @Value("${security.max-concurrent-sessions:2}")
+    public static int MAX_CONCURRENT_SESSIONS;
 
     private final AuthenticationConfiguration authenticationConfiguration;
     private final GlobalRateLimitingFilter globalRateLimitingFilter; // Assuming this is correctly configured elsewhere
@@ -131,7 +130,7 @@ public class SecurityConfig {
                         // Session fixation protection
                         .sessionFixation().migrateSession()
                         // Concurrent session control (only relevant if policy is not STATELESS)
-                        .maximumSessions(Constants.MAX_CONCURRENT_SESSIONS)
+                        .maximumSessions(MAX_CONCURRENT_SESSIONS)
                         .maxSessionsPreventsLogin(true)
                         .sessionRegistry(sessionRegistry()) // Register the session registry
                         .expiredUrl("/login?expired") // Redirect if session expires (relevant for IF_REQUIRED/ALWAYS)
@@ -161,33 +160,33 @@ public class SecurityConfig {
 
                 // --- Authorization Rules ---
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                // Authentication endpoints
-                                "/api/auth/v1/register",
-                                "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
+                                .requestMatchers(
+                                        // Authentication endpoints
+                                        "/api/auth/v1/register",
+                                        "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
 //                                "/api/auth/login", // Fallback?
-                                "/api/auth/v1/mfa/validate", // Endpoint handled by MfaAuthenticationFilter? Or controller? Needs clarity.
+                                        "/api/auth/v1/mfa/validate", // Endpoint handled by MfaAuthenticationFilter? Or controller? Needs clarity.
 //                                "/api/auth/v1/mfa/enable", // Needs authentication - Logic handled by provider during login
-                                "/api/auth/v1/qrcode", // Needs authentication
-                                "/api/auth/logout", // Needs authentication (to revoke token)
+                                        "/api/auth/v1/qrcode", // Needs authentication
+                                        "/api/auth/logout", // Needs authentication (to revoke token)
 
-                                // Public assets and error pages
-                                "/public/**",
-                                "/error",
-                                "/login", // Allow access to login page if using formLogin
+                                        // Public assets and error pages
+                                        "/public/**",
+                                        "/error",
+                                        "/login", // Allow access to login page if using formLogin
 
-                                // Actuator endpoints (secure appropriately in production)
-                                "/actuator/**"
-                        ).permitAll()
-                        //Secure MFA enablement/QR code/logout endpoints
-                        .requestMatchers(
-                                "/api/auth/v1/mfa/enable",
-                                "/api/auth/v1/qrcode",
-                                "/api/auth/logout"
-                                // Add other authenticated-only auth endpoints if any
-                        ).authenticated()
-                        // Default is to deny - all other requests must be authenticated
-                        .anyRequest().authenticated()
+                                        // Actuator endpoints (secure appropriately in production)
+                                        "/actuator/**"
+                                ).permitAll()
+                                //Secure MFA enablement/QR code/logout endpoints
+                                .requestMatchers(
+                                        "/api/auth/v1/mfa/enable",
+                                        "/api/auth/v1/qrcode",
+                                        "/api/auth/logout"
+                                        // Add other authenticated-only auth endpoints if any
+                                ).authenticated()
+                                // Default is to deny - all other requests must be authenticated
+                                .anyRequest().authenticated()
                 );
 
         return http.build();
@@ -221,8 +220,15 @@ public class SecurityConfig {
         return new ServletListenerRegistrationBean<>(new HttpSessionEventPublisher());
     }
 
+    /**
+     * Bean for PasswordEncoder.
+     * This uses Argon2 or bcrypt as the default password hashing algorithm.
+     *
+     * @return PasswordEncoder instance.
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
+//        return PasswordEncoderFactories.createDelegatingPasswordEncoder(); // Uses the default bcrypt encoder
         // Argon2 configuration - parameters can be tuned
         return new Argon2PasswordEncoder(
                 16,    // saltLength
@@ -233,6 +239,23 @@ public class SecurityConfig {
         );
     }
 
+    /**
+     * Bean for HaveIBeenPwned password checker.
+     * This checks if the password has been compromised using the HaveIBeenPwned API.
+     *
+     * @return CompromisedPasswordChecker instance.
+     */
+    @Bean
+    public CompromisedPasswordChecker compromisedPasswordChecker() {
+        return new HaveIBeenPwnedRestApiPasswordChecker(); // Use the HaveIBeenPwned service for compromised password checking
+    }
+
+    /**
+     * Bean for RoleHierarchy.
+     * This defines the role hierarchy for authorization checks.
+     *
+     * @return RoleHierarchy instance.
+     */
     @Bean
     public RoleHierarchy roleHierarchy() {
         // Define role hierarchy - adjust based on your actual roles
