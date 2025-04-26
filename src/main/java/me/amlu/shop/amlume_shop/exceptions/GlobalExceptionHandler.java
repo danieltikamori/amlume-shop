@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.exceptions;
 
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.payload.APIResponse;
+import me.amlu.shop.amlume_shop.payload.ApiResponse;
 import me.amlu.shop.amlume_shop.payload.ErrorResponse;
 import org.apache.coyote.BadRequestException;
 import org.springframework.http.HttpHeaders;
@@ -54,198 +54,198 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> resourceNotFoundException(ResourceNotFoundException e) {
+    public ResponseEntity<ApiResponse> resourceNotFoundException(ResourceNotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> apiConflictException(APIException e) {
+    public ResponseEntity<ApiResponse> apiConflictException(APIException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> notFoundException(NotFoundException e) {
+    public ResponseEntity<ApiResponse> notFoundException(NotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> badRequestException(BadRequestException e) {
+    public ResponseEntity<ApiResponse> badRequestException(BadRequestException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> illegalArgumentException(IllegalArgumentException e) {
+    public ResponseEntity<ApiResponse> illegalArgumentException(IllegalArgumentException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> entityUniquenessException(EntityUniquenessException e) {
+    public ResponseEntity<ApiResponse> entityUniquenessException(EntityUniquenessException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> productDataValidationException(ProductDataValidationException e) {
+    public ResponseEntity<ApiResponse> productDataValidationException(ProductDataValidationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> productAlreadyExistsException(ProductAlreadyExistsException e) {
+    public ResponseEntity<ApiResponse> productAlreadyExistsException(ProductAlreadyExistsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> categoryAlreadyExistsException(CategoryAlreadyExistsException e) {
+    public ResponseEntity<ApiResponse> categoryAlreadyExistsException(CategoryAlreadyExistsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userRegistrationException(UserRegistrationException e) {
+    public ResponseEntity<ApiResponse> userRegistrationException(UserRegistrationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userAlreadyExistsException(UserAlreadyExistsException e) {
+    public ResponseEntity<ApiResponse> userAlreadyExistsException(UserAlreadyExistsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> usernameAlreadyExistsException(UsernameAlreadyExistsException e) {
+    public ResponseEntity<ApiResponse> usernameAlreadyExistsException(UsernameAlreadyExistsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotFoundException(UserNotFoundException e) {
+    public ResponseEntity<ApiResponse> userNotFoundException(UserNotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> usernameNotFoundException(UsernameNotFoundException e) {
+    public ResponseEntity<ApiResponse> usernameNotFoundException(UsernameNotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userLockedException(UserLockedException e) {
+    public ResponseEntity<ApiResponse> userLockedException(UserLockedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotVerifiedException(UserNotVerifiedException e) {
+    public ResponseEntity<ApiResponse> userNotVerifiedException(UserNotVerifiedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotEnabledException(UserNotEnabledException e) {
+    public ResponseEntity<ApiResponse> userNotEnabledException(UserNotEnabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotAuthenticatedException(UserNotAuthenticatedException e) {
+    public ResponseEntity<ApiResponse> userNotAuthenticatedException(UserNotAuthenticatedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotAuthorizedException(UserNotAuthorizedException e) {
+    public ResponseEntity<ApiResponse> userNotAuthorizedException(UserNotAuthorizedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotLoggedInException(UserNotLoggedInException e) {
+    public ResponseEntity<ApiResponse> userNotLoggedInException(UserNotLoggedInException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotLoggedOutException(UserNotLoggedOutException e) {
+    public ResponseEntity<ApiResponse> userNotLoggedOutException(UserNotLoggedOutException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotAuthenticatedOrAuthorizedException(UserNotAuthenticatedOrAuthorizedException e) {
+    public ResponseEntity<ApiResponse> userNotAuthenticatedOrAuthorizedException(UserNotAuthenticatedOrAuthorizedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userNotAuthenticatedAndAuthorizedException(UserNotAuthenticatedAndAuthorizedException e) {
+    public ResponseEntity<ApiResponse> userNotAuthenticatedAndAuthorizedException(UserNotAuthenticatedAndAuthorizedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidUserIdFormatException(InvalidUserIdFormatException e) {
+    public ResponseEntity<ApiResponse> invalidUserIdFormatException(InvalidUserIdFormatException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> roleNotFoundException(RoleNotFoundException e) {
+    public ResponseEntity<ApiResponse> roleNotFoundException(RoleNotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> securityConfigurationException(SecurityConfigurationException e) {
+    public ResponseEntity<ApiResponse> securityConfigurationException(SecurityConfigurationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> requestInterruptionException(RequestInterruptionException e) {
+    public ResponseEntity<ApiResponse> requestInterruptionException(RequestInterruptionException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> fetchSecretsException(FetchSecretsException e) {
+    public ResponseEntity<ApiResponse> fetchSecretsException(FetchSecretsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.SERVICE_UNAVAILABLE);
     }
 
@@ -262,198 +262,198 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> keyManagementException(KeyManagementException e) {
+    public ResponseEntity<ApiResponse> keyManagementException(KeyManagementException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> keyDerivationFailureException(KeyDerivationFailureException e) {
+    public ResponseEntity<ApiResponse> keyDerivationFailureException(KeyDerivationFailureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> privateKeyLoadException(PrivateKeyLoadException e) {
+    public ResponseEntity<ApiResponse> privateKeyLoadException(PrivateKeyLoadException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenGenerationFailureException(TokenGenerationFailureException e) {
+    public ResponseEntity<ApiResponse> tokenGenerationFailureException(TokenGenerationFailureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenValidationException(TokenValidationException e) {
+    public ResponseEntity<ApiResponse> tokenValidationException(TokenValidationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenValidationFailureException(TokenValidationFailureException e) {
+    public ResponseEntity<ApiResponse> tokenValidationFailureException(TokenValidationFailureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenSignatureException(TokenSignatureException e) {
+    public ResponseEntity<ApiResponse> tokenSignatureException(TokenSignatureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenSignatureFailureException(TokenSignatureFailureException e) {
+    public ResponseEntity<ApiResponse> tokenSignatureFailureException(TokenSignatureFailureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenProcessingException(TokenProcessingException e) {
+    public ResponseEntity<ApiResponse> tokenProcessingException(TokenProcessingException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenExpiredException(TokenExpiredException e) {
+    public ResponseEntity<ApiResponse> tokenExpiredException(TokenExpiredException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenRevokedException(TokenRevokedException e) {
+    public ResponseEntity<ApiResponse> tokenRevokedException(TokenRevokedException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenSignatureException(InvalidTokenSignatureException e) {
+    public ResponseEntity<ApiResponse> invalidTokenSignatureException(InvalidTokenSignatureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenFormatException(InvalidTokenFormatException e) {
+    public ResponseEntity<ApiResponse> invalidTokenFormatException(InvalidTokenFormatException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenLengthException(InvalidTokenLengthException e) {
+    public ResponseEntity<ApiResponse> invalidTokenLengthException(InvalidTokenLengthException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> claimsExtractionFailureException(ClaimsExtractionFailureException e) {
+    public ResponseEntity<ApiResponse> claimsExtractionFailureException(ClaimsExtractionFailureException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenClaimException(InvalidTokenClaimException e) {
+    public ResponseEntity<ApiResponse> invalidTokenClaimException(InvalidTokenClaimException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidClaimsSizeException(ClaimsSizeException e) {
+    public ResponseEntity<ApiResponse> invalidClaimsSizeException(ClaimsSizeException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> claimsParsingException(ClaimsParsingException e) {
+    public ResponseEntity<ApiResponse> claimsParsingException(ClaimsParsingException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> userScopeMissingException(UserScopeMissingException e) {
+    public ResponseEntity<ApiResponse> userScopeMissingException(UserScopeMissingException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenHeaderException(InvalidTokenHeaderException e) {
+    public ResponseEntity<ApiResponse> invalidTokenHeaderException(InvalidTokenHeaderException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenPayloadException(InvalidTokenPayloadException e) {
+    public ResponseEntity<ApiResponse> invalidTokenPayloadException(InvalidTokenPayloadException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tokenRevocationException(TokenRevocationException e) {
+    public ResponseEntity<ApiResponse> tokenRevocationException(TokenRevocationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidKeyIdException(InvalidKeyIdException e) {
+    public ResponseEntity<ApiResponse> invalidKeyIdException(InvalidKeyIdException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> keyFactoryException(KeyFactoryException e) {
+    public ResponseEntity<ApiResponse> keyFactoryException(KeyFactoryException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidCredentialsException(InvalidCredentialsException e) {
+    public ResponseEntity<ApiResponse> invalidCredentialsException(InvalidCredentialsException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> passwordMismatchException(PasswordMismatchException e) {
+    public ResponseEntity<ApiResponse> passwordMismatchException(PasswordMismatchException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidTokenException(InvalidTokenException e) {
+    public ResponseEntity<ApiResponse> invalidTokenException(InvalidTokenException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> invalidRefreshTokenException(InvalidRefreshTokenException e) {
+    public ResponseEntity<ApiResponse> invalidRefreshTokenException(InvalidRefreshTokenException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
@@ -473,86 +473,86 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> ipValidationException(IpValidationException e) {
+    public ResponseEntity<ApiResponse> ipValidationException(IpValidationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> ipSecurityException(IpSecurityException e) {
+    public ResponseEntity<ApiResponse> ipSecurityException(IpSecurityException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> geoIp2Exception(GeoIp2Exception e) {
+    public ResponseEntity<ApiResponse> geoIp2Exception(GeoIp2Exception e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintRegistrationException(DeviceFingerprintRegistrationException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintRegistrationException(DeviceFingerprintRegistrationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintNotFoundException(DeviceFingerprintNotFoundException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintNotFoundException(DeviceFingerprintNotFoundException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintUpdateException(DeviceFingerprintUpdateException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintUpdateException(DeviceFingerprintUpdateException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintValidationException(DeviceFingerprintValidationException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintValidationException(DeviceFingerprintValidationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintNotValidException(DeviceFingerprintNotValidException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintNotValidException(DeviceFingerprintNotValidException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintMismatchException(DeviceFingerprintMismatchException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintMismatchException(DeviceFingerprintMismatchException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintAdditionException(DeviceFingerprintAdditionException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintAdditionException(DeviceFingerprintAdditionException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintDeletionException(DeviceFingerprintDeletionException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintDeletionException(DeviceFingerprintDeletionException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tooManyDevicesException(TooManyDevicesException e) {
+    public ResponseEntity<ApiResponse> tooManyDevicesException(TooManyDevicesException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -567,159 +567,159 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> maxDevicesExceededException(MaxDevicesExceededException e) {
+    public ResponseEntity<ApiResponse> maxDevicesExceededException(MaxDevicesExceededException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintGenerationException(DeviceFingerprintGenerationException e, WebRequest request) {
+    public ResponseEntity<ApiResponse> deviceFingerprintGenerationException(DeviceFingerprintGenerationException e, WebRequest request) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> deviceFingerprintingDisabledException(DeviceFingerprintingDisabledException e) {
+    public ResponseEntity<ApiResponse> deviceFingerprintingDisabledException(DeviceFingerprintingDisabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> inactiveDeviceFingerprintException(InactiveDeviceFingerprintException e) {
+    public ResponseEntity<ApiResponse> inactiveDeviceFingerprintException(InactiveDeviceFingerprintException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> authenticationException(AuthenticationException e) {
+    public ResponseEntity<ApiResponse> authenticationException(AuthenticationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> unauthorizedAccessException(UnauthorizedAccessException e) {
+    public ResponseEntity<ApiResponse> unauthorizedAccessException(UnauthorizedAccessException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaException(MfaException e) {
+    public ResponseEntity<ApiResponse> mfaException(MfaException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaRequiredException(MfaRequiredException e) {
+    public ResponseEntity<ApiResponse> mfaRequiredException(MfaRequiredException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaVerificationException(MfaVerificationException e) {
+    public ResponseEntity<ApiResponse> mfaVerificationException(MfaVerificationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaValidationException(MfaValidationException e) {
+    public ResponseEntity<ApiResponse> mfaValidationException(MfaValidationException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaDisabledException(MfaDisabledException e) {
+    public ResponseEntity<ApiResponse> mfaDisabledException(MfaDisabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaAlreadySetupException(MfaAlreadySetupException e) {
+    public ResponseEntity<ApiResponse> mfaAlreadySetupException(MfaAlreadySetupException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaNotSetupException(MfaNotSetupException e) {
+    public ResponseEntity<ApiResponse> mfaNotSetupException(MfaNotSetupException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaSetupException(MfaSetupException e) {
+    public ResponseEntity<ApiResponse> mfaSetupException(MfaSetupException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaNotEnabledException(MfaNotEnabledException e) {
+    public ResponseEntity<ApiResponse> mfaNotEnabledException(MfaNotEnabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.UNAUTHORIZED);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaAlreadyEnabledException(MfaAlreadyEnabledException e) {
+    public ResponseEntity<ApiResponse> mfaAlreadyEnabledException(MfaAlreadyEnabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaAlreadyDisabledException(MfaAlreadyDisabledException e) {
+    public ResponseEntity<ApiResponse> mfaAlreadyDisabledException(MfaAlreadyDisabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> mfaNotDisabledException(MfaNotDisabledException e) {
+    public ResponseEntity<ApiResponse> mfaNotDisabledException(MfaNotDisabledException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> loginAttemptsCacheException(LoginAttemptsCacheException e) {
+    public ResponseEntity<ApiResponse> loginAttemptsCacheException(LoginAttemptsCacheException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> loginAttemptsExceededException(LoginAttemptsExceededException e) {
+    public ResponseEntity<ApiResponse> loginAttemptsExceededException(LoginAttemptsExceededException e) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.TOO_MANY_REQUESTS);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> tooManyAttemptsException(TooManyAttemptsException e) {
+    public ResponseEntity<ApiResponse> tooManyAttemptsException(TooManyAttemptsException e) {
         String message = e.getMessage();
         long retryAfter = e.getRetryAfterSeconds(); //Get retry-after value
         HttpHeaders headers = new HttpHeaders();
         headers.add("Retry-After", String.valueOf(retryAfter));
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).headers(headers).body(apiResponse);
     }
 
     @ExceptionHandler
-    public ResponseEntity<APIResponse> isUserBlockedCheckStatusException(IsUserBlockedCheckStatusException e, WebRequest request) {
+    public ResponseEntity<ApiResponse> isUserBlockedCheckStatusException(IsUserBlockedCheckStatusException e, WebRequest request) {
         String message = e.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -731,9 +731,9 @@ public class GlobalExceptionHandler {
 //    }
 
     @ExceptionHandler(UsernameAlreadyExistsException.class)
-    public ResponseEntity<APIResponse> emailSendingFailedException(EmailSendingFailedException ex) {
+    public ResponseEntity<ApiResponse> emailSendingFailedException(EmailSendingFailedException ex) {
         String message = ex.getMessage();
-        APIResponse apiResponse = new APIResponse(message, false);
+        ApiResponse apiResponse = new ApiResponse(message, false);
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
