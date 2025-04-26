@@ -9,6 +9,7 @@
  */
 
 package me.amlu.shop.amlume_shop.resilience;
+import com.maxmind.geoip2.model.AsnResponse;
 
 import me.amlu.shop.amlume_shop.security.service.GeoIp2Service;
 import org.springframework.boot.actuate.health.AbstractHealthIndicator;
@@ -26,8 +27,9 @@ public class GeoIp2HealthIndicator extends AbstractHealthIndicator {
     @Override
     protected void doHealthCheck(Health.Builder builder) {
         try {
-            String asn = geoIp2Service.lookupAsn("8.8.8.8");
-            if (asn != null) {
+            AsnResponse asnResponse = geoIp2Service.lookupAsn("8.8.8.8");
+            if (asnResponse != null && asnResponse.getAutonomousSystemNumber() != null)
+            {
                 builder.up();
             } else {
                 builder.down().withDetail("error", "Could not lookup test IP");
