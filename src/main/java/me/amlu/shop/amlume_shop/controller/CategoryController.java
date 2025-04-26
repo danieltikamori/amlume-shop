@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.controller;
 
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.payload.CategoryDTO;
+import me.amlu.shop.amlume_shop.payload.CreateCategoryRequest;
 import me.amlu.shop.amlume_shop.payload.GetCategoryResponse;
 import me.amlu.shop.amlume_shop.category_management.CategoryService;
 import org.springframework.http.HttpStatus;
@@ -41,24 +41,24 @@ public class CategoryController {
     }
 
     @PostMapping("v1/public/categories")
-    public ResponseEntity<CategoryDTO> createCategory(@Valid @RequestBody CategoryDTO categoryDTO) {
-        CategoryDTO savedCategoryDTO = categoryService.createCategory(categoryDTO);
+    public ResponseEntity<CreateCategoryRequest> createCategory(@Valid @RequestBody CreateCategoryRequest createCategoryRequest) {
+        CreateCategoryRequest savedCreateCategoryRequest = categoryService.createCategory(createCategoryRequest);
 
-        return new ResponseEntity<>(savedCategoryDTO, HttpStatus.CREATED);
+        return new ResponseEntity<>(savedCreateCategoryRequest, HttpStatus.CREATED);
     }
 
     @DeleteMapping("v1/admin/categories/{categoryId}")
-    public ResponseEntity<CategoryDTO> deleteCategory(@PathVariable Long categoryId) {
-        CategoryDTO deletedCategory = categoryService.deleteCategory(categoryId);
+    public ResponseEntity<CreateCategoryRequest> deleteCategory(@PathVariable Long categoryId) {
+        CreateCategoryRequest deletedCategory = categoryService.deleteCategory(categoryId);
 
         return ResponseEntity.status(HttpStatus.OK).body(deletedCategory);
     }
 
     @PutMapping("v1/admin/categories/{categoryId}")
-    public ResponseEntity<CategoryDTO> updateCategory(@Valid @PathVariable Long categoryId, @RequestBody CategoryDTO categoryDTO) {
-        CategoryDTO savedCategoryDTO = categoryService.updateCategory(categoryId, categoryDTO);
+    public ResponseEntity<CreateCategoryRequest> updateCategory(@Valid @PathVariable Long categoryId, @RequestBody CreateCategoryRequest createCategoryRequest) {
+        CreateCategoryRequest savedCreateCategoryRequest = categoryService.updateCategory(categoryId, createCategoryRequest);
 
-        return new ResponseEntity<>(savedCategoryDTO, HttpStatus.OK);
+        return new ResponseEntity<>(savedCreateCategoryRequest, HttpStatus.OK);
     }
 
 }
