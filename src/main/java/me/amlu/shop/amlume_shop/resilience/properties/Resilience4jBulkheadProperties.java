@@ -10,16 +10,19 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.convert.DurationUnit; // Optional but good practice
-import org.springframework.stereotype.Component; // Or @Configuration
-import org.springframework.validation.annotation.Validated; // Optional validation
+import org.springframework.boot.convert.DurationUnit;
+import org.springframework.validation.annotation.Validated;
 
-import jakarta.validation.constraints.NotNull; // Optional validation
 import java.time.Duration;
-import java.time.temporal.ChronoUnit; // For DurationUnit
+import java.time.temporal.ChronoUnit;
 
-@Component // Makes it a Spring bean, eligible for injection elsewhere
+/**
+ * Configuration properties for Resilience4j Bulkhead.
+ *
+ * @author Daniel Itiro Tikamori
+ */
 @ConfigurationProperties(prefix = "resilience4j.bulkhead.instances.default")
 @Validated // Optional: Enables JSR-303 validation
 public class Resilience4jBulkheadProperties {

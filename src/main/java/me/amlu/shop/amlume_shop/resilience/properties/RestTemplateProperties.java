@@ -11,7 +11,6 @@
 package me.amlu.shop.amlume_shop.resilience.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -19,7 +18,6 @@ import org.springframework.validation.annotation.Validated;
  *
  * @author Daniel Itiro Tikamori
  */
-@Component
 @ConfigurationProperties(prefix = "resilience4j.rest-template")
 @Validated
 public class RestTemplateProperties {
@@ -35,13 +33,21 @@ public class RestTemplateProperties {
 
     // --- Getters ---
 
-    public int getConnectTimeout() { return connectTimeout; }
+    public int getConnectTimeout() {
+        return connectTimeout;
+    }
 
-    public int getReadTimeout() { return readTimeout; }
+    public int getReadTimeout() {
+        return readTimeout;
+    }
 
     // --- Setters ---
 
-    public void setConnectTimeout(int connectTimeout) { this.connectTimeout = connectTimeout; }
+    public void setConnectTimeout(int connectTimeout) {
+        this.connectTimeout = connectTimeout;
+    }
 
-    public void setReadTimeout(int readTimeout) { this.readTimeout = readTimeout; }
+    public void setReadTimeout(int readTimeout) {
+        this.readTimeout = readTimeout;
+    }
 }

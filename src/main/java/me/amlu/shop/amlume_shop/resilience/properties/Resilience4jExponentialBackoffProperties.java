@@ -12,10 +12,15 @@ package me.amlu.shop.amlume_shop.resilience.properties;
 
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
-@Component
+/**
+ * Configuration properties for Resilience4j Exponential Backoff.
+ * <p>
+ * This class is used to configure the properties for the exponential backoff strategy in Resilience4j.
+ *
+ * @author Daniel Itiro Tikamori
+ */
 @ConfigurationProperties(prefix = "resilience4j.exponential-backoff.instances.default")
 @Validated
 public class Resilience4jExponentialBackoffProperties {

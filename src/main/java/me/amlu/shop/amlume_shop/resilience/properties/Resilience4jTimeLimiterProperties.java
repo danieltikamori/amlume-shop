@@ -13,13 +13,16 @@ package me.amlu.shop.amlume_shop.resilience.properties;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 
-@Component
+/**
+ * Configuration properties for Resilience4j Time Limiter.
+ *
+ * @author Daniel Itiro Tikamori
+ */
 @ConfigurationProperties(prefix = "resilience4j.time-limiter.instances.default")
 @Validated
 public class Resilience4jTimeLimiterProperties {
@@ -29,7 +32,7 @@ public class Resilience4jTimeLimiterProperties {
     private Duration timeoutDuration = Duration.ofSeconds(1);
 
 // --- Getters ---
-    
+
     public Duration getTimeoutDuration() {
         return timeoutDuration;
     }

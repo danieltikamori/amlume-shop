@@ -13,11 +13,10 @@ package me.amlu.shop.amlume_shop.resilience.properties;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
-import java.time.temporal.ChronoUnit;
 import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 
 /**
  * Resilience4j Retry properties.
@@ -28,8 +27,9 @@ import java.time.Duration;
  * <p>
  * The properties can be accessed using the getter methods provided by this class.
  * </p>
+ *
+ * @author Daniel Itiro Tikamori
  */
-@Component
 @ConfigurationProperties(prefix = "resilience4j.retry.instances.default")
 @Validated
 public class Resilience4jRetryProperties {

@@ -11,14 +11,19 @@
 package me.amlu.shop.amlume_shop.resilience.properties;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for Resilience4j executor instances.
+ * <p>
+ * This class is used to configure the properties of the executor instances
+ * for Resilience4j.
+ * <p>
+ * It includes properties such as core pool size and maximum number of concurrent calls.
+ *
+ * @author Daniel Itiro Tikamori
  */
 
-@Component
 @ConfigurationProperties(prefix = "resilience4j.executor.instances.default")
 @Validated
 public class Resilience4jExecutorProperties {

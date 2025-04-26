@@ -14,19 +14,16 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
-import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.Objects;
 
 /**
  * Configuration properties for Resilience4j Circuit Breaker.
  *
  * @author Daniel Itiro Tikamori
  */
-@Component
 @ConfigurationProperties(prefix = "resilience4j.circuitbreaker.instances.default")
 @Validated
 public class Resilience4jCircuitBreakerProperties {
