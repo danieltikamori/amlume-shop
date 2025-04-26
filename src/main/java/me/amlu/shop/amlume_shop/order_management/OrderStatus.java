@@ -8,16 +8,13 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.payload;
+package me.amlu.shop.amlume_shop.order_management;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+public enum OrderStatus {
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class APIResponse {
-    private String message;
-    private boolean success;
+    PENDING,
+    PROCESSING,
+    SHIPPED,
+    DELIVERED,
+    PENDING_APPROVAL, SHIPPING, DISPUTED, CANCELLED
 }
