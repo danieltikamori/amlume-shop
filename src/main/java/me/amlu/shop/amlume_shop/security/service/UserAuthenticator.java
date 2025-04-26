@@ -182,7 +182,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             performPreFlightChecks(request.username(), ipAddress, "Login", request.captchaResponse());
 
             // 1. Fetch user
-            User user = userRepository.findByUsername(request.username())
+            User user = userRepository.findByAuthenticationInfoUsername_Username(request.username())
                     .orElseThrow(() -> {
                         auditService.logFailedLogin(request.username(), ipAddress, Constants.USER_NOT_FOUND_MESSAGE);
                         return new UsernameNotFoundException(Constants.INVALID_CREDENTIALS_MESSAGE); // Generic message
@@ -228,7 +228,7 @@ public class UserAuthenticator implements AuthenticationInterface {
             performPreFlightChecks(request.username(), ipAddress, "MFA Verification", request.captchaResponse()); // Captcha likely isn't needed here
 
             // 1. Fetch user
-            User user = userRepository.findByUsername(request.username())
+            User user = userRepository.findByAuthenticationInfoUsername_Username(request.username())
                     .orElseThrow(() -> {
                         auditService.logFailedLogin(request.username(), ipAddress, Constants.USER_NOT_FOUND_MESSAGE);
                         return new UsernameNotFoundException(Constants.INVALID_CREDENTIALS_MESSAGE); // Generic message
@@ -559,7 +559,7 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Override
     @Transactional
     public void unlockUser(String username) {
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
                 .orElseThrow(() -> new UsernameNotFoundException(Constants.USER_NOT_FOUND_MESSAGE));
         if (!user.isAccountNonLocked()) {
             user.updateAccountNonLocked(true);
@@ -668,9 +668,9 @@ public class UserAuthenticator implements AuthenticationInterface {
             AuthenticationInfo info = cacheService.getOrCache(
                     AUTH_CACHE,
                     cacheKey,
-                    () -> userRepository.findAuthenticationInfoByUsername(username)
+                    () -> userRepository.findByAuthenticationInfoUsername_Username(username)
                             .orElseThrow(() -> new UsernameNotFoundException("AuthInfo not found for user: " + username)) // Handle not found in supplier
-            );
+            ).getAuthenticationInfo();
             sample.stop(meterRegistry.timer("auth.info.fetch", "status", "success"));
             return info;
         } catch (Exception e) {
@@ -697,7 +697,7 @@ public class UserAuthenticator implements AuthenticationInterface {
         }
 
         // Fetch existing user to ensure they exist before updating auth info
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Cannot update auth info, user not found: " + username));
 
         // Update the embedded object on the user entity
