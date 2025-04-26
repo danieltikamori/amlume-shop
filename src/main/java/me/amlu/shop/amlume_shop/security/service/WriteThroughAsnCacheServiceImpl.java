@@ -30,7 +30,7 @@ import java.util.concurrent.ExecutionException;
  *
  * @author Daniel Itiro Tikamori
  * @version 1.0
- * @see AsnLookupServiceImpl
+ * @see CoreAsnLookupServiceImpl
  * @see AsnRepository
  * @see Cache
  * @since 2025-02-16
