@@ -44,7 +44,7 @@ public class Resilience4jCircuitBreakerProperties {
 
     @Min(value = 1, message = "slidingWindowSize must be greater than or equal to 1")
     @NotNull
-    private int slidingWindowSize; // No default here, will handle in main config
+    private int slidingWindowSize = 100; // No default here, will handle in main config
 
     // --- Getter ---
 
