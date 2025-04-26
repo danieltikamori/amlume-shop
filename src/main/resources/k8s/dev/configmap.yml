@@ -1,0 +1,29 @@
+# src/main/resources/k8s/configmap.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: amlume-shop-config
+  labels:
+    app: amlume-shop
+data:
+  application.yml: |
+    valkey:
+      nodes: ${VALKEY_HOST:valkey-service}:${VALKEY_PORT:6379}
+    
+    resilience4j:
+      retry:
+        instances:
+          captchaValidation:
+            maxAttempts: 3
+            waitDuration: 1s
+            enableExponentialBackoff: true
+            exponentialBackoffMultiplier: 2
+    
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: prometheus,metrics
+      metrics:
+        tags:
+          application: amlume-shop

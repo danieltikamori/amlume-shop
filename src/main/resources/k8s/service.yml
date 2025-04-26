@@ -1,0 +1,13 @@
+# src/main/resources/k8s/service.yml
+apiVersion: v1
+kind: Service
+metadata:
+  name: amlume-shop
+spec:
+  selector:
+    app: amlume-shop
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: ClusterIP

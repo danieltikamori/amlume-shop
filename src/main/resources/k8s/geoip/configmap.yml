@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: asn-lookup-config
+data:
+  application.yml: |
+    spring:
+      cache:
+        type: redis
+      redis:
+        host: redis-service
+        port: 6379
+    
+    geoip2:
+      database:
+        path: /app/GeoLite2-ASN.mmdb
+    
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: health,metrics,prometheus
+      endpoint:
+        health:
+          probes:
+            enabled: true

@@ -27,15 +27,15 @@ spec:
 #                  name: valkey-secret
 #                  key: valkey-password
           ports:
-            - containerPort: 7000 # or 6379
+            - containerPort: 6379
           livenessProbe:
             tcpSocket:
-              port: 7000
+              port: 6379
             initialDelaySeconds: 15
             periodSeconds: 10
           readinessProbe:
             tcpSocket:
-              port: 7000
+              port: 6379
             initialDelaySeconds: 5
             periodSeconds: 10
           resources:

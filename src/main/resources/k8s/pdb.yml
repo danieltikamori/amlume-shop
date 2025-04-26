@@ -1,0 +1,24 @@
+#PodDisruptionBudget
+
+# src/main/resources/k8s/pdb.yml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: valkey-pdb
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: valkey
+
+
+#apiVersion: policy/v1
+#kind: PodDisruptionBudget
+#metadata:
+#  name: {{ .Values.podDisruptionBudget.name }}
+#  namespace: {{ .Values.namespace }}
+#spec:
+#  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+#  selector:
+#    matchLabels:
+#      app: {{ .Values.podDisruptionBudget.app }}

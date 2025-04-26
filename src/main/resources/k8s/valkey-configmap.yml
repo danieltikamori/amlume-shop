@@ -4,7 +4,7 @@ metadata:
   name: valkey-config
 data:
   valkey.conf: |
-    port 7000
+    port 6379
     bind 0.0.0.0
     maxmemory 256mb
     maxmemory-policy allkeys-lru

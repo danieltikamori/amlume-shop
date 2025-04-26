@@ -9,6 +9,6 @@ spec:
   selector:
     app: valkey
   ports:
-    - port: 7000 # or 6379 as it's the default
-      targetPort: 7000
+    - port: 6379 # or 6379 as it's the default
+      targetPort: 6379
   clusterIP: None  # Headless service for StatefulSet. Headless service for better network partition handling. Headless service is a service that has no public IP address.

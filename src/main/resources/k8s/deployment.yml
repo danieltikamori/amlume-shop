@@ -1,0 +1,60 @@
+# src/main/resources/k8s/deployment.yml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amlume-shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: amlume-shop
+  template:
+    metadata:
+      labels:
+        app: amlume-shop
+    spec:
+      containers:
+        - name: amlume-shop
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            readinessProbe:
+              httpGet:
+                path: /actuator/health/readiness
+                port: 8080
+              initialDelaySeconds: 20
+              periodSeconds: 10
+            resources:
+              requests:
+                memory: "512Mi"
+                cpu: "250m"
+              limits:
+                memory: "1Gi"
+                cpu: "500m"
+          image: amlume-shop:latest
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+          env:
+            - name: SPRING_CONFIG_LOCATION
+              value: file:/resources/application.yml
+#              value: file:/config/application.yml
+            - name: VALKEY_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: amlume-shop-config
+                  key: valkey.host
+            - name: VALKEY_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: amlume-shop-config
+                  key: valkey.port
+      volumes:
+        - name: config-volume
+          configMap:
+            name: amlume-shop-config
