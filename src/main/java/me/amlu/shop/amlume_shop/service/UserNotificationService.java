@@ -23,10 +23,10 @@ import com.slack.api.model.block.composition.MarkdownTextObject;
 import com.slack.api.model.block.composition.PlainTextObject;
 import com.slack.api.model.block.element.ButtonElement;
 import jakarta.mail.internet.MimeMessage;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.NotificationSendingFailedException;
-import me.amlu.shop.amlume_shop.payload.EmailAttachment;
+import me.amlu.shop.amlume_shop.payload.CreateEmailAttachmentRequest;
 import me.amlu.shop.amlume_shop.payload.CreateNotificationRequest;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -40,20 +40,22 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-@Slf4j
 @Service
 public class UserNotificationService {
-    private final JavaMailSender emailSender;
-    private final MethodsClient slackClient;
-    
+
     @Value("${slack.channel}")
     private String slackChannel;
 
     @Value("${slack.token}")
     private String slackToken;
-    
+
     @Value("${spring.mail.username}")
     private String emailFrom;
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(UserNotificationService.class);
+
+    private final JavaMailSender emailSender;
+    private final MethodsClient slackClient;
 
     public UserNotificationService(JavaMailSender emailSender, MethodsClient slackClient) {
         this.emailSender = emailSender;
@@ -62,7 +64,7 @@ public class UserNotificationService {
 
     public void sendNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
         // Add specific handling based on notification type
-        switch (request.getType()) {
+        switch (request.type()) {
             case ALERT:
                 // High priority handling
                 sendUrgentNotification(request);
@@ -88,12 +90,12 @@ public class UserNotificationService {
             MimeMailMessage message = new MimeMailMessage(mimeMessage);
 
             message.setFrom(emailFrom);
-            message.setTo(request.getRecipientEmail());
-            message.setSubject(request.getSubject());
-            message.setText(request.getMessage());
-            
+            message.setTo(request.recipientEmail());
+            message.setSubject(request.subject());
+            message.setText(request.message());
+
             emailSender.send(mimeMessage);
-            log.info("Email notification sent successfully to: {}", request.getRecipientEmail());
+            log.info("Email notification sent successfully to: {}", request.recipientEmail());
         } catch (MailException e) {
             log.error("Failed to send email notification", e);
             throw new NotificationSendingFailedException("Email sending failed", e);
@@ -107,19 +109,19 @@ public class UserNotificationService {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
             helper.setFrom(emailFrom);
-            helper.setTo(request.getRecipientEmail());
-            helper.setSubject(request.getSubject());
-            helper.setText(request.getMessage(), true); // true enables HTML
+            helper.setTo(request.recipientEmail());
+            helper.setSubject(request.subject());
+            helper.setText(request.message(), true); // true enables HTML
 
             // Add attachments if present
-            if (request.getAttachments() != null) {
-                for (EmailAttachment attachment : request.getAttachments()) {
-                    helper.addAttachment(attachment.getFileName(), attachment.getFile());
+            if (request.attachments() != null) {
+                for (CreateEmailAttachmentRequest attachment : request.attachments()) {
+                    helper.addAttachment(attachment.fileName(), attachment.file());
                 }
             }
 
             emailSender.send(mimeMessage);
-            log.info("Rich email sent successfully to: {}", request.getRecipientEmail());
+            log.info("Rich email sent successfully to: {}", request.recipientEmail());
 
         } catch (MessagingException | MailException | jakarta.mail.MessagingException e) {
             log.error("Failed to send rich email notification", e);
@@ -134,14 +136,14 @@ public class UserNotificationService {
 
             ChatPostMessageRequest slackRequest = ChatPostMessageRequest.builder()
                     .channel(slackChannel)
-                    .text(request.getMessage())
+                    .text(request.message())
                     .build();
 
             ChatPostMessageResponse response = methods.chatPostMessage(slackRequest);
 
             if (!response.isOk()) {
                 log.error("Failed to send Slack message: {}", response.getError());
-                throw new NotificationSendingFailedException("Slack message sending failed: " + response.getError(),new Exception());
+                throw new NotificationSendingFailedException("Slack message sending failed: " + response.getError(), new Exception());
             }
 
         } catch (SlackApiException | IOException e) {
@@ -152,38 +154,46 @@ public class UserNotificationService {
 
     private List<LayoutBlock> createSlackBlocks(CreateNotificationRequest request) {
         return Arrays.asList(
-            SectionBlock.builder()
-                .text(MarkdownTextObject.builder()
-                    .text("*" + request.getSubject() + "*\n" + request.getMessage())
-                    .build())
-                .build(),
-            ActionsBlock.builder()
-                .elements(Collections.singletonList(
-                        ButtonElement.builder()
-                                .text(PlainTextObject.builder()
-                                        .text("View Details")
-                                        .build())
-                                .url(request.getActionUrl())
-                                .style("primary")
-                                .build()))
-                .build()
+                SectionBlock.builder()
+                        .text(MarkdownTextObject.builder()
+                                .text("*" + request.subject() + "*\n" + request.message())
+                                .build())
+                        .build(),
+                ActionsBlock.builder()
+                        .elements(Collections.singletonList(
+                                ButtonElement.builder()
+                                        .text(PlainTextObject.builder()
+                                                .text("View Details")
+                                                .build())
+                                        .url(request.actionUrl())
+                                        .style("primary")
+                                        .build()))
+                        .build()
         );
     }
 
     private void sendUrgentNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
         // Add urgent prefix to subject
-        request.setSubject("🚨 URGENT: " + request.getSubject());
+        String subject = "🚨 URGENT: " + request.subject();
+        CreateNotificationRequest updatedRequest = CreateNotificationRequest.builder()
+                .recipientEmail(request.recipientEmail())
+                .message(request.message())
+                .subject(subject)
+                .attachments(request.attachments())
+                .build();
 
         // Send to both email and Slack
-        if (request.isEmailEnabled()) {
-            sendRichEmail(request);
+        if (request.emailEnabled()) {
+            sendRichEmail(updatedRequest);
+
         }
-        if (request.isSlackEnabled()) {
+        if (request.slackEnabled()) {
             // Create a new request with formatted message for Slack
             CreateNotificationRequest slackRequest = CreateNotificationRequest.builder()
                     .message(formatUrgentSlackMessage(request))
-                    .type(request.getType())
+                    .type(request.type())
                     .slackEnabled(true)
+                    .subject(subject)
                     .build();
 
             sendSlackMessage(slackRequest);
@@ -191,14 +201,20 @@ public class UserNotificationService {
     }
 
     private void sendWarningNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
-        request.setSubject("⚠️ WARNING: " + request.getSubject());
-        if (request.isEmailEnabled()) {
-            sendRichEmail(request);
+        String subject = "⚠️ WARNING: " + request.subject();
+        CreateNotificationRequest updatedRequest = CreateNotificationRequest.builder()
+                .recipientEmail(request.recipientEmail())
+                .message(request.message())
+                .subject(subject)
+                .attachments(request.attachments())
+                .build();
+        if (request.emailEnabled()) {
+            sendRichEmail(updatedRequest);
         }
-        if (request.isSlackEnabled()) {
+        if (request.slackEnabled()) {
             CreateNotificationRequest slackRequest = CreateNotificationRequest.builder()
-                    .message("⚠️ *WARNING*\n>" + request.getMessage())
-                    .type(request.getType())
+                    .message("⚠️ *WARNING*\n>" + updatedRequest.message())
+                    .type(request.type())
                     .slackEnabled(true)
                     .build();
             sendSlackMessage(slackRequest);
@@ -206,14 +222,20 @@ public class UserNotificationService {
     }
 
     private void sendAnnouncementNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
-        request.setSubject("📢 ANNOUNCEMENT: " + request.getSubject());
-        if (request.isEmailEnabled()) {
-            sendRichEmail(request);
+        String subject = "📢 ANNOUNCEMENT: " + request.subject();
+        CreateNotificationRequest updatedRequest = CreateNotificationRequest.builder()
+                .recipientEmail(request.recipientEmail())
+                .message(request.message())
+                .subject(subject)
+                .attachments(request.attachments())
+                .build();
+        if (request.emailEnabled()) {
+            sendRichEmail(updatedRequest);
         }
-        if (request.isSlackEnabled()) {
+        if (updatedRequest.slackEnabled()) {
             CreateNotificationRequest slackRequest = CreateNotificationRequest.builder()
-                    .message("⚠️ *WARNING*\n>" + request.getMessage())
-                    .type(request.getType())
+                    .message("⚠️ *WARNING*\n>" + request.message())
+                    .type(request.type())
                     .slackEnabled(true)
                     .build();
             sendSlackMessage(slackRequest);
@@ -221,14 +243,20 @@ public class UserNotificationService {
     }
 
     private void sendInformationalNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
-        request.setSubject("ℹ️ INFO: " + request.getSubject());
-        if (request.isEmailEnabled()) {
-            sendRichEmail(request);
+        String subject = "ℹ️ INFO: " + request.subject();
+        CreateNotificationRequest updatedRequest = CreateNotificationRequest.builder()
+                .recipientEmail(request.recipientEmail())
+                .message(request.message())
+                .subject(subject)
+                .attachments(request.attachments())
+                .build();
+        if (request.emailEnabled()) {
+            sendRichEmail(updatedRequest);
         }
-        if (request.isSlackEnabled()) {
+        if (updatedRequest.slackEnabled()) {
             CreateNotificationRequest slackRequest = CreateNotificationRequest.builder()
-                    .message("⚠️ *WARNING*\n>" + request.getMessage())
-                    .type(request.getType())
+                    .message("⚠️ *WARNING*\n>" + request.message())
+                    .type(request.type())
                     .slackEnabled(true)
                     .build();
             sendSlackMessage(slackRequest);
@@ -238,10 +266,8 @@ public class UserNotificationService {
     // Ignore the %n should be used. As we are using for Slack
     private String formatUrgentSlackMessage(CreateNotificationRequest request) {
         return String.format("*URGENT ALERT*\n>%s\n%s",
-                request.getSubject(),
-                request.getMessage());
+                request.subject(),
+                request.message());
     }
 
 }
-
-
