@@ -48,14 +48,14 @@ public class TokenCleanupServiceImpl implements TokenCleanupService {
 
     /**
      * Asynchronously cleans up old revoked token records from the database.
-     * Records older than 30 days (based on revocation time) are deleted.
+     * Records older than 30 days (based on revocation timestamp) are deleted.
      * Cache cleanup for Redis/Valkey is handled automatically by TTL.
      */
     @Async // Consider specifying a task executor bean name if you have one configured: @Async("taskExecutor")
     @Transactional
     public void cleanupExpiredTokensAsync() {
         try {
-            // Define the cutoff time for old records (e.g., 30 days ago)
+            // Define the cutoff timestamp for old records (e.g., 30 days ago)
             Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
             log.debug("Deleting revoked token records from database where revokedAt is before {}", cutoff);
 
