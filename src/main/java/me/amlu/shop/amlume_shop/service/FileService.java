@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.FileUploadResult;
+import me.amlu.shop.amlume_shop.payload.GetFileUploadResultResponse;
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,7 +32,7 @@ public interface FileService {
      * @throws IOException              if an I/O error occurs during file saving or directory creation.
      * @throws IllegalArgumentException if the imageFile is null, empty, or has no original filename.
      */
-    FileUploadResult uploadImage(String path, MultipartFile imageFile) throws IOException;
+    GetFileUploadResultResponse uploadImage(String path, MultipartFile imageFile) throws IOException;
 
     /**
      * Deletes an image file from the specified path.

@@ -11,12 +11,13 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.FileUploadResult;
+import me.amlu.shop.amlume_shop.payload.GetFileUploadResultResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -24,6 +25,7 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Paths;
 import java.util.UUID;
 
@@ -31,19 +33,44 @@ import java.util.UUID;
 public class FileServiceImpl implements FileService {
 
     private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
+    private static final long MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+    private static final int MAX_FILENAME_LENGTH = 255;
+    private static final int MAX_PATH_LENGTH = 512;
+
 
     @Override
-    public FileUploadResult uploadImage(String path, MultipartFile imageFile) throws IOException {
+    public GetFileUploadResultResponse uploadImage(String path, MultipartFile imageFile) throws IOException {
         // --- Input Validation ---
         if (imageFile == null || imageFile.isEmpty()) {
             log.warn("Attempted to upload an empty or null image file.");
             throw new IllegalArgumentException("Image file cannot be null or empty.");
         }
 
+        // --- File Size Validation ---
+        if (imageFile.getSize() > MAX_FILE_SIZE_BYTES) {
+            log.warn("Attempted to upload a file exceeding the maximum allowed size.");
+            throw new IllegalArgumentException("File size exceeds the maximum allowed size of " + MAX_FILE_SIZE_BYTES + " bytes.");
+        }
+
         String originalFilename = imageFile.getOriginalFilename(); // Keep the original name
         if (!StringUtils.hasText(originalFilename)) {
             log.warn("Attempted to upload a file with no original filename.");
             throw new IllegalArgumentException("Image file must have an original filename.");
+        }
+
+        // --- Filename Length Validation ---
+        if (originalFilename.length() > MAX_FILENAME_LENGTH) {
+            log.warn("Attempted to upload a file with a filename exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Filename exceeds the maximum allowed length of " + MAX_FILENAME_LENGTH + " characters.");
+        }
+
+        if (!StringUtils.hasText(path)) {
+            log.warn("Attempted to upload a file with an empty or null path.");
+            throw new IllegalArgumentException("Path cannot be null or empty.");
+        }
+        if (path.length() > MAX_PATH_LENGTH) {
+            log.warn("Attempted to upload a file with a path exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Path cannot be null or empty.");
         }
 
         // --- Generate Unique Filename ---
@@ -55,10 +82,13 @@ public class FileServiceImpl implements FileService {
             log.warn("File '{}' has no extension. Upload might proceed without one.", originalFilename);
         }
 
-        // Use UUID for better uniqueness
-        String uniqueFileNameBase = UUID.randomUUID().toString();
-        String generatedFileName = uniqueFileNameBase + fileExtension; // This is the name for storage
+        // Generate a secure unique filename using a hash of the original filename and a UUID
+        String uniqueFileNameBase = DigestUtils.md5DigestAsHex((originalFilename + UUID.randomUUID().toString()).getBytes());
+        String generatedFileName = uniqueFileNameBase + fileExtension;
+
         Path targetDirectory = Paths.get(path);
+        // Ensure the path is canonical to prevent path traversal attacks
+        targetDirectory = targetDirectory.toAbsolutePath().normalize();
         Path targetFilePath = targetDirectory.resolve(generatedFileName); // Use resolve for path construction
 
         log.debug("Attempting to upload file '{}' as '{}' to path '{}'", originalFilename, generatedFileName, targetFilePath);
@@ -76,10 +106,10 @@ public class FileServiceImpl implements FileService {
 
         // --- Upload File ---
         try {
-            Files.copy(imageFile.getInputStream(), targetFilePath);
+            Files.copy(imageFile.getInputStream(), targetFilePath, StandardCopyOption.REPLACE_EXISTING);
             log.info("Successfully uploaded file '{}' to '{}'", generatedFileName, targetFilePath);
             // Return both names
-            return new FileUploadResult(generatedFileName, originalFilename); // Return the generated unique filename
+            return new GetFileUploadResultResponse(generatedFileName, originalFilename); // Return the generated unique filename
         } catch (IOException e) {
             log.error("Failed to upload file '{}' to '{}'", generatedFileName, targetFilePath, e);
             // Delete the partially uploaded file if possible/necessary
@@ -93,13 +123,31 @@ public class FileServiceImpl implements FileService {
     }
 
     @Override
-    public void deleteImage(String path, String imageNameToDelete) throws IOException {
+    public void deleteImage(String path, String imageNameToDelete) throws IOException{
         if (!StringUtils.hasText(imageNameToDelete) || imageNameToDelete.equals("default.png")) {
             log.warn("Attempted to delete an invalid or default image name: '{}'", imageNameToDelete);
             return; // Don't attempt to delete null, empty, or default names
         }
 
+        // --- Filename Length Validation ---
+        if (imageNameToDelete.length() > MAX_FILENAME_LENGTH) {
+            log.warn("Attempted to delete a file with a filename exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Filename exceeds the maximum allowed length of " + MAX_FILENAME_LENGTH + " characters.");
+        }
+
+        if (path.length() > MAX_PATH_LENGTH) {
+            log.warn("Attempted to delete a file with a path exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Path exceeds the maximum allowed length of " + MAX_PATH_LENGTH + " characters.");
+        }
+
+        if (!StringUtils.hasText(path)) {
+            log.warn("Attempted to delete a file with an empty or null path.");
+            throw new IllegalArgumentException("Path cannot be null or empty.");
+        }
+
         Path targetDirectory = Paths.get(path);
+        // Ensure the path is canonical to prevent path traversal attacks
+        targetDirectory = targetDirectory.toAbsolutePath().normalize();
         Path targetFilePath = targetDirectory.resolve(imageNameToDelete);
 
         log.debug("Attempting to delete file: {}", targetFilePath);
@@ -126,15 +174,29 @@ public class FileServiceImpl implements FileService {
     @Override
     public Resource downloadFile(String path, String fileName) throws ResourceNotFoundException, MalformedURLException {
         // --- Input Validation ---
-        if (!StringUtils.hasText(path)) {
-            throw new IllegalArgumentException("File path cannot be empty.");
-        }
         if (!StringUtils.hasText(fileName)) {
             throw new IllegalArgumentException("Filename cannot be empty.");
         }
 
+        // --- Filename Length Validation ---
+        if (fileName.length() > MAX_FILENAME_LENGTH) {
+            log.warn("Attempted to download a file with a filename exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Filename exceeds the maximum allowed length of " + MAX_FILENAME_LENGTH + " characters.");
+        }
+
+        if (path.length() > MAX_PATH_LENGTH) {
+            log.warn("Attempted to download a file with a path exceeding the maximum allowed length.");
+            throw new IllegalArgumentException("Path exceeds the maximum allowed length of " + MAX_PATH_LENGTH + " characters.");
+        }
+        if (!StringUtils.hasText(path)) {
+            log.warn("Attempted to download a file with an empty or null path.");
+            throw new IllegalArgumentException("Path cannot be null or empty.");
+        }
+
         try {
             Path fileDirectory = Paths.get(path);
+            // Ensure the path is canonical to prevent path traversal attacks
+            fileDirectory = fileDirectory.toAbsolutePath().normalize();
             Path filePath = fileDirectory.resolve(fileName).normalize(); // Normalize a path
 
             log.debug("Attempting to load file for download: {}", filePath);
