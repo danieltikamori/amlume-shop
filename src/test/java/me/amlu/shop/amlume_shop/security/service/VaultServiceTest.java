@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.exceptions.VaultOperationException;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.vault.core.VaultTemplate;
@@ -27,6 +28,7 @@ class VaultServiceTest {
 
     private VaultTemplate vaultTemplate;
     private VaultService vaultService;
+    private final String path = "testPath";
 
     @BeforeEach
     void setUp() {
@@ -47,7 +49,7 @@ class VaultServiceTest {
         when(vaultTemplate.read(anyString())).thenReturn(mockResponse);
 
         // Act
-        String actualValue = vaultService.getSecret(key);
+        String actualValue = vaultService.getSecret(this.path, key);
 
         // Assert
         assertEquals(expectedValue, actualValue);
@@ -66,7 +68,7 @@ class VaultServiceTest {
         when(vaultTemplate.read(anyString())).thenReturn(mockResponse);
 
         // Act
-        vaultService.setSecret(key, value);
+        vaultService.setSecret(this.path, key, value);
 
         // Assert
         verify(vaultTemplate).write(anyString(), argThat((Map<String, Object> map) ->
@@ -86,7 +88,7 @@ class VaultServiceTest {
         when(vaultTemplate.read(anyString())).thenReturn(mockResponse);
 
         // Act
-        vaultService.deleteSecret(key);
+        vaultService.deleteSecret(this.path, key);
 
         // Assert
         verify(vaultTemplate).write(anyString(), argThat((Map<String, Object> map) ->
@@ -102,7 +104,7 @@ class VaultServiceTest {
 
         // Act & Assert
         assertThrows(VaultOperationException.class, () ->
-                vaultService.getSecret("testKey")
+                vaultService.getSecret("","testKey")
         );
     }
 
@@ -112,7 +114,7 @@ class VaultServiceTest {
         when(vaultTemplate.read(anyString())).thenReturn(null);
 
         // Act
-        String result = vaultService.getSecret("testKey");
+        String result = vaultService.getSecret("","testKey");
 
         // Assert
         assertNull(result);
@@ -126,9 +128,41 @@ class VaultServiceTest {
         when(vaultTemplate.read(anyString())).thenReturn(mockResponse);
 
         // Act
-        String result = vaultService.getSecret("testKey");
+        String result = vaultService.getSecret("","testKey");
 
         // Assert
         assertNull(result);
+    }
+
+    @AfterEach
+    void tearDown() {
+    }
+
+    @Test
+    void getSecretOptional() {
+    }
+
+    @Test
+    void getSecretOptionalFallback() {
+    }
+
+    @Test
+    void getSecret() {
+    }
+
+    @Test
+    void setSecret() {
+    }
+
+    @Test
+    void deleteSecret() {
+    }
+
+    @Test
+    void writeSecretFallback() {
+    }
+
+    @Test
+    void testWriteSecretFallback() {
     }
 }
