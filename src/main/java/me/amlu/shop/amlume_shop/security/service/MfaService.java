@@ -36,18 +36,11 @@ public interface MfaService {
 
     void resetFailedAttempts(User user);
 
-//    boolean shouldLockAccount(String userId);
-
-    boolean shouldLockAccount(User user);
-
-    @Transactional
-    void lockAccount(String userId);
-
     void enableMfaForUser(User user);
     void disableMfaForUser(User user);
     void resetMfaForUser(User user);
     void updateSecretForUser(User user, String encryptedSecret);
-    void updateMfaTokenForUser(User user, String mfaToken);
+//    void updateMfaTokenForUser(User user, String mfaToken);
     void deleteMfaTokenForUser(User user);
     void deleteSecretForUser(User user);
     void deleteAllMfaTokens();
