@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import me.amlu.shop.amlume_shop.model.Event;
 import me.amlu.shop.amlume_shop.service.EventServiceInterface;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,16 +26,6 @@ public class ApiController {
 
     public ApiController(EventServiceInterface eventService) {
         this.eventService = eventService;
-    }
-
-    public static class Event {
-        public String name;
-        public Instant time;
-
-        public Event(String name, Instant time) {
-            this.name = name;
-            this.time = time;
-        }
     }
 
     @GetMapping("/")

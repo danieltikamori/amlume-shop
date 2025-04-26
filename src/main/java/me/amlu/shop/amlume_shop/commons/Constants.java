@@ -78,7 +78,7 @@ public final class Constants {
     public static final String DEFAULT_PAGE_NUMBER = "0";
 
     // --- Tolerances ---
-    // For time-based validation
+    // For timestamp-based validation
     public static final Duration CLOCK_SKEW_TOLERANCE = Duration.ofSeconds(10);
 
     // --- Authentication and Authorization constants ---
