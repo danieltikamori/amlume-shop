@@ -14,16 +14,16 @@ import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.InputValidator;
 import me.amlu.shop.amlume_shop.config.RoleHierarchyValidator;
-// import me.amlu.shop.amlume_shop.config.SecureAppRoleValidator; // Removed if username sanitization isn't needed
 import me.amlu.shop.amlume_shop.config.SecurityValidator;
 import me.amlu.shop.amlume_shop.exceptions.RoleAssignmentException;
 import me.amlu.shop.amlume_shop.exceptions.SecurityValidationException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
-import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
+import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
@@ -40,7 +40,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
-import java.util.*;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -129,8 +133,8 @@ public class RoleServiceImpl implements RoleService {
                             "resourceType", resource.getClass().getSimpleName(),
                             "resourceId", resource.hashCode(), // Use hashcode as identifier
                             "error", e.getMessage()
-                    )
-            ));
+                    ), AlertSeverityEnum.HIGH, Instant.now(), "production")
+            );
             return Collections.emptySet(); // Fail secure
         }
     }
@@ -407,8 +411,9 @@ public class RoleServiceImpl implements RoleService {
             alertService.alertSecurityTeam(new SecurityAlert(
                     String.valueOf(user.getUserId()),
                     "Failed to assign roles",
-                    Map.of("assignedRoles", newRoles.toString(), "error", e.getMessage())
-            ));
+                    Map.of("assignedRoles", newRoles.toString(), "error", e.getMessage()),
+                    AlertSeverityEnum.HIGH, Instant.now(), "production")
+            );
             // Consider throwing a specific exception instead of returning false
             throw new RoleAssignmentException("Failed to assign roles to user " + user.getUsername(), e);
             // return false; // Indicate failure
@@ -443,11 +448,8 @@ public class RoleServiceImpl implements RoleService {
 
         // Check if the user is the SELLER of the product
         boolean isSeller = userRoles.stream().anyMatch(ur -> ur.getRoleName() == AppRole.ROLE_SELLER);
-        if (isSeller && product.getSeller() != null && user.getUserId().equals(product.getSeller().getUserId())) {
-            return true; // User is the seller of this specific product
-        }
-
-        return false; // No sufficient privileges found
+        return isSeller && product.getSeller() != null && user.getUserId().equals(product.getSeller().getUserId()); // User is the seller of this specific product
+// No sufficient privileges found
     }
 
     /*
