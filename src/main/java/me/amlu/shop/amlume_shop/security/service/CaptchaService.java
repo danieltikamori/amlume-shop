@@ -21,7 +21,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.payload.RecaptchaResponse;
+import me.amlu.shop.amlume_shop.payload.GetRecaptchaResponse;
 import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -175,15 +175,15 @@ public class CaptchaService {
      */
     private boolean validateCaptchaInternal(String captchaResponse) throws Exception {
         // Supplier for the core synchronous API call logic
-        Supplier<CompletionStage<RecaptchaResponse>> asyncOperationSupplier = getCompletionStageSupplier(captchaResponse);
+        Supplier<CompletionStage<GetRecaptchaResponse>> asyncOperationSupplier = getCompletionStageSupplier(captchaResponse);
 
         // Decorate the *initiation and execution* of the time-limited async operation with Retry.
         // Retry will call this lambda on each attempt.
-        Supplier<RecaptchaResponse> retryingSupplier = Retry.decorateSupplier(recaptchaRetry, () -> {
+        Supplier<GetRecaptchaResponse> retryingSupplier = Retry.decorateSupplier(recaptchaRetry, () -> {
             try {
                 // Inside the retry attempt, execute the async operation with the TimeLimiter applied.
                 // recaptchaTimeLimiter.executeCompletionStage handles scheduling the timeout.
-                CompletionStage<RecaptchaResponse> timeLimitedStage =
+                CompletionStage<GetRecaptchaResponse> timeLimitedStage =
                         recaptchaTimeLimiter.executeCompletionStage(
                                 // The scheduler is implicitly used by executeCompletionStage when called on the limiter instance
                                 // if the limiter was configured with one, but passing it explicitly is clearer.
@@ -226,13 +226,13 @@ public class CaptchaService {
 
 
         // Decorate the retrying operation with the Circuit Breaker
-        Supplier<RecaptchaResponse> resilientSupplier = CircuitBreaker.decorateSupplier(
+        Supplier<GetRecaptchaResponse> resilientSupplier = CircuitBreaker.decorateSupplier(
                 recaptchaCircuitBreaker,
                 retryingSupplier // Apply Circuit Breaker to the supplier that handles retries and time limits
         );
 
         // Execute the fully decorated operation
-        RecaptchaResponse apiResponse;
+        GetRecaptchaResponse apiResponse;
         try {
             apiResponse = resilientSupplier.get();
         } catch (Exception e) {
@@ -262,8 +262,8 @@ public class CaptchaService {
     }
 
     @NotNull
-    private Supplier<CompletionStage<RecaptchaResponse>> getCompletionStageSupplier(String captchaResponse) {
-        Supplier<RecaptchaResponse> recaptchaApiCallSupplier = () -> {
+    private Supplier<CompletionStage<GetRecaptchaResponse>> getCompletionStageSupplier(String captchaResponse) {
+        Supplier<GetRecaptchaResponse> recaptchaApiCallSupplier = () -> {
             MultiValueMap<String, String> requestMap = new LinkedMultiValueMap<>();
             requestMap.add("secret", recaptchaSecret);
             requestMap.add("response", captchaResponse);
@@ -272,7 +272,7 @@ public class CaptchaService {
             return restTemplate.postForObject(
                     RECAPTCHA_VERIFY_URL,
                     requestMap,
-                    RecaptchaResponse.class
+                    GetRecaptchaResponse.class
             );
         };
 
