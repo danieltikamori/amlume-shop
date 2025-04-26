@@ -21,6 +21,7 @@ import me.amlu.shop.amlume_shop.config.ResilienceConfig;
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
+import me.amlu.shop.amlume_shop.resilience.properties.Resilience4jRetryProperties;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService; // Assuming this validates your Bearer token
 import me.amlu.shop.amlume_shop.user_management.UserService; // Use interface
 import org.aspectj.lang.JoinPoint;
@@ -84,6 +85,9 @@ public class AuthenticationAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuthenticationAspect.class);
 
+    private final long retryInterval;
+    private final int maxRetryAttempts;
+
     private final UserService userService; // Use interface
     private final TokenValidationService tokenValidationService; // Service to validate the token
     private final MeterRegistry meterRegistry;
@@ -101,13 +105,16 @@ public class AuthenticationAspect {
             // Keep Redis/ObjectMapper if used elsewhere
             // @NonNull StringRedisTemplate redisTemplate,
             // @NonNull ObjectMapper objectMapper,
-            @Qualifier("retryRegistry") RetryRegistry retryRegistry // Inject registry
+            @Qualifier("retryRegistry") RetryRegistry retryRegistry, // Inject registry
+            @Qualifier("retryProperties") Resilience4jRetryProperties retryProperties // Inject properties if needed
     ) {
         this.userService = userService;
         this.tokenValidationService = tokenValidationService;
         this.meterRegistry = meterRegistry;
         // this.redisTemplate = redisTemplate;
         // this.objectMapper = objectMapper;
+        this.retryInterval = retryProperties.getRetryInterval(); // Use properties for interval
+        this.maxRetryAttempts = retryProperties.getMaxRetryAttempts(); // Use properties for max attempts
 
         // Get or create specific instances from registries
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("authenticationAspectBreaker", createCircuitBreakerConfig());
@@ -144,11 +151,11 @@ public class AuthenticationAspect {
     private RetryTemplate createRetryTemplate(RetryRegistry retryRegistry) {
         RetryTemplate localRetryTemplate = new RetryTemplate();
 
-        CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy();
+        CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy(this.maxRetryAttempts);
 
         // For user authentication, usually the fixed policy is more adequate.
         FixedBackOffPolicy backOffPolicy = new FixedBackOffPolicy();
-        backOffPolicy.setBackOffPeriod(ResilienceConfig.RETRY_INTERVAL);
+        backOffPolicy.setBackOffPeriod(retryInterval); // Use the retry interval from properties
 
           // For applications - sets deterministic randomization (Jitter)
 //        ExponentialRandomBackOffPolicy backOffPolicy = new ExponentialRandomBackOffPolicy();
@@ -166,7 +173,7 @@ public class AuthenticationAspect {
     }
 
     @NotNull
-    private static CompositeRetryPolicy getCompositeRetryPolicy() {
+    private static CompositeRetryPolicy getCompositeRetryPolicy(int maxRetryAttempts) {
         BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
                 IOException.class, true,
                 TimeoutException.class, true,
@@ -176,7 +183,7 @@ public class AuthenticationAspect {
 
         CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
         BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
-        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(ResilienceConfig.MAX_RETRY_ATTEMPTS);
+        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(maxRetryAttempts);
 
         retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
         return retryPolicy;
