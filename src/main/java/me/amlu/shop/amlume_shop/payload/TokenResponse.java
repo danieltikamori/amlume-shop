@@ -8,21 +8,10 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
+
 package me.amlu.shop.amlume_shop.payload;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Data;
 
-@Data
-public class TokenResponse {
-    @JsonProperty("access_token")
-    private String accessToken;
-    
-    @JsonProperty("expires_in")
-    private Long expiresIn;
-
-    @JsonProperty("token_type")
-    private String tokenType;
+public record TokenResponse(@JsonProperty("access_token") String accessToken, @JsonProperty("expires_in") Long expiresIn, @JsonProperty("token_type") String tokenType) {
 }
-
-

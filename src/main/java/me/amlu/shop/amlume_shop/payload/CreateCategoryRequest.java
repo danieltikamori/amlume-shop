@@ -10,13 +10,24 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import org.springframework.core.io.InputStreamSource;
-
-@Data
-@AllArgsConstructor
-public class EmailAttachment {
-    private String fileName;
-    private InputStreamSource file;
+/**
+ * Represents category data for transfer (API requests).
+ * Implemented as an immutable record.
+ */
+public record CreateCategoryRequest(
+        Long categoryId,
+        String categoryName,
+        String description,
+        Long parentId,
+        // Fields derived/mapped from entity VOs
+        Integer level,
+        String path,
+        String status,
+        Boolean active,
+        String reason,
+        Long managerId
+        // Add other fields like productCount, subCategoryCount if needed
+) {
+    // We can add validation annotations here if desired
+    // e.g., @NotBlank String categoryName, ...
 }

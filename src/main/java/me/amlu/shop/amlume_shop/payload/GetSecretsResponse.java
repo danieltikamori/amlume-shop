@@ -10,36 +10,7 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.Getter;
-import lombok.Setter;
-import me.amlu.shop.amlume_shop.enums.ResponseMessage;
-import org.springframework.http.HttpStatus;
+import java.util.Map;
 
-@Setter
-@Getter
-public class Response {
-
-    private String message;
-    private Object data;
-    private int status = HttpStatus.OK.value();
-
-    public Response(String message) {
-        this.message = message;
-    }
-
-    private Response(String message, Object data) {
-        this.message = message;
-        this.data = data;
-    }
-
-    public Response(ResponseMessage responseMessage) {
-        this.message = responseMessage.getMessage();
-    }
-
-    public Response(String message, String data, ResponseMessage responseMessage) {
-        this.message = message;
-        this.data = data;
-        this.message = responseMessage.getMessage();
-    }
-
+public record GetSecretsResponse(Map<String, String> secrets) {
 }

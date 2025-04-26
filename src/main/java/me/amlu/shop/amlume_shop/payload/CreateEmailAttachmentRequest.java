@@ -10,20 +10,7 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import java.util.List;
+import org.springframework.core.io.InputStreamSource;
 
-
-/**
- * Represents a paginated response containing a list of products and pagination metadata.
- * Implemented as an immutable record.
- */
-public record ProductResponse(
-        List<ProductDTO> content,
-        int pageNumber,
-        int pageSize,
-        long totalElements,
-        int totalPages,
-        boolean isLastPage
-) {
-    // No explicit fields, constructor, getters, equals, hashCode, or toString needed.
+public record CreateEmailAttachmentRequest(String fileName, InputStreamSource file) {
 }

@@ -11,23 +11,11 @@
 package me.amlu.shop.amlume_shop.payload;
 
 /**
- * Represents category data for transfer (API requests/responses).
- * Implemented as an immutable record.
+ * Holds the result of a file upload operation, including both
+ * the generated unique filename for storage and the original filename.
  */
-public record CategoryDTO(
-        Long categoryId,
-        String categoryName,
-        String description,
-        Long parentId,
-        // Fields derived/mapped from entity VOs
-        Integer level,
-        String path,
-        String status,
-        Boolean active,
-        String reason,
-        Long managerId
-        // Add other fields like productCount, subCategoryCount if needed
+public record GetFileUploadResultResponse(
+        String generatedFilename, // The UUID-based name used for storage
+        String originalFilename   // The original name of the uploaded file
 ) {
-    // We can add validation annotations here if desired
-    // e.g., @NotBlank String categoryName, ...
 }

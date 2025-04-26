@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
+import java.io.Serializable;
 
-public record AddressDto(String country) {
+public record CreateEmailRequest(String subject, String toList, String body) implements Serializable {
 }

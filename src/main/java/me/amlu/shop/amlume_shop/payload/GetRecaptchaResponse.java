@@ -10,12 +10,24 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
+
 /**
- * Holds the result of a file upload operation, including both
- * the generated unique filename for storage and the original filename.
+ * Represents the response from the Google reCAPTCHA verification API.
+ * Implemented as an immutable record.
  */
-public record FileUploadResult(
-        String generatedFilename, // The UUID-based name used for storage
-        String originalFilename   // The original name of the uploaded file
+public record GetRecaptchaResponse(
+        boolean success,
+
+        @JsonProperty("challenge_ts") // Maps JSON "challenge_ts" to this component
+        String challenge_ts,
+
+        String hostname,
+
+        @JsonProperty("error-codes") // Maps JSON "error-codes" to this component
+        List<String> errorCodes // Keep Java convention as camelCase
 ) {
+    // No explicit fields, constructor, getters, equals, hashCode, or toString needed.
+    // Accessors like success(), challenge_ts(), hostname(), errorCodes() are generated.
 }

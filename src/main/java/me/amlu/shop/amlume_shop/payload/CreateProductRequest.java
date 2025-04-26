@@ -16,7 +16,7 @@ import java.math.BigDecimal;
  * Represents product data for transfer (API requests/responses).
  * Implemented as an immutable record.
  */
-public record ProductDTO(
+public record CreateProductRequest(
         Long productId,
         String productName,
         String productImage, // Will hold the GENERATED filename (for constructing image URLs)

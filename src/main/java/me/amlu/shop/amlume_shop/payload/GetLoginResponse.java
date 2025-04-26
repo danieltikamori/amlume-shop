@@ -13,9 +13,9 @@ package me.amlu.shop.amlume_shop.payload;
 import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
 
 
-public record LoginResponse(AuthResponse authResponse, ErrorResponse errorResponse) {
+public record GetLoginResponse(AuthResponse authResponse, ErrorResponse errorResponse) {
 
-    public LoginResponse() {
+    public GetLoginResponse() {
         this(null, null);
     }
 
@@ -37,8 +37,8 @@ public record LoginResponse(AuthResponse authResponse, ErrorResponse errorRespon
             return this;
         }
 
-        public LoginResponse build() {
-            return new LoginResponse(this.authResponse, this.errorResponse);
+        public GetLoginResponse build() {
+            return new GetLoginResponse(this.authResponse, this.errorResponse);
         }
     }
 }

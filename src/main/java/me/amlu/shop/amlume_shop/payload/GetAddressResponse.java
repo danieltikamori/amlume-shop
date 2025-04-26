@@ -10,18 +10,5 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import java.util.List;
-
-/**
- * Represents a paginated response containing a list of categories and pagination metadata.
- * Implemented as an immutable record.
- */
-public record CategoryResponse(
-        List<CategoryDTO> content, // Changed field name to content for consistency
-        int pageNumber,
-        int pageSize,
-        long totalElements,
-        int totalPages,
-        boolean isLastPage // Changed field name for consistency
-) {
+public record GetAddressResponse(String country) {
 }

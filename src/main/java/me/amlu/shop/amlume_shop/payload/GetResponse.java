@@ -10,23 +10,20 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import me.amlu.shop.amlume_shop.user_management.User;
+import org.springframework.http.HttpStatus;
+import me.amlu.shop.amlume_shop.enums.ResponseMessage;
 
-public record UserDTO(Long userId, String username, String userEmail) {
-
-    public static UserDTO fromUser(User user) {
-        return new UserDTO(user.getUserId(), user.getUsername(), user.getContactInfo().getEmail());
+public record GetResponse(String message, Object data, int status) {
+    public GetResponse(String message) {
+        this(message, null, HttpStatus.OK.value());
     }
-
-    public Object getUserId() {
-        return userId;
+    public GetResponse(String message, Object data) {
+        this(message, data, HttpStatus.OK.value());
     }
-
-    public Object getUsername() {
-        return username;
+    public GetResponse(ResponseMessage responseMessage) {
+        this(responseMessage.getMessage(), null, HttpStatus.OK.value());
     }
-
-    public Object getUserEmail() {
-        return userEmail;
+    public GetResponse(String message, String data, ResponseMessage responseMessage) {
+        this(responseMessage.getMessage(), data, HttpStatus.OK.value());
     }
 }

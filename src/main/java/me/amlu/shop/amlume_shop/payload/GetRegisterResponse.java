@@ -10,19 +10,12 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.Getter;
-import lombok.Setter;
-import lombok.ToString;
+import me.amlu.shop.amlume_shop.payload.user.UserResponse;
+import org.springframework.validation.ObjectError;
+import java.util.List;
 
-import java.io.Serializable;
-
-@Getter
-@Setter
-@ToString
-public class EmailDto implements Serializable {
-
-    private String subject;
-    private String toList;
-    private String body;
-
+public record GetRegisterResponse(
+        UserResponse userResponse,
+        List<ObjectError> errors
+) {
 }

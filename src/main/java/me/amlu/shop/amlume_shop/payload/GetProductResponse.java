@@ -8,8 +8,22 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.payload;
 
-public interface RateLimitedAsnLookupService {
-    String lookupAsn(String ip);
+import java.util.List;
+
+
+/**
+ * Represents a paginated response containing a list of products and pagination metadata.
+ * Implemented as an immutable record.
+ */
+public record GetProductResponse(
+        List<CreateProductRequest> content,
+        int pageNumber,
+        int pageSize,
+        long totalElements,
+        int totalPages,
+        boolean isLastPage
+) {
+    // No explicit fields, constructor, getters, equals, hashCode, or toString needed.
 }

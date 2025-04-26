@@ -10,24 +10,18 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 
 /**
- * Represents the response from the Google reCAPTCHA verification API.
+ * Represents a paginated response containing a list of categories and pagination metadata.
  * Implemented as an immutable record.
  */
-public record RecaptchaResponse(
-        boolean success,
-
-        @JsonProperty("challenge_ts") // Maps JSON "challenge_ts" to this component
-        String challenge_ts,
-
-        String hostname,
-
-        @JsonProperty("error-codes") // Maps JSON "error-codes" to this component
-        List<String> errorCodes // Keep Java convention as camelCase
+public record GetCategoryResponse(
+        List<CreateCategoryRequest> content, // Changed field name to content for consistency
+        int pageNumber,
+        int pageSize,
+        long totalElements,
+        int totalPages,
+        boolean isLastPage // Changed field name for consistency
 ) {
-    // No explicit fields, constructor, getters, equals, hashCode, or toString needed.
-    // Accessors like success(), challenge_ts(), hostname(), errorCodes() are generated.
 }

@@ -10,24 +10,23 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.*;
+import me.amlu.shop.amlume_shop.user_management.User;
 
-@AllArgsConstructor
-@NoArgsConstructor(force = true)
-@Getter
-@Setter
-public class MfaChallengeResponse {
+public record GetUserResponse(Long userId, String username, String userEmail) {
 
-    private final String challengeId;
-    private final boolean mfaRequired;
-    private final String message;
-    private final boolean isSuccess;
+    public static GetUserResponse fromUser(User user) {
+        return new GetUserResponse(user.getUserId(), user.getUsername(), user.getContactInfo().getEmail());
+    }
 
+    public Object getUserId() {
+        return userId;
+    }
 
-    public MfaChallengeResponse(String string, boolean b, String challengeId, boolean mfaRequired, String message, boolean isSuccess) {
-        this.challengeId = challengeId;
-        this.mfaRequired = mfaRequired;
-        this.message = message;
-        this.isSuccess = isSuccess;
+    public Object getUsername() {
+        return username;
+    }
+
+    public Object getUserEmail() {
+        return userEmail;
     }
 }

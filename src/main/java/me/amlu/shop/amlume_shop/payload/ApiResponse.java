@@ -8,26 +8,6 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.payload;
+package me.amlu.shop.amlume_shop.payload; 
 
-import lombok.Builder;
-import lombok.Data;
-import me.amlu.shop.amlume_shop.enums.NotificationType;
-
-import java.util.List;
-import java.util.Map;
-
-@Data
-@Builder
-public class NotificationRequest {
-    private String recipientEmail;
-    private String subject;
-    private String message;
-    private String actionUrl;
-    private boolean isHtml;
-    private List<EmailAttachment> attachments;
-    private boolean emailEnabled;
-    private boolean slackEnabled;
-    private NotificationType type;
-    private Map<String, String> additionalData;
-}
+public record ApiResponse(String message, boolean success) {}

@@ -10,16 +10,7 @@
 
 package me.amlu.shop.amlume_shop.payload;
 
-import lombok.Getter;
-import lombok.Setter;
-import me.amlu.shop.amlume_shop.payload.user.UserResponse;
-import org.springframework.validation.ObjectError;
 
-import java.util.List;
-@Getter
-@Setter
-public class RegisterResponse {
-    private UserResponse userResponse;
-    private List<ObjectError> errors;
+public record GetMfaChallengeResponse(String challengeId, boolean mfaRequired, String message, boolean isSuccess) {
 
 }
