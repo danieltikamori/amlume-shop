@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop;
 
+import io.github.cdimascio.dotenv.Dotenv;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
 import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
 import org.springframework.boot.SpringApplication;
@@ -33,6 +34,12 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 public class AmlumeShopApplication {
 
     public static void main(String[] args) {
+
+        // --- Load .env file VERY EARLY ---
+        Dotenv dotenv = Dotenv.configure()
+                .ignoreIfMissing() // Optional: won't fail if .env is not there
+                .load();
+        // ---------------------------------
         SpringApplication.run(AmlumeShopApplication.class, args);
 
         // Log the available beans
@@ -41,7 +48,7 @@ public class AmlumeShopApplication {
 //        for (String beanName : context.getBeanDefinitionNames()) {
 //		System.out.println(beanName);
 //	}
+
+
     }
-
-
 }
