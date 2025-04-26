@@ -70,8 +70,8 @@ public class HCPTokenService {
             );
 
             if (response.getBody() != null) {
-                this.accessToken = response.getBody().getAccessToken();
-                this.tokenExpiration = Instant.now().plusSeconds(response.getBody().getExpiresIn());
+                this.accessToken = response.getBody().accessToken();
+                this.tokenExpiration = Instant.now().plusSeconds(response.getBody().expiresIn());
             } else {
                 log.error("Empty response body when refreshing token");
                 throw new TokenRefreshException("Empty response body when refreshing token");
