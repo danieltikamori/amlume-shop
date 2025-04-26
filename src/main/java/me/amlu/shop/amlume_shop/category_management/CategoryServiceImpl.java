@@ -13,8 +13,8 @@ package me.amlu.shop.amlume_shop.category_management;
 import me.amlu.shop.amlume_shop.exceptions.APIException;
 import me.amlu.shop.amlume_shop.exceptions.CategoryDataValidationException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.CategoryDTO;
-import me.amlu.shop.amlume_shop.payload.CategoryResponse;
+import me.amlu.shop.amlume_shop.payload.CreateCategoryRequest;
+import me.amlu.shop.amlume_shop.payload.GetCategoryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -49,7 +49,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Cacheable(value = "category", key = "#pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
-    public CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir) {
+    public GetCategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir) {
         log.debug("Fetching categories page: {}, size: {}, sort: {}, dir: {}", pageNumber, pageSize, sortBy, sortDir);
 
         Sort sortByAndDirection = sortDir.equalsIgnoreCase("asc") ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
@@ -65,11 +65,11 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         // Use manual mapping, consider removing parallelStream unless proven necessary
-        List<CategoryDTO> categoryDTOs = categories.stream()
+        List<CreateCategoryRequest> createCategoryRequests = categories.stream()
                 .map(this::mapEntityToDto) // Use manual mapping
                 .collect(Collectors.toList());
 
-        return createCategoryResponse(categoryPage, categoryDTOs);
+        return createCategoryResponse(categoryPage, createCategoryRequests);
     }
 
     @Override
@@ -135,9 +135,9 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional
     @CacheEvict(value = "category", allEntries = true) // Evict cache on create
-    public CategoryDTO createCategory(CategoryDTO categoryDTO) {
-        Assert.notNull(categoryDTO, "CategoryDTO cannot be null");
-        log.debug("Attempting to create category with name: {}", categoryDTO.categoryName()); // Use record accessor
+    public CreateCategoryRequest createCategory(CreateCategoryRequest createCategoryRequest) {
+        Assert.notNull(createCategoryRequest, "CategoryDTO cannot be null");
+        log.debug("Attempting to create category with name: {}", createCategoryRequest.categoryName()); // Use record accessor
 
         // --- Manual Mapping & Validation ---
         CategoryName categoryName;
@@ -145,9 +145,9 @@ public class CategoryServiceImpl implements CategoryService {
         Category parentCategory = null; // Assume root unless parentId is provided
 
         try {
-            categoryName = new CategoryName(categoryDTO.categoryName()); // Use record accessor
+            categoryName = new CategoryName(createCategoryRequest.categoryName()); // Use record accessor
             // Description might be optional in DTO? Handle null.
-            description = (categoryDTO.description() != null) ? new Description(categoryDTO.description()) : null; // Use record accessor
+            description = (createCategoryRequest.description() != null) ? new Description(createCategoryRequest.description()) : null; // Use record accessor
 
             // --- Check Existence ---
             // Use corrected repository method
@@ -157,9 +157,9 @@ public class CategoryServiceImpl implements CategoryService {
             }
 
             // --- Handle Parent ---
-            if (categoryDTO.parentId() != null) { // Assuming CategoryDTO has parentId
-                parentCategory = categoryRepository.findById(categoryDTO.parentId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Parent Category", "parentId", categoryDTO.parentId()));
+            if (createCategoryRequest.parentId() != null) { // Assuming CategoryDTO has parentId
+                parentCategory = categoryRepository.findById(createCategoryRequest.parentId())
+                        .orElseThrow(() -> new ResourceNotFoundException("Parent Category", "parentId", createCategoryRequest.parentId()));
             }
 
         } catch (IllegalArgumentException | NullPointerException e) {
@@ -210,7 +210,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional
     @CacheEvict(value = "category", allEntries = true) // Evict cache on delete
-    public CategoryDTO deleteCategory(Long categoryId) {
+    public CreateCategoryRequest deleteCategory(Long categoryId) {
         Assert.notNull(categoryId, "Category ID cannot be null");
         log.debug("Attempting to delete category ID: {}", categoryId);
 
@@ -221,7 +221,7 @@ public class CategoryServiceImpl implements CategoryService {
         // if (!existingCategory.getProducts().isEmpty()) { ... }
         // if (!existingCategory.getSubCategories().isEmpty()) { ... }
 
-        CategoryDTO deletedDto = mapEntityToDto(existingCategory); // Map BEFORE deleting
+        CreateCategoryRequest deletedDto = mapEntityToDto(existingCategory); // Map BEFORE deleting
 
         categoryRepository.delete(existingCategory); // Assumes soft delete via BaseEntity
         log.info("Successfully deleted category ID: {}", categoryId);
@@ -232,9 +232,9 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional
     @CacheEvict(value = "category", allEntries = true) // Evict cache on update
-    public CategoryDTO updateCategory(Long categoryId, CategoryDTO categoryDTO) {
+    public CreateCategoryRequest updateCategory(Long categoryId, CreateCategoryRequest createCategoryRequest) {
         Assert.notNull(categoryId, "Category ID cannot be null");
-        Assert.notNull(categoryDTO, "CategoryDTO cannot be null");
+        Assert.notNull(createCategoryRequest, "CategoryDTO cannot be null");
         log.debug("Attempting to update category ID: {}", categoryId);
 
         // --- Fetch Existing Entity ---
@@ -244,10 +244,10 @@ public class CategoryServiceImpl implements CategoryService {
         // --- Manual Mapping & Validation ---
         try {
             // Create new VOs from DTO data
-            CategoryName newName = new CategoryName(categoryDTO.categoryName()); // Use record accessor
-            Description newDescription = (categoryDTO.description() != null) ? new Description(categoryDTO.description()) : null; // Use record accessor
+            CategoryName newName = new CategoryName(createCategoryRequest.categoryName()); // Use record accessor
+            Description newDescription = (createCategoryRequest.description() != null) ? new Description(createCategoryRequest.description()) : null; // Use record accessor
             // Handle status update if present in DTO
-            CategoryStatus newStatus = categoryDTO.status() != null ? new CategoryStatus(categoryDTO.status(), categoryDTO.active(), categoryDTO.reason()) : existingCategory.getStatus(); // Assuming DTO fields
+            CategoryStatus newStatus = createCategoryRequest.status() != null ? new CategoryStatus(createCategoryRequest.status(), createCategoryRequest.active(), createCategoryRequest.reason()) : existingCategory.getStatus(); // Assuming DTO fields
 
             // --- Check Name Conflict (if name changed) ---
             if (!existingCategory.getCategoryName().equals(newName)) {
@@ -266,7 +266,7 @@ public class CategoryServiceImpl implements CategoryService {
             // if (categoryDTO.managerId() != null) { ... fetch user and set ... }
 
             // --- Handle Parent Change ---
-            Long newParentId = categoryDTO.parentId(); // Assuming DTO has parentId
+            Long newParentId = createCategoryRequest.parentId(); // Assuming DTO has parentId
             Long currentParentId = existingCategory.getParentCategory() != null ? existingCategory.getParentCategory().getCategoryId() : null;
 
             if (!Objects.equals(newParentId, currentParentId)) {
@@ -302,7 +302,7 @@ public class CategoryServiceImpl implements CategoryService {
      * Handles extraction of values from Value Objects.
      * Assumes CategoryDTO is a record or has appropriate fields/constructor.
      */
-    private CategoryDTO mapEntityToDto(Category category) {
+    private CreateCategoryRequest mapEntityToDto(Category category) {
         if (category == null) {
             return null;
         }
@@ -320,7 +320,7 @@ public class CategoryServiceImpl implements CategoryService {
         // Add other fields as needed in DTO
 
         // Assuming CategoryDTO is a record with matching fields
-        return new CategoryDTO(
+        return new CreateCategoryRequest(
                 categoryId,
                 categoryName,
                 description,
@@ -339,9 +339,9 @@ public class CategoryServiceImpl implements CategoryService {
      * Helper to create CategoryResponse.
      * Assumes CategoryResponse is a record or has appropriate fields/constructor.
      */
-    private CategoryResponse createCategoryResponse(Page<Category> page, List<CategoryDTO> dtoList) {
+    private GetCategoryResponse createCategoryResponse(Page<Category> page, List<CreateCategoryRequest> dtoList) {
         // Assuming CategoryResponse is a record
-        return new CategoryResponse(
+        return new GetCategoryResponse(
                 dtoList,
                 page.getNumber(),
                 page.getSize(),

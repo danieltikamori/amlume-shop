@@ -10,14 +10,14 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
-import me.amlu.shop.amlume_shop.payload.CategoryDTO;
-import me.amlu.shop.amlume_shop.payload.CategoryResponse;
+import me.amlu.shop.amlume_shop.payload.CreateCategoryRequest;
+import me.amlu.shop.amlume_shop.payload.GetCategoryResponse;
 
 import java.util.List;
 
 public interface CategoryService {
 
-    CategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir);
+    GetCategoryResponse getAllCategories(int pageNumber, int pageSize, String sortBy, String sortDir);
 
     List<Category> findAllSubcategories(Category category);
 
@@ -30,10 +30,10 @@ public interface CategoryService {
     // Prevent circular references
     void validateHierarchy(Category category, Category newParent);
 
-    CategoryDTO createCategory(CategoryDTO categoryDTO);
+    CreateCategoryRequest createCategory(CreateCategoryRequest createCategoryRequest);
 
 
-    CategoryDTO deleteCategory(Long categoryId);
+    CreateCategoryRequest deleteCategory(Long categoryId);
 
-    CategoryDTO updateCategory(Long categoryId, CategoryDTO category);
+    CreateCategoryRequest updateCategory(Long categoryId, CreateCategoryRequest category);
 }
