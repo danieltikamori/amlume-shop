@@ -111,7 +111,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     void updateFailedLoginAttempts(@Param("userId") Long userId, @Param("failedLoginAttempts") int failedLoginAttempts);
 
     /**
-     * Updates the account lock status and lock time for a user.
+     * Updates the account lock status and lock timestamp for a user.
      *
      * @param userId        The ID of the user to update.
      * @param accountNonLocked The new lock status (true means NOT locked, false means locked).
@@ -124,7 +124,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 
     /**
-     * Unlocks a user account by setting locked status to true (not locked), clearing lock time, and resetting failed attempts.
+     * Unlocks a user account by setting locked status to true (not locked), clearing lock timestamp, and resetting failed attempts.
      *
      * @param userId The ID of the user to unlock.
      */
@@ -149,7 +149,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Updates the last login timestamp for a user.
      *
      * @param userId The ID of the user to update.
-     * @param now    The current timestamp to set as the last login time.
+     * @param now    The current timestamp to set as the last login timestamp.
      */
     @Modifying
     @Transactional // Add Transactional if called outside a transactional service method

@@ -94,7 +94,7 @@ public class UserServiceImpl implements UserService {
                         // Initialize other MFA fields if necessary
                         .build())
                 .accountStatus(AccountStatus.builder()
-                        .creationTime(Instant.now()) // Set creation time
+                        .creationTime(Instant.now()) // Set creation timestamp
                         .accountNonExpired(true)
                         .accountNonLocked(true)
                         .credentialsNonExpired(true)
@@ -361,14 +361,14 @@ public class UserServiceImpl implements UserService {
             return false; // Already unlocked
         }
 
-        // Account is locked, check lock time
+        // Account is locked, check lock timestamp
         Instant lockTime = status.getLockTime();
         if (lockTime != null) {
             long lockTimeMillis = lockTime.toEpochMilli();
             long currentTimeMillis = System.currentTimeMillis();
 
             if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
-                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock time
+                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock timestamp
                 userRepository.updateAccountLockStatus(userId, true, null);
                 // Also reset failed attempts upon successful unlock
                 this.resetFailedLoginAttempts(userId); // Call the existing method
@@ -378,12 +378,12 @@ public class UserServiceImpl implements UserService {
                 log.trace("Lock duration not yet expired for user ID {}.", userId);
             }
         } else {
-            log.warn("User ID {} is locked but has no lock time recorded.", userId);
+            log.warn("User ID {} is locked but has no lock timestamp recorded.", userId);
             // Optionally unlock anyway or investigate inconsistency
             // For safety, let's unlock if lockTime is null, but the account is locked
             userRepository.updateAccountLockStatus(userId, true, null);
             this.resetFailedLoginAttempts(userId);
-            log.info("Unlocked account for user ID: {} due to missing lock time.", userId);
+            log.info("Unlocked account for user ID: {} due to missing lock timestamp.", userId);
             return true;
         }
         return false;
@@ -406,7 +406,7 @@ public class UserServiceImpl implements UserService {
     public void updateLastLoginTime(Long userId) {
         // Use targeted repository update
         userRepository.updateLastLoginTime(userId, Instant.now());
-        log.trace("Updated last login time for user ID: {}", userId);
+        log.trace("Updated last login timestamp for user ID: {}", userId);
     }
 
     // --- Validation Helper (Use with caution) ---
