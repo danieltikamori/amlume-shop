@@ -10,12 +10,11 @@
 
 package me.amlu.shop.amlume_shop;
 
-import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
 import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.ComponentScan;
@@ -29,7 +28,8 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableScheduling
 @EnableTransactionManagement
 @EnableJpaAuditing
-@EnableConfigurationProperties({TokenCacheProperties.class, TokenConstants.class, AsnProperties.class, Constants.class})
+@ConfigurationPropertiesScan
+@EnableConfigurationProperties({TokenCacheProperties.class, AsnProperties.class})
 public class AmlumeShopApplication {
 
     public static void main(String[] args) {
