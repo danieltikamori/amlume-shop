@@ -108,7 +108,7 @@ public class RedisSlidingWindowRateLimiter implements RateLimiter {
 
         try {
             Long result = stringRedisTemplate.execute(slidingWindowScript, keys, args);
-            boolean allowed = result != null && result == 1;
+            boolean allowed = result == 1;
             log.trace("Rate limit check for key '{}': Allowed={}", redisKey, allowed);
             return allowed;
         } catch (DataAccessException e) {
