@@ -112,7 +112,7 @@ public class MfaInfo implements Serializable {
 
         public MfaInfoBuilder mfaEnabled(boolean mfaEnabled) {
             this.mfaEnabled$value = mfaEnabled;
-            this.mfaEnabled$set = true;
+            this.mfaEnabled$set = mfaEnabled;
             return this;
         }
 
