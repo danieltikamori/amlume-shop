@@ -11,18 +11,10 @@
 package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
-import lombok.*;
-import lombok.experimental.SuperBuilder;
 import me.amlu.shop.amlume_shop.user_management.User;
 
 import java.util.Objects;
 
-@Getter
-@Setter
-@ToString
-@NoArgsConstructor
-@AllArgsConstructor
-@SuperBuilder
 @Table(name = "mfa_tokens", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"user_id"})
 }, indexes = @Index(name = "idx_user_id", columnList = "user_id"))
@@ -34,17 +26,46 @@ public class MfaToken extends BaseEntity {
 
     @OneToOne(fetch = FetchType.LAZY)  // Use @OneToOne for a one-to-one relationship with User
     @JoinColumn(name = "user_id", nullable = false, unique = true)
-    @ToString.Exclude // Foreign key to User
+    // Foreign key to User
     private User user;
 
     @Column(nullable = false)
     private String secret;
 
     @Column(nullable = false)
-    @Builder.Default
     private boolean enabled = false;
 
     public MfaToken(User user, String secret, boolean mfaEnforced) {
+    }
+
+    public MfaToken(Long mfaTokenId, User user, String secret, boolean enabled) {
+        this.mfaTokenId = mfaTokenId;
+        this.user = user;
+        this.secret = secret;
+        this.enabled = enabled;
+    }
+
+    public MfaToken() {
+    }
+
+    protected MfaToken(MfaTokenBuilder<?, ?> b) {
+        super(b);
+        this.mfaTokenId = b.mfaTokenId;
+        this.user = b.user;
+        this.secret = b.secret;
+        if (b.enabled$set) {
+            this.enabled = b.enabled$value;
+        } else {
+            this.enabled = $default$enabled();
+        }
+    }
+
+    private static boolean $default$enabled() {
+        return false;
+    }
+
+    public static MfaTokenBuilder<?, ?> builder() {
+        return new MfaTokenBuilderImpl();
     }
 
 //    // Constructor with builder pattern
@@ -69,6 +90,102 @@ public class MfaToken extends BaseEntity {
     @Override
     public int hashCode() {
         return Objects.hash(mfaTokenId);
+    }
+
+    @Override
+    public Long getAuditableId() {
+        return mfaTokenId;
+    }
+
+    @Override
+    public Long getId() {
+        return mfaTokenId;
+    }
+
+    public Long getMfaTokenId() {
+        return this.mfaTokenId;
+    }
+
+    public User getUser() {
+        return this.user;
+    }
+
+    public String getSecret() {
+        return this.secret;
+    }
+
+    public boolean isEnabled() {
+        return this.enabled;
+    }
+
+    public void setMfaTokenId(Long mfaTokenId) {
+        this.mfaTokenId = mfaTokenId;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public void setSecret(String secret) {
+        this.secret = secret;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public String toString() {
+        return "MfaToken(mfaTokenId=" + this.getMfaTokenId() + ", secret=" + this.getSecret() + ", enabled=" + this.isEnabled() + ")";
+    }
+
+    public static abstract class MfaTokenBuilder<C extends MfaToken, B extends MfaTokenBuilder<C, B>> extends BaseEntityBuilder<C, B> {
+        private Long mfaTokenId;
+        private User user;
+        private String secret;
+        private boolean enabled$value;
+        private boolean enabled$set;
+
+        public B mfaTokenId(Long mfaTokenId) {
+            this.mfaTokenId = mfaTokenId;
+            return self();
+        }
+
+        public B user(User user) {
+            this.user = user;
+            return self();
+        }
+
+        public B secret(String secret) {
+            this.secret = secret;
+            return self();
+        }
+
+        public B enabled(boolean enabled) {
+            this.enabled$value = enabled;
+            this.enabled$set = true;
+            return self();
+        }
+
+        protected abstract B self();
+
+        public abstract C build();
+
+        public String toString() {
+            return "MfaToken.MfaTokenBuilder(super=" + super.toString() + ", mfaTokenId=" + this.mfaTokenId + ", user=" + this.user + ", secret=" + this.secret + ", enabled$value=" + this.enabled$value + ")";
+        }
+    }
+
+    private static final class MfaTokenBuilderImpl extends MfaTokenBuilder<MfaToken, MfaTokenBuilderImpl> {
+        private MfaTokenBuilderImpl() {
+        }
+
+        protected MfaTokenBuilderImpl self() {
+            return this;
+        }
+
+        public MfaToken build() {
+            return new MfaToken(this);
+        }
     }
 
 //    // Builder pattern implementation
