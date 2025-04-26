@@ -40,7 +40,7 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Lo
     // Find events by type
     List<SecurityEvent> findByEventType(SecurityEventType eventType);
 
-    // Find events within a time range
+    // Find events within a timestamp range
     List<SecurityEvent> findByTimestampBetween(Instant startTime, Instant endTime);
 
     // Find events by user and type
@@ -53,14 +53,14 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Lo
             @Param("since") Instant since
     );
 
-    // Find failed login attempts within time window
+    // Find failed login attempts within timestamp window
     @Query("SELECT e FROM SecurityEvent e WHERE e.username = :username AND e.eventType = 'FAILED_LOGIN' AND e.timestamp >= :since")
     List<SecurityEvent> findRecentFailedLogins(
             @Param("username") String username,
             @Param("since") Instant since
     );
 
-    // Count failed login attempts within time window
+    // Count failed login attempts within timestamp window
     @Query("SELECT COUNT(e) FROM SecurityEvent e WHERE e.username = :username AND e.eventType = 'FAILED_LOGIN' AND e.timestamp >= :since")
     long countRecentFailedLogins(
             @Param("username") String username,
@@ -85,7 +85,7 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Lo
     // Find events by multiple types
     List<SecurityEvent> findByEventTypeIn(Collection<SecurityEventType> eventTypes);
 
-    // Find events by IP address within time range
+    // Find events by IP address within timestamp range
     List<SecurityEvent> findByIpAddressAndTimestampBetween(
             String ipAddress,
             Instant startTime,
