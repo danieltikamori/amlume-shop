@@ -13,10 +13,11 @@ package me.amlu.shop.amlume_shop.config;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import me.amlu.shop.amlume_shop.commons.PostalCodeUtils;
+import me.amlu.shop.amlume_shop.payload.GetAddressResponse;
 
 public class ValidPostalCodeValidator implements ConstraintValidator<ValidPostalCode, String> {
 
-    private me.amlu.shop.amlume_shop.payload.AddressDto addressDto;
+    private GetAddressResponse getAddressResponse;
 
     @Override
     public boolean isValid(String postalCode, ConstraintValidatorContext context) {
@@ -24,7 +25,7 @@ public class ValidPostalCodeValidator implements ConstraintValidator<ValidPostal
             return true; // Let @NotBlank handle null values
         }
         // Get the country code from AddressDto (might need to pass it as a parameter)
-        String countryCode = addressDto.country(); // Get country code from DTO
+        String countryCode = getAddressResponse.country(); // Get country code from DTO
         String regex = PostalCodeUtils.getPostalCodeRegex(countryCode);
         return postalCode.matches(regex);
     }
