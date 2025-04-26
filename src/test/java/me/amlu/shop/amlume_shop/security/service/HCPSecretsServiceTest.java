@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
-import me.amlu.shop.amlume_shop.payload.SecretsResponse;
+import me.amlu.shop.amlume_shop.payload.GetSecretsResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,11 +25,13 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class HCPSecretsServiceTest {
@@ -46,6 +48,7 @@ class HCPSecretsServiceTest {
     private static final String PROJECT_ID = "test-project";
     private static final String APP_NAME = "test-app";
     private static final String ACCESS_TOKEN = "test-token";
+    private final GetSecretsResponse mockResponse = new GetSecretsResponse(Map.of("key1", "value1", "key2", "value2"));
 
     @BeforeEach
     void setUp() {
@@ -63,18 +66,16 @@ class HCPSecretsServiceTest {
     @Test
     void getSecrets_Success() {
         // Arrange
-        Map<String, String> expectedSecrets = Map.of("key1", "value1", "key2", "value2");
-        SecretsResponse mockResponse = new SecretsResponse();
-        mockResponse.setSecrets(expectedSecrets);
+        Map<String, String> expectedSecrets = mockResponse.secrets();
 
-        ResponseEntity<SecretsResponse> responseEntity =
+        ResponseEntity<GetSecretsResponse> responseEntity =
                 new ResponseEntity<>(mockResponse, HttpStatus.OK);
 
         when(restTemplate.exchange(
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
+                eq(GetSecretsResponse.class)
         )).thenReturn(responseEntity);
 
         // Act
@@ -92,7 +93,7 @@ class HCPSecretsServiceTest {
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
+                eq(GetSecretsResponse.class)
         )).thenThrow(new HttpClientErrorException(HttpStatus.UNAUTHORIZED));
 
         // Act & Assert
@@ -103,17 +104,15 @@ class HCPSecretsServiceTest {
     void getSecrets_WhenServerError_ShouldRetry() {
         // Arrange
         Map<String, String> expectedSecrets = Map.of("key1", "value1");
-        SecretsResponse mockResponse = new SecretsResponse();
-        mockResponse.setSecrets(expectedSecrets);
 
         when(restTemplate.exchange(
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
+                eq(GetSecretsResponse.class)
         ))
                 .thenThrow(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR))
-                .thenReturn(new ResponseEntity<>(mockResponse, HttpStatus.OK));
+                .thenReturn(new ResponseEntity<>(new GetSecretsResponse(expectedSecrets), HttpStatus.OK));
 
         // Act
         Map<String, String> result = secretsService.getSecrets();
@@ -124,7 +123,7 @@ class HCPSecretsServiceTest {
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
+                eq(GetSecretsResponse.class)
         );
     }
 
@@ -132,15 +131,13 @@ class HCPSecretsServiceTest {
     void getSecrets_WhenCached_ShouldNotCallAPI() {
         // Arrange
         Map<String, String> expectedSecrets = Map.of("key1", "value1");
-        SecretsResponse mockResponse = new SecretsResponse();
-        mockResponse.setSecrets(expectedSecrets);
 
         when(restTemplate.exchange(
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
-        )).thenReturn(new ResponseEntity<>(mockResponse, HttpStatus.OK));
+                eq(GetSecretsResponse.class)
+        )).thenReturn(new ResponseEntity<>(new GetSecretsResponse(expectedSecrets), HttpStatus.OK));
 
         // Act
         secretsService.getSecrets(); // First call
@@ -151,7 +148,7 @@ class HCPSecretsServiceTest {
                 anyString(),
                 eq(HttpMethod.GET),
                 any(),
-                eq(SecretsResponse.class)
+                eq(GetSecretsResponse.class)
         );
     }
 }
