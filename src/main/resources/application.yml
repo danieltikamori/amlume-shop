@@ -36,6 +36,10 @@ cache:
     size: 10000
     expiration: 1h
 
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  allowed-methods: ${CORS_ALLOWED_METHODS}
+
 geoip:
   database:
     #    path: classpath:GeoLite2-Country.mmdb
@@ -80,6 +84,18 @@ logging:
     me.amlu.shop.amlume_shop.util: DEBUG
     me.amlu.shop.amlume_shop.exception: DEBUG
     me.amlu.shop.amlume_shop.model: DEBUG
+
+mail:
+  host: ${MAIL_HOST}
+  username: ${MAIL_USERNAME}
+  password: ${MAIL_PASSWORD}
+  port: ${MAIL_PORT}
+  properties:
+    mail:
+      smtp:
+        starttls:
+          enable: ${MAIL_STARTTLS_ENABLE}
+        auth: ${MAIL_AUTH_ENABLE}
 
 management:
   endpoints:
@@ -208,51 +224,44 @@ rate-limiter:
   time-unit: MINUTES
 
 resilience4j:
-  retry:
+  bulkhead:
     instances:
-      asnLookup:
-        maxAttempts: 3
-        waitDuration: 500ms # Start with 500ms
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions:
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
-          - jakarta.validation.ValidationException
-
-      captchaValidation:
-        maxAttempts: 3
-        waitDuration: 1s
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions:
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-
-      vaultService:
-        maxAttempts: 3
-        waitDuration: 500ms # Wait 500 ms between entries
-        enableExponentialBackoff: false # No exponential backoff
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - org.springframework.vault.VaultException # Retry on Vault exceptions
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions: # Exceptions not to retry
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-#          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException # Example: Don't retry our specific exception if thrown directly
+      default:
+        max-concurrent-calls: 100
+        max-wait-duration: 300
+      valkeyService:
+        max-concurrent-calls: 100
 
   circuitbreaker:
     instances:
+      default:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 20 #
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+      captchaValidation:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 30000
+
       valkeyService:
         slidingWindowSize: 10
         failureRateThreshold: 50
         waitDurationInOpenState: 20s
         permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowType: COUNT_BASED
+
       asnDnsLookup:
         failureRateThreshold: 50 # Percentage of failures to open
         slowCallRateThreshold: 100 # Percentage of slow calls to open
@@ -286,7 +295,7 @@ resilience4j:
         slidingWindowSize: 10 # Number of calls to monitor when closed. Monitor last x calls
         minimumNumberOfCalls: 5 # Need at least x calls before calculating failure rate
         permittedNumberOfCallsInHalfOpenState: 3 # Allow x calls ins half-open
-#        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        #        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
         waitDurationInOpenState: 10s # How long to stay open. Wait x before transitioning to half-open
         recordExceptions:
           - org.springframework.vault.VaultException # Retry on Vault exceptions
@@ -294,47 +303,95 @@ resilience4j:
           - java.util.concurrent.TimeoutException
         ignoreExceptions: # Exceptions that *don't* count as failures
           - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-#          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException
+  #          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException
 
+  executor:
+    instances:
+      default:
+        core-pool-size: 4
+        max-pool-size: 10
+        queue-capacity: 100
+        keep-alive-time: 60s
+        max-wait-time: 30s
+        max-concurrent-calls: 100
 
+  exponential-backoff:
+    instances:
+      default:
+        initial-interval-millis: 200L
+        max-interval-millis: 86400000L // 24h
+        eb-multiplier: 1.5
+        randomization-factor: 0.36
 
+  retry:
+    instances:
+      asnLookup:
+        maxAttempts: 3
+        waitDuration: 500ms # Start with 500ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
+          - jakarta.validation.ValidationException
 
+      captchaValidation:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+
+      default:
+        max-requests-per-minute: 100L
+        retry-interval: 1000L
+        retry-wait-duration: 200
+
+      vaultService:
+        maxAttempts: 3
+        waitDuration: 500ms # Wait 500 ms between entries
+        enableExponentialBackoff: false # No exponential backoff
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.vault.VaultException # Retry on Vault exceptions
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions: # Exceptions not to retry
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+  #          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException # Example: Don't retry our specific exception if thrown directly
 
   timelimiter:
     instances:
       valkeyService:
         timeoutDuration: 1s
-  #        cancelRunningFuture: true
-
-  bulkhead:
-    instances:
-      valkeyService:
-        maxConcurrentCalls: 10
+      #        cancelRunningFuture: true
+      default:
+        timeout-duration: 5
 
   timeout:
     instances:
       valkeyService:
         timeoutDuration: 1s
 
-  mail:
-    host: ${MAIL_HOST}
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    port: ${MAIL_PORT}
-    properties:
-      mail:
-        smtp:
-          starttls:
-            enable: ${MAIL_STARTTLS_ENABLE}
-          auth: ${MAIL_AUTH_ENABLE}
+  rest-template:
+    connect-timeout: 5000
+    read-timeout: 10000
 
 security:
   max-devices-per-user: 5
+  max-concurrent-sessions: 2
   device-fingerprint:
     hash-algorithm: ${HASH_ALGORITHM}
     hash-encoding: ${HASH_ENCODING}
     fingerprint-salt: ${FINGERPRINT_SALT}
     block-unknown: true
+    excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
 
     verification-timeout-seconds: 300
     storage:
@@ -609,7 +666,7 @@ vault:
   kubernetes:
     uri: http://vault.default.svc.cluster.local:8200
     role: "vault_role" # Placeholder for now
-#    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
+  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
   hcp:
     uri: ${VAULT_HCP_URI}
     token: ${VAULT_HCP_TOKEN}
