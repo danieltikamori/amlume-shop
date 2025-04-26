@@ -32,7 +32,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
-import me.amlu.shop.amlume_shop.payload.SecretsResponse;
+import me.amlu.shop.amlume_shop.payload.GetSecretsResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -134,11 +134,11 @@ public class HCPSecretsService {
                 HttpHeaders headers = createHeaders();
 
                 log.debug("Fetching secrets from HCP");
-                ResponseEntity<SecretsResponse> response = restTemplate.exchange(
+                ResponseEntity<GetSecretsResponse> response = restTemplate.exchange(
                         url,
                         HttpMethod.GET,
                         new HttpEntity<>(headers),
-                        SecretsResponse.class
+                        GetSecretsResponse.class
                 );
 
 //                if (response.getBody() != null) {
