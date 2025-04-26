@@ -12,20 +12,12 @@ package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.*;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.proxy.HibernateProxy;
 
 import java.time.Instant;
 import java.util.Objects;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Getter
-@Setter
-@ToString
-@RequiredArgsConstructor
-@Builder
 @Entity
 public class UserDeviceFingerprint extends BaseEntity {
     @Id
@@ -35,9 +27,7 @@ public class UserDeviceFingerprint extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    @NotBlank
-    @ToString.Exclude
-//    @ToString.Exclude
+    //    @ToString.Exclude
     private User user;
 
     @Column(name = "access_token")
@@ -46,32 +36,24 @@ public class UserDeviceFingerprint extends BaseEntity {
     @Column(name = "refresh_token")
     private String refreshToken;
 
-    @NotBlank
     @Column(name = "last_used_at", nullable = false)
     private Instant lastUsedAt = Instant.now();
 
     @Column(name = "deactivated_at")
     private Instant deactivatedAt;
 
-    @NotBlank
     @Column(name = "failed_attempts", nullable = false)
-    @Builder.Default
-    private int failedAttempts = 0; // Set default value to 0 for failed attempts
-
-    @NotBlank
+    private int failedAttempts = 0;
     @Column(name = "trusted")
     private boolean trusted;
 
     @NotBlank
     @Column(name = "active")
-    @Builder.Default
     private boolean active = true;
 
-    @NotBlank
     @Column(name = "device_fingerprint", unique = true, nullable = false)
     private String deviceFingerprint;
 
-    @NotBlank
     @Column(name = "device_name")
     private String deviceName;
 
@@ -79,19 +61,55 @@ public class UserDeviceFingerprint extends BaseEntity {
     private String lastKnownIp;
 
     @NotBlank
-    @Column(name = "update_count",  nullable = false)
-    @Builder.Default
+    @Column(name = "update_count")
     private int updateCount = 0;
 
     @Column(name = "location")
     private String location;
 
-    @Column(name = "last_known_country")
-    private String lastKnownCountry;
-
+    @Column(name = "last_known_country") private String lastKnownCountry;
     @NotBlank
     @Column(name = "browser_info", nullable = false)
     private String browserInfo;
+
+    public UserDeviceFingerprint() {
+    }
+
+    public UserDeviceFingerprint(Long userDeviceFingerprintId, User user, String accessToken, String refreshToken, Instant lastUsedAt, Instant deactivatedAt, int failedAttempts, boolean trusted, boolean active, String deviceFingerprint, String deviceName, String lastKnownIp, int updateCount, String location, String lastKnownCountry, String browserInfo) {
+        this.userDeviceFingerprintId = userDeviceFingerprintId;
+        this.user = user;
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
+        this.lastUsedAt = lastUsedAt;
+        this.deactivatedAt = deactivatedAt;
+        this.failedAttempts = failedAttempts;
+        this.trusted = trusted;
+        this.active = active;
+        this.deviceFingerprint = deviceFingerprint;
+        this.deviceName = deviceName;
+        this.lastKnownIp = lastKnownIp;
+        this.updateCount = updateCount;
+        this.location = location;
+        this.lastKnownCountry = lastKnownCountry;
+        this.browserInfo = browserInfo;
+    }
+
+    private static int $default$failedAttempts() {
+        return 0;
+    }
+
+    private static boolean $default$active() {
+        return true;
+    }
+
+    @NotBlank
+    private static int $default$updateCount() {
+        return 0;
+    }
+
+    public static UserDeviceFingerprintBuilder builder() {
+        return new UserDeviceFingerprintBuilder();
+    }
 
 
     public boolean isDeviceFingerprintingEnabled() {
@@ -107,6 +125,137 @@ public class UserDeviceFingerprint extends BaseEntity {
     @Override
     public Long getId() {
         return getUserDeviceFingerprintId();
+    }
+
+    public Long getUserDeviceFingerprintId() {
+        return this.userDeviceFingerprintId;
+    }
+
+    public User getUser() {
+        return this.user;
+    }
+
+    public String getAccessToken() {
+        return this.accessToken;
+    }
+
+    public String getRefreshToken() {
+        return this.refreshToken;
+    }
+
+    public Instant getLastUsedAt() {
+        return this.lastUsedAt;
+    }
+
+    public Instant getDeactivatedAt() {
+        return this.deactivatedAt;
+    }
+    public int getFailedAttempts() {
+        return this.failedAttempts;
+    }
+
+    public boolean isTrusted() {
+        return this.trusted;
+    }
+
+    public boolean isActive() {
+        return this.active;
+    }
+
+    public String getDeviceFingerprint() {
+        return this.deviceFingerprint;
+    }
+
+    public @NotBlank String getDeviceName() {
+        return this.deviceName;
+    }
+
+    public String getLastKnownIp() {
+        return this.lastKnownIp;
+    }
+
+    public int getUpdateCount() {
+        return this.updateCount;
+    }
+
+    public String getLocation() {
+        return this.location;
+    }
+
+    public String getLastKnownCountry() {
+        return this.lastKnownCountry;
+    }
+
+    public String getBrowserInfo() {
+        return this.browserInfo;
+    }
+
+    public void setUserDeviceFingerprintId(Long userDeviceFingerprintId) {
+        this.userDeviceFingerprintId = userDeviceFingerprintId;
+    }
+
+    public void setUser(@NotBlank User user) {
+        this.user = user;
+    }
+
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
+    }
+
+    public void setLastUsedAt(Instant lastUsedAt) {
+        this.lastUsedAt = lastUsedAt;
+    }
+
+    public void setDeactivatedAt(Instant deactivatedAt) {
+        this.deactivatedAt = deactivatedAt;
+    }
+
+    public void setFailedAttempts(int failedAttempts) {
+        this.failedAttempts = failedAttempts;
+    }
+
+    public void setTrusted(boolean trusted) {
+        this.trusted = trusted;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
+
+    public void setDeviceFingerprint(String deviceFingerprint) {
+        this.deviceFingerprint = deviceFingerprint;
+    }
+
+    public void setDeviceName(String deviceName) {
+        this.deviceName = deviceName;
+    }
+
+    public void setLastKnownIp(String lastKnownIp) {
+        this.lastKnownIp = lastKnownIp;
+    }
+
+    public void setUpdateCount(@NotBlank int updateCount) {
+        this.updateCount = updateCount;
+    }
+
+    public void setLocation(String location) {
+        this.location = location;
+    }
+
+    public void setLastKnownCountry(String lastKnownCountry) {
+        this.lastKnownCountry = lastKnownCountry;
+    }
+
+    public void setBrowserInfo(String browserInfo) {
+        this.browserInfo = browserInfo;
+    }
+
+    public String toString() {
+        return "UserDeviceFingerprint(userDeviceFingerprintId=" + this.getUserDeviceFingerprintId() + ", accessToken=" + this.getAccessToken() + ", refreshToken=" + this.getRefreshToken() + ", lastUsedAt=" + this.getLastUsedAt() + ", deactivatedAt=" + this.getDeactivatedAt() + ", failedAttempts=" + this.getFailedAttempts() + ", trusted=" + this.isTrusted() + ", active=" + this.isActive() + ", deviceFingerprint=" + this.getDeviceFingerprint() + ", deviceName=" + this.getDeviceName() + ", lastKnownIp=" + this.getLastKnownIp() + ", updateCount=" + this.getUpdateCount() + ", location=" + this.getLocation() + ", lastKnownCountry=" + this.getLastKnownCountry() + ", browserInfo=" + this.getBrowserInfo() + ")";
     }
 
 //    @NotBlank
@@ -251,11 +400,128 @@ public class UserDeviceFingerprint extends BaseEntity {
 
     public static class UserDeviceFingerprintBuilder {
         private boolean active;
+        private Long userDeviceFingerprintId;
+        private User user;
+        private String accessToken;
+        private String refreshToken;
+        private Instant lastUsedAt;
+        private Instant deactivatedAt;
+        private @NotBlank int failedAttempts$value;
+        private boolean failedAttempts$set;
+        private @NotBlank boolean trusted;
+        private @NotBlank String deviceFingerprint;
+        private @NotBlank String deviceName;
+        private String lastKnownIp;
+        private @NotBlank int updateCount$value;
+        private boolean updateCount$set;
+        private String location;
+        private String lastKnownCountry;
+        private @NotBlank String browserInfo;
+
+        UserDeviceFingerprintBuilder() {
+        }
 
 
         public UserDeviceFingerprintBuilder isActive(boolean active) {
             this.active = active;
             return this;
+        }
+
+        public UserDeviceFingerprintBuilder userDeviceFingerprintId(Long userDeviceFingerprintId) {
+            this.userDeviceFingerprintId = userDeviceFingerprintId;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder user(User user) {
+            this.user = user;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder accessToken(String accessToken) {
+            this.accessToken = accessToken;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder refreshToken(String refreshToken) {
+            this.refreshToken = refreshToken;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder lastUsedAt(Instant lastUsedAt) {
+            this.lastUsedAt = lastUsedAt;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder deactivatedAt(Instant deactivatedAt) {
+            this.deactivatedAt = deactivatedAt;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder failedAttempts(int failedAttempts) {
+            this.failedAttempts$value = failedAttempts;
+            this.failedAttempts$set = true;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder trusted(@NotBlank boolean trusted) {
+            this.trusted = trusted;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder deviceFingerprint(@NotBlank String deviceFingerprint) {
+            this.deviceFingerprint = deviceFingerprint;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder deviceName(@NotBlank String deviceName) {
+            this.deviceName = deviceName;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder lastKnownIp(String lastKnownIp) {
+            this.lastKnownIp = lastKnownIp;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder updateCount(int updateCount) {
+            this.updateCount$value = updateCount;
+            this.updateCount$set = true;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder location(String location) {
+            this.location = location;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder lastKnownCountry(String lastKnownCountry) {
+            this.lastKnownCountry = lastKnownCountry;
+            return this;
+        }
+
+        public UserDeviceFingerprintBuilder browserInfo(@NotBlank String browserInfo) {
+            this.browserInfo = browserInfo;
+            return this;
+        }
+
+        public UserDeviceFingerprint build() {
+            int failedAttempts$value = this.failedAttempts$value;
+            if (!this.failedAttempts$set) {
+                failedAttempts$value = UserDeviceFingerprint.$default$failedAttempts();
+            }
+            boolean active$value = this.active;
+
+            active$value = UserDeviceFingerprint.$default$active();
+
+            int updateCount$value = this.updateCount$value;
+            if (!this.updateCount$set) {
+                updateCount$value = UserDeviceFingerprint.$default$updateCount();
+            }
+            return new UserDeviceFingerprint(this.userDeviceFingerprintId, this.user, this.accessToken, this.refreshToken, this.lastUsedAt, this.deactivatedAt, failedAttempts$value, this.trusted, active$value, this.deviceFingerprint, this.deviceName, this.lastKnownIp, updateCount$value, this.location, this.lastKnownCountry, this.browserInfo);
+        }
+
+        public String toString() {
+            return "UserDeviceFingerprint.UserDeviceFingerprintBuilder(active=" + this.active + ", userDeviceFingerprintId=" + this.userDeviceFingerprintId + ", user=" + this.user + ", accessToken=" + this.accessToken + ", refreshToken=" + this.refreshToken + ", lastUsedAt=" + this.lastUsedAt + ", deactivatedAt=" + this.deactivatedAt + ", failedAttempts$value=" + this.failedAttempts$value + ", failedAttempts$set=" + this.failedAttempts$set + ", trusted=" + this.trusted + ", deviceFingerprint=" + this.deviceFingerprint + ", deviceName=" + this.deviceName + ", lastKnownIp=" + this.lastKnownIp + ", updateCount$value=" + this.updateCount$value + ", updateCount$set=" + this.updateCount$set + ", location=" + this.location + ", lastKnownCountry=" + this.lastKnownCountry + ", browserInfo=" + this.browserInfo + ", failedAttempts$value=" + this.failedAttempts$value + ", updateCount$value=" + this.updateCount$value + ")";
         }
     }
 
