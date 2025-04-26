@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.EnableCaching;
@@ -66,6 +67,12 @@ public class ValkeyCacheConfig {
     // @Value("${valkey.ssl.enabled:false}")
     // private boolean redisSslEnabled;
 
+    private final ObjectMapper objectMapper;
+
+    public ValkeyCacheConfig(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
+
     @Bean
     public RedisStandaloneConfiguration redisStandaloneConfiguration() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
@@ -102,6 +109,8 @@ public class ValkeyCacheConfig {
         // Validate connection on startup (optional but recommended)
         factory.setValidateConnection(true);
 
+        // Ensure factory is initialized before using it (good practice)
+        // factory.afterPropertiesSet(); // LettuceConnectionFactory usually doesn't require explicit call here
         return factory;
     }
 
@@ -110,6 +119,7 @@ public class ValkeyCacheConfig {
         // Standard StringRedisTemplate for simple String key/value operations
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory(connectionFactory);
+        // template.afterPropertiesSet(); // StringRedisTemplate usually initializes itself
         return template;
     }
 
@@ -124,7 +134,7 @@ public class ValkeyCacheConfig {
         template.setHashKeySerializer(stringSerializer);
 
         // Use JSON serializer for values (good for storing complex objects)
-        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer();
+        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
         template.setValueSerializer(jsonSerializer);
         template.setHashValueSerializer(jsonSerializer);
 
@@ -137,15 +147,17 @@ public class ValkeyCacheConfig {
 
     @Bean
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
+        // Create a RedisCacheManager with default configuration
+        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+        StringRedisSerializer stringSerializer = new StringRedisSerializer();
         // Default cache configuration
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(30)) // Default TTL for caches without a specific config
                 .serializeKeysWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer())
+                        RedisSerializationContext.SerializationPair.fromSerializer(stringSerializer)
                 )
                 .serializeValuesWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer())
-                )
+                        RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer))
                 .disableCachingNullValues(); // Prevent caching null values
 
         // Specific configurations for different caches
