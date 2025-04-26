@@ -17,8 +17,8 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class LocalCacheConfig {
-    @Bean
-    public CacheManager cacheManager() {
-        return new ConcurrentMapCacheManager(); // Simple in-memory cache for development
-    }
+//    @Bean
+//    public CacheManager cacheManager() {
+//        return new ConcurrentMapCacheManager(); // Simple in-memory cache for development
+//    }
 }
