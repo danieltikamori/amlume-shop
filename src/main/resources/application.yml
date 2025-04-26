@@ -58,11 +58,11 @@ geoip2:
   license-key: ${GEOIP2_LICENSE_KEY}
 
 hcp:
-  HCP_CLIENT_ID: ${HCP_CLIENT_ID}
-  HCP_CLIENT_SECRET: ${HCP_CLIENT_SECRET}
-  HCP_ORGANIZATION_ID: ${HCP_ORGANIZATION_ID}
-  HCP_PROJECT_ID: ${HCP_PROJECT_ID}
-  HCP_APP_NAME: ${HCP_APP_NAME}
+  client-id: ${HCP_CLIENT_ID}
+  client-secret: ${HCP_CLIENT_SECRET}
+  organization-id: ${HCP_ORGANIZATION_ID}
+  project-id: ${HCP_PROJECT_ID}
+  app-name: ${HCP_APP_NAME}
 
 jti:
   bloomfilter:
@@ -457,7 +457,7 @@ spring:
     cache-names: mfaTokens
     valkey:
       host: ${VALKEY_HOST:localhost}
-      port: ${VALKEY_PORT:7000}
+      port: ${VALKEY_PORT:6379}
     caffeine:
       spec: maximumSize=1000,expireAfterWrite=1h
 
