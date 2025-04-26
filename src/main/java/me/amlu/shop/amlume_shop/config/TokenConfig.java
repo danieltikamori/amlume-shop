@@ -32,7 +32,7 @@ public class TokenConfig {
     }
 
     @Bean
-    public ObjectMapper objectMapper() {
+    public ObjectMapper tokenObjectMapper() {
         return new ObjectMapper()
                 .registerModule(new JavaTimeModule())
                 .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
