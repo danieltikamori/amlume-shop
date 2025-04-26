@@ -10,16 +10,10 @@
 
 package me.amlu.shop.amlume_shop.commons;
 
-import lombok.Getter;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-@Slf4j
-@Component
-@Getter
 public final class Constants {
     // --- ASN constants ---
     public static final String ASN_LOOKUP_REQUESTS_METRIC = "asn.lookup.requests";
@@ -55,6 +49,8 @@ public final class Constants {
     public static final String LOCK_PREFIX = "auth:lock:";
     public static final String USER_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":user:";
     public static final String ANNOTATION_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":annotation:";
+    public static final String CAPTCHA_RATELIMIT_KEY = "captcha:";
+    public static final String AUTH_SW_RATELIMIT_KEY = "auth-sw:";
 
     // --- Cache Durations ---
     public static final Duration ANNOTATION_CACHE_DURATION = Duration.ofHours(24);
@@ -131,14 +127,18 @@ public final class Constants {
 //    public static final String X_FORWARDED_SERVER_URI = "X-Forwarded-Server-Uri";
 
     // --- Resilience constants ---
+    // --- Bulkhead constants ---
+
+    // --- Circuit breaker constants ---
     public static final String CIRCUIT_BREAKER = "circuitBreaker";
+
+    // --- Rate limiter constants ---
     public static final String RATES_LIMITER = "rateLimiter";
+
+    // --- Retry constants ---
     public static final String RETRY = "retry";
-    public static final int MAX_RETRY_ATTEMPTS = 3;
-    public static final long RETRY_INTERVAL = 1000L;
-    public static final Long MAX_REQUESTS_PER_MINUTE = 100L;
-    public static final String CAPTCHA_RATELIMIT_KEY = "captcha:";
-    public static final String AUTH_SW_RATELIMIT_KEY = "auth-sw:";
+
+    // Time limiter constants ---
 
     // --- User constants ---
     public static final String USER_ID = "userId";
@@ -157,16 +157,12 @@ public final class Constants {
     public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
     public static final String API_AUTH_V_1_LOGIN_PATH = "/api/auth/v1/login";
 
-    @Value("${security.max-concurrent-sessions:2}")
-    public static int MAX_CONCURRENT_SESSIONS;
-
     // --- Line separator ---
     private static final String LINE_SEPARATOR = "\n";
 
     // --- Product constants ---
     public static final String PRODUCT = "Product";
     public static final String PRODUCT_ID = "productId";
-
 
 
     // Private constructor to prevent instantiation
