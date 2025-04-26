@@ -41,11 +41,13 @@ Or update your hosts file to point to minikube IP:
 ``` bash
 minikube ip
 ```
-# Add to /etc/hosts or C:\Windows\System32\drivers\etc\hosts
-<minikube-ip> valkey
 
-Check if the command below works correctly:
+# Add to /etc/hosts or C:\Windows\System32\drivers\etc\hosts, replace &lt;minikube-ip&gt; with the actual IP
+&lt;minikube-ip&gt; valkey 
 
+Check if the command below works correctly: 
+```
 ``` bash
-sudo echo "<minikube-ip> valkey" | sudo tee -a /etc/hosts sudo echo "<minikube-ip> valkey" | sudo tee -a C:\Windows\System32\drivers\etc\hosts
+sudo sh -c 'echo "<minikube-ip> valkey" >> /etc/hosts'
+sudo sh -c 'echo "<minikube-ip> valkey" >> C:\Windows\System32\drivers\etc\hosts'
 ```
