@@ -82,7 +82,7 @@ public class ObjectMapperConfig {
      * Configure Jackson's ObjectMapper for RestTemplate
      */
     @Bean
-    public RestTemplate restTemplate(ObjectMapper objectMapper) {
+    public RestTemplate objectMapperRestTemplate(ObjectMapper objectMapper) {
         RestTemplate restTemplate = new RestTemplate();
         MappingJackson2HttpMessageConverter converter =
                 new MappingJackson2HttpMessageConverter(objectMapper);
@@ -104,29 +104,30 @@ public class ObjectMapperConfig {
         };
     }
 
-    /**
-     * Configure Jackson's ObjectMapper for Redis
-     */
-    @Bean
-    public RedisTemplate<String, Object> redisTemplate(
-            RedisConnectionFactory connectionFactory,
-            ObjectMapper objectMapper) {
-        RedisTemplate<String, Object> template = new RedisTemplate<>();
-        template.setConnectionFactory(connectionFactory);
-
-        // Create Jackson2JsonRedisSerializer with type resolving
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
-
-        // Configure serializers
-        template.setDefaultSerializer(serializer);
-        template.setKeySerializer(new StringRedisSerializer());
-        template.setValueSerializer(serializer);
-        template.setHashKeySerializer(new StringRedisSerializer());
-        template.setHashValueSerializer(serializer);
-
-        template.afterPropertiesSet();
-        return template;
-    }
+    // Moved to ValkeyCacheConfig
+//    /**
+//     * Configure Jackson's ObjectMapper for Redis
+//     */
+//    @Bean
+//    public RedisTemplate<String, Object> redisTemplate(
+//            RedisConnectionFactory connectionFactory,
+//            ObjectMapper objectMapper) {
+//        RedisTemplate<String, Object> template = new RedisTemplate<>();
+//        template.setConnectionFactory(connectionFactory);
+//
+//        // Create Jackson2JsonRedisSerializer with type resolving
+//        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+//
+//        // Configure serializers
+//        template.setDefaultSerializer(serializer);
+//        template.setKeySerializer(new StringRedisSerializer());
+//        template.setValueSerializer(serializer);
+//        template.setHashKeySerializer(new StringRedisSerializer());
+//        template.setHashValueSerializer(serializer);
+//
+//        template.afterPropertiesSet();
+//        return template;
+//    }
 
 //    /**
 //     * Configure custom property editor for dates
