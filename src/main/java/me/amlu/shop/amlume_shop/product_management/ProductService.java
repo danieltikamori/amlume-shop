@@ -15,8 +15,8 @@ import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.ProductDataValidationException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.ProductDTO;
-import me.amlu.shop.amlume_shop.payload.ProductResponse;
+import me.amlu.shop.amlume_shop.payload.CreateProductRequest;
+import me.amlu.shop.amlume_shop.payload.GetProductResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -40,7 +40,7 @@ public interface ProductService {
      * @throws APIException                   if there's a data integrity issue during saving.
      * @throws ProductDataValidationException if the productDTO fails basic validation (added for clarity).
      */
-    ProductDTO addProduct(ProductDTO productDTO, Long categoryId) throws ProductAlreadyExistsException, ResourceNotFoundException, APIException, ProductDataValidationException; // Added exceptions from impl
+    CreateProductRequest addProduct(CreateProductRequest productDTO, Long categoryId) throws ProductAlreadyExistsException, ResourceNotFoundException, APIException, ProductDataValidationException; // Added exceptions from impl
 
     /**
      * Retrieves a paginated list of all products.
@@ -51,7 +51,7 @@ public interface ProductService {
      * @param sortDir    The sort direction ("asc" or "desc").
      * @return A ProductResponse containing the paginated list of products and pagination details.
      */
-    ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir);
+    GetProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir);
 
     /**
      * Retrieves a paginated list of products belonging to a specific category.
@@ -65,7 +65,7 @@ public interface ProductService {
      * @throws ResourceNotFoundException if the category with the given ID is not found.
      * @throws NotFoundException         if the category exists but has no products (as per impl).
      */
-    ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir) throws ResourceNotFoundException, NotFoundException; // Added exceptions from impl
+    GetProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir) throws ResourceNotFoundException, NotFoundException; // Added exceptions from impl
 
     /**
      * Retrieves a paginated list of products matching a keyword in their name.
@@ -78,7 +78,7 @@ public interface ProductService {
      * @return A ProductResponse containing the paginated list of products and pagination details.
      * @throws ResourceNotFoundException if no products match the keyword (as per impl).
      */
-    ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir) throws ResourceNotFoundException; // Added exception from impl
+    GetProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir) throws ResourceNotFoundException; // Added exception from impl
 
     /**
      * Updates an existing product.
@@ -90,7 +90,7 @@ public interface ProductService {
      * @throws ResourceNotFoundException      if the product with the given ID is not found.
      * @throws ProductDataValidationException if the productDTO fails basic validation (should be added to impl).
      */
-    ProductDTO updateProduct(ProductDTO productDTO, Long productId) throws ResourceNotFoundException, ProductDataValidationException; // Added exceptions
+    CreateProductRequest updateProduct(CreateProductRequest productDTO, Long productId) throws ResourceNotFoundException, ProductDataValidationException; // Added exceptions
 
     /**
      * Deletes (soft deletes) a product by its ID.
@@ -99,7 +99,7 @@ public interface ProductService {
      * @return A DTO representing the product before deletion.
      * @throws ResourceNotFoundException if the product with the given ID is not found.
      */
-    ProductDTO deleteProduct(Long productId) throws ResourceNotFoundException; // Added exception
+    CreateProductRequest deleteProduct(Long productId) throws ResourceNotFoundException; // Added exception
 
     /**
      * Updates the image associated with a product.
@@ -110,7 +110,7 @@ public interface ProductService {
      * @throws ResourceNotFoundException if the product with the given ID is not found.
      * @throws IOException               if there's an error during file upload.
      */
-    ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException; // Added exception
+    CreateProductRequest updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException; // Added exception
 
     // Removed isValidProduct method as it's not appropriate for the service interface contract.
     // boolean isValidProduct(Product product);

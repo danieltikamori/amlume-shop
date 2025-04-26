@@ -15,9 +15,9 @@ import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.category_management.CategoryRepository;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.payload.FileUploadResult;
-import me.amlu.shop.amlume_shop.payload.ProductDTO;
-import me.amlu.shop.amlume_shop.payload.ProductResponse;
+import me.amlu.shop.amlume_shop.payload.GetFileUploadResultResponse;
+import me.amlu.shop.amlume_shop.payload.CreateProductRequest;
+import me.amlu.shop.amlume_shop.payload.GetProductResponse;
 import me.amlu.shop.amlume_shop.resilience.ExponentialBackoffRateLimiter;
 import me.amlu.shop.amlume_shop.service.FileService;
 import me.amlu.shop.amlume_shop.user_management.User;
@@ -107,7 +107,7 @@ public class ProductServiceImpl implements ProductService {
 //     @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true)
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN')")
-    public ProductDTO addProduct(ProductDTO productDTO, Long categoryId)
+    public CreateProductRequest addProduct(CreateProductRequest productDTO, Long categoryId)
             throws ResourceNotFoundException, ProductAlreadyExistsException, APIException, ProductDataValidationException {
 
         // --- Preconditions ---
@@ -154,7 +154,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @NotNull
-    private static Product getProduct(ProductDTO productDTO, Category category, User currentSeller) {
+    private static Product getProduct(CreateProductRequest productDTO, Category category, User currentSeller) {
         ProductName productName = new ProductName(productDTO.productName());
         ProductDescription productDescription = new ProductDescription(productDTO.productDescription());
         Money productPrice = new Money(productDTO.productPrice());
@@ -183,7 +183,7 @@ public class ProductServiceImpl implements ProductService {
     // More specific key
     @RateLimiter(name = "defaultRateLimiter")
     @Transactional(readOnly = true)
-    public ProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
+    public GetProductResponse getAllProducts(int pageNumber, int pageSize, String sortBy, String sortDir) {
         log.debug("Fetching all products page: {}, size: {}, sort: {}, dir: {}", pageNumber, pageSize, sortBy, sortDir);
         try {
             return backoffRateLimiter.executeWithBackoff(() -> {
@@ -191,7 +191,7 @@ public class ProductServiceImpl implements ProductService {
                 Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
                 Page<Product> pageProducts = productRepository.findAll(pageDetails);
 
-                List<ProductDTO> productDTOList = pageProducts.getContent().stream()
+                List<CreateProductRequest> productDTOList = pageProducts.getContent().stream()
                         .map(this::mapEntityToDto) // Use manual mapping
                         .collect(Collectors.toList());
 
@@ -209,7 +209,7 @@ public class ProductServiceImpl implements ProductService {
     // Cache key includes category ID and pagination
     @Cacheable(value = PRODUCT_LIST_CACHE, key = "'cat_' + #categoryId + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
-    public ProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir)
+    public GetProductResponse searchByCategory(Long categoryId, int pageNumber, int pageSize, String sortBy, String sortDir)
             throws ResourceNotFoundException, NotFoundException { // Added NotFoundException
 
         Assert.notNull(categoryId, "Category ID cannot be null");
@@ -225,7 +225,7 @@ public class ProductServiceImpl implements ProductService {
         Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndDirection);
         Page<Product> productPage = productRepository.findByCategory(category, pageDetails);
 
-        List<ProductDTO> productDTOList = productPage.getContent().stream()
+        List<CreateProductRequest> productDTOList = productPage.getContent().stream()
                 .map(this::mapEntityToDto) // Use manual mapping
                 .collect(Collectors.toList());
 
@@ -244,7 +244,7 @@ public class ProductServiceImpl implements ProductService {
     // Cache key includes keyword and pagination
     @Cacheable(value = PRODUCT_LIST_CACHE, key = "'kw_' + #keyword + '_p' + #pageNumber + '_' + #pageSize + '_' + #sortBy + '_' + #sortDir")
     @Transactional(readOnly = true)
-    public ProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir)
+    public GetProductResponse searchProductByKeyword(String keyword, int pageNumber, int pageSize, String sortBy, String sortDir)
             throws ResourceNotFoundException {
 
         Assert.hasText(keyword, "Keyword cannot be empty");
@@ -255,7 +255,7 @@ public class ProductServiceImpl implements ProductService {
 
         Page<Product> productPage = productRepository.findByProductName_NameContainingIgnoreCase(keyword, pageDetails);
 
-        List<ProductDTO> productDTOList = productPage.getContent().stream()
+        List<CreateProductRequest> productDTOList = productPage.getContent().stream()
                 .map(this::mapEntityToDto) // Use manual mapping
                 .collect(Collectors.toList());
 
@@ -281,7 +281,7 @@ public class ProductServiceImpl implements ProductService {
     // 2. productRepository bean is accessible via '@'.
     // 3. authentication.principal has an 'id' field matching the User ID type (adjust if using UserDetails differently).
     // 4. The User entity linked from Principal has an 'id' field/getter.
-    public ProductDTO updateProduct(ProductDTO productDTO, Long productId)
+    public CreateProductRequest updateProduct(CreateProductRequest productDTO, Long productId)
             throws ResourceNotFoundException, ProductDataValidationException {
 
         // --- Preconditions ---
@@ -379,7 +379,7 @@ public class ProductServiceImpl implements ProductService {
     // 2. productRepository bean is accessible via '@'.
     // 3. authentication.principal has an 'id' field matching the User ID type (adjust if using UserDetails differently).
     // 4. The User entity linked from Principal has an 'id' field/getter.
-    public ProductDTO deleteProduct(Long productId) throws ResourceNotFoundException { // No UnauthorizedException needed here, PreAuthorize handles it
+    public CreateProductRequest deleteProduct(Long productId) throws ResourceNotFoundException { // No UnauthorizedException needed here, PreAuthorize handles it
         Assert.notNull(productId, "Product ID cannot be null");
         log.debug("Attempting to delete product ID: {}", productId);
 
@@ -391,7 +391,7 @@ public class ProductServiceImpl implements ProductService {
                     return new ResourceNotFoundException(Constants.PRODUCT, Constants.PRODUCT_ID, productId);
                 });
 
-        ProductDTO deletedProductDTO = mapEntityToDto(product); // Map before deleting
+        CreateProductRequest deletedProductDTO = mapEntityToDto(product); // Map before deleting
 
         productRepository.delete(product); // Performs soft delete via BaseEntity/Hibernate listener
         log.info("Successfully soft-deleted product ID: {}", productId);
@@ -407,7 +407,7 @@ public class ProductServiceImpl implements ProductService {
     // @CacheEvict(value = {"allProductsCache", "categoryProductsCache"}, allEntries = true) // Consider broader eviction
     // Use Spring Security's @PreAuthorize for combined check
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SELLER', 'ROLE_SELLER_MANAGER', 'ROLE_SELLER_STAFF', 'ROLE_SUPER_ADMIN') or @productRepository.findById(#productId).orElse(null)?.seller?.userId == authentication.principal.id")
-    public ProductDTO updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException {
+    public CreateProductRequest updateProductImage(Long productId, MultipartFile image) throws IOException, ResourceNotFoundException {
         Assert.notNull(productId, "Product ID cannot be null");
         Assert.notNull(image, "Image file cannot be null");
         Assert.isTrue(!image.isEmpty(), "Image file cannot be empty");
@@ -440,7 +440,7 @@ public class ProductServiceImpl implements ProductService {
         }
 
         // --- Upload New Image ---
-        FileUploadResult uploadResult = fileService.uploadImage(path, image); // GET RESULT OBJECT
+        GetFileUploadResultResponse uploadResult = fileService.uploadImage(path, image); // GET RESULT OBJECT
         String generatedFileName = uploadResult.generatedFilename();
         String originalFileName = uploadResult.originalFilename();
         log.debug("Uploaded new image '{}' (original: '{}') for product ID {}", generatedFileName, originalFileName, productId);
@@ -471,7 +471,7 @@ public class ProductServiceImpl implements ProductService {
      * Performs basic validation on the incoming ProductDTO.
      * More complex validation is handled by Value Object constructors.
      */
-    private void validateProductData(ProductDTO productDTO) throws ProductDataValidationException {
+    private void validateProductData(CreateProductRequest productDTO) throws ProductDataValidationException {
         // These checks are somewhat redundant if VOs are used correctly, but act as early fail
 
         // Use record accessors (fieldName() instead of getFieldName())
@@ -496,7 +496,7 @@ public class ProductServiceImpl implements ProductService {
      * Manually maps a Product entity to a ProductDTO.
      * Handles extraction of values from Value Objects.
      */
-    private ProductDTO mapEntityToDto(Product product) {
+    private CreateProductRequest mapEntityToDto(Product product) {
         if (product == null) {
             return null;
         }
@@ -519,7 +519,7 @@ public class ProductServiceImpl implements ProductService {
         String sellerName = (product.getSeller() != null) ? product.getSeller().getUsername() : null;
 
         // Use the record's canonical constructor
-        return new ProductDTO(
+        return new CreateProductRequest(
                 productId,
                 productName,
                 productImage,
@@ -539,9 +539,9 @@ public class ProductServiceImpl implements ProductService {
     /**
      * Helper to create ProductResponse from Page and DTO list.
      */
-    private ProductResponse createProductResponse(Page<Product> page, List<ProductDTO> dtoList) {
+    private GetProductResponse createProductResponse(Page<Product> page, List<CreateProductRequest> dtoList) {
         // Use the record's canonical constructor
-        return new ProductResponse(
+        return new GetProductResponse(
                 dtoList,
                 page.getNumber(),
                 page.getSize(),
