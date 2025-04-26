@@ -16,8 +16,8 @@ import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.model.CountryResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -26,13 +26,14 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 
-@Slf4j
 @Service
 public class MaxMindGeoService {
-    private DatabaseReader reader;
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(MaxMindGeoService.class);
 
     @Value("${geoip.database.path}")
     private Resource geoipDatabase;
+
+    private DatabaseReader reader;
 
     @PostConstruct
     public void init() throws IOException {
@@ -107,6 +108,7 @@ public class MaxMindGeoService {
             return -1;
         }
     }
+
     public double getDistance(double lastLocationLatitude, double lastLocationLongitude, double currentLocationLatitude, double currentLocationLongitude) {
         try {
             return calculateDistance(
@@ -114,7 +116,9 @@ public class MaxMindGeoService {
                     currentLocationLatitude, currentLocationLongitude
             );
         } catch (Exception e) {
-            log.error("Error calculating distance between IPs: {} and {}", ip1, ip2, e);
+            String lastLocationCoordinates = String.format("lat: %s, lon: %s", lastLocationLatitude, lastLocationLongitude);
+            String currentLocationCoordinates = String.format("lat: %s, lon: %s", currentLocationLatitude, currentLocationLongitude);
+            log.error("Error calculating distance between current and last location: {} and {}", currentLocationCoordinates, lastLocationCoordinates, e);
             return -1;
         }
     }

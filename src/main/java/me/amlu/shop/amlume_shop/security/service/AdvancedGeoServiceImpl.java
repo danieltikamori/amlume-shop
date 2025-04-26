@@ -16,13 +16,14 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.AsnConfigLoader;
+import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.enums.RiskLevel;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import me.amlu.shop.amlume_shop.security.model.GeoLocationHistory;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -34,8 +35,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 @Service
-@Slf4j
 public class AdvancedGeoServiceImpl implements AdvancedGeoService {
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AdvancedGeoServiceImpl.class);
     private final MaxMindGeoService maxMindGeoService;
     private final GeoIp2Service geoIp2Service;
     private final LoadingCache<String, GeoLocationHistory> locationHistoryCache;
@@ -140,10 +141,10 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
      * <p>
      * The method then returns the result object.
      *
-     * @param result the result to update
+     * @param result          the result to update
      * @param currentLocation the current location
-     * @param history the history of locations
-     * @param userId the ID of the user
+     * @param history         the history of locations
+     * @param userId          the ID of the user
      * @return the updated result
      */
     @Override
@@ -174,7 +175,10 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                     "speed", speedKmH,
                                     "from", lastLocation.getCity() != null ? lastLocation.getCity() : "Unknown",
                                     "to", currentLocation.getCity() != null ? currentLocation.getCity() : "Unknown"
-                            )
+                            ),
+                            AlertSeverityEnum.MEDIUM,
+                            Instant.now(),
+                            "production"
                     ));
                 }
             }
@@ -240,6 +244,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         double reputation = reputationService.getReputationScore(asn);
         return isVpn || reputation < 0.3; // Threshold can be adjusted
     }
+
     @Override
     public boolean isLikelyVpn(GeoLocation location) {
         if (location == null || location.getAsn() == null) {
