@@ -38,6 +38,7 @@
     </scm>
     <properties>
         <java.version>21</java.version>
+        <maven.compiler.parameters>true</maven.compiler.parameters>
         <spring.version>6.2.2</spring.version>
         <spring-modulith.version>1.2.4</spring-modulith.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
@@ -772,6 +773,7 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <parameters>true</parameters>
                     <compilerArgs>
                         <arg>-Xlint:all,-options,-path</arg>
                     </compilerArgs>
