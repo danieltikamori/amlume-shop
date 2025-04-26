@@ -16,12 +16,11 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.config.MeterFilter;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
 import io.prometheus.client.CollectorRegistry;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import me.amlu.shop.amlume_shop.security.service.CaptchaService;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -30,31 +29,36 @@ import java.time.Duration;
 
 
 @Configuration
-public class MetricsConfig implements io.micrometer.prometheusmetrics.PrometheusConfig {
+public class MetricsConfig {
+    // Removed implements PrometheusConfig - it's an interface, not meant to be implemented by config class directly
 
-    @Bean
-    MeterRegistry meterRegistry() {
-        // Consider using CompositeMeterRegistry if multiple registries are needed
-        // Or rely on Spring Boot Actuator's auto-configuration
-        return new SimpleMeterRegistry();
-    }
-
-    // Provide a Clock bean for dependency injection
+    // REMOVED: Redundant MeterRegistry bean - Let Actuator provide CompositeMeterRegistry
     // @Bean
-    // public Clock clock() {
-    //     return Clock.systemUTC();
+    // MeterRegistry meterRegistry() {
+    //     return new SimpleMeterRegistry();
     // }
 
+    /**
+     * Defines the Prometheus CollectorRegistry bean.
+     * This bean should be simple and NOT depend on PrometheusMeterRegistry.
+     */
+    @Bean
+    public CollectorRegistry collectorRegistry() {
+        // Create a new, default CollectorRegistry.
+        // It might be CollectorRegistry.defaultRegistry if you want the global one,
+        // but a new instance is often preferred for application-specific metrics.
+        return new CollectorRegistry(true); // 'true' enables default exports like JVM metrics
+    }
 
     @Bean
-    public PrometheusMeterRegistry prometheusMeterRegistry(PrometheusRegistry collectorRegistry, io.micrometer.core.instrument.Clock clock) { // Inject Clock
-        PrometheusMeterRegistry prometheusMeterRegistry = new PrometheusMeterRegistry(
-                this,
-                collectorRegistry,
-                clock
-        );
-        return prometheusMeterRegistry;
+    public PrometheusMeterRegistry prometheusMeterRegistry(PrometheusConfig prometheusConfig, PrometheusRegistry collectorRegistry, io.micrometer.core.instrument.Clock clock) { // Inject Clock
+        // Ensure collectorRegistry is not null if injection somehow failed (optional check)
+        if (collectorRegistry == null) {
+            throw new IllegalStateException("CollectorRegistry bean is required for PrometheusMeterRegistry");
+        }
+        return new PrometheusMeterRegistry(prometheusConfig, collectorRegistry, clock);
     }
+
 
     @Bean
     MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
@@ -65,48 +69,59 @@ public class MetricsConfig implements io.micrometer.prometheusmetrics.Prometheus
     }
 
     @Bean
-    public PrometheusRegistry collectorRegistry(PrometheusMeterRegistry prometheusMeterRegistry) { // Inject PrometheusMeterRegistry
+    public PrometheusRegistry prometheusCollectorRegistry(PrometheusMeterRegistry prometheusMeterRegistry) { // Inject PrometheusMeterRegistry
         return prometheusMeterRegistry.getPrometheusRegistry();
+    }
+
+    /**
+     * Provides the PrometheusConfig (usually the default is sufficient).
+     */
+    @Bean
+    public PrometheusConfig prometheusConfig() {
+        // You can customize PrometheusConfig here if needed
+        // E.g., return key -> switch(key) { case "prometheus.descriptions": return "true"; default: return null; };
+        return PrometheusConfig.DEFAULT;
     }
 
     @Bean
     public MeterFilter meterFilter() {
-        // Example: Only accept metrics starting with "paseto" or "captcha"
+        // Example: Only accept metrics starting with specific prefixes
         return MeterFilter.denyUnless(meterId ->
                 meterId.getName().startsWith("paseto") ||
                         meterId.getName().startsWith("captcha") ||
-                        meterId.getName().startsWith("cache") || meterId.getName().startsWith("ratelimit") || meterId.getName().startsWith("valkey") || meterId.getName().startsWith("circuit_breaker")
+                        meterId.getName().startsWith("cache") ||
+                        meterId.getName().startsWith("ratelimit") ||
+                        meterId.getName().startsWith("valkey") ||
+                        meterId.getName().startsWith("circuit_breaker") ||
+                        // Allow common http/system metrics if desired
+                        meterId.getName().startsWith("http.server.requests") ||
+                        meterId.getName().startsWith("jvm.") ||
+                        meterId.getName().startsWith("process.") ||
+                        meterId.getName().startsWith("system.") ||
+                        meterId.getName().startsWith("log4j2.") ||
+                        meterId.getName().startsWith("tomcat.") ||
+                        meterId.getName().startsWith("disk.")
         );
-        // return MeterFilter.denyNameStartsWith("jvm"); // Example: Deny JVM metrics
     }
 
-    @Bean
-    public CollectorRegistry prometheusClientCollectorRegistry() {
-        return CollectorRegistry.defaultRegistry;
-    }
+    // REMOVED: Redundant CollectorRegistry bean - the primary one is defined above.
+    // @Bean
+    // public CollectorRegistry prometheusClientCollectorRegistry() {
+    //     return CollectorRegistry.defaultRegistry; // This returns the static default registry, usually not needed as a separate bean
+    // }
 
     @Bean
     public MeterBinder captchaMetrics(CaptchaService captchaService) {
         return registry -> {
-            // Register gauge for rate limit remaining
-            // Note: This now relies on CaptchaService.getRemainingLimit which uses ResilienceService
             Gauge.builder("captcha.rate_limit.remaining",
-                            // Use a lambda to call the service method, handle potential errors if needed
-                            () -> captchaService.getRemainingLimit("global")) // Assuming "global" or pass relevant key if needed
+                            () -> captchaService.getRemainingLimit("global"))
                     .description("Remaining captcha rate limit capacity (approximate)")
                     .register(registry);
-
-            // Register counter for total validations (already present in CaptchaService)
-            // Counter.builder("captcha.total")
-            //        .description("Total captcha validations")
-            //        .tag("type", "validation")
-            //        .register(registry);
-
-            // Other counters (like success/error/ratelimit exceeded) are incremented directly in CaptchaService
+            // Other counters are incremented directly in CaptchaService
         };
     }
 
-    // --- Other metric beans remain the same ---
+    // --- Other metric beans (tokenValidationCounter, tokenValidationTimer, etc.) remain the same ---
     @Bean
     public Counter tokenValidationCounter(MeterRegistry meterRegistry) {
         return Counter.builder("paseto_token_validation_total")
@@ -126,24 +141,16 @@ public class MetricsConfig implements io.micrometer.prometheusmetrics.Prometheus
                 .register(meterRegistry);
     }
 
-    @Bean
-    public Timer tokenValidationLatency(MeterRegistry meterRegistry) {
-        return Timer.builder("paseto_token_validation_seconds")
-                .description("Time spent validating PASETO tokens")
-                .publishPercentiles(0.5, 0.95, 0.99)
-                .publishPercentileHistogram()
-                .distributionStatisticExpiry(Duration.ofMinutes(5))
-                .distributionStatisticBufferLength(5)
-                .register(meterRegistry);
-    }
-    @Override
-    public String get(@NotNull String key) {
-        // This method is part of the PrometheusConfig interface,
-        // return null or handle specific Prometheus config keys if needed
-        return null;
-    }
+    // Removed duplicate timer bean - tokenValidationTimer already covers this
+    // @Bean
+    // public Timer tokenValidationLatency(MeterRegistry meterRegistry) { ... }
 
-    // Timer bean for claims validation latency
+    // Removed implements PrometheusConfig and the get() method override
+    // @Override
+    // public String get(@NotNull String key) {
+    //     return null;
+    // }
+
     @Bean
     public Timer tokenClaimsValidationLatency(MeterRegistry meterRegistry) {
         return Timer.builder("paseto.token.claims.validation")
@@ -152,7 +159,8 @@ public class MetricsConfig implements io.micrometer.prometheusmetrics.Prometheus
                 .publishPercentiles(0.5, 0.95, 0.99)
                 .publishPercentileHistogram()
                 .minimumExpectedValue(Duration.ofMillis(1))
-                .maximumExpectedValue(Duration.ofSeconds(2)) // Claims validation should be faster
+                .maximumExpectedValue(Duration.ofSeconds(2))
                 .register(meterRegistry);
     }
 }
+
