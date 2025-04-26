@@ -55,7 +55,7 @@ import java.util.List;
 public class SecurityConfig {
 
     @Value("${security.max-concurrent-sessions:2}")
-    public static int MAX_CONCURRENT_SESSIONS;
+    private final int maxConcurrentSessions;
 
     private final AuthenticationConfiguration authenticationConfiguration;
     private final GlobalRateLimitingFilter globalRateLimitingFilter; // Assuming this is correctly configured elsewhere
@@ -73,7 +73,7 @@ public class SecurityConfig {
     @Value("${cors.allowed-origins}")
     private List<String> allowedOrigins;
 
-    public SecurityConfig(AuthenticationConfiguration authenticationConfiguration, GlobalRateLimitingFilter globalRateLimitingFilter,
+    public SecurityConfig(@Value("${security.max-concurrent-sessions:2}") int maxConcurrentSessions, AuthenticationConfiguration authenticationConfiguration, GlobalRateLimitingFilter globalRateLimitingFilter,
                           PasetoTokenService pasetoTokenService,
                           CustomAuthenticationFilter customAuthenticationFilter,
                           MfaAuthenticationFilter mfaAuthenticationFilter,
@@ -81,6 +81,7 @@ public class SecurityConfig {
                           AuthenticationFailureHandler authenticationFailureHandler,
                           DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter
             /*, AuthenticationManager authenticationManager */) {
+        this.maxConcurrentSessions = maxConcurrentSessions;
         this.authenticationConfiguration = authenticationConfiguration;
         this.globalRateLimitingFilter = globalRateLimitingFilter;
         this.pasetoTokenService = pasetoTokenService;
@@ -130,7 +131,7 @@ public class SecurityConfig {
                         // Session fixation protection
                         .sessionFixation().migrateSession()
                         // Concurrent session control (only relevant if policy is not STATELESS)
-                        .maximumSessions(MAX_CONCURRENT_SESSIONS)
+                        .maximumSessions(this.maxConcurrentSessions)
                         .maxSessionsPreventsLogin(true)
                         .sessionRegistry(sessionRegistry()) // Register the session registry
                         .expiredUrl("/login?expired") // Redirect if session expires (relevant for IF_REQUIRED/ALWAYS)
