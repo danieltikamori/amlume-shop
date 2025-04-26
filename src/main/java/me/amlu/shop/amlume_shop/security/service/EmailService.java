@@ -10,9 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.payload.EmailDto;
+import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
 
 public interface EmailService {
-    Object sendMail(EmailDto emailDto);
+    Object sendMail(CreateEmailRequest createEmailRequest);
 
 }
