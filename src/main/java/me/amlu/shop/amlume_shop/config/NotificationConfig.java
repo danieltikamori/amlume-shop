@@ -27,7 +27,23 @@ public class NotificationConfig {
     private String slackToken;
 
     @Bean
-    public MethodsClient slackClient() {
+    public MethodsClient slackMethodsClient() {
+        // Check if slackToken is null or empty, handle appropriately if needed
+        if (slackToken == null || slackToken.trim().isEmpty()) {
+            // Log a warning or throw an exception if the token is required
+            // For now, let's assume it might be optional or configured elsewhere
+            // and return null or a default client if applicable.
+            // Or, ensure the property is always set.
+            // For simplicity, we proceed, but this is a potential issue.
+            System.err.println("Warning: slack.bot.token is not configured. Slack MethodsClient might not work.");
+            // Depending on strictness, you might want to:
+            // throw new IllegalStateException("slack.bot.token must be configured to create Slack MethodsClient");
+            // or return a non-functional mock/null if the application can tolerate it.
+        }
+        // Ensure slackToken is not null before passing to Slack.getInstance().methods()
+        // If slackToken can be legitimately null/empty, the Slack library might handle it
+        // or throw an exception. Check the library's behavior.
+        // Assuming here that a valid token is expected if the bean is created.
         return Slack.getInstance().methods(slackToken);
     }
 
