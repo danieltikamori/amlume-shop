@@ -40,7 +40,7 @@ public class MfaException extends BaseException {
         RECOVERY_CODE_VERIFICATION_ERROR,
         RECOVERY_CODE_LIST_ERROR,
         RECOVERY_CODE_COUNT_ERROR,
-        RECOVERY_CODE_CREATION_ERROR
+        AUTHENTICATION_ERROR, VERIFICATION_ERROR, RECOVERY_CODE_CREATION_ERROR
     }
 
     private final MfaErrorType errorType;
