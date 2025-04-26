@@ -11,18 +11,12 @@
 package me.amlu.shop.amlume_shop.model;
 
 import jakarta.persistence.*;
-import lombok.*;
 import org.hibernate.proxy.HibernateProxy;
 
 import java.util.Objects;
 
 @Entity
 @Table(name = "mfa_settings")
-@Getter
-@Setter
-@ToString
-@NoArgsConstructor
-@AllArgsConstructor
 public class MfaSettings {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,6 +24,14 @@ public class MfaSettings {
 
     @Column(name = "mfa_enforced")
     private boolean mfaEnforced;
+
+    public MfaSettings(Long mfaSettingsId, boolean mfaEnforced) {
+        this.mfaSettingsId = mfaSettingsId;
+        this.mfaEnforced = mfaEnforced;
+    }
+
+    public MfaSettings() {
+    }
 
     @Override
     public final boolean equals(Object o) {
@@ -46,5 +48,29 @@ public class MfaSettings {
     @Override
     public final int hashCode() {
         return this instanceof HibernateProxy hibernateProxy ? hibernateProxy.getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+    }
+
+    public Long getMfaSettingsId() {
+        return this.mfaSettingsId;
+    }
+
+    public boolean isMfaEnforced() {
+        return this.mfaEnforced;
+    }
+
+    public void setMfaSettingsId(Long mfaSettingsId) {
+        this.mfaSettingsId = mfaSettingsId;
+    }
+
+    public void setId(Long mfaSettingsId) {
+        this.mfaSettingsId = mfaSettingsId;
+    }
+
+    public void setMfaEnforced(boolean mfaEnforced) {
+        this.mfaEnforced = mfaEnforced;
+    }
+
+    public String toString() {
+        return "MfaSettings(mfaSettingsId=" + this.getMfaSettingsId() + ", mfaEnforced=" + this.isMfaEnforced() + ")";
     }
 }
