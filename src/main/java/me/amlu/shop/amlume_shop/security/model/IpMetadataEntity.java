@@ -11,7 +11,6 @@
 package me.amlu.shop.amlume_shop.security.model;
 
 import jakarta.persistence.*;
-import lombok.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
 import java.time.Instant;
@@ -19,7 +18,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-@Builder
 @Entity
 @Table(name = "ip_metadata", indexes = {
         @Index(name = "idx_ip_address", columnList = "ip_address"),
@@ -27,11 +25,6 @@ import java.util.Objects;
         @Index(name = "idx_last_seen_at", columnList = "last_seen_at")
 })
 @Cacheable
-@Getter
-@Setter
-@ToString
-@RequiredArgsConstructor
-@NoArgsConstructor
 public class IpMetadataEntity extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -41,18 +34,15 @@ public class IpMetadataEntity extends BaseEntity {
     private String ipAddress;
 
     @Column(name = "suspicious_count", nullable = false)
-    @Builder.Default
     private int suspiciousCount = 0;
 
     @Column(name = "last_geolocation", nullable = false)
     private String lastGeolocation;
 
     @Column(name = "first_seen_at", nullable = false)
-    @Builder.Default
     private Instant firstSeenAt = Instant.now();
 
     @Column(name = "last_seen_at", nullable = false)
-    @Builder.Default
     private Instant lastSeenAt = Instant.now();
 
     @ElementCollection
@@ -70,13 +60,156 @@ public class IpMetadataEntity extends BaseEntity {
     @CollectionTable(name = "ip_ttl_history")
     private List<Integer> ttlHistory = new ArrayList<>();
 
+    public IpMetadataEntity() {
+    }
+
+    @Override
+    public Long getAuditableId() {
+        return id;
+    }
+
+    public Long getId() {
+        return this.id;
+    }
+
+    public String getIpAddress() {
+        return this.ipAddress;
+    }
+
+    public int getSuspiciousCount() {
+        return this.suspiciousCount;
+    }
+
+    public String getLastGeolocation() {
+        return this.lastGeolocation;
+    }
+
+    public Instant getFirstSeenAt() {
+        return this.firstSeenAt;
+    }
+
+    public Instant getLastSeenAt() {
+        return this.lastSeenAt;
+    }
+
+    public List<String> getPreviousGeolocations() {
+        return this.previousGeolocations;
+    }
+
+    public int getLastTtl() {
+        return this.lastTtl;
+    }
+
+    public List<GeoLocationEntry> getGeoHistory() {
+        return this.geoHistory;
+    }
+
+    public List<Integer> getTtlHistory() {
+        return this.ttlHistory;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
+    public void setSuspiciousCount(int suspiciousCount) {
+        this.suspiciousCount = suspiciousCount;
+    }
+
+    public void setLastGeolocation(String lastGeolocation) {
+        this.lastGeolocation = lastGeolocation;
+    }
+
+    public void setFirstSeenAt(Instant firstSeenAt) {
+        this.firstSeenAt = firstSeenAt;
+    }
+
+    public void setLastSeenAt(Instant lastSeenAt) {
+        this.lastSeenAt = lastSeenAt;
+    }
+
+    public void setPreviousGeolocations(List<String> previousGeolocations) {
+        this.previousGeolocations = previousGeolocations;
+    }
+
+    public void setLastTtl(int lastTtl) {
+        this.lastTtl = lastTtl;
+    }
+
+    public void setGeoHistory(List<GeoLocationEntry> geoHistory) {
+        this.geoHistory = geoHistory;
+    }
+
+    public void setTtlHistory(List<Integer> ttlHistory) {
+        this.ttlHistory = ttlHistory;
+    }
+
+    public String toString() {
+        return "IpMetadataEntity(id=" + this.getId() + ", ipAddress=" + this.getIpAddress() + ", suspiciousCount=" + this.getSuspiciousCount() + ", lastGeolocation=" + this.getLastGeolocation() + ", firstSeenAt=" + this.getFirstSeenAt() + ", lastSeenAt=" + this.getLastSeenAt() + ", previousGeolocations=" + this.getPreviousGeolocations() + ", lastTtl=" + this.getLastTtl() + ", geoHistory=" + this.getGeoHistory() + ", ttlHistory=" + this.getTtlHistory() + ")";
+    }
+
     @Embeddable
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
     public static class GeoLocationEntry {
         private String location;
         private Instant timestamp;
+
+        public GeoLocationEntry(String location, Instant timestamp) {
+            this.location = location;
+            this.timestamp = timestamp;
+        }
+
+        public GeoLocationEntry() {
+        }
+
+        public String getLocation() {
+            return this.location;
+        }
+
+        public Instant getTimestamp() {
+            return this.timestamp;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public void setTimestamp(Instant timestamp) {
+            this.timestamp = timestamp;
+        }
+
+        public boolean equals(final Object o) {
+            if (o == this) return true;
+            if (!(o instanceof GeoLocationEntry other)) return false;
+            if (!other.canEqual((Object) this)) return false;
+            final Object this$location = this.getLocation();
+            final Object other$location = other.getLocation();
+            if (!Objects.equals(this$location, other$location)) return false;
+            final Object this$timestamp = this.getTimestamp();
+            final Object other$timestamp = other.getTimestamp();
+            return Objects.equals(this$timestamp, other$timestamp);
+        }
+
+        protected boolean canEqual(final Object other) {
+            return other instanceof GeoLocationEntry;
+        }
+
+        public int hashCode() {
+            final int PRIME = 59;
+            int result = 1;
+            final Object $location = this.getLocation();
+            result = result * PRIME + ($location == null ? 43 : $location.hashCode());
+            final Object $timestamp = this.getTimestamp();
+            result = result * PRIME + ($timestamp == null ? 43 : $timestamp.hashCode());
+            return result;
+        }
+
+        public String toString() {
+            return "IpMetadataEntity.GeoLocationEntry(location=" + this.getLocation() + ", timestamp=" + this.getTimestamp() + ")";
+        }
     }
 
     public IpMetadataEntity(String ipAddress) {
