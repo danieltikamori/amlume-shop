@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  vault:
+    image: hashicorp/vault:latest # Or pin to a specific version like 1.16.1
+    container_name: vault-dev
+    ports:
+      - "8200:8200" # Map host port 8200 to container port 8200
+    environment:
+      # --- Vault Dev Mode Configuration ---
+      # Sets the root token ID. Use this value for 'vault.token' in your Spring app.
+      # WARNING: This is for development ONLY. Keep it secure.
+      VAULT_DEV_ROOT_TOKEN_ID: "my-dev-root-token"
+
+      # Makes Vault listen on all interfaces inside the container
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+
+      # --- Optional: Set VAULT_ADDR for CLI inside the container ---
+      # VAULT_ADDR: "http://127.0.0.1:8200" # Usually needed if you exec into the container
+
+    cap_add:
+      # Required for Vault to lock memory pages (prevents swapping sensitive data)
+      - IPC_LOCK
+    volumes:
+      # --- Optional: Persistence (Uncomment if you want data to survive restarts) ---
+      # Note: Dev mode primarily uses in-memory storage. For file storage in dev:
+      # Add '-dev -dev-root-token-id="my-dev-root-token" -dev-listen-address="0.0.0.0:8200" -config=/vault/config/local.json' to command
+      # And mount a config file + data directory.
+      # For a more production-like setup, use a proper backend (like file, consul, postgres etc.) and don't run in dev mode.
+      # - ./vault-data:/vault/file # Example for file backend persistence
+      - vault_logs:/vault/logs # Optional: Persist logs
+    # command: vault server -dev # This is the default for the image, usually not needed explicitly
+
+volumes:
+  # Define the named volume for logs (if used)
+  vault_logs: {}
+  # vault_data: {} # Define if using file persistence volume mount
+
+networks:
+  default:
+    name: amlume-shop-network # Optional: Define a custom network
+
+
+#  This configuration uses Vault's dev mode, which is convenient for local testing but not suitable for production. It starts unsealed with an in-memory backend (data is lost on restart unless you add persistence) and a known root token.
+
+#Explanation:
+#1.version: '3.8': Specifies the Docker Compose file format version.
+#2.services:: Defines the containers to run.
+#3.vault:: The name of our Vault service.
+#4.image: hashicorp/vault:latest: Uses the official HashiCorp Vault image. It's often better to pin to a specific version (e.g., hashicorp/vault:1.16.1) for stability.
+#5.container_name: vault-dev: A friendly name for the container.
+#6.ports: - "8200:8200": Maps port 8200 on your host machine to port 8200 inside the container. This is the default Vault API port. Your Spring application's vault.uri should point to http://localhost:8200.
+#7.environment:: Sets environment variables inside the container.
+#•VAULT_DEV_ROOT_TOKEN_ID: "my-dev-root-token": Crucially, this sets the root token Vault will use in dev mode. You must use this exact value (my-dev-root-token or whatever you choose) for the vault.token property in your Spring Boot application.properties or environment variables. Never use predictable tokens in production.
+#•VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200": Tells Vault to listen for connections on all network interfaces within the container on port 8200. This is necessary for the port mapping to work.
+#8.cap_add: - IPC_LOCK: Grants the container the capability to lock memory. Vault recommends this to prevent sensitive information from being swapped to disk.
+#9.volumes:: (Optional) Defines volumes for data persistence.•The commented-out line - ./vault-data:/vault/file is an example if you were using the file storage backend (requires different command arguments). Dev mode is primarily in-memory.•vault_logs:/vault/logs mounts a named volume to store Vault's operational logs.
+#10.volumes: vault_logs: {}: (Top-level) Declares the named volume used for logs.
+#
+#How to Use:
+#1.Save the code above as docker-compose.yml in your project's root (or a suitable directory).
+#2.Make sure you have Docker and Docker Compose installed.
+#3.Open a terminal in the directory containing the docker-compose.yml file.
+#4.Run the command: docker-compose up -d•This will download the Vault image (if you don't have it) and start the container in detached mode (-d).
+#5.Vault should now be running and accessible at http://localhost:8200.
+#6.Configure your Spring Boot application:
+#•Set vault.uri=http://localhost:8200
+#•Set vault.token=my-dev-root-token (or the value you chose for VAULT_DEV_ROOT_TOKEN_ID)
+#
+#Important Considerations for Development:
+#•Security: The VAULT_DEV_ROOT_TOKEN_ID makes the root token easily accessible. This is highly insecure and only acceptable for local development where the container isn't exposed.
+#•Data Persistence: Dev mode uses an in-memory backend by default. All secrets will be lost when the container stops. If you need persistence during development, you'll need to configure Vault to use a different storage backend (like file) and mount a volume accordingly, which requires running the vault server command with different arguments instead of relying purely on dev mode defaults.
+#•KV v2 Engine: Your VaultService.java uses the KV v2 secrets engine (implied by paths like secret/data/...). Dev mode might enable this by default, but to be sure, you might need to manually enable it after starting Vault:
+#  •docker exec -it vault-dev sh (Get a shell inside the container)
+#                 •export VAULT_TOKEN=my-dev-root-token
+#                 •export VAULT_ADDR=http://127.0.0.1:8200
+#                 •vault secrets enable -path=secret kv-v2 (Enable KV v2 at the 'secret/' path)
+#                 •exit
+#                 •Alternatively, create a setup script as shown in the thought process.
+#
+#This setup provides a quick way to get a Vault instance running locally that your Spring application can connect to using the token authentication configured in VaultConfig.java.
