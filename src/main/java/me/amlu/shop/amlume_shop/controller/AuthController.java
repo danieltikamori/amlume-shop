@@ -15,7 +15,8 @@ import me.amlu.shop.amlume_shop.exceptions.GlobalExceptionHandler;
 import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.payload.RegisterResponse;
+import me.amlu.shop.amlume_shop.payload.ErrorResponse;
+import me.amlu.shop.amlume_shop.payload.GetRegisterResponse;
 import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.payload.user.UserResponse;
 import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
@@ -25,12 +26,14 @@ import me.amlu.shop.amlume_shop.security.service.MfaService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.slf4j.Logger;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.BindingResult;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -60,17 +63,26 @@ public class AuthController {
     }
 
     @PostMapping("/v1/register")
-    public ResponseEntity<RegisterResponse> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) throws RoleNotFoundException {
-        RegisterResponse response = new RegisterResponse();
-
+    public ResponseEntity<GetRegisterResponse> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) throws RoleNotFoundException {
         if (bindingResult.hasErrors()) {
             // Handle validation errors
-            response.setErrors(bindingResult.getAllErrors());
-            return ResponseEntity.badRequest().body(response);
+            return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
+
         }
-        User user = userService.registerUser(request);
-        response.setUserResponse(new UserResponse(user));
-        return ResponseEntity.ok(response);
+        User user;
+        try {
+            user = userService.registerUser(request);
+        } catch (DataIntegrityViolationException e) {
+            GetRegisterResponse response = new GetRegisterResponse(null, java.util.List.of(new ObjectError("DUPLICATE_EMAIL", "Email already exists")));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (Exception e) {
+            ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "An error occurred while registering user.").getBody();
+            if (errorResponse != null) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, java.util.List.of(new ObjectError(errorResponse.code(), errorResponse.message()))));
+            }
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, java.util.List.of(new ObjectError("INTERNAL_SERVER_ERROR", "An error occurred while registering user."))));
+        }
+        return ResponseEntity.ok(new GetRegisterResponse(new UserResponse(user), null));
     }
 
     // @Deprecated
