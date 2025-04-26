@@ -11,9 +11,6 @@
 package me.amlu.shop.amlume_shop.security.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
 import java.time.Instant;
@@ -25,25 +22,37 @@ import java.util.Objects;
         @Index(name = "idx_ip_address", columnList = "ip_address")
 })
 @Cacheable
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class IpBlock extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name= "ip_address", nullable = false)
+    @Column(name = "ip_address", nullable = false)
     private String ipAddress;
 
     @Column(name = "reason", nullable = false)
     private String reason;
 
-    @Column(name = "blocked_at",  nullable = false)
+    @Column(name = "blocked_at", nullable = false)
     private Instant blockedAt;
 
     @Column(nullable = false)
     private boolean active;
+
+    public IpBlock(Long id, String ipAddress, String reason, Instant blockedAt, boolean active) {
+        this.id = id;
+        this.ipAddress = ipAddress;
+        this.reason = reason;
+        this.blockedAt = blockedAt;
+        this.active = active;
+    }
+
+    public IpBlock() {
+    }
+
+    public static IpBlockBuilder builder() {
+        return new IpBlockBuilder();
+    }
 
     @Override
     public boolean equals(Object o) {
@@ -55,5 +64,59 @@ public class IpBlock extends BaseEntity {
     @Override
     public int hashCode() {
         return Objects.hash(id, ipAddress, reason, blockedAt, active);
+    }
+
+    @Override
+    public Long getAuditableId() {
+        return id;
+    }
+
+    @Override
+    public Long getId() {
+        return id;
+    }
+
+    public static class IpBlockBuilder {
+        private Long id;
+        private String ipAddress;
+        private String reason;
+        private Instant blockedAt;
+        private boolean active;
+
+        IpBlockBuilder() {
+        }
+
+        public IpBlockBuilder id(Long id) {
+            this.id = id;
+            return this;
+        }
+
+        public IpBlockBuilder ipAddress(String ipAddress) {
+            this.ipAddress = ipAddress;
+            return this;
+        }
+
+        public IpBlockBuilder reason(String reason) {
+            this.reason = reason;
+            return this;
+        }
+
+        public IpBlockBuilder blockedAt(Instant blockedAt) {
+            this.blockedAt = blockedAt;
+            return this;
+        }
+
+        public IpBlockBuilder active(boolean active) {
+            this.active = active;
+            return this;
+        }
+
+        public IpBlock build() {
+            return new IpBlock(this.id, this.ipAddress, this.reason, this.blockedAt, this.active);
+        }
+
+        public String toString() {
+            return "IpBlock.IpBlockBuilder(id=" + this.id + ", ipAddress=" + this.ipAddress + ", reason=" + this.reason + ", blockedAt=" + this.blockedAt + ", active=" + this.active + ")";
+        }
     }
 }
