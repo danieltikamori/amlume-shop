@@ -16,14 +16,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.payload.EmailDto;
-import me.amlu.shop.amlume_shop.payload.Response;
+import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
+import me.amlu.shop.amlume_shop.payload.GetResponse;
 import me.amlu.shop.amlume_shop.security.service.EmailService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.Operation;
-
-import springfox.documentation.annotations.ApiIgnore;
 
 @RestController
 @RequestMapping("/emailService")
@@ -33,13 +31,12 @@ import springfox.documentation.annotations.ApiIgnore;
 public class EmailController {
     private final EmailService emailService;
 
-    @ApiIgnore
     @PostMapping("/send")
     @Operation(summary = "Send EMail", description = "Send Email to the given Email Address")
-    @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = Response.class)))
-    public ResponseEntity<Object> sendMail(@Valid @RequestBody EmailDto emailDto) {
-        log.info("HIT /send POST | Dto : {}", emailDto);
-        return ResponseEntity.ok(emailService.sendMail(emailDto));
+    @ApiResponse(responseCode = "200", description = "Success", content = @Content(schema = @Schema(implementation = GetResponse.class)))
+    public ResponseEntity<Object> sendMail(@Valid @RequestBody CreateEmailRequest createEmailRequest) {
+        log.info("HIT /send POST | Dto : {}", createEmailRequest);
+        return ResponseEntity.ok(emailService.sendMail(createEmailRequest));
     }
 
 }
