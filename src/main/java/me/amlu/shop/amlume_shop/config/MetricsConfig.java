@@ -18,8 +18,6 @@ import io.micrometer.core.instrument.binder.MeterBinder;
 import io.micrometer.core.instrument.config.MeterFilter;
 import io.micrometer.prometheusmetrics.PrometheusConfig;
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry;
-import io.prometheus.client.CollectorRegistry;
-import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import me.amlu.shop.amlume_shop.security.service.CaptchaService;
 import org.springframework.boot.actuate.autoconfigure.metrics.MeterRegistryCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -27,65 +25,30 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 
-
 @Configuration
 public class MetricsConfig {
-    // Removed implements PrometheusConfig - it's an interface, not meant to be implemented by config class directly
-
-    // REMOVED: Redundant MeterRegistry bean - Let Actuator provide CompositeMeterRegistry
-    // @Bean
-    // MeterRegistry meterRegistry() {
-    //     return new SimpleMeterRegistry();
-    // }
-
-    /**
-     * Defines the Prometheus CollectorRegistry bean.
-     * This bean should be simple and NOT depend on PrometheusMeterRegistry.
-     */
-    @Bean
-    public CollectorRegistry collectorRegistry() {
-        // Create a new, default CollectorRegistry.
-        // It might be CollectorRegistry.defaultRegistry if you want the global one,
-        // but a new instance is often preferred for application-specific metrics.
-        return new CollectorRegistry(true); // 'true' enables default exports like JVM metrics
-    }
 
     @Bean
-    public PrometheusMeterRegistry prometheusMeterRegistry(PrometheusConfig prometheusConfig, PrometheusRegistry collectorRegistry, io.micrometer.core.instrument.Clock clock) { // Inject Clock
-        // Ensure collectorRegistry is not null if injection somehow failed (optional check)
-        if (collectorRegistry == null) {
-            throw new IllegalStateException("CollectorRegistry bean is required for PrometheusMeterRegistry");
-        }
-        return new PrometheusMeterRegistry(prometheusConfig, collectorRegistry, clock);
+    public PrometheusMeterRegistry prometheusMeterRegistry(PrometheusConfig prometheusConfig, io.prometheus.metrics.model.registry.PrometheusRegistry prometheusCollectorRegistry, io.micrometer.core.instrument.Clock clock) {
+        return new PrometheusMeterRegistry(prometheusConfig, prometheusCollectorRegistry, clock);
     }
-
 
     @Bean
     MeterRegistryCustomizer<MeterRegistry> metricsCommonTags() {
+        String environment = System.getProperty("app.environment", "development");
         return registry -> registry.config().commonTags(
                 "application", "amlume-shop",
-                "environment", "development" // Make environment configurable
+                "environment", environment
         );
     }
 
     @Bean
-    public PrometheusRegistry prometheusCollectorRegistry(PrometheusMeterRegistry prometheusMeterRegistry) { // Inject PrometheusMeterRegistry
-        return prometheusMeterRegistry.getPrometheusRegistry();
-    }
-
-    /**
-     * Provides the PrometheusConfig (usually the default is sufficient).
-     */
-    @Bean
     public PrometheusConfig prometheusConfig() {
-        // You can customize PrometheusConfig here if needed
-        // E.g., return key -> switch(key) { case "prometheus.descriptions": return "true"; default: return null; };
         return PrometheusConfig.DEFAULT;
     }
 
     @Bean
     public MeterFilter meterFilter() {
-        // Example: Only accept metrics starting with specific prefixes
         return MeterFilter.denyUnless(meterId ->
                 meterId.getName().startsWith("paseto") ||
                         meterId.getName().startsWith("captcha") ||
@@ -93,7 +56,6 @@ public class MetricsConfig {
                         meterId.getName().startsWith("ratelimit") ||
                         meterId.getName().startsWith("valkey") ||
                         meterId.getName().startsWith("circuit_breaker") ||
-                        // Allow common http/system metrics if desired
                         meterId.getName().startsWith("http.server.requests") ||
                         meterId.getName().startsWith("jvm.") ||
                         meterId.getName().startsWith("process.") ||
@@ -104,12 +66,6 @@ public class MetricsConfig {
         );
     }
 
-    // REMOVED: Redundant CollectorRegistry bean - the primary one is defined above.
-    // @Bean
-    // public CollectorRegistry prometheusClientCollectorRegistry() {
-    //     return CollectorRegistry.defaultRegistry; // This returns the static default registry, usually not needed as a separate bean
-    // }
-
     @Bean
     public MeterBinder captchaMetrics(CaptchaService captchaService) {
         return registry -> {
@@ -117,11 +73,9 @@ public class MetricsConfig {
                             () -> captchaService.getRemainingLimit("global"))
                     .description("Remaining captcha rate limit capacity (approximate)")
                     .register(registry);
-            // Other counters are incremented directly in CaptchaService
         };
     }
 
-    // --- Other metric beans (tokenValidationCounter, tokenValidationTimer, etc.) remain the same ---
     @Bean
     public Counter tokenValidationCounter(MeterRegistry meterRegistry) {
         return Counter.builder("paseto_token_validation_total")
@@ -141,16 +95,6 @@ public class MetricsConfig {
                 .register(meterRegistry);
     }
 
-    // Removed duplicate timer bean - tokenValidationTimer already covers this
-    // @Bean
-    // public Timer tokenValidationLatency(MeterRegistry meterRegistry) { ... }
-
-    // Removed implements PrometheusConfig and the get() method override
-    // @Override
-    // public String get(@NotNull String key) {
-    //     return null;
-    // }
-
     @Bean
     public Timer tokenClaimsValidationLatency(MeterRegistry meterRegistry) {
         return Timer.builder("paseto.token.claims.validation")
@@ -163,4 +107,3 @@ public class MetricsConfig {
                 .register(meterRegistry);
     }
 }
-
