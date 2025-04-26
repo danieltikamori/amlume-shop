@@ -147,7 +147,7 @@ public class HCPSecretsService {
 
                 // For debugging purposes, log the keys retrieved from HCP
                 if (response.getBody() != null) {
-                    Map<String, String> secrets = response.getBody().getSecrets();
+                    Map<String, String> secrets = response.getBody().secrets();
                     log.debug("Retrieved keys from HCP: {}", secrets.keySet());
                     return secrets;
                 } else {
