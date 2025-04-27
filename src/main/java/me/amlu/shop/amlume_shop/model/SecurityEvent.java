@@ -45,7 +45,8 @@ public class SecurityEvent {
     @ToString.Exclude
     private String ipAddress;
 
-    @Column(nullable = false, columnDefinition = "DATETIME ZONE='UTC'", name = "timestamp")
+//    @Column(nullable = false, columnDefinition = "DATETIME ZONE='UTC'", name = "timestamp")
+    @Column(nullable = false, columnDefinition = "TIMESTAMP", name = "timestamp")
     private Instant timestamp;
 
     @Column(length = 1000, name = "details")
