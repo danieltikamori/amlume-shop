@@ -39,7 +39,9 @@ ARG EXECUTABLE_NAME=amlume-shop
 
 # Build the native executable using the 'native' profile
 # Ensure your pom.xml has the native-maven-plugin configured correctly in the 'native' profile.
-RUN ./mvnw -Pnative native:compile -DskipTests
+# Disable Vault during build as it's not needed and requires credentials
+# Add -Dspring.cloud.vault.enabled=false
+RUN ./mvnw -Pnative native:compile -DskipTests -Dspring.cloud.vault.enabled=false
 
 # --- Run Stage ---
 # Use a minimal base image with glibc suitable for dynamically linked native executables.
@@ -58,3 +60,6 @@ EXPOSE 8080
 # Set the entry point to run the native executable
 # Uses the EXECUTABLE_NAME argument passed during the build.
 ENTRYPOINT ["/app/${EXECUTABLE_NAME}"]
+
+# Optional: Add healthcheck if needed
+# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD curl -f http://localhost:8080/actuator/health || exit 1
