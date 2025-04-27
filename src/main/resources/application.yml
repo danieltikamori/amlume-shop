@@ -16,7 +16,12 @@ asn:
     window-seconds: 60
     max-requests: 100
     capacity: 100
-
+  stale-threshold: 30d # days for DB cleanup
+  cleanup-schedule: "0 0 3 * * *" # Cron expression for daily cleanup
+  reputation:
+    # ttl: 31d # Optional: Explicit TTL for Redis reputation entries
+    decay:
+      schedule: "0 1 4 * * *" # Schedule for the (currently no-op) decay task
   update:
     schedule: 0 0 0 * * *
 
