@@ -76,7 +76,7 @@ logging:
     org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
     #    root: DEBUG
     me.amlu.shop.amlume_shop: DEBUG
-    me.amlu.shop.amlume_shop.config: DEBUG
+    me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
     me.amlu.shop.amlume_shop.service: DEBUG
     me.amlu.shop.amlume_shop.controller: DEBUG
     me.amlu.shop.amlume_shop.repository: DEBUG
@@ -101,7 +101,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics, caches
   health:
     livenessState:
       enabled: true
@@ -110,12 +110,12 @@ management:
     show-details: when_authorized # always
   metrics:
     cache:
-      instrument: true
+      instrument: true # Enable cache metrics collection
     enabled: true
     enable:
       all: true
       cache: true
-      redis: true
+      redis: true # Ensure Redis metrics are enabled
     tags:
       application: ${spring.application.name}
     distribution:
@@ -433,7 +433,7 @@ service:
 
 spring:
   application:
-    name: ${SERVICE_NAME}
+    name: ${SERVICE_NAME:amlume-shop}
     version: ${SERVICE_VERSION}
     environment: ${SERVICE_ENVIRONMENT}
     description: ${SERVICE_DESCRIPTION}
@@ -453,13 +453,32 @@ spring:
         email: ${SERVICE_LICENSE_CONTACT_EMAIL}
 
   cache:
-    type: valkey  # redis/valkey
+    type: redis  # redis/valkey
     cache-names: mfaTokens
-    valkey:
-      host: ${VALKEY_HOST:localhost}
-      port: ${VALKEY_PORT:6379}
-    caffeine:
-      spec: maximumSize=1000,expireAfterWrite=1h
+    redis:
+      # These properties provide defaults that can be overridden by ValkeyCacheConfig
+      time-to-live: 30m # Default TTL if not specified in Java config (matches ValkeyCacheConfig default)
+      cache-null-values: false # Consistent with ValkeyCacheConfig
+      key-prefix: "${spring.application.name}:cache:" # Optional: Add a prefix to all cache keys
+      use-key-prefix: true # Optional: Enable the prefix
+
+
+  # --- Valkey Connection Details ---
+  # These are correctly picked up by @Value in ValkeyCacheConfig
+  valkey:
+    host: ${VALKEY_HOST:localhost}
+    port: ${VALKEY_PORT:6379}
+    password: ${VALKEY_PASSWORD:} # Use empty default if no password
+    # database: ${VALKEY_DATABASE:0} # Optional: Specify database index if not 0
+    # timeout: 5000 # Optional: Connection timeout (consider Lettuce properties below)
+    # --- Lettuce specific properties (optional but recommended) ---
+    lettuce:
+      pool:
+        max-active: 8 # Max connections in pool
+        max-idle: 8   # Max idle connections
+        min-idle: 0   # Min idle connections
+        max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
+      shutdown-timeout: 100ms # Timeout for shutting down the pool
 
   cloud:
     vault:
