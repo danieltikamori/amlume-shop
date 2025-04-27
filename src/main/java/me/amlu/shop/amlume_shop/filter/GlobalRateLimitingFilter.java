@@ -50,7 +50,9 @@ import static me.amlu.shop.amlume_shop.commons.Constants.IP_HEADERS;
 // Run very early, but potentially after CORS/logging filters if they have HIGHEST_PRECEDENCE
 public class GlobalRateLimitingFilter extends OncePerRequestFilter {
 
+    @Value("${rate-limiter.global-filter-limiter-name:global}")
     private final String globalLimiterName;
+
     private static final Logger log = LoggerFactory.getLogger(GlobalRateLimitingFilter.class);
 
     private final RateLimiter rateLimiter;
@@ -63,7 +65,7 @@ public class GlobalRateLimitingFilter extends OncePerRequestFilter {
      * @param objectMapper the {@link ObjectMapper} for serializing error responses
      */
     // Inject the specific RateLimiter bean you configured (likely the Redis one)
-    public GlobalRateLimitingFilter(@Value("${rate-limiter.global-filter-limiter-name}") String globalLimiterName,
+    public GlobalRateLimitingFilter(@Value("${rate-limiter.global-filter-limiter-name:global}") String globalLimiterName,
                                     @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
                                     ObjectMapper objectMapper) {
         this.globalLimiterName = globalLimiterName;
