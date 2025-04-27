@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.RateLimiter;
+import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.IpSecurityException;
 import me.amlu.shop.amlume_shop.security.model.IpBlock;
@@ -22,6 +22,7 @@ import me.amlu.shop.amlume_shop.security.repository.IpMetadataRepository;
 import me.amlu.shop.amlume_shop.security.repository.IpWhitelistRepository;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -39,6 +40,15 @@ import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.IP_METADATA_CACH
 
 @Service
 public class IpSecurityServiceImpl implements IpSecurityService {
+
+    private static final String IP_SUSPICION_LIMITER_NAME = "ipSuspicionCheck";
+
+    @Value("${security.ip.suspicious-requests-threshold}")
+    private int suspiciousRequestsThreshold;
+
+    @Value("${security.ip.block-threshold}")
+    private int blockThreshold;
+
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(IpSecurityServiceImpl.class);
 
     private final IpBlockRepository ipBlockRepository;
@@ -46,16 +56,10 @@ public class IpSecurityServiceImpl implements IpSecurityService {
     private final IpMetadataRepository ipMetadataRepository;
     private final GeoLocationService geoLocationService;
     private final AuditLogger auditLogger;
-    private final RateLimiter rateLimiter; // Keep Guava RateLimiter for now
+    private final RateLimiter rateLimiter; // Custom RateLimiter interface
     private final IpSecurityService self; // For transactional self-calls
     private final Cache ipBlockCacheInstance; // Spring Cache instance
     private final Cache ipMetadataCacheInstance; // Spring Cache instance
-
-    @Value("${security.ip.suspicious-requests-threshold}")
-    private int suspiciousRequestsThreshold;
-
-    @Value("${security.ip.block-threshold}")
-    private int blockThreshold;
 
     public IpSecurityServiceImpl(
             IpBlockRepository ipBlockRepository,
@@ -64,7 +68,8 @@ public class IpSecurityServiceImpl implements IpSecurityService {
             GeoLocationService geoLocationService,
             AuditLogger auditLogger,
             CacheManager cacheManager, // Inject CacheManager
-            @Lazy IpSecurityService self // Inject self lazily
+            @Lazy IpSecurityService self, // Inject self lazily
+            @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter
     ) {
         this.ipBlockRepository = ipBlockRepository;
         this.ipWhitelistRepository = ipWhitelistRepository;
@@ -72,6 +77,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         this.geoLocationService = geoLocationService;
         this.auditLogger = auditLogger;
         this.self = self; // Assign self
+        this.rateLimiter = rateLimiter;
 
         // Initialize Spring Cache instances
         this.ipBlockCacheInstance = cacheManager.getCache(IP_BLOCK_CACHE);
@@ -79,9 +85,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         Objects.requireNonNull(this.ipBlockCacheInstance, "Cache '" + IP_BLOCK_CACHE + "' not configured or CacheManager not available.");
         Objects.requireNonNull(this.ipMetadataCacheInstance, "Cache '" + IP_METADATA_CACHE + "' not configured or CacheManager not available.");
 
-
-        // Keep Guava RateLimiter initialization
-        this.rateLimiter = RateLimiter.create(100.0); // 100 requests per second
+        log.info("IpSecurityService initialized using RateLimiter implementation: {}.", rateLimiter.getClass().getSimpleName());
     }
 
     @Override
@@ -133,7 +137,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
     public boolean isIpSuspicious(String ip, HttpServletRequest request) {
         if (StringUtils.isBlank(ip)) {
             log.warn("Attempt to check blank IP address for suspicion");
-            return true; // Fail safe/secure based on policy
+            return true; // Fail-safe/secure based on policy
         }
 
         try {
@@ -145,7 +149,9 @@ public class IpSecurityServiceImpl implements IpSecurityService {
                 return true; // Fail safe/secure
             }
 
-            String currentGeo = geoLocationService.getGeolocation(ip); // Consider caching this too
+            // Get current geolocation (already cached by the service)
+            String currentGeo = geoLocationService.getGeolocation(ip);
+
             int currentTtl = extractTTL(request);
 
             boolean suspicious = checkSuspiciousActivity(ip, currentGeo, currentTtl, metadata);
@@ -169,8 +175,6 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         }
     }
 
-    // No changes needed in checkSuspiciousActivity, extractTTL, convertToIpMetadata, updateEntityFromMetadata, isIpWhitelisted
-
     private boolean checkSuspiciousActivity(String ip, String currentGeo, int currentTtl, IpMetadata metadata) {
         boolean suspicious = false;
 
@@ -188,9 +192,21 @@ public class IpSecurityServiceImpl implements IpSecurityService {
             suspicious = true;
         }
 
-        // Check rate limiting (Keep Guava RateLimiter for now)
-        if (!rateLimiter.tryAcquire()) {
-            log.warn("Rate limit exceeded for IP: {}", ip);
+        // Rate limit check
+        // This is a custom rate limiter, not the Spring one
+        String rateLimitKey = IP_SUSPICION_LIMITER_NAME + ":" + ip;
+
+        try {
+            if (!rateLimiter.tryAcquire(rateLimitKey)) {
+                log.warn("Rate limit exceeded for IP: {}", ip);
+                metadata.incrementSuspiciousCount();
+                suspicious = true;
+            }
+        } catch (Exception e) {
+            // Handle potential errors from the Redis rate limiter (e.g., connection issues)
+            // Decide whether to count this as suspicious or ignore based on fail-open/closed policy
+            // For now, let's log and potentially count as suspicious (fail-closed for suspicion check)
+            log.error("Error checking internal rate limit for IP: {}. Counting as suspicious.", ip, e);
             metadata.incrementSuspiciousCount();
             suspicious = true;
         }
@@ -202,7 +218,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
 
 
     @Override
-    @Transactional // Keep transactional here
+    @Transactional
     public void blockIp(String ip, String reason) {
         if (StringUtils.isBlank(ip)) {
             return;
@@ -247,9 +263,8 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         }
     }
 
-
     @Override
-    @Transactional // Keep transactional here
+    @Transactional
     public void persistIpMetadata(String ip, IpMetadata metadata) {
         if (StringUtils.isBlank(ip) || metadata == null) {
             log.warn("Attempted to persist null or blank IP/metadata");
@@ -311,7 +326,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
             });
         }
 
-
+        // Assuming IpMetadata has a method to set the last TTL
         metadata.setFirstSeen(entity.getFirstSeenAt());
         metadata.setLastSeen(entity.getLastSeenAt());
 
@@ -344,7 +359,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         // Ensure lists are not null before creating new ArrayList
         entity.setPreviousGeolocations(metadata.getPreviousGeolocations() != null ? new ArrayList<>(metadata.getPreviousGeolocations()) : new ArrayList<>());
 
-        // Update geo history
+        // Update geohistory
         List<IpMetadataEntity.GeoLocationEntry> geoEntries = new ArrayList<>();
         if (metadata.getGeoHistory() != null) {
             for (IpMetadata.GeoLocation loc : metadata.getGeoHistory()) {
@@ -367,7 +382,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
 
 
     @Override
-    @Transactional // Keep transactional here
+    @Transactional
     public void unblockIp(String userId, String ip) {
         if (StringUtils.isBlank(ip)) {
             return;
@@ -396,7 +411,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
             return ipWhitelistRepository.existsByIpAddressAndActiveTrue(ipAddress);
         } catch (Exception e) {
             log.error("Error checking IP whitelist status for IP: {}", ipAddress, e);
-            return false; // Fail safe (treat as not whitelisted on error)
+            return false; // Fail-safe (treat as not whitelisted on error)
         }
     }
 
