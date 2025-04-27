@@ -35,13 +35,23 @@ public class Category extends BaseEntity {
     @Column(name = "category_id", nullable = false, updatable = false)
     private Long categoryId;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "categoryName.name", column = @Column(name = "category_name"))
+    })
     @Embedded
     @Column(name = "category_name") // Explicit column name for index clarity
     private CategoryName categoryName;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "description.descriptionData", column = @Column(name = "description"))
+    })
     @Embedded
     private Description description;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "hierarchyLevel.level", column = @Column(name = "hierarchy_level")),
+            @AttributeOverride(name = "hierarchyLevel.path", column = @Column(name = "hierarchy_path"))
+    })
     @Embedded
     private HierarchyLevel hierarchyLevel;
 
@@ -62,6 +72,11 @@ public class Category extends BaseEntity {
     @BatchSize(size = 20)
     private Set<Product> products = new HashSet<>();
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "categoryStatus.status", column = @Column(name = "category_status")),
+            @AttributeOverride(name = "categoryStatus.active", column = @Column(name = "is_active")),
+            @AttributeOverride(name = "categoryStatus.reason", column = @Column(name = "status_reason"))
+    })
     @Embedded
     private CategoryStatus status;
 
