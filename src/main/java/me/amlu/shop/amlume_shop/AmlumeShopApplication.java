@@ -11,10 +11,12 @@
 package me.amlu.shop.amlume_shop;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import jakarta.annotation.PostConstruct;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
 import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
@@ -23,8 +25,11 @@ import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
+import java.util.TimeZone;
+
 @SpringBootApplication
 @EnableCaching // Enable Spring's caching annotations like @Cacheable
+@EntityScan(basePackages = "me.amlu.shop.amlume_shop")
 @ComponentScan(basePackages = {"me.amlu.shop.amlume_shop"})
 @EnableScheduling
 @EnableTransactionManagement
@@ -32,6 +37,20 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @ConfigurationPropertiesScan
 @EnableConfigurationProperties({TokenCacheProperties.class, AsnProperties.class})
 public class AmlumeShopApplication {
+
+    /**
+     * Sets the default time zone to UTC.
+     * This method is called after the bean's properties have been set.
+     */
+    @PostConstruct
+    public void init() {
+        TimeZone.setDefault(TimeZone.getTimeZone("UTC"));
+    }
+    /**
+     * Main method to run the Spring Boot application.
+     *
+     * @param args command line arguments
+     */
 
     public static void main(String[] args) {
 
