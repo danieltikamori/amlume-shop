@@ -13,7 +13,6 @@ package me.amlu.shop.amlume_shop.security.service;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
-import me.amlu.shop.amlume_shop.config.AsnConfigLoader;
 import me.amlu.shop.amlume_shop.config.ValkeyCacheConfig;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.enums.RiskLevel;
@@ -40,7 +39,6 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     private final GeoIp2Service geoIp2Service;
     private final AlertService alertService;
     private final MetricRegistry metrics;
-    private final AsnConfigLoader asnConfigLoader;
     private final EnhancedVpnDetectorService vpnDetector;
     private final AsnReputationService reputationService;
 
@@ -63,7 +61,6 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                   GeoIp2Service geoIp2Service,
                                   AlertService alertService,
                                   MetricRegistry metrics,
-                                  AsnConfigLoader asnConfigLoader,
                                   EnhancedVpnDetectorService vpnDetector,
                                   AsnReputationService reputationService,
                                   CacheManager cacheManager // Inject CacheManager
@@ -72,7 +69,6 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         this.geoIp2Service = geoIp2Service;
         this.alertService = alertService;
         this.metrics = metrics;
-        this.asnConfigLoader = asnConfigLoader;
         this.vpnDetector = vpnDetector;
         this.reputationService = reputationService;
 
