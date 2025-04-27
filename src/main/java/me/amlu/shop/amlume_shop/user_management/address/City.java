@@ -8,33 +8,31 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.model.address;
+package me.amlu.shop.amlume_shop.user_management.address;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.config.ValidPostalCode;
 
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
 @Embeddable
-public class ZipCode implements Serializable {
+public class City implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @ValidPostalCode
     @NotBlank
-    @Size(min = 2, max = 15, message = "Zip code must be between 2 and 15 characters")
-    @Column(name = "zip_code")
+    @Size(min = 5, max = 250, message = "City must be between 5 and 250 characters")
+    @Column(name = "city")
     private String value;
 
-    protected ZipCode() {
+    protected City() {
     } // for JPA
 
-    public ZipCode(String value) {
+    public City(String value) {
         // It's better to perform validation using Bean Validation annotations and let the framework handle it,
         // but constructor validation is also an option. Ensure the value is not null or empty before trim.
         if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
@@ -49,9 +47,9 @@ public class ZipCode implements Serializable {
         if (this == o) return true;
         // Use getClass() for strict value object equality
         if (o == null || getClass() != o.getClass()) return false;
-        ZipCode zipCode = (ZipCode) o;
+        City city = (City) o;
         // Compare the core value field using Objects.equals for null safety
-        return Objects.equals(value, zipCode.value);
+        return Objects.equals(value, city.value);
     }
 
     @Override
@@ -66,7 +64,7 @@ public class ZipCode implements Serializable {
         return value;
     }
 
-    public @NotBlank @Size(min = 2, max = 15, message = "Zip code must be between 2 and 15 characters") String getValue() {
+    public @NotBlank @Size(min = 5, max = 250, message = "City must be between 5 and 250 characters") String getValue() {
         return this.value;
     }
 }

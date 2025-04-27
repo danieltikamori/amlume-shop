@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.model.address;
+package me.amlu.shop.amlume_shop.user_management.address;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -20,19 +20,19 @@ import java.io.Serializable;
 import java.util.Objects;
 
 @Embeddable
-public class State implements Serializable {
+public class Street implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
     @NotBlank
-    @Size(min = 5, max = 250, message = "State or province must be between 5 and 250 characters")
-    @Column(name = "state")
+    @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters")
+    @Column(name = "street")
     private String value;
 
-    protected State() {
+    protected Street() {
     } // for JPA
 
-    public State(String value) {
+    public Street(String value) {
         // It's better to perform validation using Bean Validation annotations and let the framework handle it,
         // but constructor validation is also an option. Ensure the value is not null or empty before trim.
         if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
@@ -47,9 +47,9 @@ public class State implements Serializable {
         if (this == o) return true;
         // Use getClass() for strict value object equality
         if (o == null || getClass() != o.getClass()) return false;
-        State state = (State) o;
+        Street street = (Street) o;
         // Compare the core value field using Objects.equals for null safety
-        return Objects.equals(value, state.value);
+        return Objects.equals(value, street.value);
     }
 
     @Override
@@ -64,8 +64,7 @@ public class State implements Serializable {
         return value;
     }
 
-    public @NotBlank @Size(min = 5, max = 250, message = "State or province must be between 5 and 250 characters") String getValue() {
+    public @NotBlank @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters") String getValue() {
         return this.value;
     }
 }
-

@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.model.address;
+package me.amlu.shop.amlume_shop.user_management.address;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
@@ -20,24 +20,24 @@ import java.io.Serializable;
 import java.util.Objects;
 
 @Embeddable
-public class City implements Serializable {
+public class Country implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
     @NotBlank
-    @Size(min = 5, max = 250, message = "City must be between 5 and 250 characters")
-    @Column(name = "city")
+    @Size(min = 5, max = 250, message = "Country must be between 5 and 250 characters")
+    @Column(name = "country")
     private String value;
 
-    protected City() {
+    protected Country() {
     } // for JPA
 
-    public City(String value) {
+    public Country(String value) {
         // It's better to perform validation using Bean Validation annotations and let the framework handle it,
         // but constructor validation is also an option. Ensure the value is not null or empty before trim.
         if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
             // Using a custom exception related to domain validation might be better than IllegalArgumentException
-            throw new IllegalArgumentException("Building value must be between 5 and 250 characters");
+            throw new IllegalArgumentException("Country value must be between 5 and 250 characters");
         }
         this.value = value.trim(); // Trim whitespace
     }
@@ -47,9 +47,9 @@ public class City implements Serializable {
         if (this == o) return true;
         // Use getClass() for strict value object equality
         if (o == null || getClass() != o.getClass()) return false;
-        City city = (City) o;
+        Country country = (Country) o;
         // Compare the core value field using Objects.equals for null safety
-        return Objects.equals(value, city.value);
+        return Objects.equals(value, country.value);
     }
 
     @Override
@@ -64,7 +64,7 @@ public class City implements Serializable {
         return value;
     }
 
-    public @NotBlank @Size(min = 5, max = 250, message = "City must be between 5 and 250 characters") String getValue() {
+    public @NotBlank @Size(min = 5, max = 250, message = "Country must be between 5 and 250 characters") String getValue() {
         return this.value;
     }
 }
