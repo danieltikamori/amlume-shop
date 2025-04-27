@@ -10,94 +10,117 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
-import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
-import org.springframework.scheduling.annotation.Scheduled;
+import me.amlu.shop.amlume_shop.security.model.KeyPair; // Import the correct KeyPair record
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory; // Use standard LoggerFactory
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
+import java.util.Objects;
+// Removed Map, TimeUnit, ExecutionException imports
 
 @Service
-@Slf4j
 public class KeyManagementFacade {
-    private final HCPSecretsService hcpSecretsService;
-    private final Cache<String, String> keyCache;
 
-    public record KeyPair(String privateKey, String publicKey) {
+    private static final Logger log = LoggerFactory.getLogger(KeyManagementFacade.class);
+
+    // --- Injected Secret Strings from Vault/Environment ---
+    // NOTE: Ensure these property names match the keys in your Vault path (e.g., secret/mfa/)
+
+    // Access Keys (Asymmetric - Public/Private)
+    @Value("${paseto-access-private-key}")
+    private String pasetoAccessPrivateKey;
+
+    @Value("${paseto-access-public-key}")
+    private String pasetoAccessPublicKey;
+
+    // Refresh Keys (Symmetric - Secret) - Assuming symmetric for refresh based on original code
+    @Value("${paseto-refresh-secret-key}")
+    private String pasetoRefreshSecretKey;
+
+    // Access Keys (Symmetric - Secret) - If you also use symmetric for access
+    @Value("${paseto-access-secret-key}")
+    private String pasetoAccessSecretKey; // Added based on KeyManagementService usage
+
+    // Other secrets if needed by this facade or passed through
+    @Value("${mfa-encryption-password}")
+    private String mfaEncryptionPassword;
+
+    // Removed HCPSecretsService dependency and Cache
+
+    // Constructor is now simpler or can be removed if no other dependencies
+    public KeyManagementFacade() {
+        // No dependencies to inject here anymore
+        log.info("KeyManagementFacade initialized. Secrets will be injected via @Value.");
     }
 
-    // Maximum number of keys to cache
-    private static final int MAX_CACHE_SIZE = 100;
-    // Cache duration
-    private static final int CACHE_DURATION_HOURS = 1;
+    // Removed initialize() and loadSecrets() - @Value handles loading
 
-    private static final String KEY_PREFIX = "PASETO_";
-    
-    public KeyManagementFacade(
-            HCPSecretsService hcpSecretsService) {
-        this.hcpSecretsService = hcpSecretsService;
-        this.keyCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(CACHE_DURATION_HOURS, TimeUnit.HOURS)
-                .maximumSize(MAX_CACHE_SIZE)
-                .recordStats()
-                .build();
-    }
-
-    @PostConstruct
-    public void initialize() {
-        loadSecrets();
-    }
-
-    private void loadSecrets() {
-        try {
-            Map<String, String> secrets = hcpSecretsService.getSecrets();
-            updateKeys(secrets);
-        } catch (Exception e) {
-            log.error("Failed to initialize keys from HCP", e);
-            throw new KeyManagementException("Key initialization failed", e);
-        }
-    }
-
+    /**
+     * Retrieves the asymmetric key pair strings for the given purpose.
+     * Now directly returns the injected values.
+     *
+     * @param purpose Typically "ACCESS" or potentially others if defined.
+     * @return KeyPair record containing the private and public key strings.
+     * @throws KeyManagementException if required keys for the purpose are not injected/found.
+     */
     public KeyPair getAsymmetricKeys(String purpose) {
-        try {
-            String privateKey = getCachedKey(KEY_PREFIX + purpose + "_PRIVATE_KEY");
-            String publicKey = getCachedKey(KEY_PREFIX + purpose + "_PUBLIC_KEY");
-            return new KeyPair(privateKey, publicKey);
-        } catch (Exception e) {
-            log.error("Failed to retrieve asymmetric keys for purpose: {}", purpose);
-            throw new KeyManagementException("Key retrieval failed", e);
+        log.debug("Retrieving asymmetric keys for purpose: {}", purpose);
+        // Simple example: Assuming only "ACCESS" uses asymmetric keys based on original code
+        if ("ACCESS".equalsIgnoreCase(purpose)) {
+            if (pasetoAccessPrivateKey == null || pasetoAccessPublicKey == null) {
+                log.error("Asymmetric keys for purpose '{}' are not available (check Vault/environment variables: paseto-access-private-key, paseto-access-public-key)", purpose);
+                throw new KeyManagementException("Asymmetric keys for purpose '" + purpose + "' not found.");
+            }
+            return new KeyPair(pasetoAccessPrivateKey, pasetoAccessPublicKey);
+        } else {
+            // Handle other purposes if necessary, or throw an exception
+            log.warn("Asymmetric keys requested for unsupported purpose: {}", purpose);
+            throw new KeyManagementException("Unsupported purpose for asymmetric keys: " + purpose);
         }
     }
 
+    /**
+     * Retrieves the symmetric secret key string for the given purpose.
+     * Now directly returns the injected value.
+     *
+     * @param purpose Typically "ACCESS" or "REFRESH".
+     * @return The secret key string.
+     * @throws KeyManagementException if the required key for the purpose is not injected/found.
+     */
     public String getSymmetricKey(String purpose) {
-        try {
-            return getCachedKey(KEY_PREFIX + purpose + "_SECRET_KEY");
-        } catch (Exception e) {
-            log.error("Failed to retrieve symmetric key for purpose: {}", purpose);
-            throw new KeyManagementException("Key retrieval failed", e);
+        log.debug("Retrieving symmetric key for purpose: {}", purpose);
+        String key = null;
+        String propertyName = "unknown";
+
+        if ("ACCESS".equalsIgnoreCase(purpose)) {
+            key = pasetoAccessSecretKey; // Use the symmetric access key if needed
+            propertyName = "paseto-access-secret-key";
+        } else if ("REFRESH".equalsIgnoreCase(purpose)) {
+            key = pasetoRefreshSecretKey;
+            propertyName = "paseto-refresh-secret-key";
+        } else {
+            log.warn("Symmetric key requested for unsupported purpose: {}", purpose);
+            throw new KeyManagementException("Unsupported purpose for symmetric key: " + purpose);
         }
+
+        if (key == null) {
+            log.error("Symmetric key for purpose '{}' is not available (check Vault/environment variable: {})", purpose, propertyName);
+            throw new KeyManagementException("Symmetric key for purpose '" + purpose + "' not found.");
+        }
+        return key;
     }
 
-    private String getCachedKey(String keyIdentifier) throws ExecutionException {
-        return keyCache.get(keyIdentifier, () -> {
-            Map<String, String> secrets = hcpSecretsService.getSecrets();
-            return secrets.get(keyIdentifier);
-        });
+    // --- Optional: Getter for other injected secrets if needed elsewhere ---
+    public String getMfaEncryptionPassword() {
+        if (mfaEncryptionPassword == null) {
+            log.error("MFA encryption password is not available (check Vault/environment variable: mfa-encryption-password)");
+            throw new KeyManagementException("MFA encryption password not found.");
+        }
+        return mfaEncryptionPassword;
     }
 
-    private void updateKeys(Map<String, String> secrets) {
-        secrets.forEach(keyCache::put);
-    }
 
-    @Scheduled(fixedRate = 3600000) // Refresh every hour
-    public void refreshKeys() {
-        log.info("Starting scheduled key refresh");
-        loadSecrets();
-    }
-
+    // Removed getCachedKey(), updateKeys(), refreshKeys()
 }
