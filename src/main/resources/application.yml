@@ -203,7 +203,6 @@ rate-limiter:
     global:
       limit: 50
       window-duration: 1h
-
     login: # Specific config for login
       limit: 10
       window-duration: 15m
@@ -217,6 +216,9 @@ rate-limiter:
     deviceFingerprintRegister: # Specific config for device registration
       limit: 5
       window-duration: 1h
+    ipSuspicionCheck: # Specific config for suspicious IPs inside IpSecurityServiceImpl
+      limit: 20
+      window-duration: 1m
     # Add other specific limiters as needed
 
   token:
@@ -336,7 +338,7 @@ resilience4j:
     instances:
       default:
         initial-interval-millis: 200L
-        max-interval-millis: 86400000L // 24h
+        max-interval-millis: 86400000L # 24h
         eb-multiplier: 1.5
         randomization-factor: 0.36
 
@@ -430,6 +432,90 @@ security:
       type: database  # or redis/hazelcast
     trusted-device:
       expiration-days: 30
+
+  geo:
+    suspicious-distance-km: 500.0 # Default distance in KM for impossible travel check
+    time-window-hours: 24       # Default time window in hours for location history cache TTL
+    known-vpn-asns: # List of ASNs considered likely VPNs/Proxies
+      - "AS9009"  # M247
+      - "AS12876" # ONLINE S.A.S.
+      - "AS16276" # OVH SAS
+      - "AS14061" # DigitalOcean
+      - "AS45102" # Alibaba
+      - "AS7552"  # Viettel
+      - "AS4766"  # Korea Telecom
+      - "AS9299"  # Philippine Long Distance Telephone
+      - "AS4134"  # Chinanet
+      - "AS3356"  # Level3 (Lumen)
+      - "AS3257"  # GTT Communications
+      - "AS6939"  # Hurricane Electric
+      - "AS174"   # Cogent Communications
+      - "AS2914"  # NTT America
+      - "AS3491"  # PCCW Global
+      - "AS1299"  # Telia Carrier
+      - "AS7018"  # AT&T
+      - "AS3320"  # Deutsche Telekom
+      - "AS6461"  # Zayo Bandwidth
+      - "AS6453"  # TATA Communications
+      - "AS20473" # Choopa, LLC (Vultr)
+      - "AS51167" # Contabo GmbH
+      - "AS24940" # Hetzner Online GmbH
+      - "AS14618" # Amazon
+      - "AS16509" # Amazon AWS
+      - "AS8075"  # Microsoft Azure
+      - "AS15169" # Google
+      - "AS396982" # Google Cloud
+      - "AS13335" # Cloudflare
+      - "AS45090" # Tencent Cloud
+      - "AS37963" # Alibaba Cloud
+      - "AS4837"  # China Unicom
+      - "AS9808"  # China Mobile
+      - "AS4808"  # CHINA169-BJ
+      - "AS4538",  # China Education and Research Network
+      - "AS17621", # China Unicom Shanghai
+      - "AS4812",  # China Telecom
+      - "AS9394",  # China TieTong
+      - "AS9929",  # China Netcom
+      - "AS58593", # Microsoft Mobile
+      - "AS132203", # Tencent Building, Kejizhongyi Avenue
+      - "AS45102", # Alibaba (China) Technology Co., Ltd.
+      - "AS55967", # Beijing Baidu Netcom Science and Technology Co., Ltd.
+      - "AS137971", # Perfect Online Technology
+      - "AS134105", # KATECH
+      - "AS9269",  # Hong Kong Broadband Network
+      - "AS4760",  # HKT Limited
+      - "AS9304",  # HGC Global Communications Limited
+      - "AS4515",  # ERX-STAR HKT Limited
+      - "AS7713",  # PT Telekomunikasi Indonesia
+      - "AS7473",  # Singapore Telecommunications Limited
+      - "AS4657",  # StarHub Ltd
+      - "AS9892",  # Mobile One Ltd
+      - "AS9443",  # Link Broadband
+      - "AS9583",  # Sify Limited
+      - "AS55410", # VnCloud
+      - "AS38001", # NewMedia Express
+      - "AS45899", # VNPT Corp
+      - "AS131429", # Megatron
+      - "AS135905", # VNPT
+      - "AS45543", # SingNet
+      - "AS56308", # Telin
+      - "AS24203", # NAPXLNET
+      - "AS24378", # ENGTAC
+      - "AS133752", # LEASEWEB-APAC-HKG-10
+      - "AS133480", # INTERGRID
+      - "AS132816", # SIMPLERCLOUD-AS-AP
+      - "AS132787", # MNSPL
+      - "AS132203", # TENCENT
+      - "AS131584", # TAIFO
+      - "AS45102", # CNNIC-ALIBABA-CN-NET-AP
+      - "AS38283", # CHINANET
+      - "AS23724", # CHINANET-IDC
+      - "AS17621", # CNCGROUP-SH
+      - "AS4134"   # CHINANET-BACKBONE
+      # ... Add others as necessary ...
+    high-risk-countries: # List of ISO country codes considered high-risk
+      - "IR" # Iran
+      # Add other relevant countries based on risk assessment
   ip:
     suspicious-requests-threshold: 5
     block-threshold: 10
