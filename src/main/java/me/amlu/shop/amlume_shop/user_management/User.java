@@ -14,7 +14,7 @@ import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
-import me.amlu.shop.amlume_shop.model.address.Address;
+import me.amlu.shop.amlume_shop.user_management.address.Address;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;

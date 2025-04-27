@@ -10,17 +10,12 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
-// Removed unused validation imports for method parameters
-// import jakarta.validation.constraints.Email;
-// import jakarta.validation.constraints.NotBlank;
-// import jakarta.validation.constraints.Size;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.security.core.userdetails.UserDetails; // Keep if findUserDetails is used
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional; // Keep for @Modifying if needed
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Optional;
