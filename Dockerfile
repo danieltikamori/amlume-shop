@@ -5,17 +5,17 @@ FROM ghcr.io/graalvm/native-image-community:21 AS builder
 # Set working directory
 WORKDIR /app
 
-# Install locales and set default locale (Fixes setlocale warnings)
-# Ensure your base image uses apt (like Debian/Ubuntu based ones)
-# If using a different package manager (like apk for Alpine), adjust accordingly.
-RUN apt-get update && apt-get install -y locales \
-    && echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
-    && locale-gen en_US.UTF-8 \
-    && update-locale LANG=en_US.UTF-8 \
-    && rm -rf /var/lib/apt/lists/*
-ENV LANG en_US.UTF-8
-ENV LANGUAGE en_US:en
-ENV LC_ALL en_US.UTF-8
+# --- REMOVED Locale Installation Block ---
+# The base image has conflicting dependencies that prevent installing glibc-langpack-en.
+# We will accept potential locale warnings during the build process, as the runtime
+# image (distroless) should handle locales correctly if needed.
+# RUN microdnf install -y glibc-langpack-en && \
+#     microdnf clean all && \
+#     rm -rf /var/cache/yum/*
+# ENV LANG=en_US.UTF-8
+# ENV LANGUAGE=en_US:en
+# ENV LC_ALL=en_US.UTF-8
+# --- End of Removed Block ---
 
 # Copy the Maven wrapper and project files
 # Copy pom.xml and mvnw first to leverage Docker cache
