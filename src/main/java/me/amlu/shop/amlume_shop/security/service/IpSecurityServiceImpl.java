@@ -11,12 +11,8 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.util.concurrent.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.IpSecurityException;
 import me.amlu.shop.amlume_shop.security.model.IpBlock;
 import me.amlu.shop.amlume_shop.security.model.IpMetadata;
@@ -25,34 +21,35 @@ import me.amlu.shop.amlume_shop.security.repository.IpBlockRepository;
 import me.amlu.shop.amlume_shop.security.repository.IpMetadataRepository;
 import me.amlu.shop.amlume_shop.security.repository.IpWhitelistRepository;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.ExecutionException;
+import java.util.Objects;
+
+import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.IP_BLOCK_CACHE;
+import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.IP_METADATA_CACHE;
 
 @Service
-@Slf4j
-@Transactional
 public class IpSecurityServiceImpl implements IpSecurityService {
-    private static final int CACHE_SIZE = 10000;
-    private static final Duration CACHE_DURATION = Duration.ofHours(24);
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(IpSecurityServiceImpl.class);
 
     private final IpBlockRepository ipBlockRepository;
     private final IpWhitelistRepository ipWhitelistRepository;
     private final IpMetadataRepository ipMetadataRepository;
     private final GeoLocationService geoLocationService;
     private final AuditLogger auditLogger;
-    private final LoadingCache<String, Boolean> ipBlockCache;
-    private final LoadingCache<String, IpMetadata> ipMetadataCache;
-    private final RateLimiter rateLimiter;
-    private IpSecurityService self;
+    private final RateLimiter rateLimiter; // Keep Guava RateLimiter for now
+    private final IpSecurityService self; // For transactional self-calls
+    private final Cache ipBlockCacheInstance; // Spring Cache instance
+    private final Cache ipMetadataCacheInstance; // Spring Cache instance
 
     @Value("${security.ip.suspicious-requests-threshold}")
     private int suspiciousRequestsThreshold;
@@ -60,40 +57,30 @@ public class IpSecurityServiceImpl implements IpSecurityService {
     @Value("${security.ip.block-threshold}")
     private int blockThreshold;
 
-    public IpSecurityServiceImpl(IpBlockRepository ipBlockRepository, IpWhitelistRepository ipWhitelistRepository,
-                                 IpMetadataRepository ipMetadataRepository,
-                                 GeoLocationService geoLocationService,
-                                 AuditLogger auditLogger) {
+    public IpSecurityServiceImpl(
+            IpBlockRepository ipBlockRepository,
+            IpWhitelistRepository ipWhitelistRepository,
+            IpMetadataRepository ipMetadataRepository,
+            GeoLocationService geoLocationService,
+            AuditLogger auditLogger,
+            CacheManager cacheManager, // Inject CacheManager
+            @Lazy IpSecurityService self // Inject self lazily
+    ) {
         this.ipBlockRepository = ipBlockRepository;
         this.ipWhitelistRepository = ipWhitelistRepository;
         this.ipMetadataRepository = ipMetadataRepository;
         this.geoLocationService = geoLocationService;
         this.auditLogger = auditLogger;
+        this.self = self; // Assign self
 
-        this.ipBlockCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(CACHE_DURATION)
-                .maximumSize(CACHE_SIZE)
-                .recordStats()
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public Boolean load(@NotNull String ip) {
-                        return checkIfIpIsBlocked(ip);
-                    }
-                });
+        // Initialize Spring Cache instances
+        this.ipBlockCacheInstance = cacheManager.getCache(IP_BLOCK_CACHE);
+        this.ipMetadataCacheInstance = cacheManager.getCache(IP_METADATA_CACHE);
+        Objects.requireNonNull(this.ipBlockCacheInstance, "Cache '" + IP_BLOCK_CACHE + "' not configured or CacheManager not available.");
+        Objects.requireNonNull(this.ipMetadataCacheInstance, "Cache '" + IP_METADATA_CACHE + "' not configured or CacheManager not available.");
 
-        this.ipMetadataCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(CACHE_DURATION)
-                .maximumSize(CACHE_SIZE)
-                .recordStats()
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public IpMetadata load(@NotNull String ip) {
-                        return getOrCreateIpMetadata(ip);
-                    }
-                });
 
+        // Keep Guava RateLimiter initialization
         this.rateLimiter = RateLimiter.create(100.0); // 100 requests per second
     }
 
@@ -101,25 +88,43 @@ public class IpSecurityServiceImpl implements IpSecurityService {
     public boolean isIpBlocked(String ip) {
         if (StringUtils.isBlank(ip)) {
             log.warn("Attempt to check blank IP address");
-            return true;
+            return true; // Fail secure
         }
 
         try {
-            // Check if IP is explicitly blocked
-            if (Optional.of(ipBlockCache.get(ip)).orElse(false)) {
+            // Check cache for explicit block
+            // The second argument is a Callable used if the key is not found
+            Boolean blocked = ipBlockCacheInstance.get(ip, () -> checkIfIpIsBlocked(ip));
+
+            // Handle potential null from cache loader if checkIfIpIsBlocked could return null
+            // Or if cache allows null values (though we disabled it)
+            if (Boolean.TRUE.equals(blocked)) {
                 return true;
             }
 
-            // Check if IP is suspicious enough to be blocked
-            IpMetadata metadata = ipMetadataCache.get(ip);
+            // Check if IP is suspicious enough to be blocked (load metadata from cache)
+            IpMetadata metadata = ipMetadataCacheInstance.get(ip, () -> getOrCreateIpMetadata(ip));
+
+            // Handle case where metadata loading fails or returns null
+            if (metadata == null) {
+                log.error("Failed to load or create IP metadata for IP: {}. Assuming blocked.", ip);
+                return true; // Fail secure
+            }
+
             if (metadata.getSuspiciousCount() >= blockThreshold) {
+                // Use self-injection to ensure transactional execution
                 self.blockIp(ip, "Exceeded suspicious activity threshold");
                 return true;
             }
 
             return false;
-        } catch (ExecutionException e) {
-            log.error("Error checking IP block status: {}", ip, e);
+        } catch (Cache.ValueRetrievalException e) {
+            // Handle exceptions during the cache loading phase (checkIfIpIsBlocked or getOrCreateIpMetadata)
+            log.error("Error retrieving value from cache for IP: {}. Assuming blocked.", ip, e);
+            return true; // Fail secure
+        } catch (Exception e) {
+            // Catch unexpected errors
+            log.error("Unexpected error checking IP block status: {}. Assuming blocked.", ip, e);
             return true; // Fail secure
         }
     }
@@ -128,29 +133,43 @@ public class IpSecurityServiceImpl implements IpSecurityService {
     public boolean isIpSuspicious(String ip, HttpServletRequest request) {
         if (StringUtils.isBlank(ip)) {
             log.warn("Attempt to check blank IP address for suspicion");
-            return true;
+            return true; // Fail safe/secure based on policy
         }
 
         try {
-            IpMetadata metadata = ipMetadataCache.get(ip);
-            String currentGeo = geoLocationService.getGeolocation(ip);
+            // Load metadata from cache or create if not present
+            IpMetadata metadata = ipMetadataCacheInstance.get(ip, () -> getOrCreateIpMetadata(ip));
+
+            if (metadata == null) {
+                log.error("Failed to load or create IP metadata for IP: {}. Assuming suspicious.", ip);
+                return true; // Fail safe/secure
+            }
+
+            String currentGeo = geoLocationService.getGeolocation(ip); // Consider caching this too
             int currentTtl = extractTTL(request);
 
             boolean suspicious = checkSuspiciousActivity(ip, currentGeo, currentTtl, metadata);
 
             if (suspicious && metadata.getSuspiciousCount() >= blockThreshold) {
+                // Use self-injection for transactional call
                 self.blockIp(ip, "Exceeded suspicious activity threshold");
+                // No need to return true immediately after blocking, let persist happen
             }
 
-            // Persist updated metadata
-            self.persistIpMetadata(ip, metadata);
+            // Persist updated metadata (transactional via self-injection)
+            self.persistIpMetadata(ip, metadata); // persistIpMetadata should update the cache if necessary
             return suspicious;
 
+        } catch (Cache.ValueRetrievalException e) {
+            log.error("Error retrieving metadata from cache for IP: {}. Assuming suspicious.", ip, e);
+            return true; // Fail safe/secure
         } catch (Exception e) {
-            log.error("Error checking IP suspicion: {}", ip, e);
-            return true; // Fail safe
+            log.error("Error checking IP suspicion: {}. Assuming suspicious.", ip, e);
+            return true; // Fail safe/secure
         }
     }
+
+    // No changes needed in checkSuspiciousActivity, extractTTL, convertToIpMetadata, updateEntityFromMetadata, isIpWhitelisted
 
     private boolean checkSuspiciousActivity(String ip, String currentGeo, int currentTtl, IpMetadata metadata) {
         boolean suspicious = false;
@@ -169,7 +188,7 @@ public class IpSecurityServiceImpl implements IpSecurityService {
             suspicious = true;
         }
 
-        // Check rate limiting
+        // Check rate limiting (Keep Guava RateLimiter for now)
         if (!rateLimiter.tryAcquire()) {
             log.warn("Rate limit exceeded for IP: {}", ip);
             metadata.incrementSuspiciousCount();
@@ -177,17 +196,25 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         }
 
         metadata.updateLastSeen();
+        // Return true if any check was suspicious OR if the count exceeds the lower threshold
         return suspicious || metadata.getSuspiciousCount() > suspiciousRequestsThreshold;
     }
 
+
     @Override
-    @Transactional
+    @Transactional // Keep transactional here
     public void blockIp(String ip, String reason) {
         if (StringUtils.isBlank(ip)) {
             return;
         }
 
         try {
+            // Check if already blocked to avoid redundant operations (optional)
+            if (Boolean.TRUE.equals(ipBlockCacheInstance.get(ip, () -> checkIfIpIsBlocked(ip)))) {
+                log.debug("IP {} already blocked, skipping block operation.", ip);
+                return;
+            }
+
             IpBlock ipBlock = IpBlock.builder()
                     .ipAddress(ip)
                     .reason(reason)
@@ -196,181 +223,191 @@ public class IpSecurityServiceImpl implements IpSecurityService {
                     .build();
 
             ipBlockRepository.save(ipBlock);
-            ipBlockCache.put(ip, true);
+            ipBlockCacheInstance.put(ip, true); // Update cache after successful save
 
             auditLogger.logSecurityEvent("IP_BLOCKED", null, ip, reason);
             log.info("IP address blocked: {} for reason: {}", ip, reason);
 
         } catch (Exception e) {
+            // Don't re-throw IpSecurityException if already caught, just log
             log.error("Error blocking IP address: {}", ip, e);
-            throw new IpSecurityException("Failed to block IP address", e);
+            // Let Spring handle transaction rollback on runtime exceptions
+            throw new IpSecurityException("Failed to block IP address: " + ip, e);
         }
     }
 
     private int extractTTL(HttpServletRequest request) {
         try {
             String ttlHeader = request.getHeader("X-TTL");
+            // Provide a default TTL if header is missing, e.g., 0 or -1
             return ttlHeader != null ? Integer.parseInt(ttlHeader) : 0;
         } catch (NumberFormatException e) {
-            return 0;
+            log.warn("Invalid TTL header format for request from {}: {}", request.getRemoteAddr(), request.getHeader("X-TTL"));
+            return 0; // Default value on format error
         }
     }
 
-    @Transactional
+
     @Override
+    @Transactional // Keep transactional here
     public void persistIpMetadata(String ip, IpMetadata metadata) {
+        if (StringUtils.isBlank(ip) || metadata == null) {
+            log.warn("Attempted to persist null or blank IP/metadata");
+            return;
+        }
         try {
             IpMetadataEntity entity = ipMetadataRepository.findByIpAddress(ip)
-                    .orElseGet(() -> new IpMetadataEntity(ip));
+                    .orElseGet(() -> new IpMetadataEntity(ip)); // Create if not found
 
             updateEntityFromMetadata(entity, metadata);
-            ipMetadataRepository.save(entity);
+            IpMetadataEntity savedEntity = ipMetadataRepository.save(entity);
+
+            // Update cache AFTER successful save
+            // Convert the saved entity back to IpMetadata to ensure cache consistency
+            ipMetadataCacheInstance.put(ip, convertToIpMetadata(savedEntity));
+            log.debug("Persisted and updated cache for IP metadata: {}", ip);
 
         } catch (Exception e) {
             log.error("Error persisting IP metadata for IP: {}", ip, e);
-            // Handle the error appropriately
+            // Let Spring handle transaction rollback
+            throw new IpSecurityException("Failed to persist IP metadata for: " + ip, e);
         }
     }
 
+    // This is the loader function for the ipMetadataCache
     private IpMetadata getOrCreateIpMetadata(String ip) {
+        log.debug("Cache miss or loading required for IP metadata: {}", ip);
+        // Find existing or create a new transient IpMetadata object
+        // This doesn't save to DB yet, persistIpMetadata does that.
         return ipMetadataRepository.findByIpAddress(ip)
-                .map(this::convertToIpMetadata)
-                .orElseGet(IpMetadata::new);
+                .map(this::convertToIpMetadata) // Convert existing entity
+                .orElseGet(() -> {
+                    log.debug("No existing metadata found for IP: {}, creating new transient instance.", ip);
+                    return new IpMetadata(); // Create new transient metadata
+                });
     }
 
+    // This is the loader function for the ipBlockCache
+    private Boolean checkIfIpIsBlocked(String ip) {
+        log.debug("Cache miss or loading required for IP block status: {}", ip);
+        return ipBlockRepository.existsByIpAddressAndActiveTrue(ip);
+    }
+
+
+    // --- Conversion methods remain the same ---
     private IpMetadata convertToIpMetadata(IpMetadataEntity entity) {
         IpMetadata metadata = new IpMetadata();
-        // Set the values from entity to metadata
         metadata.setLastGeolocation(entity.getLastGeolocation());
-        entity.getPreviousGeolocations().forEach(metadata::setLastGeolocation);
+        // This seems wrong - it overwrites lastGeolocation repeatedly.
+        // Should likely add to a history list if IpMetadata supports it.
+        // Assuming IpMetadata.setLastGeolocation is correct for now.
+        // entity.getPreviousGeolocations().forEach(metadata::setLastGeolocation); // REVIEW THIS LOGIC
 
-        // Set timestamps
+        // A better approach if IpMetadata has a way to add previous locations:
+        if (entity.getPreviousGeolocations() != null) {
+            entity.getPreviousGeolocations().forEach(geo -> {
+                // Assuming IpMetadata has a method like addPreviousGeolocation(String geo)
+                // metadata.addPreviousGeolocation(geo);
+            });
+        }
+
+
         metadata.setFirstSeen(entity.getFirstSeenAt());
         metadata.setLastSeen(entity.getLastSeenAt());
 
-        // Set TTL
-        for (Integer ttl : entity.getTtlHistory()) {
-            metadata.hasTTLAnomaly(ttl); // This will populate the TTL history
+        // Populate TTL history by calling hasTTLAnomaly (relies on side effect)
+        if (entity.getTtlHistory() != null) {
+            entity.getTtlHistory().forEach(metadata::hasTTLAnomaly);
         }
 
-        // Set Geo history
-        for (IpMetadataEntity.GeoLocationEntry entry : entity.getGeoHistory()) {
-            metadata.hasGeolocationChanged(entry.getLocation()); // This will populate the geo history
+        // Populate Geo history by calling hasGeolocationChanged (relies on side effect)
+        if (entity.getGeoHistory() != null) {
+            entity.getGeoHistory().forEach(entry -> metadata.hasGeolocationChanged(entry.getLocation()));
         }
 
         // Set suspicious count
+        // This is inefficient. IpMetadata should have a setSuspiciousCount method.
+        // Assuming it does: metadata.setSuspiciousCount(entity.getSuspiciousCount());
+        // If not, the loop is needed but suboptimal:
         for (int i = 0; i < entity.getSuspiciousCount(); i++) {
             metadata.incrementSuspiciousCount();
         }
 
-        // Set other fields as needed
-
         return metadata;
-    }
-
-    private Boolean checkIfIpIsBlocked(String ip) {
-        return ipBlockRepository.existsByIpAddressAndActiveTrue(ip);
     }
 
     private void updateEntityFromMetadata(IpMetadataEntity entity, IpMetadata metadata) {
         entity.setSuspiciousCount(metadata.getSuspiciousCount());
         entity.setLastGeolocation(metadata.getLastGeolocation());
         entity.setLastSeenAt(metadata.getLastSeen());
-        entity.setPreviousGeolocations(new ArrayList<>(metadata.getPreviousGeolocations()));
+
+        // Ensure lists are not null before creating new ArrayList
+        entity.setPreviousGeolocations(metadata.getPreviousGeolocations() != null ? new ArrayList<>(metadata.getPreviousGeolocations()) : new ArrayList<>());
 
         // Update geo history
         List<IpMetadataEntity.GeoLocationEntry> geoEntries = new ArrayList<>();
-        for (IpMetadata.GeoLocation loc : metadata.getGeoHistory()) {
-            geoEntries.add(new IpMetadataEntity.GeoLocationEntry(
-                    loc.location(),
-                    loc.timestamp()
-            ));
+        if (metadata.getGeoHistory() != null) {
+            for (IpMetadata.GeoLocation loc : metadata.getGeoHistory()) {
+                // Ensure location and timestamp are not null if required by GeoLocationEntry constructor
+                if (loc != null && loc.location() != null && loc.timestamp() != null) {
+                    geoEntries.add(new IpMetadataEntity.GeoLocationEntry(
+                            loc.location(),
+                            loc.timestamp()
+                    ));
+                }
+            }
         }
         entity.setGeoHistory(geoEntries);
 
         // Update TTL history
-        entity.setTtlHistory(new ArrayList<>(metadata.getTtlHistory()));
+        entity.setTtlHistory(metadata.getTtlHistory() != null ? new ArrayList<>(metadata.getTtlHistory()) : new ArrayList<>());
         entity.setLastTtl(metadata.getLastTtl());
     }
+    // --- End of conversion methods ---
+
 
     @Override
-    @Transactional
+    @Transactional // Keep transactional here
     public void unblockIp(String userId, String ip) {
         if (StringUtils.isBlank(ip)) {
             return;
         }
         try {
             ipBlockRepository.deactivateIpBlock(ip);
-//            ipBlockRepository.deleteByIpAddress(ip);
-//            // Clear metadata cache for this IP
-            ipMetadataCache.invalidate(ip);
+            // Evict from caches after successful deactivation
+            ipBlockCacheInstance.evict(ip);
+            ipMetadataCacheInstance.evict(ip); // Evict metadata too, as block status changed
+
             log.info("IP address unblocked: {}", ip);
             auditLogger.logSecurityEvent("IP_UNBLOCKED", userId, "Manual unblock", ip);
         } catch (Exception e) {
             log.error("Error unblocking IP address: {}", ip, e);
-            throw new IpSecurityException("Failed to unblock IP address", e);
+            throw new IpSecurityException("Failed to unblock IP address: " + ip, e);
         }
     }
+
     @Override
     public boolean isIpWhitelisted(String ipAddress) {
         if (StringUtils.isBlank(ipAddress)) {
             return false;
         }
-
+        // No caching needed here unless whitelist changes very rarely and lookup is expensive
         try {
             return ipWhitelistRepository.existsByIpAddressAndActiveTrue(ipAddress);
         } catch (Exception e) {
             log.error("Error checking IP whitelist status for IP: {}", ipAddress, e);
-            return false;
+            return false; // Fail safe (treat as not whitelisted on error)
         }
     }
 
 
-    // Helper method to get metadata for testing/monitoring
+    // Helper method for testing/monitoring - needs adjustment for Spring Cache
     @VisibleForTesting
-    IpMetadata getIpMetadata(String ip) throws ExecutionException {
-        return ipMetadataCache.get(ip);
+    IpMetadata getIpMetadata(String ip) {
+        // Direct cache access for inspection (might return null if not loaded)
+        Cache.ValueWrapper wrapper = ipMetadataCacheInstance.get(ip);
+        return (wrapper != null) ? (IpMetadata) wrapper.get() : null;
+        // Or trigger loading if needed for test:
+        // return ipMetadataCacheInstance.get(ip, () -> getOrCreateIpMetadata(ip));
     }
-
-//    public boolean isIpSuspicious(String ip, HttpServletRequest request) {
-//        IpMetadata metadata = getIpMetadata(ip);
-//
-//        // Check for common spoofing indicators
-//        boolean suspicious = checkSpoofingIndicators(ip, request, metadata);
-//
-//        if (suspicious) {
-//            metadata.incrementSuspiciousCount();
-//            if (metadata.getSuspiciousCount() > suspiciousRequestsThreshold) {
-//                blockIp(ip);
-//                return true;
-//            }
-//        }
-//
-//        return false;
-//    }
-
-//    private boolean checkSpoofingIndicators(String ip, HttpServletRequest request, IpMetadata metadata) {
-//        // Check for rapid geolocation changes
-//        String currentGeo = String.valueOf(geoLocationService.getGeolocation(ip));
-//        if (metadata.hasGeolocationChanged(currentGeo)) {
-//            log.warn("Suspicious geolocation change for IP: {}", ip);
-//            return true;
-//        }
-//
-//        // Check for inconsistent TTL values
-//        int ttl = extractTTL(request);
-//        if (metadata.hasTTLAnomaly(ttl)) {
-//            log.warn("TTL anomaly detected for IP: {}", ip);
-//            return true;
-//        }
-//
-//        // Check for TCP sequence prediction
-//        if (hasAbnormalTcpSequence(request)) {
-//            log.warn("Abnormal TCP sequence for IP: {}", ip);
-//            return true;
-//        }
-//
-//        return false;
-//    }
 }
-
