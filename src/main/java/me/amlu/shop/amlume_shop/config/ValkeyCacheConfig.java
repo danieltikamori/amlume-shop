@@ -52,6 +52,7 @@ public class ValkeyCacheConfig {
     public static final String IP_BLOCK_CACHE = "ipBlockCache";
     public static final String IP_METADATA_CACHE = "ipMetadataCache";
     public static final String GEO_LOCATION_CACHE = "geoLocationCache";
+    public static final String GEO_HISTORY_CACHE = "geoHistoryCache";
 
     // Inject properties using @Value
     @Value("${valkey.host:localhost}")
@@ -62,6 +63,9 @@ public class ValkeyCacheConfig {
 
     @Value("${valkey.password:#{null}}")
     private String redisPassword;
+
+    @Value("${security.geo.time-window-hours:24}")
+    private int geoHistoryTtlHours;
 
     // Inject the application's pre-configured ObjectMapper
     private final ObjectMapper objectMapper;
@@ -158,15 +162,19 @@ public class ValkeyCacheConfig {
                 .cacheDefaults(defaultCacheConfig)
                 // --- Configure Specific Caches ---
 
-                // IP Security Caches (using 24h TTL like the original Guava config)
+                // IP Security Caches (using 24h TTL)
                 .withCacheConfiguration(IP_BLOCK_CACHE,
                         defaultCacheConfig.entryTtl(Duration.ofHours(24)))
                 .withCacheConfiguration(IP_METADATA_CACHE,
                         defaultCacheConfig.entryTtl(Duration.ofHours(24)))
 
-                // Geolocation Cache (using 24h TTL like the original Guava config)
+                // Geolocation Cache (using 24h TTL)
                 .withCacheConfiguration(GEO_LOCATION_CACHE,
                         defaultCacheConfig.entryTtl(Duration.ofHours(24)))
+
+                // GeoHistory cache
+                .withCacheConfiguration(GEO_HISTORY_CACHE,
+                        defaultCacheConfig.entryTtl(Duration.ofHours(this.geoHistoryTtlHours)))
 
                 // --- Include Existing Cache Configurations from Constants ---
                 .withCacheConfiguration(Constants.PRODUCTS_CACHE, defaultCacheConfig.entryTtl(PRODUCTS_CACHE_TTL))
