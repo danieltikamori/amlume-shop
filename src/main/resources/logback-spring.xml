@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+  ~
+  ~ This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+  ~
+  ~ Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+  ~
+  ~ Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+  -->
+
+<configuration>
+
+    <!-- Include Spring Boot's base configuration -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Define properties -->
+    <property name="LOG_FILE" value="./logs/application.log"/> <!-- Path relative to runtime location -->
+    <property name="LOG_ARCHIVE" value="./logs/archived/application.%d{yyyy-MM-dd}.%i.log"/>
+
+    <!-- Appender to log to Console -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- Use Spring Boot's default console pattern -->
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Appender to log to File and Roll -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <encoder>
+            <!-- Use Spring Boot's default file pattern or define your own -->
+            <pattern>${FILE_LOG_PATTERN}</pattern>
+            <charset>utf8</charset>
+        </encoder>
+
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- daily rollover -->
+            <fileNamePattern>${LOG_ARCHIVE}</fileNamePattern>
+            <!-- keep 30 days' worth of history capped at 1GB total size -->
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+            <!-- Or roll based on size, e.g., each file max 10MB -->
+            <maxFileSize>10MB</maxFileSize>
+        </rollingPolicy>
+
+    </appender>
+
+    <!-- Configure root logger -->
+    <root level="INFO"> <!-- Set your desired root logging level -->
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <!-- Configure specific logger levels (optional) -->
+    <!-- Example: Set your application's package to DEBUG -->
+    <logger name="me.amlu.shop.amlume_shop" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Example: Quieter logging for noisy libraries -->
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.springframework.cache" level="INFO"/> <!-- Adjust as needed -->
+
+
+    <!-- Add shutdown hook for graceful logging shutdown -->
+    <shutdownHook class="ch.qos.logback.core.hook.DelayingShutdownHook"/>
+
+</configuration>
