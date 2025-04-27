@@ -25,46 +25,46 @@ public class Street implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @NotBlank
-    @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters")
-    @Column(name = "street")
-    private String value;
+    @Size(min = 1, max = 250, message = "Street must be between 1 and 250 characters")
+    @Column(name = "street_name")
+    private String streetName;
 
     protected Street() {
     } // for JPA
 
-    public Street(String value) {
+    public Street(String streetName) {
         // It's better to perform validation using Bean Validation annotations and let the framework handle it,
-        // but constructor validation is also an option. Ensure the value is not null or empty before trim.
-        if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
+        // but constructor validation is also an option. Ensure the streetName is not null or empty before trim.
+        if (streetName == null || streetName.trim().isEmpty() || streetName.trim().length() > 250) {
             // Using a custom exception related to domain validation might be better than IllegalArgumentException
-            throw new IllegalArgumentException("Building value must be between 5 and 250 characters");
+            throw new IllegalArgumentException("Street name must be between 1 and 250 characters");
         }
-        this.value = value.trim(); // Trim whitespace
+        this.streetName = streetName.trim(); // Trim whitespace
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        // Use getClass() for strict value object equality
+        // Use getClass() for strict streetName object equality
         if (o == null || getClass() != o.getClass()) return false;
         Street street = (Street) o;
-        // Compare the core value field using Objects.equals for null safety
-        return Objects.equals(value, street.value);
+        // Compare the core streetName field using Objects.equals for null safety
+        return Objects.equals(streetName, street.streetName);
     }
 
     @Override
     public int hashCode() {
         // Use Objects.hash for concise and null-safe hashCode generation
-        return Objects.hash(value);
+        return Objects.hash(streetName);
     }
 
     @Override
     public String toString() {
-        // This toString is reasonable for a simple value object
-        return value;
+        // This toString is reasonable for a simple streetName object
+        return streetName;
     }
 
-    public @NotBlank @Size(min = 5, max = 250, message = "Street must be between 5 and 250 characters") String getValue() {
-        return this.value;
+    public @NotBlank @Size(min = 1, max = 250, message = "Street must be between 1 and 250 characters") String getStreetName() {
+        return this.streetName;
     }
 }

@@ -29,44 +29,44 @@ public class ZipCode implements Serializable {
     @NotBlank
     @Size(min = 2, max = 15, message = "Zip code must be between 2 and 15 characters")
     @Column(name = "zip_code")
-    private String value;
+    private String zipCode;
 
     protected ZipCode() {
     } // for JPA
 
-    public ZipCode(String value) {
+    public ZipCode(String zipCode) {
         // It's better to perform validation using Bean Validation annotations and let the framework handle it,
-        // but constructor validation is also an option. Ensure the value is not null or empty before trim.
-        if (value == null || value.trim().length() < 5 || value.trim().length() > 250) {
+        // but constructor validation is also an option. Ensure the zipCode is not null or empty before trim.
+        if (zipCode == null || zipCode.trim().length() < 2 || zipCode.trim().length() > 250) {
             // Using a custom exception related to domain validation might be better than IllegalArgumentException
-            throw new IllegalArgumentException("Building value must be between 5 and 250 characters");
+            throw new IllegalArgumentException("Zipcode must be between 2 and 250 characters");
         }
-        this.value = value.trim(); // Trim whitespace
+        this.zipCode = zipCode.trim(); // Trim whitespace
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        // Use getClass() for strict value object equality
+        // Use getClass() for strict zipCode object equality
         if (o == null || getClass() != o.getClass()) return false;
         ZipCode zipCode = (ZipCode) o;
-        // Compare the core value field using Objects.equals for null safety
-        return Objects.equals(value, zipCode.value);
+        // Compare the core zipCode field using Objects.equals for null safety
+        return Objects.equals(this.zipCode, zipCode.zipCode);
     }
 
     @Override
     public int hashCode() {
         // Use Objects.hash for concise and null-safe hashCode generation
-        return Objects.hash(value);
+        return Objects.hash(zipCode);
     }
 
     @Override
     public String toString() {
-        // This toString is reasonable for a simple value object
-        return value;
+        // This toString is reasonable for a simple zipCode object
+        return zipCode;
     }
 
-    public @NotBlank @Size(min = 2, max = 15, message = "Zip code must be between 2 and 15 characters") String getValue() {
-        return this.value;
+    public @NotBlank @Size(min = 2, max = 15, message = "Zip code must be between 2 and 15 characters") String getZipCode() {
+        return this.zipCode;
     }
 }
