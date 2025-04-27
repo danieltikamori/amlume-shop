@@ -9,7 +9,8 @@
 
 services:
   the-spring-app:
-    image: spring-app-image
+    image: amlume-shop
+    container_name: amlume-shop
     environment:
       VAULT_URI: http://vault:8200 # Assumes vault service name is 'vault'
       VAULT_TOKEN: hvs.95eba8ed-f6fc-958a-f490-c7fd0eda5e9e
