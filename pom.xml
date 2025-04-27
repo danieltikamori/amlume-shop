@@ -40,6 +40,7 @@
         <java.version>21</java.version>
         <maven.compiler.parameters>true</maven.compiler.parameters>
         <spring.version>6.2.2</spring.version>
+        <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <spring-modulith.version>1.2.4</spring-modulith.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
         <spring-webflux.version>6.2.2</spring-webflux.version>
@@ -90,6 +91,39 @@
         <bcprov-jdk18on.version>1.80</bcprov-jdk18on.version>
 
     </properties>
+
+    <profiles>
+        <profile>
+            <id>native</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.graalvm.buildtools</groupId>
+                        <artifactId>native-maven-plugin</artifactId>
+                        <version>${native.maven.plugin.version}</version>
+                        <extensions>true</extensions>
+                        <executions>
+                            <execution>
+                                <id>build-native</id>
+                                <goals>
+                                    <goal>compile-no-fork</goal>
+                                </goals>
+                                <phase>package</phase>
+                            </execution>
+                            <execution>
+                                <id>test-native</id>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                                <phase>test</phase>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -773,6 +807,7 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <fork>true</fork>
                     <parameters>true</parameters>
                     <compilerArgs>
                         <arg>-Xlint:all,-options,-path</arg>
@@ -795,6 +830,19 @@
                             <version>${org.lombok.mapstruct.binding.version}</version>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>me.amlu.shop.amlume_shop.AmlumeShopApplication</mainClass>
+                            <addClasspath>true</addClasspath>
+                        </manifest>
+                    </archive>
                 </configuration>
             </plugin>
         </plugins>
