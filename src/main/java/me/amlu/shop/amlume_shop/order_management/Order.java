@@ -44,7 +44,6 @@ public class Order extends BaseEntity {
     private String orderId;
 
     @NotBlank
-    @GeneratedValue(strategy = GenerationType.AUTO)
     @Column(name = "order_number", updatable = false, unique = true)
     private String orderNumber;
 
