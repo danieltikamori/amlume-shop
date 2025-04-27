@@ -148,6 +148,15 @@ public class RedisSlidingWindowRateLimiter implements RateLimiter {
     }
 
     // --- Helper methods for key parsing ---
+
+    /**
+     * Extracts the limiter name from the key.
+     * IMPORTANT: Assumes the format "limiterName:identifier".
+     * If no separator is found, returns "default".
+     *
+     * @param key The key to extract the limiter name from.
+     * @return The extracted limiter name or "default" if not found.
+     */
     private String extractLimiterName(String key) {
         int separatorIndex = key.indexOf(':');
         if (separatorIndex > 0) {
