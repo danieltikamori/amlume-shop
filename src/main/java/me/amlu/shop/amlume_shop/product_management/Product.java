@@ -37,6 +37,10 @@ public class Product extends BaseEntity {
     @Column(name = "product_id", nullable = false, updatable = false, unique = true)
     private Long productId;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "productName.name", column = @Column(name = "product_name", nullable = false, unique = true)),
+    })
+    @Column(name = "product_name", nullable = false)
     @Embedded
     @Valid
     // Optional: Override column name if Hibernate doesn't generate 'productName_name' as desired
@@ -49,6 +53,10 @@ public class Product extends BaseEntity {
     @Column(name = "original_image_filename") // For reference
     private String originalImageFilename;     // Stores the original uploaded filename
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "productDescription.description", column = @Column(name = "product_description", length = 2000)),
+    })
+    @Column(name = "product_description", length = 2000)
     @Embedded
     @Valid
     // Optional: Override column name if needed
@@ -62,18 +70,18 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
-    @AttributeOverride(name = "amount", column = @Column(name = "product_price", nullable = false, precision = 12, scale = 2))
+    @AttributeOverride(name = "money.amount", column = @Column(name = "product_price", nullable = false, precision = 12, scale = 2))
     private Money productPrice;
 
     @Embedded
     @Valid
-    @AttributeOverride(name = "percentage", column = @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2))
+    @AttributeOverride(name = "discountPercentage.percentage", column = @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2))
     private DiscountPercentage productDiscountPercentage;
 
     @Embedded
     @Valid
     // Mark as not directly updatable via standard setters if calculation is always enforced
-    @AttributeOverride(name = "amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2 /*, updatable = false ??? */))
+    @AttributeOverride(name = "money.amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2 /*, updatable = false ??? */))
     private Money productSpecialPrice;
 
     @ManyToOne(fetch = FetchType.LAZY)
