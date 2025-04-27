@@ -12,51 +12,62 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
 import me.amlu.shop.amlume_shop.config.AsnConfigLoader;
+import me.amlu.shop.amlume_shop.config.ValkeyCacheConfig;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.enums.RiskLevel;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import me.amlu.shop.amlume_shop.security.model.GeoLocationHistory;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(AdvancedGeoServiceImpl.class);
+
     private final MaxMindGeoService maxMindGeoService;
     private final GeoIp2Service geoIp2Service;
-    private final LoadingCache<String, GeoLocationHistory> locationHistoryCache;
     private final AlertService alertService;
     private final MetricRegistry metrics;
     private final AsnConfigLoader asnConfigLoader;
     private final EnhancedVpnDetectorService vpnDetector;
     private final AsnReputationService reputationService;
 
-    private final Set<String> knownVpnAsns;
+    // --- Injected Config ---
+    @Value("${security.geo.suspicious-distance-km:500.0}")
+    private double suspiciousDistanceKm; // Instance field
 
-    @Value("${security.geo.suspicious-distance-km}")
-    private static final double SUSPICIOUS_DISTANCE_KM = 500;
+    // timeWindowHours is used for cache TTL, configured in ValkeyCacheConfig now
 
-    @Value("${security.geo.time-window-hours}")
-    private static final int TIME_WINDOW_HOURS = 24;
+    @Value("${security.geo.known-vpn-asns}")
+    private Set<String> knownVpnAsns; // Injected from application.yml
 
-    public AdvancedGeoServiceImpl(MaxMindGeoService maxMindGeoService, GeoIp2Service geoIp2Service,
+    @Value("${security.geo.high-risk-countries}")
+    private Set<String> highRiskCountries; // Injected from application.yml
+
+    // --- Spring Cache ---
+    private final Cache locationHistoryCacheInstance;
+
+    public AdvancedGeoServiceImpl(MaxMindGeoService maxMindGeoService,
+                                  GeoIp2Service geoIp2Service,
                                   AlertService alertService,
-                                  MetricRegistry metrics, AsnConfigLoader asnConfigLoader, EnhancedVpnDetectorService vpnDetector, AsnReputationService reputationService) {
+                                  MetricRegistry metrics,
+                                  AsnConfigLoader asnConfigLoader,
+                                  EnhancedVpnDetectorService vpnDetector,
+                                  AsnReputationService reputationService,
+                                  CacheManager cacheManager // Inject CacheManager
+    ) {
         this.maxMindGeoService = maxMindGeoService;
         this.geoIp2Service = geoIp2Service;
         this.alertService = alertService;
@@ -65,39 +76,80 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         this.vpnDetector = vpnDetector;
         this.reputationService = reputationService;
 
-        // Initialize known VPN ASNs
-        this.knownVpnAsns = initializeKnownVpnAsns();
+        // Initialize Spring Cache instance
+        this.locationHistoryCacheInstance = cacheManager.getCache(ValkeyCacheConfig.GEO_HISTORY_CACHE);
+        Objects.requireNonNull(this.locationHistoryCacheInstance, "Cache '" + ValkeyCacheConfig.GEO_HISTORY_CACHE + "' not configured.");
 
-        this.locationHistoryCache = CacheBuilder.newBuilder()
-                .maximumSize(100_000)
-                .expireAfterWrite(TIME_WINDOW_HOURS, TimeUnit.HOURS)
-                .recordStats()
-                .build(new CacheLoader<>() {
-                    @NotNull
-                    @Override
-                    public GeoLocationHistory load(@NotNull String key) {
-                        return new GeoLocationHistory();
-                    }
-                });
+        log.info("AdvancedGeoServiceImpl initialized.");
+        // Log injected config for verification during startup (optional)
+        log.debug("Known VPN ASNs count: {}", knownVpnAsns != null ? knownVpnAsns.size() : 0);
+        log.debug("High Risk Countries count: {}", highRiskCountries != null ? highRiskCountries.size() : 0);
     }
 
     @Override
     public GeoVerificationResult verifyLocation(String ip, String userId) {
+        // Input validation
+        if (ip == null || ip.isBlank() || userId == null || userId.isBlank()) {
+            log.warn("Invalid input for verifyLocation: ip='{}', userId='{}'", ip, userId);
+            GeoVerificationResult invalidResult = new GeoVerificationResult();
+            invalidResult.setRisk(RiskLevel.HIGH);
+            invalidResult.addAlert("Invalid input provided for verification.");
+            return invalidResult;
+        }
+
         try (Timer.Context timer = metrics.timer("geo.verification").time()) {
-            GeoLocation currentLocation = maxMindGeoService.getGeoLocation(ip);
+            GeoLocation currentLocation = maxMindGeoService.getGeoLocation(ip); // Can return GeoLocation.unknown()
             GeoLocationHistory history = getOrCreateHistory(userId);
 
+            // Pass ASN from GeoLocation if available
+            if (currentLocation != null && currentLocation.getAsn() == null) {
+                try {
+                    String asn = String.valueOf(geoIp2Service.lookupAsn(ip));
+                    // Create a new GeoLocation object with ASN if needed, or modify if mutable
+                    // Assuming GeoLocation is immutable (record/builder pattern)
+                    currentLocation = GeoLocation.builder()
+                            .countryCode(currentLocation.getCountryCode())
+                            .countryName(currentLocation.getCountryName())
+                            .city(currentLocation.getCity())
+                            .postalCode(currentLocation.getPostalCode())
+                            .latitude(currentLocation.getLatitude())
+                            .longitude(currentLocation.getLongitude())
+                            .timeZone(currentLocation.getTimeZone())
+                            .subdivisionName(currentLocation.getSubdivisionName())
+                            .subdivisionCode(currentLocation.getSubdivisionCode())
+                            .asn(asn) // Add ASN here
+                            .build();
+                } catch (GeoIp2Exception e) {
+                    log.warn("Could not look up ASN for IP: {}", ip, e);
+                    // Proceed without ASN
+                }
+            }
+
             return analyzeLocation(currentLocation, history, userId);
+        } catch (Exception e) {
+            // Catch unexpected errors during verification
+            log.error("Unexpected error during geo verification for ip='{}', userId='{}'", ip, userId, e);
+            GeoVerificationResult errorResult = new GeoVerificationResult();
+            errorResult.setRisk(RiskLevel.HIGH); // Fail closed on unexpected error
+            errorResult.addAlert("Internal error during location verification.");
+            return errorResult;
         }
     }
 
     @Override
     public GeoLocationHistory getOrCreateHistory(String userId) {
         try {
-            return locationHistoryCache.get(userId);
-        } catch (ExecutionException e) {
-            log.error("Error getting location history for user {}", userId, e);
-            return new GeoLocationHistory(); // Fallback to new history if cache fails
+            // Use Spring Cache's get method with a loader lambda
+            // This retrieves from cache or calls the lambda if not found, then caches the result.
+            return locationHistoryCacheInstance.get(userId, GeoLocationHistory::new);
+        } catch (Cache.ValueRetrievalException e) {
+            // This exception wraps loader exceptions
+            log.error("Error retrieving/loading location history for user {}. Returning new history.", userId, e);
+            return new GeoLocationHistory(); // Fallback
+        } catch (Exception e) {
+            // Catch other potential cache interaction errors
+            log.error("Unexpected cache error for user {}. Returning new history.", userId, e);
+            return new GeoLocationHistory(); // Fallback
         }
     }
 
@@ -107,53 +159,46 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                                  String userId) {
         GeoVerificationResult result = new GeoVerificationResult();
 
-        if (currentLocation == null) {
+        // Handle case where MaxMind lookup failed but returned an "unknown" object
+        if (currentLocation == null || GeoLocation.DEFAULT_COUNTRY_CODE.equals(currentLocation.getCountryCode())) {
             return handleUnknownLocation(result);
         }
 
-        // Check for impossible travel
-        if (history.hasRecentLocation()) {
-            return checkImpossibleTravel(result, currentLocation, history, userId);
-        }
+        // Perform checks and update result
+        checkImpossibleTravel(result, currentLocation, history, userId);
+        checkVpnRisk(result, currentLocation);
+        checkCountryRisk(result, currentLocation);
 
-        // Safe to update history after validation
+        // --- Update History and Cache ---
+        // Decide policy: Always update, or only if not high risk?
+        // Let's always update history for now, as even risky logins are part of the history.
         history.addLocation(currentLocation);
+        // Explicitly put the modified history object back into the Spring Cache
+        try {
+            locationHistoryCacheInstance.put(userId, history);
+        } catch (Exception e) {
+            log.error("Failed to update location history cache for user {}", userId, e);
+            // Decide how to handle cache write failure - potentially log and continue
+        }
 
         return result;
     }
 
     @Override
     public GeoVerificationResult handleUnknownLocation(GeoVerificationResult result) {
-        result.setRisk(RiskLevel.HIGH);
-        result.addAlert("Unable to determine location");
+        result.setRisk(RiskLevel.MEDIUM); // Or HIGH depending on policy for unknown locations
+        result.addAlert("Unable to determine location from IP address.");
+        metrics.counter("geo.unknown.location").inc();
         return result;
     }
 
-    /**
-     * Check if the user has traveled an impossible distance in a given time
-     * window. If so, mark the request as high risk and send an alert.
-     * <p>
-     * The checkImpossibleTravel method takes in a GeoVerificationResult object, a GeoLocation object, a GeoLocationHistory object, and a String object as parameters. It checks if the lastLocation in the history is not null. If it's not null, it calculates the distance between the lastLocation and the currentLocation using the calculateDistance method.
-     * <p>
-     * Then, it checks if the lastTimestamp in the history is not null. If it's not null, it calculates the time difference between the lastTimestamp and the current time using the Duration.between method. It then calculates the speed in kilometers per hour using the calculateSpeed method.
-     * <p>
-     * Finally, it checks if the calculated speed is considered impossible travel (greater than 1000 km/h) using the isImpossibleTravel method. If it is, it sets the risk of the result object to RiskLevel.HIGH, adds an alert message to the result, and sends an alert using the alertService.sendAlert method.
-     * <p>
-     * The method then returns the result object.
-     *
-     * @param result          the result to update
-     * @param currentLocation the current location
-     * @param history         the history of locations
-     * @param userId          the ID of the user
-     * @return the updated result
-     */
     @Override
     public GeoVerificationResult checkImpossibleTravel(GeoVerificationResult result,
                                                        GeoLocation currentLocation,
                                                        GeoLocationHistory history,
                                                        String userId) {
         GeoLocation lastLocation = history.getLastLocation();
-        if (lastLocation != null) {
+        if (lastLocation != null && currentLocation.getLatitude() != null && currentLocation.getLongitude() != null) {
             double distance = calculateDistance(
                     lastLocation.getLatitude(), lastLocation.getLongitude(),
                     currentLocation.getLatitude(), currentLocation.getLongitude()
@@ -162,24 +207,36 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
             Instant lastTimestamp = history.getLastTimestamp();
             if (lastTimestamp != null) {
                 Duration timeDiff = Duration.between(lastTimestamp, Instant.now());
-                double speedKmH = calculateSpeed(distance, timeDiff);
+                // Avoid division by zero or near-zero time differences
+                if (!timeDiff.isNegative() && !timeDiff.isZero() && timeDiff.toSeconds() > 1) { // Add a small threshold
+                    double speedKmH = calculateSpeed(distance, timeDiff);
 
-                if (isImpossibleTravel(speedKmH)) {
-                    result.setRisk(RiskLevel.HIGH);
-                    result.addAlert("Impossible travel detected");
-                    alertService.sendAlert(new SecurityAlert(
-                            userId,
-                            "Impossible travel detected",
-                            Map.of(
-                                    "distance", distance,
-                                    "speed", speedKmH,
-                                    "from", lastLocation.getCity() != null ? lastLocation.getCity() : "Unknown",
-                                    "to", currentLocation.getCity() != null ? currentLocation.getCity() : "Unknown"
-                            ),
-                            AlertSeverityEnum.MEDIUM,
-                            Instant.now(),
-                            "production"
-                    ));
+                    // Use the configured distance threshold indirectly via speed calculation
+                    // Or directly check distance if timeDiff is very small?
+                    // Let's stick to speed check for now.
+                    if (isImpossibleTravel(speedKmH)) {
+                        result.setRisk(RiskLevel.HIGH); // Impossible travel is usually high risk
+                        result.addAlert(String.format("Impossible travel detected (%.0f km/h)", speedKmH));
+                        metrics.counter("geo.impossible.travel").inc();
+                        alertService.sendAlert(new SecurityAlert(
+                                userId,
+                                "Impossible travel detected",
+                                Map.of(
+                                        "distanceKm", String.format("%.2f", distance),
+                                        "speedKmH", String.format("%.2f", speedKmH),
+                                        "timeDiffSeconds", timeDiff.toSeconds(),
+                                        "fromCity", lastLocation.getCity() != null ? lastLocation.getCity() : "Unknown",
+                                        "fromCountry", lastLocation.getCountryCode() != null ? lastLocation.getCountryCode() : "XX",
+                                        "toCity", currentLocation.getCity() != null ? currentLocation.getCity() : "Unknown",
+                                        "toCountry", currentLocation.getCountryCode() != null ? currentLocation.getCountryCode() : "XX"
+                                ),
+                                AlertSeverityEnum.HIGH, // High severity for impossible travel
+                                Instant.now(),
+                                "production" // Consider making environment configurable
+                        ));
+                    }
+                } else {
+                    log.debug("Time difference too small or negative for speed calculation for user {}", userId);
                 }
             }
         }
@@ -187,160 +244,120 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     }
 
     private double calculateDistance(Double lat1, Double lon1, Double lat2, Double lon2) {
-        if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) {
-            log.warn("Invalid coordinates for distance calculation");
-            return 0.0;
+        // Ensure coordinates are valid before calculation
+        if (lat1 == null || lon1 == null || lat2 == null || lon2 == null ||
+                lat1 < -90 || lat1 > 90 || lon1 < -180 || lon1 > 180 ||
+                lat2 < -90 || lat2 > 90 || lon2 < -180 || lon2 > 180) {
+            log.warn("Invalid coordinates for distance calculation: ({}, {}), ({}, {})", lat1, lon1, lat2, lon2);
+            return 0.0; // Or throw an exception? Returning 0 prevents impossible travel detection here.
         }
 
         // Haversine formula
         final int R = 6371; // Earth's radius in kilometers
-
         double latDistance = Math.toRadians(lat2 - lat1);
         double lonDistance = Math.toRadians(lon2 - lon1);
-
         double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(lonDistance / 2) * Math.sin(lonDistance / 2);
-
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
         return R * c;
     }
 
     private double calculateSpeed(double distanceKm, Duration time) {
-        if (time == null || time.isZero()) {
-            return Double.POSITIVE_INFINITY;
+        if (time == null || time.isZero() || time.isNegative()) {
+            return Double.POSITIVE_INFINITY; // Treat zero/negative time as infinite speed
         }
-        double hours = time.toSeconds() / 3600.0;
+        // Use higher precision for hours calculation
+        double hours = (double) time.toMillis() / (3600.0 * 1000.0);
+        if (hours == 0) {
+            return Double.POSITIVE_INFINITY; // Avoid division by zero if millis is too small
+        }
         return distanceKm / hours;
     }
 
+    // Speed threshold based on typical commercial flight speeds + buffer
+    private static final double IMPOSSIBLE_SPEED_KMH = 1100.0;
     private boolean isImpossibleTravel(double speedKmH) {
-        // Average commercial flight speed is ~800 km/h
-        return speedKmH > 1000;
+        return speedKmH > IMPOSSIBLE_SPEED_KMH;
     }
 
+    // --- highRiskCountries ---
     @Override
     public boolean isHighRiskCountry(String countryCode) {
-        // Implement your high-risk country logic
-        Set<String> highRiskCountries = Set.of("XX", "YY", "ZZ");
-        return highRiskCountries.contains(countryCode);
-    }
-
-//    private boolean isLikelyVpn(GeoLocation location) {
-//        // Implement VPN detection logic
-//        return location.getAsn() != null &&
-//                knownVpnAsns.contains(location.getAsn());
-//    }
-
-    public boolean isVpnConnection(String ip) throws GeoIp2Exception {
-        String asn = String.valueOf(geoIp2Service.lookupAsn(ip));
-        boolean isVpn = vpnDetector.isLikelyVpn(ip, asn);
-
-        // Update reputation based on detection result
-        reputationService.recordActivity(asn, isVpn);
-
-        // Consider reputation in final decision
-        double reputation = reputationService.getReputationScore(asn);
-        return isVpn || reputation < 0.3; // Threshold can be adjusted
-    }
-
-    @Override
-    public boolean isLikelyVpn(GeoLocation location) {
-        if (location == null || location.getAsn() == null) {
+        if (countryCode == null || highRiskCountries == null) {
             return false;
         }
+        boolean isHighRisk = highRiskCountries.contains(countryCode);
+        if (isHighRisk) {
+            metrics.counter("geo.high.risk.country").inc();
+            log.debug("High-risk country detected: {}", countryCode);
+        }
+        return isHighRisk;
+    }
 
+    // --- knownVpnAsns ---
+    @Override
+    public boolean isLikelyVpn(GeoLocation location) {
+        if (location == null || location.getAsn() == null || knownVpnAsns == null) {
+            return false;
+        }
         boolean isKnownVpn = knownVpnAsns.contains(location.getAsn());
         if (isKnownVpn) {
-            metrics.counter("geo.vpn.detected").inc();
-            log.debug("VPN detected for ASN: {}", location.getAsn());
+            metrics.counter("geo.vpn.detected.asn").inc();
+            log.debug("Potential VPN detected based on known ASN: {}", location.getAsn());
         }
-
         return isKnownVpn;
     }
 
-    private Set<String> initializeKnownVpnAsns() {
-        // Common VPN providers' ASNs
-        return Set.of(
-                "AS9009",  // M247
-                "AS12876", // ONLINE S.A.S.
-                "AS16276", // OVH SAS
-                "AS14061", // DigitalOcean
-                "AS45102", // Alibaba
-                "AS7552",  // Viettel
-                "AS4766",  // Korea Telecom
-                "AS9299",  // Philippine Long Distance Telephone
-                "AS4134",  // Chinanet
-                "AS3356",  // Level3
-                "AS3257",  // GTT Communications
-                "AS6939",  // Hurricane Electric
-                "AS174",   // Cogent Communications
-                "AS2914",  // NTT America
-                "AS3491",  // PCCW Global
-                "AS1299",  // Telia Carrier
-                "AS7018",  // AT&T
-                "AS3320",  // Deutsche Telekom
-                "AS6461",  // Zayo Bandwidth
-                "AS6453",  // TATA Communications
-                "AS20473", // Choopa, LLC
-                "AS51167", // Contabo GmbH
-                "AS24940", // Hetzner Online GmbH
-                "AS14618", // Amazon
-                "AS16509", // Amazon AWS
-                "AS8075",  // Microsoft
-                "AS15169", // Google
-                "AS396982", // Google Cloud
-                "AS13335", // Cloudflare
-                "AS45090", // Tencent Cloud
-                "AS37963", // Alibaba Cloud
-                "AS4837",  // China Unicom
-                "AS9808",  // China Mobile
-                "AS4538",  // China Education and Research Network
-                "AS17621", // China Unicom Shanghai
-                "AS4812",  // China Telecom
-                "AS9394",  // China TieTong
-                "AS9929",  // China Netcom
-                "AS58593", // Microsoft Mobile
-                "AS132203", // Tencent Building, Kejizhongyi Avenue
-                "AS45102", // Alibaba (China) Technology Co., Ltd.
-                "AS55967", // Beijing Baidu Netcom Science and Technology Co., Ltd.
-                "AS137971", // Perfect Online Technology
-                "AS134105", // KATECH
-                "AS9269",  // Hong Kong Broadband Network
-                "AS4760",  // HKT Limited
-                "AS9304",  // HGC Global Communications Limited
-                "AS4515",  // ERX-STAR HKT Limited
-                "AS7713",  // PT Telekomunikasi Indonesia
-                "AS7473",  // Singapore Telecommunications Limited
-                "AS4657",  // StarHub Ltd
-                "AS9892",  // Mobile One Ltd
-                "AS9443",  // Link Broadband
-                "AS9583",  // Sify Limited
-                "AS55410", // VnCloud
-                "AS38001", // NewMedia Express
-                "AS45899", // VNPT Corp
-                "AS131429", // Megatron
-                "AS135905", // VNPT
-                "AS45543", // SingNet
-                "AS56308", // Telin
-                "AS24203", // NAPXLNET
-                "AS24378", // ENGTAC
-                "AS133752", // LEASEWEB-APAC-HKG-10
-                "AS133480", // INTERGRID
-                "AS132816", // SIMPLERCLOUD-AS-AP
-                "AS132787", // MNSPL
-                "AS132203", // TENCENT
-                "AS131584", // TAIFO
-                "AS45102", // CNNIC-ALIBABA-CN-NET-AP
-                "AS38283", // CHINANET
-                "AS23724", // CHINANET-IDC
-                "AS17621", // CNCGROUP-SH
-                "AS4808",  // CHINA169-BJ
-                "AS4134"   // CHINANET-BACKBONE
-        );
+    // --- Helper methods used by analyzeLocation ---
+    private void checkVpnRisk(GeoVerificationResult result, GeoLocation location) {
+        // Simple check based on ASN list
+        if (isLikelyVpn(location)) {
+            result.setRisk(RiskLevel.MEDIUM); // Or HIGH depending on policy
+            result.addAlert("Potential VPN/Proxy detected based on ASN: " + location.getAsn());
+        }
+
+        // Optional: Add more advanced check using external services if needed
+        // try {
+        //     if (isVpnConnection(location.getIpAddress())) { // Assuming GeoLocation has IP
+        //         result.setRisk(RiskLevel.MEDIUM); // Or HIGH
+        //         result.addAlert("Potential VPN/Proxy detected based on reputation/external check.");
+        //         metrics.counter("geo.vpn.detected.external").inc();
+        //     }
+        // } catch (GeoIp2Exception e) {
+        //     log.warn("Error during advanced VPN check for IP: {}", location.getIpAddress(), e);
+        // } catch (Exception e) {
+        //     log.error("Unexpected error during advanced VPN check for IP: {}", location.getIpAddress(), e);
+        // }
     }
 
+    private void checkCountryRisk(GeoVerificationResult result, GeoLocation location) {
+        if (location.getCountryCode() != null && isHighRiskCountry(location.getCountryCode())) {
+            // Only set risk if it's not already HIGH from impossible travel
+            if (result.getRisk() != RiskLevel.HIGH) {
+                result.setRisk(RiskLevel.MEDIUM); // Or HIGH depending on policy
+            }
+            result.addAlert("Connection from high-risk country: " + location.getCountryCode());
+        }
+    }
 
+    // --- Advanced VPN check using external services (remains available but not used in default analyzeLocation) ---
+    public boolean isVpnConnection(String ip) throws GeoIp2Exception {
+        if (ip == null || ip.isBlank()) return false;
+
+        String asn = String.valueOf(geoIp2Service.lookupAsn(ip)); // Can throw GeoIp2Exception
+        boolean isVpn = vpnDetector.isLikelyVpn(ip, asn); // Assuming vpnDetector handles null ASN
+
+        // Update reputation based on detection result
+        if (asn != null) {
+            reputationService.recordActivity(asn, isVpn);
+            // Consider reputation in final decision
+            double reputation = reputationService.getReputationScore(asn);
+            log.debug("ASN {} reputation score: {}", asn, reputation);
+            // Example: Lower reputation significantly increases likelihood of VPN being flagged
+            return isVpn || reputation < 0.3; // Threshold can be adjusted
+        } else {
+            return isVpn; // If ASN lookup failed, rely solely on vpnDetector's result
+        }
+    }
 }
-
