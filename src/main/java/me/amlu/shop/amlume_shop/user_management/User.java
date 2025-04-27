@@ -46,20 +46,62 @@ public class User extends BaseEntity implements UserDetails {
     private Long userId;
 
     @Embedded
+    // Override the column name for the 'username' field within AuthenticationInfo
+    @AttributeOverrides({
+            @AttributeOverride(name = "username.username", column = @Column(name = "user_name", nullable = false, unique = true)), // Assuming Username VO has 'username' field
+            // Add override for password if you need a specific column name, e.g.:
+            @AttributeOverride(name = "password.password", column = @Column(name = "user_password", nullable = false, length = 128)) // Assuming UserPassword VO has 'password' field
+    })
     private AuthenticationInfo authenticationInfo; // Set via constructor/builder
 
+    // Override the column name for the 'userEmail' field within ContactInfo
+    @AttributeOverrides({
+            @AttributeOverride(name = "userEmail.userEmail", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
+            @AttributeOverride(name = "firstName", column = @Column(name = "first_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "lastName", column = @Column(name = "last_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
+//            @AttributeOverride(name = "phoneNumber", column = @Column(name = "phone_number", length = 50)) // Assuming PhoneNumber VO has 'phoneNumber' field
+            // Add override for phone number if you need a specific column name:
+             @AttributeOverride(name = "phoneNumber.phoneNumber", column = @Column(name = "phone_number", length = 50))
+            // Add overrides for other ContactInfo fields if needed
+    })
     @Embedded
     private ContactInfo contactInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "accountNonExpired", column = @Column(name = "account_non_expired", nullable = false)),
+            @AttributeOverride(name = "accountNonLocked", column = @Column(name = "account_non_locked", nullable = false)),
+            @AttributeOverride(name = "credentialsNonExpired", column = @Column(name = "credentials_non_expired", nullable = false)),
+            @AttributeOverride(name = "enabled", column = @Column(name = "enabled", nullable = false)),
+            @AttributeOverride(name = "lastLoginTime", column = @Column(name = "last_login_time")),
+            @AttributeOverride(name = "failedLoginAttempts", column = @Column(name = "failed_login_attempts")),
+            @AttributeOverride(name = "lockedAt", column = @Column(name = "locked_at"))
+    })
     @Embedded
     private AccountStatus accountStatus; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "mfaEnabled", column = @Column(name = "mfa_enabled", nullable = false)),
+            @AttributeOverride(name = "mfaMethod", column = @Column(name = "mfa_method")),
+            @AttributeOverride(name = "mfaEnforced", column = @Column(name = "mfa_enforced")),
+            @AttributeOverride(name = "mfaQrCodeUrl.mfaQrCodeUrl", column = @Column(name = "mfa_qr_code_url")),
+            @AttributeOverride(name = "mfaSecret.mfaSecret", column = @Column(name = "mfa_secret"))
+    })
     @Embedded
     private MfaInfo mfaInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "deviceFingerprintingEnabled", column = @Column(name = "device_fingerprinting_enabled", nullable = false)),
+            @AttributeOverride(name = "deviceFingerprintingMethod", column = @Column(name = "device_fingerprinting_method")),
+//            @AttributeOverride(name = "deviceFingerprintingData.deviceFingerprintingData", column = @Column(name = "device_fingerprinting_data"))
+    })
     @Embedded
     private DeviceFingerprintingInfo deviceFingerprintingInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "department", column = @Column(name = "department")),
+            @AttributeOverride(name = "region", column = @Column(name = "region")),
+    })
     @Embedded
     private LocationInfo locationInfo; // Set via constructor/builder
 

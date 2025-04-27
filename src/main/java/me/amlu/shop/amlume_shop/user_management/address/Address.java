@@ -25,7 +25,13 @@ import java.util.Objects;
 @Cacheable
 @Entity
 @org.hibernate.annotations.Cache(usage = CacheConcurrencyStrategy.NONSTRICT_READ_WRITE)
-@Table(name = "addresses")
+@Table(name = "addresses", indexes = {
+        @Index(name = "idx_address_user_id", columnList = "user_id"),
+        @Index(name = "idx_address_city", columnList = "city"),
+        @Index(name = "idx_address_state", columnList = "state"),
+        @Index(name = "idx_address_country", columnList = "country"),
+        @Index(name = "idx_address_zip_code", columnList = "zip_code")
+})
 public class Address extends BaseEntity implements Serializable {
 
     @Serial
@@ -36,22 +42,48 @@ public class Address extends BaseEntity implements Serializable {
     @Column(name = "address_id")
     private Long addressId;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "street.streetName", column = @Column(name = "street_name")),
+            @AttributeOverride(name = "streetNumber", column = @Column(name = "street_number")),
+            @AttributeOverride(name = "streetType", column = @Column(name = "street_type"))
+    })
     @Filter(name = "deletedFilter")
     @Embedded
     private Street street;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "building.buildingName", column = @Column(name = "building_name")),
+            @AttributeOverride(name = "building.buildingNumber", column = @Column(name = "building_number")),
+            @AttributeOverride(name = "building.buildingType", column = @Column(name = "building_type"))
+    })
     @Embedded
     private Building building;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "city.cityName", column = @Column(name = "city_name")),
+            @AttributeOverride(name = "city.cityCode", column = @Column(name = "city_code"))
+    })
     @Embedded
     private City city;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "state.stateName", column = @Column(name = "state_name")),
+            @AttributeOverride(name = "state.stateCode", column = @Column(name = "state_code"))
+    })
     @Embedded
     private State state;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "country.countryName", column = @Column(name = "country_name")),
+            @AttributeOverride(name = "country.countryCode", column = @Column(name = "country_code"))
+    })
     @Embedded
     private Country country;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "zipCode.zipCode", column = @Column(name = "zip_code")),
+            @AttributeOverride(name = "zipCode.zipCodeType", column = @Column(name = "zip_code_type"))
+    })
     @Embedded
     private ZipCode zipCode;
 
