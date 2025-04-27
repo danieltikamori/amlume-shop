@@ -138,7 +138,6 @@ mfa:
     password: ${MFA_ENCRYPTION_PASSWORD}
     salt: ${MFA_ENCRYPTION_SALT}
 
-
 notification:
   email:
     from: ${NOTIFICATION_EMAIL_FROM}
@@ -192,6 +191,7 @@ project:
 
 rate-limiter:
   redis-key-prefix: "ratelimit:sw:"
+  global-filter-limiter-name: global
   fail-open: false # Default: deny requests if Redis fails
   defaults:
     limit: 100 # Default limit per window
@@ -200,6 +200,10 @@ rate-limiter:
     captcha: # Specific config for captcha
       limit: 50
       window-duration: 1h
+    global:
+      limit: 50
+      window-duration: 1h
+
     login: # Specific config for login
       limit: 10
       window-duration: 15m
@@ -246,22 +250,6 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
 
-      captchaValidation:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 30000
-
-      valkeyService:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 20s
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowType: COUNT_BASED
-
       asnDnsLookup:
         failureRateThreshold: 50 # Percentage of failures to open
         slowCallRateThreshold: 100 # Percentage of slow calls to open
@@ -288,6 +276,35 @@ resilience4j:
         #   - java.util.concurrent.TimeoutException
         # ignoreExceptions: # Exceptions that *don't* count as failures
         #   - me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException
+
+      captchaValidation:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 30000
+
+      rateLimiterRedis:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 20 #
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+      valkeyService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowType: COUNT_BASED
+
       vaultService:
         failureRateThreshold: 50 # Percentage of failures to open
         registerHealthIndicator: true
@@ -349,9 +366,24 @@ resilience4j:
           - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
 
       default:
+        max-attempts: 3
         max-requests-per-minute: 100L
         retry-interval: 1000L
         retry-wait-duration: 200
+
+      rateLimiterRedis:
+        maxAttempts: 3
+        waitDuration: 200ms
+#        enableExponentialBackoff: true
+#        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.dao.DataAccessException # Retry on Redis connection issues exceptions
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitException # Retry if our wrapper is thrown due to backend/Redis error
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions: # Exceptions that should NOT trigger a retry
+            - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
+            - jakarta.validation.ValidationException
 
       vaultService:
         maxAttempts: 3
@@ -494,8 +526,6 @@ spring:
         # profile-separator: '/' # Usually default is fine
   config:
     import: "optional:vault://" # <<< IMPORTANT: Makes Vault optional at startup
-
-
     gateway:
       routes:
         - id: asn_lookup_route
