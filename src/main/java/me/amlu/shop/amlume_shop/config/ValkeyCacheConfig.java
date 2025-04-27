@@ -1,24 +1,24 @@
 /*
  * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
- *
- * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
- *
- * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
- *
- * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ * ... (rest of copyright notice) ...
  */
 
 package me.amlu.shop.amlume_shop.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo; // For default typing
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // For Java 8+ time types
 import me.amlu.shop.amlume_shop.commons.Constants;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer; // Use customizer
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-import org.springframework.data.redis.cache.RedisCacheManager;
+// import org.springframework.data.redis.cache.RedisCacheManager; // BuilderCustomizer is preferred
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -32,26 +32,26 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-import java.util.HashMap;
-import java.util.Map;
+// Removed HashMap and Map imports as BuilderCustomizer is used
 
-import static me.amlu.shop.amlume_shop.commons.Constants.PRODUCTS_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.CATEGORIES_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.USERS_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.ROLES_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.ASN_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.TOKENS_CACHE_TTL;
-import static me.amlu.shop.amlume_shop.commons.Constants.TEMPORARY_CACHE_TTL;
-
+// Import static constants for TTLs
+import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
 /**
  * Configuration class for setting up caching and Redis/Valkey connection
  * using Spring Data Redis with Lettuce connector.
- * Configures RedisTemplate, StringRedisTemplate, and the primary CacheManager beans.
+ * Configures RedisTemplate, StringRedisTemplate, and the primary CacheManager beans
+ * using RedisCacheManagerBuilderCustomizer for better Spring Boot integration.
  */
 @Configuration
 @EnableCaching // Enables Spring's caching annotations like @Cacheable
 public class ValkeyCacheConfig {
+
+    // --- Cache Names for IP Security & Geolocation ---
+    // Defined here for clarity, could also be in Constants.java
+    public static final String IP_BLOCK_CACHE = "ipBlockCache";
+    public static final String IP_METADATA_CACHE = "ipMetadataCache";
+    public static final String GEO_LOCATION_CACHE = "geoLocationCache";
 
     // Inject properties using @Value
     @Value("${valkey.host:localhost}")
@@ -63,14 +63,30 @@ public class ValkeyCacheConfig {
     @Value("${valkey.password:#{null}}")
     private String redisPassword;
 
-    // Optional: Make SSL configurable
-    // @Value("${valkey.ssl.enabled:false}")
-    // private boolean redisSslEnabled;
-
+    // Inject the application's pre-configured ObjectMapper
     private final ObjectMapper objectMapper;
 
     public ValkeyCacheConfig(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        // Configure the ObjectMapper specifically for cache serialization needs
+        this.objectMapper = objectMapper.copy(); // Work on a copy to avoid side effects
+        this.objectMapper.registerModule(new JavaTimeModule()); // Ensure Java 8+ time types are handled
+        // Enable default typing for polymorphic types if needed, adjust security as necessary
+        // Use NON_FINAL for flexibility, consider specific type registration for stricter security
+
+        // Create a PolymorphicTypeValidator instance.
+        // BasicPolymorphicTypeValidator is a standard implementation.
+        // allowIfSubType(Object.class) is a permissive setting suitable for
+        // internal caching where you trust the types being cached.
+        // For stricter security, you might use allowIfBaseType or allowIfSubTypeIsArray etc.
+        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType(Object.class) // Allows any subtype of Object
+                .build();
+
+        // Pass the validator instance to activateDefaultTyping
+        this.objectMapper.activateDefaultTyping(
+                ptv, // Use the created validator
+                ObjectMapper.DefaultTyping.NON_FINAL, // Or OBJECT_AND_NON_CONCRETE
+                JsonTypeInfo.As.PROPERTY); // Store type info as a property (e.g., "@class")
     }
 
     @Bean
@@ -78,48 +94,25 @@ public class ValkeyCacheConfig {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
         config.setHostName(redisHost);
         config.setPort(redisPort);
-
-        // Configure password if provided in properties
         if (StringUtils.hasText(redisPassword)) {
             config.setPassword(redisPassword);
         }
-
-        // Optionally configure database index if needed
-        // config.setDatabase(databaseIndex);
-
         return config;
     }
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory(RedisStandaloneConfiguration standaloneConfig) {
-        // Basic LettuceConnectionFactory setup
         LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig);
-
-        // Configure SSL based on property (example)
-        // if (redisSslEnabled) {
-        //     factory.setUseSsl(true);
-        //     // Potentially add further SSL configuration here if needed
-        // } else {
-        //     factory.setUseSsl(false);
-        // }
-
-        // Share native connection for performance
         factory.setShareNativeConnection(true);
-
-        // Validate connection on startup (optional but recommended)
         factory.setValidateConnection(true);
-
-        // Ensure factory is initialized before using it (good practice)
-        // factory.afterPropertiesSet(); // LettuceConnectionFactory usually doesn't require explicit call here
         return factory;
     }
 
+    // Keep RedisTemplate beans if they are used directly elsewhere in the application
     @Bean
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
-        // Standard StringRedisTemplate for simple String key/value operations
         StringRedisTemplate template = new StringRedisTemplate();
         template.setConnectionFactory(connectionFactory);
-        // template.afterPropertiesSet(); // StringRedisTemplate usually initializes itself
         return template;
     }
 
@@ -127,77 +120,72 @@ public class ValkeyCacheConfig {
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
-
-        // Use String serializer for keys (standard practice)
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
+        // Use the ObjectMapper configured in the constructor for consistency
+        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(this.objectMapper);
+
         template.setKeySerializer(stringSerializer);
         template.setHashKeySerializer(stringSerializer);
-
-        // Use JSON serializer for values (good for storing complex objects)
-        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
         template.setValueSerializer(jsonSerializer);
         template.setHashValueSerializer(jsonSerializer);
-
-        // Enable transaction support if needed for atomic operations across multiple commands
-        // template.setEnableTransactionSupport(true);
-
-        template.afterPropertiesSet(); // Ensure serializers are initialized
+        template.afterPropertiesSet();
         return template;
     }
 
     @Bean
-    public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        // Create a RedisCacheManager with default configuration
-        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
-        StringRedisSerializer stringSerializer = new StringRedisSerializer();
-        // Default cache configuration
-        RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
-                .entryTtl(Duration.ofMinutes(30)) // Default TTL for caches without a specific config
+    public RedisCacheConfiguration defaultCacheConfiguration() {
+        // Define the default cache configuration (serializers, default TTL, null values)
+        // Use the ObjectMapper configured in the constructor
+        GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(this.objectMapper);
+
+        return RedisCacheConfiguration.defaultCacheConfig()
+                .entryTtl(Duration.ofMinutes(30)) // Default TTL if not overridden
                 .serializeKeysWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(stringSerializer)
+                        RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer())
                 )
                 .serializeValuesWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer))
+                        RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer) // Use configured ObjectMapper
+                )
                 .disableCachingNullValues(); // Prevent caching null values
-
-        // Specific configurations for different caches
-        Map<String, RedisCacheConfiguration> cacheConfigurations = new HashMap<>();
-
-        // Product lists/searches - maybe longer TTL?
-        cacheConfigurations.put(Constants.PRODUCTS_CACHE, defaultConfig.entryTtl(PRODUCTS_CACHE_TTL));
-        // Category lists/searches
-        cacheConfigurations.put(Constants.CATEGORIES_CACHE, defaultConfig.entryTtl(CATEGORIES_CACHE_TTL));
-        // User details - shorter TTL?
-        cacheConfigurations.put(Constants.USERS_CACHE, defaultConfig.entryTtl(USERS_CACHE_TTL));
-        // Roles - relatively static, maybe longer TTL
-        cacheConfigurations.put(Constants.ROLES_CACHE, defaultConfig.entryTtl(ROLES_CACHE_TTL));
-        // ASN - very static, long TTL
-        cacheConfigurations.put(Constants.ASN_CACHE, defaultConfig.entryTtl(ASN_CACHE_TTL));
-        // Tokens - TTL should match token validity, often handled differently (e.g., direct Redis ops)
-        // but if using @Cacheable, set a reasonable TTL like 1 hour or less.
-        cacheConfigurations.put(Constants.TOKENS_CACHE, defaultConfig.entryTtl(TOKENS_CACHE_TTL));
-        // Temporary cache - short TTL, maybe cleaned by maintenance anyway
-        cacheConfigurations.put(Constants.TEMPORARY_CACHE, defaultConfig.entryTtl(TEMPORARY_CACHE_TTL));
-
-        // Add configurations from Constants if they exist and need specific TTLs
-        // cacheConfigurations.put(Constants.PRODUCT_CACHE, defaultConfig.entryTtl(Duration.ofHours(1)));
-        // cacheConfigurations.put(Constants.USERS_CACHE, defaultConfig.entryTtl(Duration.ofMinutes(10)));
-
-        // Build the cache manager with default and specific configurations
-        return RedisCacheManager.builder(connectionFactory)
-                .cacheDefaults(defaultConfig) // Apply default config to any cache not explicitly configured
-                // Add specific configurations for named caches if needed
-//                .withCacheConfiguration(USERS_CACHE,
-//                        defaultConfig.entryTtl(Duration.ofMinutes(10))) // Override TTL for userCache
-//                .withCacheConfiguration(PRODUCT_CACHE,
-//                        defaultConfig.entryTtl(Duration.ofHours(1))) // Override TTL for productCache
-                // Add more cache configurations as needed
-                // .withCacheConfiguration("anotherCache", ...)
-                .withInitialCacheConfigurations(cacheConfigurations) // Apply specific configurations
-                .transactionAware() // Enable if you need cache operations to be aware of Spring transactions
-                .build();
     }
 
+    @Bean
+    public RedisCacheManagerBuilderCustomizer redisCacheManagerBuilderCustomizer(
+            RedisCacheConfiguration defaultCacheConfig) {
+        // Use RedisCacheManagerBuilderCustomizer for better integration and flexibility
+        return (builder) -> builder
+                // Apply default config first
+                .cacheDefaults(defaultCacheConfig)
+                // --- Configure Specific Caches ---
+
+                // IP Security Caches (using 24h TTL like the original Guava config)
+                .withCacheConfiguration(IP_BLOCK_CACHE,
+                        defaultCacheConfig.entryTtl(Duration.ofHours(24)))
+                .withCacheConfiguration(IP_METADATA_CACHE,
+                        defaultCacheConfig.entryTtl(Duration.ofHours(24)))
+
+                // Geolocation Cache (using 24h TTL like the original Guava config)
+                .withCacheConfiguration(GEO_LOCATION_CACHE,
+                        defaultCacheConfig.entryTtl(Duration.ofHours(24)))
+
+                // --- Include Existing Cache Configurations from Constants ---
+                .withCacheConfiguration(Constants.PRODUCTS_CACHE, defaultCacheConfig.entryTtl(PRODUCTS_CACHE_TTL))
+                .withCacheConfiguration(Constants.CATEGORIES_CACHE, defaultCacheConfig.entryTtl(CATEGORIES_CACHE_TTL))
+                .withCacheConfiguration(Constants.USERS_CACHE, defaultCacheConfig.entryTtl(USERS_CACHE_TTL))
+                .withCacheConfiguration(Constants.ROLES_CACHE, defaultCacheConfig.entryTtl(ROLES_CACHE_TTL))
+                .withCacheConfiguration(Constants.ASN_CACHE, defaultCacheConfig.entryTtl(ASN_CACHE_TTL))
+                .withCacheConfiguration(Constants.TOKENS_CACHE, defaultCacheConfig.entryTtl(TOKENS_CACHE_TTL))
+                .withCacheConfiguration(Constants.TEMPORARY_CACHE, defaultCacheConfig.entryTtl(TEMPORARY_CACHE_TTL))
+                // Add any other caches defined in Constants that need specific TTLs
+                // e.g., .withCacheConfiguration(Constants.AUTH_CACHE, defaultCacheConfig.entryTtl(AUTH_CACHE_TTL))
+
+                // --- Optional Features ---
+                .enableStatistics() // Enable cache statistics for monitoring (requires management.metrics.cache.instrument=true)
+                .transactionAware(); // Enable if cache operations should participate in Spring transactions
+    }
+
+
+    // Keep Lua script bean if used for rate limiting or other custom Redis operations
     @Bean
     public RedisScript<Long> slidingWindowRateLimiterScript() {
         DefaultRedisScript<Long> redisScript = new DefaultRedisScript<>();
@@ -206,5 +194,4 @@ public class ValkeyCacheConfig {
         redisScript.setResultType(Long.class); // Lua script returns 1 or 0 (number)
         return redisScript;
     }
-
 }
