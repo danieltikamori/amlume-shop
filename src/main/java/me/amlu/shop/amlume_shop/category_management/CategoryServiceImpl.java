@@ -309,7 +309,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         Long categoryId = category.getCategoryId();
         String categoryName = (category.getCategoryName() != null) ? category.getCategoryName().getName() : null;
-        String description = (category.getDescription() != null) ? category.getDescription().getValue() : null;
+        String description = (category.getDescription() != null) ? category.getDescription().getDescriptionData() : null;
         Long parentId = (category.getParentCategory() != null) ? category.getParentCategory().getCategoryId() : null;
         Integer level = (category.getHierarchyLevel() != null) ? category.getHierarchyLevel().getLevel() : null;
         String path = (category.getHierarchyLevel() != null) ? category.getHierarchyLevel().getPath() : null;
