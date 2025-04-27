@@ -8,13 +8,21 @@
 #         3.Provide these values to your Spring Boot application using one of the methods above (properties file, environment variables, etc.) for the vault.uri and vault.token properties.
 
 services:
-  your-spring-app:
+  the-spring-app:
     image: spring-app-image
     environment:
       VAULT_URI: http://vault:8200 # Assumes vault service name is 'vault'
-      VAULT_TOKEN: s.YourVaultToken
+      VAULT_TOKEN: hvs.95eba8ed-f6fc-958a-f490-c7fd0eda5e9e
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/amlume_db
+      SPRING_DATASOURCE_USERNAME: amlume_user
+      SPRING_DATASOURCE_PASSWORD: C0961F7D8F83574BEA49E9B412BBA60704CD720C
+      CACHE_HOST: valkey-cache
     depends_on:
-      - vault
+      - mysql
+      - valkey-cache
+    networks:
+      - amlume-shop-network
+
   vault:
     image: hashicorp/vault:latest # Or pin to a specific version like 1.16.1
     container_name: vault-dev
@@ -24,7 +32,7 @@ services:
       # --- Vault Dev Mode Configuration ---
       # Sets the root token ID. Use this value for 'vault.token' in your Spring app.
       # WARNING: This is for development ONLY. Keep it secure.
-      VAULT_DEV_ROOT_TOKEN_ID: "my-dev-root-token"
+      VAULT_DEV_ROOT_TOKEN_ID: "95eba8ed-f6fc-958a-f490-c7fd0eda5e9e"
 
       # Makes Vault listen on all interfaces inside the container
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
@@ -44,16 +52,39 @@ services:
       # - ./vault-data:/vault/file # Example for file backend persistence
       - vault_logs:/vault/logs # Optional: Persist logs
     # command: vault server -dev # This is the default for the image, usually not needed explicitly
+    networks:
+      - amlume-shop-network
+   # ... other vault config ...
+
+  mysql:
+    image: mysql:lts
+    container_name: mysql-db
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: 7D3212C359485FBF140ABBEBFF4A09CFAB1C0F98
+      MYSQL_DATABASE: amlume_db
+      MYSQL_USER: amlume_user
+      MYSQL_PASSWORD: C0961F7D8F83574BEA49E9B412BBA60704CD720C
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - amlume-shop-network
+
+  valkey-cache:
+    image: valkey/valkey:latest
+    container_name: valkey-cache
+    ports:
+      - "6379:6379"
+    networks:
+      - amlume-shop-network
+
+    # Add other required services here
 
 volumes:
-  # Define the named volume for logs (if used)
   vault_logs: {}
-  # vault_data: {} # Define if using file persistence volume mount
+  mysql_data: {}
 
 networks:
-  default:
-    name: amlume-shop-network # Optional: Define a custom network
-
-
-    # ... other vault config ...
-        
+  amlume-shop-network:
+    name: amlume-shop-network
