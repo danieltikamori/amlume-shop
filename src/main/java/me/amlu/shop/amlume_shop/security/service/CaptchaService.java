@@ -52,6 +52,7 @@ public class CaptchaService {
     private static final String RECAPTCHA_RETRY = "recaptchaRetry";
     private static final String RECAPTCHA_TIME_LIMITER = "recaptchaTimeLimiter";
 
+//    @Value("${RECAPTCHA_SECRET_KEY}")
     @Value("${recaptcha.secret}")
     private String recaptchaSecret;
 
