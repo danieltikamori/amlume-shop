@@ -15,8 +15,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.RateLimitException;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -29,9 +29,9 @@ import java.util.List;
 import java.util.function.Supplier;
 
 @Service
-@Slf4j
 public class RedisSlidingWindowRateLimiter implements RateLimiter {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(RedisSlidingWindowRateLimiter.class);
     private final StringRedisTemplate stringRedisTemplate;
     private final RedisScript<Long> slidingWindowScript;
     private final RateLimiterProperties properties;
