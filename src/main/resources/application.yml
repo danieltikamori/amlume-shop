@@ -476,46 +476,46 @@ security:
       - "AS4837"  # China Unicom
       - "AS9808"  # China Mobile
       - "AS4808"  # CHINA169-BJ
-      - "AS4538",  # China Education and Research Network
-      - "AS17621", # China Unicom Shanghai
-      - "AS4812",  # China Telecom
-      - "AS9394",  # China TieTong
-      - "AS9929",  # China Netcom
-      - "AS58593", # Microsoft Mobile
-      - "AS132203", # Tencent Building, Kejizhongyi Avenue
-      - "AS45102", # Alibaba (China) Technology Co., Ltd.
-      - "AS55967", # Beijing Baidu Netcom Science and Technology Co., Ltd.
-      - "AS137971", # Perfect Online Technology
-      - "AS134105", # KATECH
-      - "AS9269",  # Hong Kong Broadband Network
-      - "AS4760",  # HKT Limited
-      - "AS9304",  # HGC Global Communications Limited
-      - "AS4515",  # ERX-STAR HKT Limited
-      - "AS7713",  # PT Telekomunikasi Indonesia
-      - "AS7473",  # Singapore Telecommunications Limited
-      - "AS4657",  # StarHub Ltd
-      - "AS9892",  # Mobile One Ltd
-      - "AS9443",  # Link Broadband
-      - "AS9583",  # Sify Limited
-      - "AS55410", # VnCloud
-      - "AS38001", # NewMedia Express
-      - "AS45899", # VNPT Corp
-      - "AS131429", # Megatron
-      - "AS135905", # VNPT
-      - "AS45543", # SingNet
-      - "AS56308", # Telin
-      - "AS24203", # NAPXLNET
-      - "AS24378", # ENGTAC
-      - "AS133752", # LEASEWEB-APAC-HKG-10
-      - "AS133480", # INTERGRID
-      - "AS132816", # SIMPLERCLOUD-AS-AP
-      - "AS132787", # MNSPL
-      - "AS132203", # TENCENT
-      - "AS131584", # TAIFO
-      - "AS45102", # CNNIC-ALIBABA-CN-NET-AP
-      - "AS38283", # CHINANET
-      - "AS23724", # CHINANET-IDC
-      - "AS17621", # CNCGROUP-SH
+      - "AS4538"  # China Education and Research Network
+      - "AS17621" # China Unicom Shanghai
+      - "AS4812"  # China Telecom
+      - "AS9394"  # China TieTong
+      - "AS9929"  # China Netcom
+      - "AS58593" # Microsoft Mobile
+      - "AS132203" # Tencent Building, Kejizhongyi Avenue
+      - "AS45102" # Alibaba (China) Technology Co., Ltd.
+      - "AS55967" # Beijing Baidu Netcom Science and Technology Co., Ltd.
+      - "AS137971" # Perfect Online Technology
+      - "AS134105" # KATECH
+      - "AS9269"  # Hong Kong Broadband Network
+      - "AS4760"  # HKT Limited
+      - "AS9304"  # HGC Global Communications Limited
+      - "AS4515"  # ERX-STAR HKT Limited
+      - "AS7713"  # PT Telekomunikasi Indonesia
+      - "AS7473"  # Singapore Telecommunications Limited
+      - "AS4657"  # StarHub Ltd
+      - "AS9892"  # Mobile One Ltd
+      - "AS9443"  # Link Broadband
+      - "AS9583"  # Sify Limited
+      - "AS55410" # VnCloud
+      - "AS38001" # NewMedia Express
+      - "AS45899" # VNPT Corp
+      - "AS131429" # Megatron
+      - "AS135905" # VNPT
+      - "AS45543" # SingNet
+      - "AS56308" # Telin
+      - "AS24203" # NAPXLNET
+      - "AS24378" # ENGTAC
+      - "AS133752" # LEASEWEB-APAC-HKG-10
+      - "AS133480" # INTERGRID
+      - "AS132816" # SIMPLERCLOUD-AS-AP
+      - "AS132787" # MNSPL
+      - "AS132203" # TENCENT
+      - "AS131584" # TAIFO
+      - "AS45102" # CNNIC-ALIBABA-CN-NET-AP
+      - "AS38283" # CHINANET
+      - "AS23724" # CHINANET-IDC
+      - "AS17621" # CNCGROUP-SH
       - "AS4134"   # CHINANET-BACKBONE
       # ... Add others as necessary ...
     high-risk-countries: # List of ISO country codes considered high-risk
@@ -585,29 +585,12 @@ spring:
       key-prefix: "${spring.application.name}:cache:" # Optional: Add a prefix to all cache keys
       use-key-prefix: true # Optional: Enable the prefix
 
-
-  # --- Valkey Connection Details ---
-  # These are correctly picked up by @Value in ValkeyCacheConfig
-  valkey:
-    host: ${VALKEY_HOST:localhost}
-    port: ${VALKEY_PORT:6379}
-    password: ${VALKEY_PASSWORD:} # Use empty default if no password
-    # database: ${VALKEY_DATABASE:0} # Optional: Specify database index if not 0
-    # timeout: 5000 # Optional: Connection timeout (consider Lettuce properties below)
-    # --- Lettuce specific properties (optional but recommended) ---
-    lettuce:
-      pool:
-        max-active: 8 # Max connections in pool
-        max-idle: 8   # Max idle connections
-        min-idle: 0   # Min idle connections
-        max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
-      shutdown-timeout: 100ms # Timeout for shutting down the pool
-
   cloud:
     vault:
       enabled: true
       fail-fast: false  # <<< IMPORTANT: Allow fallback if Vault fails
-      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
+      uri: http://localhost:8200 # Example fallback URI
+#      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
       token: ${VAULT_TOKEN:} # Allow empty token for fallback testing if needed
       kv:
         enabled: true
@@ -634,15 +617,22 @@ spring:
   #    password: ${DB_PASSWORD}
   #    driverClassName: org.postgresql.Driver
 
+  # --- Datasource (Connect to Docker MySQL) ---
+  datasource:
+    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
+    username: amlume_user
+    password: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Match docker-compose env
+    driverClassName: com.mysql.cj.jdbc.Driver # Usually inferred
+
   h2:
     console:
-      enabled: true
-      path: /h2-console
-    datasource:
-      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-      username: sa
-      password:
-      driverClassName: org.h2.Driver
+      enabled: false
+#      path: /h2-console
+#    datasource:
+#      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+#      username: sa
+#      password:
+#      driverClassName: org.h2.Driver
 
   jackson:
     default-property-inclusion: non_null
@@ -657,26 +647,16 @@ spring:
     property-naming-strategy: SNAKE_CASE
     time-zone: UTC
 
-  main:
-    #    allow-circular-references: true
-    keep-alive: true
-    web-application-type: reactive
-  profiles:
-    active: local
-  threads:
-    virtual:
-      enabled: true
-      enabled.manually: false
-      name-prefix: ${SERVICE_NAME}
-
   jpa: # To store events in a database
+    database-platform: org.hibernate.dialect.MySQLDialect
     #    database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true # Show SQL generated by JPA queries in the console
     hibernate:
-      ddl-auto: create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production.
-      properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+      ddl-auto: update #create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production.
+#      properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.MySQLDialect
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
       show-sql: true
     properties:
       hibernate:
@@ -686,12 +666,45 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
+  main:
+    #    allow-circular-references: true
+    keep-alive: true
+    web-application-type: reactive
+
+
   mfa:
     excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
     rate-limit:
       max-attempts: 5
       window-seconds: 300  # 5 minutes
       time-window-minutes: 30
+
+# --- Spring Profiles - local, dev, or this main ---
+  profiles:
+    active: local
+
+  threads:
+    virtual:
+      enabled: true
+      enabled.manually: false
+      name-prefix: ${SERVICE_NAME}
+
+  # --- Valkey Connection Details ---
+  # These are correctly picked up by @Value in ValkeyCacheConfig
+  valkey:
+    host: ${VALKEY_HOST:localhost}
+    port: ${VALKEY_PORT:6379}
+    password: ${VALKEY_PASSWORD:} # Use empty default if no password
+    # database: ${VALKEY_DATABASE:0} # Optional: Specify database index if not 0
+    # timeout: 5000 # Optional: Connection timeout (consider Lettuce properties below)
+    # --- Lettuce specific properties (optional but recommended) ---
+    lettuce:
+      pool:
+        max-active: 8 # Max connections in pool
+        max-idle: 8   # Max idle connections
+        min-idle: 0   # Min idle connections
+        max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
+      shutdown-timeout: 100ms # Timeout for shutting down the pool
 
 # Thread Pool Configuration
 threadpool:

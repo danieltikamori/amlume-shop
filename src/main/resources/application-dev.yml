@@ -1,6 +1,6 @@
 spring:
   profiles:
-    active: dev
+    active: local
   sleuth:
     sampler:
       probability: 1.0 # Sample all requests in development
