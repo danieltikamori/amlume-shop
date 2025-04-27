@@ -122,7 +122,6 @@ public class User extends BaseEntity implements UserDetails {
         return new UserBuilderImpl();
     }
 
-
     // --- UserDetails Implementation ---
 
     @Override
@@ -136,7 +135,6 @@ public class User extends BaseEntity implements UserDetails {
                 .collect(Collectors.toSet()) // Collect into a Set
                 : Collections.emptySet(); // Return an empty set if roles are null
     }
-
 
     @Override
     public String getPassword() {
@@ -174,7 +172,6 @@ public class User extends BaseEntity implements UserDetails {
         return (accountStatus != null) && accountStatus.isEnabled();
     }
     // --- End UserDetails ---
-
 
     // --- Auditable Implementation ---
     // Method required by BaseEntity's isNew() logic

@@ -31,7 +31,7 @@ public class UserDeviceFingerprints implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
+    private final List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
 
     protected UserDeviceFingerprints() { // Required by JPA
     }
