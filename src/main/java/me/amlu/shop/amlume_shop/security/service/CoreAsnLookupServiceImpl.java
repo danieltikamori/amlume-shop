@@ -207,7 +207,7 @@ public class CoreAsnLookupServiceImpl implements AsnLookupService {
      */
 //    IMPORTANT: At the moment, this is the last resort.
 //    So if another last resort is given, change the fallback method in the CircuitBreaker annotation.
-    @CircuitBreaker(name = "whoisLookupCircuitBreaker", fallbackMethod = "lookupAsnViaWhois")
+    @CircuitBreaker(name = "whoisLookupCircuitBreaker", fallbackMethod = "whoisFallback")
     @Override
     public String lookupAsnViaWhois(String ip) {
         // Use try-with-resources for Socket, PrintWriter, BufferedReader
@@ -240,5 +240,18 @@ public class CoreAsnLookupServiceImpl implements AsnLookupService {
             log.error("WHOIS ASN lookup failed unexpectedly for IP: {}", ip, e);
         }
         return null;
+    }
+
+    /**
+     * Fallback method for WHOIS lookup in case of failure.
+     * This method is called when the CircuitBreaker is triggered.
+     *
+     * @param ip the IP address for which the ASN is to be looked up
+     * @param t  the exception that caused the fallback
+     * @return null, indicating that the lookup failed
+     */
+    public String whoisFallback(String ip, Throwable t) {
+        log.warn("WHOIS ASN lookup circuit breaker open or call failed for IP: {}. Returning null. Error: {}", ip, t.getMessage());
+        return null; // Return null when WHOIS fails persistently
     }
 }
