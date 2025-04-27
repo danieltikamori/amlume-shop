@@ -57,12 +57,12 @@ geoip2:
   account-id: ${GEOIP2_ACCOUNT_ID}
   license-key: ${GEOIP2_LICENSE_KEY}
 
-hcp:
-  client-id: ${HCP_CLIENT_ID}
-  client-secret: ${HCP_CLIENT_SECRET}
-  organization-id: ${HCP_ORGANIZATION_ID}
-  project-id: ${HCP_PROJECT_ID}
-  app-name: ${HCP_APP_NAME}
+#hcp:
+#  client-id: ${HCP_CLIENT_ID}
+#  client-secret: ${HCP_CLIENT_SECRET}
+#  organization-id: ${HCP_ORGANIZATION_ID}
+#  project-id: ${HCP_PROJECT_ID}
+#  app-name: ${HCP_APP_NAME}
 
 jti:
   bloomfilter:
@@ -453,7 +453,7 @@ spring:
         email: ${SERVICE_LICENSE_CONTACT_EMAIL}
 
   cache:
-    type: redis  # redis/valkey
+    type: valkey  # redis/valkey
     cache-names: mfaTokens
     valkey:
       host: ${VALKEY_HOST:localhost}
@@ -657,24 +657,24 @@ valkey:
     jmx-name-base: connection-pool
     jmx-name-prefix: "valkey.pool"
 
-vault:
-  uri: ${VAULT_URI}
-  token: ${VAULT_TOKEN}
-  secret:
-    base-path: secret/data/amlume-shop
-    database-path: secret/data/amlume-shop/database
-  kubernetes:
-    uri: http://vault.default.svc.cluster.local:8200
-    role: "vault_role" # Placeholder for now
-  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
-  hcp:
-    uri: ${VAULT_HCP_URI}
-    token: ${VAULT_HCP_TOKEN}
-    approle: # AppRple - fetch secret-id securely
-      path: ${VAULT_HCP_APP_ROLE_PATH}
-      role-id: ${VAULT_HCP_APP_ROLE_ID}
-      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
-
+# Rely primarily on spring.cloud.vault. * properties
+#vault:
+#  uri: ${VAULT_URI}
+#  token: ${VAULT_TOKEN}
+#  secret:
+#    base-path: secret/data/amlume-shop
+#    database-path: secret/data/amlume-shop/database
+#  kubernetes:
+#    uri: http://vault.default.svc.cluster.local:8200
+#    role: "vault_role" # Placeholder for now
+#  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
+#  hcp:
+#    uri: ${VAULT_HCP_URI}
+#    token: ${VAULT_HCP_TOKEN}
+#    approle: # AppRple - fetch secret-id securely
+#      path: ${VAULT_HCP_APP_ROLE_PATH}
+#      role-id: ${VAULT_HCP_APP_ROLE_ID}
+#      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
 
 web:
   cors:
