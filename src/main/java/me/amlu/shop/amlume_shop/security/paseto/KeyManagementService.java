@@ -11,21 +11,18 @@
 package me.amlu.shop.amlume_shop.security.paseto;
 
 import jakarta.annotation.PostConstruct;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.ErrorMessages;
 import me.amlu.shop.amlume_shop.exceptions.KeyConversionException;
 import me.amlu.shop.amlume_shop.exceptions.KeyFactoryException;
 import me.amlu.shop.amlume_shop.exceptions.KeyInitializationException;
+import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
 import me.amlu.shop.amlume_shop.security.service.KeyManagementFacade;
 import org.paseto4j.commons.PrivateKey;
 import org.paseto4j.commons.PublicKey;
 import org.paseto4j.commons.SecretKey;
 import org.paseto4j.commons.Version;
+import org.slf4j.Logger;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
@@ -38,114 +35,88 @@ import java.util.Base64;
 import java.util.Objects;
 
 @Service
-@RequiredArgsConstructor
-@Slf4j
 public class KeyManagementService {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(KeyManagementService.class);
     private final KeyManagementFacade keyManagementFacade;
     private static final KeyFactory KEY_FACTORY = initializeKeyFactory();
 
-    // Key holders - immutable
-    @AllArgsConstructor
-    @NoArgsConstructor
-    @Data
-    private static class KeyPairHolder {
-        PrivateKey privateKey;
-        PublicKey publicKey;
+    // --- Store the actual paseto4j key objects ---
+    private PrivateKey accessPrivateKey;
+    private PublicKey accessPublicKey;
+    private SecretKey accessSecretKey; // For symmetric access tokens
+    private SecretKey refreshSecretKey; // For symmetric refresh tokens
 
+    public KeyManagementService(KeyManagementFacade keyManagementFacade) {
+        this.keyManagementFacade = keyManagementFacade;
     }
-
-    @AllArgsConstructor
-    @NoArgsConstructor
-    @Data
-    private static class SecretKeyHolder {
-        SecretKey accessKey;
-        SecretKey refreshKey;
-    }
-
-    // Key management
-    private KeyPairHolder keyPairHolder;
-    private SecretKeyHolder secretKeyHolder;
 
     // --- Key accessors ---
-    // IMPORTANT: Getters for keys with null checks
-
-    /**
-     * Usage example:
-     * public String signToken(String payload) {
-     * try {
-     * return Paseto.sign(payload, getAccessPrivateKey());
-     * } catch (Exception e) {
-     * throw new TokenSigningException("Failed to sign token", e);
-     * }
-     * }
-     * <p>
-     * public boolean verifyToken(String token) {
-     * try {
-     * return Paseto.verify(token, getAccessPublicKey());
-     * } catch (Exception e) {
-     * throw new TokenVerificationException("Failed to verify token", e);
-     * }
-     * }
-     *
-     * @return the access private key
-     */
     protected PrivateKey getAccessPrivateKey() {
-        return Objects.requireNonNull(keyPairHolder.getPrivateKey(), "Access private key not initialized");
+        return Objects.requireNonNull(accessPrivateKey, "Access private key not initialized");
     }
 
     protected PublicKey getAccessPublicKey() {
-        return Objects.requireNonNull(keyPairHolder.getPublicKey(), "Access public key not initialized");
+        return Objects.requireNonNull(accessPublicKey, "Access public key not initialized");
     }
 
     protected SecretKey getAccessSecretKey() {
-        return Objects.requireNonNull(secretKeyHolder.getAccessKey(), "Access secret key not initialized");
+        return Objects.requireNonNull(accessSecretKey, "Access secret key not initialized");
     }
 
     protected SecretKey getRefreshSecretKey() {
-        return Objects.requireNonNull(secretKeyHolder.getRefreshKey(), "Refresh secret key not initialized");
+        return Objects.requireNonNull(refreshSecretKey, "Refresh secret key not initialized");
     }
 
     @PostConstruct
     private void initializeKeys() {
+        log.info("Initializing PASETO keys...");
         try {
             // Initialize asymmetric keys
-            KeyManagementFacade.KeyPair accessKeys = keyManagementFacade.getAsymmetricKeys("ACCESS");
-            this.keyPairHolder = new KeyPairHolder(
-                    convertToPrivateKey(validateKey(accessKeys.privateKey(), "private")),
-                    convertToPublicKey(validateKey(accessKeys.publicKey(), "public"),"access")
-            );
+            // Use the imported KeyPair record
+            KeyPair accessKeyStrings = keyManagementFacade.getAsymmetricKeys("ACCESS");
+            this.accessPrivateKey = convertToPrivateKey(validateKey(accessKeyStrings.privateKey(), "ACCESS private string"));
+            this.accessPublicKey = convertToPublicKey(validateKey(accessKeyStrings.publicKey(), "ACCESS public string"), "access-key-init");
+            log.info("Asymmetric ACCESS keys initialized successfully.");
 
             // Initialize symmetric keys
-            this.secretKeyHolder = new SecretKeyHolder(
-                    convertToSecretKey(validateKey(keyManagementFacade.getSymmetricKey("ACCESS"), "access secret")),
-                    convertToSecretKey(validateKey(keyManagementFacade.getSymmetricKey("REFRESH"), "refresh secret"))
-            );
+            this.accessSecretKey = convertToSecretKey(validateKey(keyManagementFacade.getSymmetricKey("ACCESS"), "ACCESS secret string"));
+            log.info("Symmetric ACCESS key initialized successfully.");
+            this.refreshSecretKey = convertToSecretKey(validateKey(keyManagementFacade.getSymmetricKey("REFRESH"), "REFRESH secret string"));
+            log.info("Symmetric REFRESH key initialized successfully.");
+
+            log.info("All PASETO keys initialized.");
+
         } catch (Exception e) {
-            log.error("Failed to initialize keys", e);
-            throw new KeyInitializationException("Failed to initialize keys", e);
+            log.error("Failed to initialize PASETO keys", e);
+            // Depending on fail-fast strategy, you might want to re-throw or handle differently
+            throw new KeyInitializationException("Failed to initialize PASETO keys", e);
         }
     }
+
     /**
      * Initializes the key factory for the specified algorithm.
      * This method is called during the initialization of the service.
      * It uses the KeyFactory.getInstance() method to get an instance of the KeyFactory for the specified algorithm.
      *
      * @return a {@link KeyFactory} instance for the specified algorithm.
-     * @throws KeyConversionException   if the algorithm is not available.
-//     * @throws NoSuchAlgorithmException if the algorithm is not available.
-//     * @throws InvalidKeySpecException  if the key specification is invalid.
-     * @throws KeyFactoryException      if the key factory is not available.
+     * @throws KeyConversionException if the algorithm is not available.
+     *                                //     * @throws NoSuchAlgorithmException if the algorithm is not available.
+     *                                //     * @throws InvalidKeySpecException  if the key specification is invalid.
+     * @throws KeyFactoryException    if the key factory is not available.
      */
-    private static KeyFactory initializeKeyFactory() throws KeyConversionException, KeyFactoryException{
+    private static KeyFactory initializeKeyFactory() throws KeyConversionException, KeyFactoryException {
         try {
             return KeyFactory.getInstance(TokenConstants.KEY_CONVERSION_ALGORITHM);
         } catch (NoSuchAlgorithmException e) {
             log.error(String.valueOf(ErrorMessages.KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE), e);
             throw new KeyConversionException(String.valueOf(ErrorMessages.KEY_CONVERSION_ALGORITHM_NOT_AVAILABLE), e);
-        } catch (KeyFactoryException e) {
-            throw new IllegalStateException("Failed to initialize KeyFactory", e);
+        } catch (KeyFactoryException e) { // Catch the specific exception type
+            log.error("Failed to initialize KeyFactory", e); // Log the error
+            throw new IllegalStateException("Failed to initialize KeyFactory", e); // Re-throw as IllegalStateException
         }
     }
+
     /**
      * Converts a base64 encoded private key string to a {@link PrivateKey} object.
      *
@@ -188,7 +159,7 @@ public class KeyManagementService {
     public PublicKey convertToPublicKey(String publicKeyString, String correlationId) {
         MDC.put("correlationId", correlationId);
 
-        if (publicKeyString.isBlank()) {
+        if (publicKeyString == null || publicKeyString.isBlank()) { // Added null check
             throw new IllegalArgumentException("Public key string cannot be null or empty");
         }
 
@@ -200,19 +171,19 @@ public class KeyManagementService {
             );
         } catch (IllegalArgumentException e) {
             // Handle Base64 decoding errors
-            log.warn("Invalid Base64 encoding in public key");
+            log.warn("Invalid Base64 encoding in public key. CorrelationId: {}", correlationId, e); // Log exception
             throw new KeyConversionException("Invalid public key format: Base64 decoding failed", e);
         } catch (InvalidKeySpecException e) {
             // Handle invalid key specification
-            log.warn("Invalid public key specification format. CorrelationId: {}", correlationId);
+            log.warn("Invalid public key specification format. CorrelationId: {}", correlationId, e); // Log exception
             throw new KeyConversionException("Invalid public key format: incorrect key specification", e);
         } catch (SecurityException e) {
             // Handle security-related exceptions
-            log.error("Security violation during public key conversion");
+            log.error("Security violation during public key conversion. CorrelationId: {}", correlationId, e); // Log exception
             throw new KeyConversionException("Security error during key conversion", e);
         } catch (RuntimeException e) {
             // Handle unexpected runtime errors
-            log.error("Unexpected error during public key conversion");
+            log.error("Unexpected error during public key conversion. CorrelationId: {}", correlationId, e); // Log exception
             throw new KeyConversionException("Internal error during key conversion", e);
         } finally {
             MDC.remove("correlationId");
@@ -227,19 +198,32 @@ public class KeyManagementService {
      * @throws KeyConversionException if the secret key string is invalid
      */
     public SecretKey convertToSecretKey(String secretKeyString) {
-        if (secretKeyString.isBlank()) {
+        if (secretKeyString == null || secretKeyString.isBlank()) { // Added null check
             throw new IllegalArgumentException("Secret key string cannot be null or empty");
         }
 
         try {
             byte[] decodedKey = Base64.getDecoder().decode(secretKeyString);
+            // Consider adding a length check if your keys have expected lengths
+            // if (decodedKey.length != 32) { // Example for AES-256
+            //     throw new KeyConversionException("Invalid secret key length: expected 32 bytes");
+            // }
             return new SecretKey(decodedKey, Version.V4);
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) { // Catch Base64 decoding errors specifically
+            log.error("Invalid Base64 encoding for secret key", e);
+            throw new KeyConversionException("Invalid secret key format: Base64 decoding failed", e);
+        } catch (Exception e) { // Catch other potential errors
             log.error("Failed to convert secret key", e);
             throw new KeyConversionException("Failed to convert secret key", e);
         }
     }
-        public  <T> T validateKey(T key, String keyType) {
+
+    public <T> T validateKey(T key, String keyType) {
+        // Consider adding a check for blank strings if T can be String
+        if (key instanceof String strKey && strKey.isBlank()) {
+            throw new KeyInitializationException(keyType + " key string cannot be blank");
+        }
         return Objects.requireNonNull(key, keyType + " key cannot be null");
     }
+
 }
