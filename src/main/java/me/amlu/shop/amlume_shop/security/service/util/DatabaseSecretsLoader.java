@@ -20,7 +20,8 @@ import java.util.Optional;
 
 public class DatabaseSecretsLoader {
 
-    @Value("${vault.secret.database-path:secret/data/amlume-shop/database}")
+//    @Value("${vault.secret.database-path:secret/data/amlume-shop/database}")
+    @Value("${spring.cloud.vault.path:secret/amlume-shop/mfa}")
     String vaultPath;
 
     private final VaultService vaultService;

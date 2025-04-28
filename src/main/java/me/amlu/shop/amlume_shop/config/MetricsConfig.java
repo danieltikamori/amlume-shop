@@ -83,6 +83,13 @@ public class MetricsConfig {
                 .register(meterRegistry);
     }
 
+    /**
+     * Defines a Timer bean named 'tokenValidationTimer' to measure the latency
+     * of the overall PASETO token validation process.
+     *
+     * @param meterRegistry The MeterRegistry to register the timer with.
+     * @return The configured Timer bean.
+     */
     @Bean
     public Timer tokenValidationTimer(MeterRegistry meterRegistry) {
         return Timer.builder("paseto.token.validation")
@@ -95,6 +102,13 @@ public class MetricsConfig {
                 .register(meterRegistry);
     }
 
+    /**
+     * Defines a Timer bean named 'tokenClaimsValidationLatency' to measure the latency
+     * specifically for validating the claims within a PASETO token.
+     *
+     * @param meterRegistry The MeterRegistry to register the timer with.
+     * @return The configured Timer bean.
+     */
     @Bean
     public Timer tokenClaimsValidationLatency(MeterRegistry meterRegistry) {
         return Timer.builder("paseto.token.claims.validation")
