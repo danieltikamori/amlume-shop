@@ -606,7 +606,7 @@ spring:
       kv:
         enabled: true
         backend: secret  # Path where KV v2 engine is mounted
-        # application-name: amlume-shop # Uses spring.application.name by default
+        application-name: ${spring.application.name} # Uses spring.application.name by default
         default-context: mfa # Looks for secrets under secret/amlume-shop/mfa
         # profile-separator: '/' # Usually default is fine
   config:
