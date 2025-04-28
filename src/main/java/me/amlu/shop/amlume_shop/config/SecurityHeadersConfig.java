@@ -27,6 +27,7 @@ import java.io.IOException;
 @Configuration
 public class SecurityHeadersConfig {
 
+    //TODO: use env values for these headers. Remove hardcoded values
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE) // Set the filter order
     public FilterRegistrationBean<OncePerRequestFilter> securityHeadersFilter() {
