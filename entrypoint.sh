@@ -81,6 +81,10 @@ while IFS= read -r line || [ -n "$line" ]; do
   key=$(echo "$line" | cut -d'=' -f1)
   value=$(echo "$line" | cut -d'=' -f2-)
 
+  # Remove inline comment starting with # (if any)
+  # This assumes comments are not typically placed inside quoted values in .env
+  value=${value%%#*}
+
 #  # Trim whitespace (optional but recommended)
 #  key=$(echo "$key" | xargs)
 #  value=$(echo "$value" | xargs)
@@ -91,10 +95,12 @@ while IFS= read -r line || [ -n "$line" ]; do
   # Basic quote removal (optional)
   value=$(echo "$value" | sed "s/^'//; s/'$//; s/^\"//; s/\"$//")
 
-  # Append "key=value" to the arguments string, ensuring proper quoting for the shell
-  # Use printf for safer handling of potential special characters in values
-  # This prepares arguments like: 'key1=value1' 'key2=value with spaces'
-  put_args=$(printf "%s '%s=%s'" "$put_args" "$key" "$value")
+  # *** Escape single quotes within the value for eval ***
+  # Replace every ' with '\''
+  escaped_value_for_eval=$(echo "$value" | sed "s/'/'\\\\''/g") # The four backslashes produce a literal '\'' in the sed replacement
+
+  # Append "'key=escaped_value'" to the arguments string
+  put_args=$(printf "%s '%s=%s'" "$put_args" "$key" "$escaped_value_for_eval") # Use the escaped value
 
 done < "$ENV_FILE_PATH"
 # -----------------------------------------
@@ -102,8 +108,7 @@ done < "$ENV_FILE_PATH"
 # --- Execute 'vault kv put' ONCE with all arguments ---
 if [ -n "$put_args" ]; then
   echo "Seeder: Writing all secrets to ${VAULT_PATH}..."
-  # Use 'eval' carefully here to correctly interpret the quoted arguments built in $put_args
-  # The command becomes: vault kv put <path> 'key1=value1' 'key2=value with spaces' ...
+  # eval should now work correctly with the escaped values
   eval "vault kv put -address=${VAULT_ADDR} ${VAULT_PATH} ${put_args}"
   # Check exit status of eval/vault
   if [ $? -ne 0 ]; then
