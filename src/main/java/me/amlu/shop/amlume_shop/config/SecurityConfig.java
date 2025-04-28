@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
@@ -32,8 +33,6 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
-import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -75,7 +74,7 @@ public class SecurityConfig {
 
     public SecurityConfig(@Value("${security.max-concurrent-sessions:2}") int maxConcurrentSessions, AuthenticationConfiguration authenticationConfiguration, GlobalRateLimitingFilter globalRateLimitingFilter,
                           PasetoTokenService pasetoTokenService,
-                          CustomAuthenticationFilter customAuthenticationFilter,
+                          @Lazy CustomAuthenticationFilter customAuthenticationFilter,
                           MfaAuthenticationFilter mfaAuthenticationFilter,
                           MfaAuthenticationProvider mfaAuthenticationProvider,
                           AuthenticationFailureHandler authenticationFailureHandler,
