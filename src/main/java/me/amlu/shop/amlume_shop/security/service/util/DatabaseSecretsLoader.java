@@ -10,17 +10,14 @@
 
 package me.amlu.shop.amlume_shop.security.service.util;
 
-import me.amlu.shop.amlume_shop.security.records.DatabaseConfig;
 import me.amlu.shop.amlume_shop.security.service.VaultService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 
-import java.util.Optional;
-
 public class DatabaseSecretsLoader {
 
-//    @Value("${vault.secret.database-path:secret/data/amlume-shop/database}")
+    //    @Value("${vault.secret.database-path:secret/data/amlume-shop/database}")
     @Value("${spring.cloud.vault.path:secret/amlume-shop/mfa}")
     String vaultPath;
 
