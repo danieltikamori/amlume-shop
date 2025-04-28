@@ -26,7 +26,7 @@ public class KeyManagementFacade {
     private static final Logger log = LoggerFactory.getLogger(KeyManagementFacade.class);
 
     // --- Injected Secret Strings from Vault/Environment ---
-    // NOTE: Ensure these property names match the keys in your Vault path (e.g., secret/mfa/)
+    // NOTE: Ensure these property names match the keys in your Vault path (e.g., secret/<application-name>/mfa)
 
     // Access Keys (Asymmetric - Public/Private)
     @Value("${paseto-access-private-key}")
