@@ -144,6 +144,11 @@ mfa:
   encryption:
     password: ${MFA_ENCRYPTION_PASSWORD}
     salt: ${MFA_ENCRYPTION_SALT}
+  excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
+  rate-limit:
+    max-attempts: 5
+    window-seconds: 300  # 5 minutes
+    time-window-minutes: 30
 
 notification:
   email:
@@ -589,6 +594,7 @@ spring:
 
   cloud:
     vault:
+      path: "secret/${spring.application.name}/mfa" # Path where secrets are stored
       enabled: true
       fail-fast: false  # <<< IMPORTANT: Allow fallback if Vault fails
       uri: http://localhost:8200 # Example fallback URI
@@ -673,12 +679,17 @@ spring:
     keep-alive: true
     web-application-type: servlet # or reactive if using WebFlux
 
-  mfa:
-    excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
-    rate-limit:
-      max-attempts: 5
-      window-seconds: 300  # 5 minutes
-      time-window-minutes: 30
+  mail:
+    host: ${MAIL_HOST}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    port: ${MAIL_PORT}
+    properties:
+      mail:
+        smtp:
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE}
+          auth: ${MAIL_AUTH_ENABLE}
 
 # --- Spring Profiles - local, dev, or this main ---
   profiles:
