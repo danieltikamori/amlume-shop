@@ -42,7 +42,7 @@ WORKDIR /app
 # Copy the native executable from the builder stage
 # Uses the EXECUTABLE_NAME argument passed during the build.
 # Ensure the ARG is available in this stage if needed, or use the default/passed value directly.
-ARG EXECUTABLE_NAME=amlume-shop # Make ARG available here too if ENTRYPOINT needs it explicitly
+ARG EXECUTABLE_NAME=amlume-shop
 COPY --from=builder /app/target/${EXECUTABLE_NAME} ./
 
 # Expose the port your Spring Boot app runs on (default is 8080)
