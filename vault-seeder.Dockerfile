@@ -23,7 +23,7 @@ RUN curl -Lo vault.zip "https://releases.hashicorp.com/vault/${VAULT_VERSION}/va
 # Create directory for scripts and copy entrypoint script
 RUN mkdir /app
 COPY entrypoint.sh /app/entrypoint.sh
-RUN dos2unix entrypoint.sh # Convert line endings to Unix format if necessary
+#RUN dos2unix entrypoint.sh # Convert line endings to Unix format if necessary
 RUN chmod +x /app/entrypoint.sh
 
 WORKDIR /app
