@@ -15,7 +15,7 @@ set -e
 
 # --- Configuration (Read from environment variables) ---
 #VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}" # Default to service name 'vault'
-VAULT_ADDR="${VAULT_ADDR:-http://vault-dev:8200}" # Default to service name 'vault'
+VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}" # Default to service name 'vault'
 VAULT_TOKEN="${VAULT_TOKEN}"
 VAULT_PATH="${VAULT_PATH:-secret/amlume-shop/mfa}" # Default path, can be overridden
 ENV_FILE_PATH="${ENV_FILE_PATH:-/.env}"          # Default path where .env is mounted
