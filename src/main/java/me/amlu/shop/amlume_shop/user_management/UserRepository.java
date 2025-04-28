@@ -25,19 +25,24 @@ import java.util.Set;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     // --- Standard Finders ---
-    Optional<User> findByUserId(Long userId); // Keep standard findById if preferred
+    Optional<User> findByUserId(Long userId); // Keep standard findById just in case
 
     // --- Finders based on Embedded Objects ---
 
     /**
      * Finds a user by their username string stored within the AuthenticationInfo.Username embedded object.
      * Uses property expression: authenticationInfo.username.username (assuming Username VO has a 'username' field)
+     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
      *
      * @param username The username string to search for.
      * @return An Optional containing the User if found.
      */
-    // Optional<User> findByAuthenticationInfoUsername(Username authenticationInfo_username); // OLD
-    Optional<User> findByAuthenticationInfoUsername_Username(String username); // NEW: Query by nested property
+    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username")
+    Optional<User> findByAuthenticationInfoUsername_Username(@Param("username") String username); // FIX: Added @Query and @Param
+
+    default Optional<User> findByUsername(Username username) {
+        return findByAuthenticationInfoUsername_Username(username.getUsername());
+    }
 
     /**
      * Finds a user by their email address stored within the ContactInfo.UserEmail embedded object.
@@ -47,29 +52,42 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     Optional<User> findByContactInfoUserEmailEmail(String email);
 
+    default Optional<User> findByEmail(String email) {
+        return findByContactInfoUserEmailEmail(email);
+    }
+
     /**
      * Finds a user by either their username string or email address.
      * Uses property expression: authenticationInfo.username.username
+     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
      *
      * @param username The username string to search for.
      * @param email    The email address to search for.
      * @return An Optional containing the User if found by either identifier.
      */
-    // Optional<User> findByAuthenticationInfoUsernameOrContactInfoUserEmailEmail(String username, String email); // OLD (Username part was wrong)
-    Optional<User> findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(String username, String email); // NEW: Correct username path
+    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username OR u.contactInfo.userEmail.email = :email")
+    Optional<User> findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(@Param("username") String username, @Param("email") String email); // FIX: Added @Query and @Param
 
+    default Optional<User> findByUsernameOrEmail(Username username, String email) {
+        return findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(username.getUsername(), email);
+    }
 
     // --- Existence Checks based on Embedded Objects ---
 
     /**
      * Checks if a user exists with the given username string.
      * Uses property expression: authenticationInfo.username.username
+     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
      *
      * @param username The username string to check.
      * @return true if a user with the username exists, false otherwise.
      */
-    // boolean existsByAuthenticationInfoUsername(String username); // OLD (Ambiguous if it expected String or Username object)
-    boolean existsByAuthenticationInfoUsername_Username(String username); // NEW: Query by nested property
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.authenticationInfo.username.username = :username")
+    boolean existsByAuthenticationInfoUsername_Username(@Param("username") String username); // FIX: Added @Query and @Param
+
+    default boolean existsByUsername(Username username) {
+        return existsByAuthenticationInfoUsername_Username(username.getUsername());
+    }
 
     /**
      * Checks if a user exists with the given email address.
@@ -78,6 +96,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return true if a user with the email exists, false otherwise.
      */
     boolean existsByContactInfoUserEmailEmail(String email);
+
+    default boolean existsByEmail(String email) {
+        return existsByContactInfoUserEmailEmail(email);
+    }
 
     // --- Custom Queries ---
 
