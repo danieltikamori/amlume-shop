@@ -531,7 +531,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     private String generateFallbackFingerprint() {
-        return "fallbackFingerprint_" + UUID.randomUUID().toString();
+        return "fallbackFingerprint_" + UUID.randomUUID();
     }
 
     private void handleValidationError(String userId, String fingerprintId, String clientIp, Exception e) {
