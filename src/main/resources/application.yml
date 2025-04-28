@@ -162,35 +162,70 @@ notification:
     channel: ${SLACK_CHANNEL_NAME}
     channel-id: ${SLACK_CHANNEL_ID}
 
+#paseto:
+#  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
+#  expiration: 3600                  # Non-sensitive config is fine here
+#  access:
+#    expiration: 3600
+#    local:
+#      expiration: 3600
+#      secret-key: ${PASETO_ACCESS_SECRET_KEY}
+#      kid: ${PASETO_ACCESS_LOCAL_KID}
+#    public:
+#      expiration: 3600
+#      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
+#      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
+#      kid: ${PASETO_ACCESS_PUBLIC_KID}
+#  refresh:
+#    expiration: 86400
+#    local:
+#      expiration: 86400
+#      secret-key: ${PASETO_REFRESH_SECRET_KEY}
+#      kid: ${PASETO_REFRESH_LOCAL_KID}
+#    public:
+#      expiration: 86400
+#      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
+#      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
+#      kid: ${PASETO_REFRESH_PUBLIC_KID}
+#  token-no-footer:
+#    parts: 3
+#  token-with-footer:
+#    parts: 4
+
+# application.yml
+
 paseto:
-  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
-  expiration: 3600                  # Non-sensitive config is fine here
-  access:
-    expiration: 3600
-    local:
-      expiration: 3600
-      secret-key: ${PASETO_ACCESS_SECRET_KEY}
-      kid: ${PASETO_ACCESS_LOCAL_KID}
-    public:
-      expiration: 3600
-      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
-      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
-      kid: ${PASETO_ACCESS_PUBLIC_KID}
-  refresh:
-    expiration: 86400
-    local:
-      expiration: 86400
-      secret-key: ${PASETO_REFRESH_SECRET_KEY}
-      kid: ${PASETO_REFRESH_LOCAL_KID}
-    public:
-      expiration: 86400
-      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
-      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
-      kid: ${PASETO_REFRESH_PUBLIC_KID}
   token-no-footer:
     parts: 3
   token-with-footer:
     parts: 4
+  access:
+    expiration: 3600 # Default expiration for access tokens
+    local:
+      # Define the properties expected by PasetoProperties.Access.Local
+      # Use ${ENV_VAR_NAME:default_value} to read from environment or provide a default
+      secret-key: ${PASETO_ACCESS_SECRET_KEY:} # Read from env, default to empty if not set
+      kid: ${PASETO_ACCESS_LOCAL_KID:}       # Read from env, default to empty if not set
+      # expiration: 3600 # Optional: Override default if needed for local access tokens specifically
+    public:
+      # Define the properties expected by PasetoProperties.Access.Public
+      private-key: ${PASETO_ACCESS_PRIVATE_KEY:} # Read from env
+      public-key: ${PASETO_ACCESS_PUBLIC_KEY:}  # Read from env
+      kid: ${PASETO_ACCESS_PUBLIC_KID:}       # Read from env
+      expiration: 3600 # Can override default access expiration if needed for public access tokens
+  refresh:
+    expiration: 86400 # Default expiration for refresh tokens
+    local:
+      # Define the properties expected by PasetoProperties.Refresh.Local
+      secret-key: ${PASETO_REFRESH_SECRET_KEY:} # Read from env
+      kid: ${PASETO_REFRESH_LOCAL_KID:}       # Read from env
+      # expiration: 86400 # Optional: Override default if needed for local refresh tokens
+    public:
+      # Define the properties expected by PasetoProperties.Refresh.Public
+      private-key: ${PASETO_REFRESH_PRIVATE_KEY:} # Read from env
+      public-key: ${PASETO_REFRESH_PUBLIC_KEY:}  # Read from env
+      kid: ${PASETO_REFRESH_PUBLIC_KID:}       # Read from env
+      expiration: 86400 # Can override default refresh expiration if needed for public refresh tokens
 
 recaptcha:
   secret: ${RECAPTCHA_SECRET_KEY}
