@@ -632,7 +632,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
      *
      * @param claims       token claims
      * @param missingClaim missing claim name
-     * @throws TokenValidationFailureException
+     * @throws TokenValidationFailureException missing claims
      */
     private void handleMissingClaim(Map<String, Object> claims, String missingClaim) throws TokenValidationFailureException {
         String errorMessage = String.format(MISSING_REQUIRED_CLAIM, missingClaim); // Use String.format()
