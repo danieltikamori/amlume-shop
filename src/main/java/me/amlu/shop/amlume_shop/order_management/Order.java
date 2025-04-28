@@ -41,7 +41,7 @@ public class Order extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "order_id", updatable = false, unique = true)
-    private String orderId;
+    private Long orderId;
 
     @NotBlank
     @Column(name = "order_number", updatable = false, unique = true)
@@ -95,11 +95,11 @@ public class Order extends BaseEntity {
 
     @Override
     public Long getAuditableId() {
-        return Long.parseLong(orderId);
+        return this.orderId;
     }
 
     @Override
     public Long getId() {
-        return Long.parseLong(orderId);
+        return this.orderId;
     }
 }
