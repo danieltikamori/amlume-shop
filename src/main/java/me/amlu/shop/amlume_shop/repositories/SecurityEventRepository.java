@@ -92,5 +92,5 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Lo
             Instant endTime
     );
 
-    Page<SecurityEvent> findAll(Object o, Pageable pageable);
+    Page<SecurityEvent> findAll(Pageable pageable);
 }

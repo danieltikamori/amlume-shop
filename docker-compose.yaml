@@ -99,6 +99,7 @@ services:
     command: -config.file=/etc/promtail/config.yml
     environment:
       # This correctly reads the full URL from the .env file
+#      LOKI_URL: ${LOKI_URL}
       LOKI_URL: ${LOKI_URL}
       # LOKI_USERNAME and LOKI_PASSWORD are no longer needed here
     networks:
@@ -128,7 +129,7 @@ services:
     depends_on:
       vault:
         condition: service_healthy # Waits for Vault's healthcheck to pass
-    restart: 'on-failure' # 'no' -> Crucial: Run this container only once
+    restart: 'no' # 'no' -> Crucial: Run this container only once
  #For debugging, you can change restart: 'no' to restart: 'on-failure' or add sleep infinity to the end of entrypoint.sh for debugging, then restart)
 
 # --- Volumes Definition ---
