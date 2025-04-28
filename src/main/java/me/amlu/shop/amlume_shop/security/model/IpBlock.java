@@ -19,7 +19,7 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "ip_blocks", indexes = {
-        @Index(name = "idx_ip_address", columnList = "ip_address")
+        @Index(name = "idx_ip_block_address", columnList = "ip_address")
 })
 @Cacheable
 public class IpBlock extends BaseEntity {
