@@ -69,30 +69,51 @@ echo "Seeder: Vault is ready. Populating secrets from $ENV_FILE_PATH into $VAULT
 # Export token for Vault CLI commands
 export VAULT_TOKEN
 
-# Using awk for slightly more robust parsing than basic shell loops
-# Handles comments (#), empty lines, and basic key=value pairs
-awk -F= '!/^#/ && NF > 1 {
-    key=$1
-    # Reconstruct value if it contains '='
-    value = substr($0, index($0, "=") + 1)
-    # Trim leading/trailing whitespace from key and value (optional)
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-    # Basic quote removal (optional)
-    gsub(/^'\''|'\''$/, "", value)
-    gsub(/^\"|\"$/, "", value)
+# --- Collect all key=value pairs FIRST ---
+put_args=""
+while IFS= read -r line || [ -n "$line" ]; do
+  # Skip comments and empty lines
+  case "$line" in
+    \#* | "") continue ;;
+  esac
 
-    # Construct the kv put command arguments: key=value
-    kv_pair = sprintf("%s=%s", key, value)
+  # Basic parsing (assumes no '=' in key, value starts after first '=')
+  key=$(echo "$line" | cut -d'=' -f1)
+  value=$(echo "$line" | cut -d'=' -f2-)
 
-    # Execute vault kv put for each pair
-    cmd = sprintf("vault kv put -address=%s %s \"%s\"", ENVIRON["VAULT_ADDR"], ENVIRON["VAULT_PATH"], kv_pair)
-    print "Seeder: Writing key: " key
-    if (system(cmd) != 0) {
-        print "Seeder: Error writing key: " key > "/dev/stderr"
-        # exit 1 # Optionally exit on first error
-    }
-}' < "$ENV_FILE_PATH"
+#  # Trim whitespace (optional but recommended)
+#  key=$(echo "$key" | xargs)
+#  value=$(echo "$value" | xargs)
+  # Trim whitespace using sed (safer than xargs for this purpose)
+  key=$(echo "$key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  value=$(echo "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+  # Basic quote removal (optional)
+  value=$(echo "$value" | sed "s/^'//; s/'$//; s/^\"//; s/\"$//")
+
+  # Append "key=value" to the arguments string, ensuring proper quoting for the shell
+  # Use printf for safer handling of potential special characters in values
+  # This prepares arguments like: 'key1=value1' 'key2=value with spaces'
+  put_args=$(printf "%s '%s=%s'" "$put_args" "$key" "$value")
+
+done < "$ENV_FILE_PATH"
+# -----------------------------------------
+
+# --- Execute 'vault kv put' ONCE with all arguments ---
+if [ -n "$put_args" ]; then
+  echo "Seeder: Writing all secrets to ${VAULT_PATH}..."
+  # Use 'eval' carefully here to correctly interpret the quoted arguments built in $put_args
+  # The command becomes: vault kv put <path> 'key1=value1' 'key2=value with spaces' ...
+  eval "vault kv put -address=${VAULT_ADDR} ${VAULT_PATH} ${put_args}"
+  # Check exit status of eval/vault
+  if [ $? -ne 0 ]; then
+      echo "Seeder: Error executing vault kv put command." >&2
+      exit 1
+  fi
+else
+  echo "Seeder: No secrets found in $ENV_FILE_PATH to put."
+fi
+# ------------------------------------------------------
 
 echo "Seeder: Vault population script finished."
 exit 0 # Important: Exit successfully so Compose knows the one-time task is done
