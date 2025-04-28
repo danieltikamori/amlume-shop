@@ -52,11 +52,14 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private final IpSecurityService ipSecurityService;
     private final RateLimiter rateLimiter;
 
+    @Value("${security.device-fingerprint.fingerprint-salt}")
     private final String fingerprintSalt;
+
+    @Value("${security.max-devices-per-user}")
     private final int maxDevicesPerUser;
 
     // --- Constructor Updated ---
-    public DeviceFingerprintServiceImpl(@Value("${security.fingerprint-salt}") String fingerprintSalt,
+    public DeviceFingerprintServiceImpl(@Value("${security.device-fingerprint.fingerprint-salt}") String fingerprintSalt,
                                         @Value("${security.max-devices-per-user}") int maxDevicesPerUser,
                                         UserRepository userRepository,
                                         UserDeviceFingerprintRepository userDeviceFingerprintRepository,
