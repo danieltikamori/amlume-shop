@@ -222,25 +222,6 @@ public class SecurityConfig {
     }
 
     /**
-     * Bean for PasswordEncoder.
-     * This uses Argon2 or bcrypt as the default password hashing algorithm.
-     *
-     * @return PasswordEncoder instance.
-     */
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-//        return PasswordEncoderFactories.createDelegatingPasswordEncoder(); // Uses the default bcrypt encoder
-        // Argon2 configuration - parameters can be tuned
-        return new Argon2PasswordEncoder(
-                16,    // saltLength
-                32,    // hashLength
-                1,     // parallelism (adjust based on CPU cores)
-                1 << 14, // memory cost (16MB - adjust based on available RAM)
-                3       // iterations (increase for more security, impacts performance)
-        );
-    }
-
-    /**
      * Bean for HaveIBeenPwned password checker.
      * This checks if the password has been compromised using the HaveIBeenPwned API.
      *
