@@ -23,7 +23,7 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Entity(name = "categories") // Keep entity name if different from class name
+@Entity
 @Table(name = "categories", indexes = @Index(name = "idx_category_name", columnList = "category_name"))
 // Assuming ValueObjects maps to category_name
 @EntityListeners(AuditingEntityListener.class)

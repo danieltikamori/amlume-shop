@@ -39,7 +39,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
      * @param pathPattern The starting path pattern (e.g., "1.2.").
      * @return A list of descendant categories (including the one matching the pattern if it exists).
      */
-    @Query("SELECT c FROM categories c WHERE c.hierarchyLevel.path LIKE :pathPattern%")
+    @Query("SELECT c FROM Category c WHERE c.hierarchyLevel.path LIKE :pathPattern%")
     List<Category> findByHierarchyLevelPathStartingWith(@Param("pathPattern") String pathPattern);
 
     /**
@@ -48,6 +48,6 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
      * @param level The hierarchy level (0 for root).
      * @return A list of categories at the specified level.
      */
-    @Query("SELECT c FROM categories c WHERE c.hierarchyLevel.level = :level")
+    @Query("SELECT c FROM Category c WHERE c.hierarchyLevel.level = :level")
     List<Category> findByLevel(@Param("level") int level);
 }
