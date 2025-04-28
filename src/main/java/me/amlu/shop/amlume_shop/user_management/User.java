@@ -10,12 +10,13 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.model.RefreshToken;
-import me.amlu.shop.amlume_shop.user_management.address.Address;
 import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.user_management.address.Address;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -56,13 +57,11 @@ public class User extends BaseEntity implements UserDetails {
 
     // Override the column name for the 'userEmail' field within ContactInfo
     @AttributeOverrides({
-            @AttributeOverride(name = "userEmail.userEmail", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
+            @AttributeOverride(name = "userEmail.email", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
             @AttributeOverride(name = "firstName", column = @Column(name = "first_name", nullable = false, length = 127)),
             @AttributeOverride(name = "lastName", column = @Column(name = "last_name", nullable = false, length = 127)),
             @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
-//            @AttributeOverride(name = "phoneNumber", column = @Column(name = "phone_number", length = 50)) // Assuming PhoneNumber VO has 'phoneNumber' field
-            // Add override for phone number if you need a specific column name:
-             @AttributeOverride(name = "phoneNumber.phoneNumber", column = @Column(name = "phone_number", length = 50))
+            // Phone number is handled by ContactInfo and stored as a string in E.164 format
             // Add overrides for other ContactInfo fields if needed
     })
     @Embedded
@@ -108,7 +107,10 @@ public class User extends BaseEntity implements UserDetails {
     // Initialized collection - JPA will replace this instance upon load
     @ElementCollection(fetch = FetchType.EAGER) // EAGER fetch for roles is often acceptable
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING) // Store enum as string
+    @Column(name = "role_name", nullable = false) // Name of the column in the user_roles table holding the role
     private Set<UserRole> roles = new HashSet<>();
+//    private Set<UserRole.roleName> roles = new HashSet<>(); // Store roleName enum directly
 
     // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
@@ -363,6 +365,25 @@ public class User extends BaseEntity implements UserDetails {
         this.roles = roles;
     }
 
+//    public void addRole(UserRole.roleName roleName) {
+//        if (this.roles == null) {
+//            this.roles = new HashSet<>();
+//        }
+//        if (roleName != null) {
+//            this.roles.add(roleName);
+//        }
+//    }
+//
+//    public void removeRole(UserRole.roleName roleName) {
+//        if (this.roles != null && roleName != null) {
+//            this.roles.remove(roleName);
+//        }
+//    }
+//
+//    public void createRoleSet(Set<UserRole.roleName> roles) {
+//        this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
+//    }
+
     public void addAddress(Address address) {
         if (this.addresses == null) { // Paranoid check
             this.addresses = new ArrayList<>();
@@ -475,6 +496,43 @@ public class User extends BaseEntity implements UserDetails {
             this.contactInfo.updateEmailAddress(newEmailAddress);
         }
     }
+
+    // Using string for phone number to avoid dependency on external library
+    public void updatePhoneNumber(String newPhoneNumber) {
+        if (this.contactInfo != null) {
+            this.contactInfo.updatePhoneNumber(newPhoneNumber);
+        }
+    }
+
+    // Using Phonenumber.PhoneNumber object for phone number
+    public void updatePhoneNumber(Phonenumber.PhoneNumber newPhoneNumber) {
+        if (this.contactInfo != null) {
+            this.contactInfo.updatePhoneNumber(newPhoneNumber);
+        }
+    }
+
+//    public void updatePassword(String encodedPassword) {
+//        if (this.authenticationInfo != null) {
+//            // Assuming AuthenticationInfo has a way to update password,
+//            // potentially by creating a new UserPassword object
+//            this.authenticationInfo = new AuthenticationInfo(
+//                    this.authenticationInfo.getUsername(), // Keep existing username
+//                    new UserPassword(encodedPassword)     // Create new password object
+//            );
+//        }
+//    }
+//
+//    public void updateEmailAddress(String newEmailAddress) {
+//        if (this.contactInfo != null) {
+//            // Assuming ContactInfo has a way to update email,
+//            // potentially by creating a new UserEmail object
+//            this.contactInfo = new ContactInfo(
+//                    new UserEmail(newEmailAddress), // Create new email object
+//                    this.contactInfo.getPhoneNumber() // Keep existing phone number
+//            );
+//        }
+//    }
+
 
     public void updateLastLoginTime(Instant now) {
         if (this.accountStatus != null) {

@@ -42,6 +42,11 @@ public class AuthenticationInfo implements Serializable {
     protected AuthenticationInfo() {
     }
 
+    public AuthenticationInfo(String username, UserPassword userPassword) {
+        this.username = new Username(username);
+        this.password = new UserPassword(userPassword.getPassword());
+    }
+
     public static AuthenticationInfoBuilder builder() {
         return new AuthenticationInfoBuilder();
     }

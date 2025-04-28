@@ -31,7 +31,7 @@ public class UserPassword implements Serializable {
     @NotBlank
     @Size(min = 12, max = 255, message = "Password must be between 12 and 255 characters")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Column(nullable = false, name = "password")
+    @Column(nullable = false, name = "user_password")
     private String password;  // This will store the Argon2id or other hash
 
     protected UserPassword() { // Required by JPA
