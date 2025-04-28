@@ -19,7 +19,6 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
@@ -76,7 +75,10 @@ public class TokenValidationServiceImpl implements TokenValidationService {
     private final Timer tokenValidationLatency;
     private final Timer tokenClaimsValidationLatency;
 
-    public TokenValidationServiceImpl(ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, MeterRegistry meterRegistry, Counter tokenValidationCounter, PasetoPropertyResolver pasetoPropertyResolver, @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter, Timer tokenValidationLatency, Timer tokenClaimsValidationLatency) {
+    public TokenValidationServiceImpl(ObjectMapper objectMapper, KeyManagementService keyManagementService, TokenUtilService tokenUtilService, TokenRevocationService tokenRevocationService, HttpServletRequest httpServletRequest, UserRepository userRepository, MeterRegistry meterRegistry, Counter tokenValidationCounter, PasetoPropertyResolver pasetoPropertyResolver,
+                                      @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
+                                      @Qualifier("tokenValidationTimer") Timer tokenValidationLatency,
+                                      @Qualifier("tokenClaimsValidationLatency") Timer tokenClaimsValidationLatency) {
         this.rateLimiter = rateLimiter;
         this.tokenClaimsValidationLatency = tokenClaimsValidationLatency;
         this.objectMapper = objectMapper;
