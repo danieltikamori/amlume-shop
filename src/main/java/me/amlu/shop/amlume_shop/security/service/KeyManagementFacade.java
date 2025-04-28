@@ -11,13 +11,11 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
-import me.amlu.shop.amlume_shop.security.model.KeyPair; // Import the correct KeyPair record
+import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory; // Use standard LoggerFactory
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.util.Objects;
 // Removed Map, TimeUnit, ExecutionException imports
 
 @Service
