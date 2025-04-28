@@ -70,7 +70,7 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
-    @AttributeOverride(name = "money.amount", column = @Column(name = "product_price", nullable = false, precision = 12, scale = 2))
+    @AttributeOverride(name = "amount", column = @Column(name = "product_price", nullable = false, precision = 12, scale = 2))
     private Money productPrice;
 
     @Embedded
@@ -81,7 +81,7 @@ public class Product extends BaseEntity {
     @Embedded
     @Valid
     // Mark as not directly updatable via standard setters if calculation is always enforced
-    @AttributeOverride(name = "money.amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2 /*, updatable = false ??? */))
+    @AttributeOverride(name = "amount", column = @Column(name = "product_special_price", nullable = false, precision = 12, scale = 2 /*, updatable = false ??? */))
     private Money productSpecialPrice;
 
     @ManyToOne(fetch = FetchType.LAZY)
