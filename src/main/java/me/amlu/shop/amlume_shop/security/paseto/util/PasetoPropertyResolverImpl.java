@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
+import me.amlu.shop.amlume_shop.config.properties.PasetoProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
@@ -18,7 +20,7 @@ import java.util.Objects;
 /**
  * This class is responsible for resolving properties related to Paseto tokens.
  * It implements the PasetoPropertyResolver interface and uses the Environment object
- * to retrieve the required properties.
+ * or the injected PasetoProperties bean to retrieve the required properties.
  * <p>
  * Benefits of Property Resolver:
  * Provides a more flexible way to access the token configuration properties, as it allows you to resolve the properties at runtime using the PasetoPropertyResolver instance.
@@ -33,56 +35,100 @@ import java.util.Objects;
  * <p>
  * Note:
  * You can also use a caching mechanism to cache the resolved properties and improve performance.
+ * <p>
+ * *** IMPORTANT ***
+ * This implementation mixes direct environment variable access (`System.getenv`) with access
+ * via the injected `PasetoProperties` bean. This can lead to inconsistencies if properties
+ * are defined in multiple places (e.g., `application.yml` AND environment variables).
+ * It's generally recommended to rely *solely* on the `@ConfigurationProperties` bean (`PasetoProperties`)
+ * for consistency and to leverage Spring Boot's property binding features (including environment variable overrides).
+ * The direct `System.getenv` calls bypass this mechanism.
+ * Consider refactoring to use only `pasetoProperties`.
  */
 @Component
 public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
 
-    private Environment environment;
+    private final Environment environment; // Keep for properties not in PasetoProperties if needed
+    private final PasetoProperties pasetoProperties; // Inject the properties bean
+
+    @Autowired // Optional if using constructor injection with a single constructor
+    public PasetoPropertyResolverImpl(Environment environment, PasetoProperties pasetoProperties) {
+        this.environment = environment;
+        this.pasetoProperties = pasetoProperties;
+    }
 
     @Override
     public int resolveTokenNoFooterParts() {
-        return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-no-footer.parts")));
+        // Prefer using the injected properties bean
+        return pasetoProperties.getTokenNoFooterParts();
+        // Fallback to environment if needed, but less ideal:
+        // return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-no-footer.parts")));
     }
 
     @Override
     public int resolveTokenWithFooterParts() {
-        return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-with-footer.parts")));
+        // Prefer using the injected properties bean
+        return pasetoProperties.getTokenWithFooterParts();
+        // Fallback to environment if needed, but less ideal:
+        // return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-with-footer.parts")));
     }
 
 
     @Override
     public String resolveAccessPublicKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_ACCESS_PUBLIC_KEY"));
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getAccessPublicKey(), "Access Public Key not configured (paseto.access.public.public-key)");
+        // Direct environment access (less recommended):
+        // return Objects.requireNonNull(System.getenv("PASETO_ACCESS_PUBLIC_KEY"));
     }
 
     @Override
     public String resolveAccessSecretKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_ACCESS_SECRET_KEY"));
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getAccessSecretKey(), "Access Secret Key not configured (paseto.access.local.secret-key)");
+        // Direct environment access (less recommended):
+        // return Objects.requireNonNull(System.getenv("PASETO_ACCESS_SECRET_KEY"));
     }
 
     @Override
     public String resolveRefreshSecretKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_REFRESH_SECRET_KEY"));
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getRefreshSecretKey(), "Refresh Secret Key not configured (paseto.refresh.local.secret-key)");
+        // Direct environment access (less recommended):
+        // return Objects.requireNonNull(System.getenv("PASETO_REFRESH_SECRET_KEY"));
     }
 
     @Override
     public String resolvePublicAccessKid() {
-        return System.getenv("PASETO_ACCESS_KID");
+        // Prefer using the injected properties bean
+        // Note: PasetoProperties has accessPublicKid, not just a generic public access kid.
+        return Objects.requireNonNull(pasetoProperties.getAccessPublicKid(), "Public Access KID not configured (paseto.access.public.kid)");
+        // Direct environment access (less recommended, and uses a different env var name):
+        // return System.getenv("PASETO_ACCESS_KID"); // Original code used PASETO_ACCESS_KID
     }
 
     @Override
     public String resolvePublicRefreshKid() {
-        return System.getenv("PASETO_REFRESH_KID");
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getRefreshPublicKid(), "Public Refresh KID not configured (paseto.refresh.public.kid)");
+        // Direct environment access (less recommended, and uses a different env var name):
+        // return System.getenv("PASETO_REFRESH_KID"); // Original code used PASETO_REFRESH_KID
     }
 
     @Override
     public String resolveLocalAccessKid() {
-        return System.getenv("PASETO_ACCESS_LOCAL_KID");
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getAccessLocalKid(), "Local Access KID not configured (paseto.access.local.kid)");
+        // Direct environment access (less recommended):
+        // return System.getenv("PASETO_ACCESS_LOCAL_KID");
     }
 
     @Override
     public String resolveLocalRefreshKid() {
-        return System.getenv("PASETO_REFRESH_LOCAL_KID");
+        // Prefer using the injected properties bean
+        return Objects.requireNonNull(pasetoProperties.getRefreshLocalKid(), "Local Refresh KID not configured (paseto.refresh.local.kid)");
+        // Direct environment access (less recommended):
+        // return System.getenv("PASETO_REFRESH_LOCAL_KID");
     }
 
 }
