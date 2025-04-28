@@ -12,7 +12,6 @@ package me.amlu.shop.amlume_shop.config;
 
 import me.amlu.shop.amlume_shop.filter.*;
 import me.amlu.shop.amlume_shop.security.auth.MfaAuthenticationProvider;
-import me.amlu.shop.amlume_shop.security.handler.AuthenticationFailureHandler;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
@@ -60,9 +59,7 @@ public class SecurityConfig {
     private final GlobalRateLimitingFilter globalRateLimitingFilter; // Assuming this is correctly configured elsewhere
     private final PasetoTokenService pasetoTokenService; // Use interface
     private final CustomAuthenticationFilter customAuthenticationFilter; // Assumes this handles user/pass
-    private final MfaAuthenticationFilter mfaAuthenticationFilter; // Handles MFA verification step
     private final MfaAuthenticationProvider mfaAuthenticationProvider; // Provider for MFA logic
-    private final AuthenticationFailureHandler authenticationFailureHandler; // Handles login failures
     private final DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter; // Verifies device post-auth
 
     // Inject AuthenticationManager if custom filters need it
@@ -75,9 +72,7 @@ public class SecurityConfig {
     public SecurityConfig(@Value("${security.max-concurrent-sessions:2}") int maxConcurrentSessions, AuthenticationConfiguration authenticationConfiguration, GlobalRateLimitingFilter globalRateLimitingFilter,
                           PasetoTokenService pasetoTokenService,
                           @Lazy CustomAuthenticationFilter customAuthenticationFilter,
-                          MfaAuthenticationFilter mfaAuthenticationFilter,
                           MfaAuthenticationProvider mfaAuthenticationProvider,
-                          AuthenticationFailureHandler authenticationFailureHandler,
                           DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter
             /*, AuthenticationManager authenticationManager */) {
         this.maxConcurrentSessions = maxConcurrentSessions;
@@ -85,9 +80,7 @@ public class SecurityConfig {
         this.globalRateLimitingFilter = globalRateLimitingFilter;
         this.pasetoTokenService = pasetoTokenService;
         this.customAuthenticationFilter = customAuthenticationFilter;
-        this.mfaAuthenticationFilter = mfaAuthenticationFilter;
         this.mfaAuthenticationProvider = mfaAuthenticationProvider;
-        this.authenticationFailureHandler = authenticationFailureHandler;
         this.deviceFingerprintVerificationFilter = deviceFingerprintVerificationFilter;
         // this.authenticationManager = authenticationManager;
     }
