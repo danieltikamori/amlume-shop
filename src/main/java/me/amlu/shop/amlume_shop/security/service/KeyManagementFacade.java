@@ -10,115 +10,109 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import me.amlu.shop.amlume_shop.config.properties.PasetoProperties; // Import PasetoProperties
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
 import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Value; // Keep for mfaEncryptionPassword if needed
 import org.springframework.stereotype.Service;
-// Removed Map, TimeUnit, ExecutionException imports
+
+import java.util.Objects; // Import Objects for null checks
 
 @Service
 public class KeyManagementFacade {
 
     private static final Logger log = LoggerFactory.getLogger(KeyManagementFacade.class);
 
-    // --- Injected Secret Strings from Vault/Environment ---
-    // NOTE: Ensure these property names match the keys in your Vault path (e.g., secret/<application-name>/mfa)
+    // --- Injected Paseto Properties Bean ---
+    private final PasetoProperties pasetoProperties;
 
-    // Access Keys (Asymmetric - Public/Private)
-    @Value("${paseto-access-private-key}")
-    private String pasetoAccessPrivateKey;
-
-    @Value("${paseto-access-public-key}")
-    private String pasetoAccessPublicKey;
-
-    // Refresh Keys (Symmetric - Secret) - Assuming symmetric for refresh based on original code
-    @Value("${paseto-refresh-secret-key}")
-    private String pasetoRefreshSecretKey;
-
-    // Access Keys (Symmetric - Secret) - If you also use symmetric for access
-    @Value("${paseto-access-secret-key}")
-    private String pasetoAccessSecretKey; // Added based on KeyManagementService usage
-
-    // Other secrets if needed by this facade or passed through
+    // --- Other secrets if needed by this facade or passed through ---
+    // Keep @Value for secrets NOT managed within PasetoProperties
     @Value("${mfa-encryption-password}")
     private String mfaEncryptionPassword;
 
-    // Removed HCPSecretsService dependency and Cache
-
-    // Constructor is now simpler or can be removed if no other dependencies
-    public KeyManagementFacade() {
-        // No dependencies to inject here anymore
-        log.info("KeyManagementFacade initialized. Secrets will be injected via @Value.");
+    // Constructor updated to inject PasetoProperties
+    public KeyManagementFacade(PasetoProperties pasetoProperties) {
+        this.pasetoProperties = pasetoProperties;
+        log.info("KeyManagementFacade initialized. PASETO secrets will be retrieved via PasetoProperties bean.");
     }
-
-    // Removed initialize() and loadSecrets() - @Value handles loading
 
     /**
      * Retrieves the asymmetric key pair strings for the given purpose.
-     * Now directly returns the injected values.
+     * Now retrieves values from the injected PasetoProperties bean.
      *
-     * @param purpose Typically "ACCESS" or potentially others if defined.
+     * @param purpose Typically "ACCESS" or potentially "REFRESH" if asymmetric refresh keys are used.
      * @return KeyPair record containing the private and public key strings.
-     * @throws KeyManagementException if required keys for the purpose are not injected/found.
+     * @throws KeyManagementException if required keys for the purpose are not configured.
      */
     public KeyPair getAsymmetricKeys(String purpose) {
         log.debug("Retrieving asymmetric keys for purpose: {}", purpose);
-        // Simple example: Assuming only "ACCESS" uses asymmetric keys based on original code
+        String privateKey;
+        String publicKey;
+        String privateKeyPropertyPath;
+        String publicKeyPropertyPath;
+
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            if (pasetoAccessPrivateKey == null || pasetoAccessPublicKey == null) {
-                log.error("Asymmetric keys for purpose '{}' are not available (check Vault/environment variables: paseto-access-private-key, paseto-access-public-key)", purpose);
-                throw new KeyManagementException("Asymmetric keys for purpose '" + purpose + "' not found.");
-            }
-            return new KeyPair(pasetoAccessPrivateKey, pasetoAccessPublicKey);
+            privateKey = pasetoProperties.getAccessPrivateKey();
+            publicKey = pasetoProperties.getAccessPublicKey();
+            privateKeyPropertyPath = "paseto.access.public.private-key";
+            publicKeyPropertyPath = "paseto.access.public.public-key";
+        } else if ("REFRESH".equalsIgnoreCase(purpose)) {
+            // Assuming REFRESH might also use asymmetric keys (adjust if not)
+            privateKey = pasetoProperties.getRefreshPrivateKey();
+            publicKey = pasetoProperties.getRefreshPublicKey();
+            privateKeyPropertyPath = "paseto.refresh.public.private-key";
+            publicKeyPropertyPath = "paseto.refresh.public.public-key";
         } else {
-            // Handle other purposes if necessary, or throw an exception
             log.warn("Asymmetric keys requested for unsupported purpose: {}", purpose);
             throw new KeyManagementException("Unsupported purpose for asymmetric keys: " + purpose);
         }
+
+        // Use Objects.requireNonNull for cleaner null checks
+        Objects.requireNonNull(privateKey, "Private key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + privateKeyPropertyPath + ")");
+        Objects.requireNonNull(publicKey, "Public key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + publicKeyPropertyPath + ")");
+
+        return new KeyPair(privateKey, publicKey);
     }
 
     /**
      * Retrieves the symmetric secret key string for the given purpose.
-     * Now directly returns the injected value.
+     * Now retrieves values from the injected PasetoProperties bean.
      *
      * @param purpose Typically "ACCESS" or "REFRESH".
      * @return The secret key string.
-     * @throws KeyManagementException if the required key for the purpose is not injected/found.
+     * @throws KeyManagementException if the required key for the purpose is not configured.
      */
     public String getSymmetricKey(String purpose) {
         log.debug("Retrieving symmetric key for purpose: {}", purpose);
-        String key = null;
-        String propertyName = "unknown";
+        String key;
+        String propertyName; // For logging the expected property path
 
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            key = pasetoAccessSecretKey; // Use the symmetric access key if needed
-            propertyName = "paseto-access-secret-key";
+            key = pasetoProperties.getAccessSecretKey();
+            propertyName = "paseto.access.local.secret-key";
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
-            key = pasetoRefreshSecretKey;
-            propertyName = "paseto-refresh-secret-key";
+            key = pasetoProperties.getRefreshSecretKey();
+            propertyName = "paseto.refresh.local.secret-key";
         } else {
             log.warn("Symmetric key requested for unsupported purpose: {}", purpose);
             throw new KeyManagementException("Unsupported purpose for symmetric key: " + purpose);
         }
 
-        if (key == null) {
-            log.error("Symmetric key for purpose '{}' is not available (check Vault/environment variable: {})", purpose, propertyName);
-            throw new KeyManagementException("Symmetric key for purpose '" + purpose + "' not found.");
-        }
+        // Use Objects.requireNonNull for cleaner null check
+        Objects.requireNonNull(key, "Symmetric key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + propertyName + ")");
+
         return key;
     }
 
     // --- Optional: Getter for other injected secrets if needed elsewhere ---
     public String getMfaEncryptionPassword() {
-        if (mfaEncryptionPassword == null) {
-            log.error("MFA encryption password is not available (check Vault/environment variable: mfa-encryption-password)");
-            throw new KeyManagementException("MFA encryption password not found.");
-        }
+        // Use Objects.requireNonNull
+        Objects.requireNonNull(mfaEncryptionPassword, "MFA encryption password is not available (check Vault/environment variable: mfa-encryption-password)");
         return mfaEncryptionPassword;
     }
-
 
     // Removed getCachedKey(), updateKeys(), refreshKeys()
 }
