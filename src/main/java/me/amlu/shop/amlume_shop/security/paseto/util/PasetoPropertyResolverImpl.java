@@ -11,7 +11,6 @@
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
 import me.amlu.shop.amlume_shop.config.properties.PasetoProperties;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
@@ -33,13 +32,10 @@ import java.util.Objects;
 @Component
 public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
 
-    // Removed Environment dependency as we rely solely on PasetoProperties now
-    // private final Environment environment;
     private final PasetoProperties pasetoProperties; // Inject the properties bean
 
-    @Autowired // Optional if using constructor injection with a single constructor
+    //    @Autowired // Optional if using constructor injection with a single constructor
     public PasetoPropertyResolverImpl(PasetoProperties pasetoProperties) {
-        // this.environment = environment; // Removed
         this.pasetoProperties = pasetoProperties;
     }
 
@@ -58,7 +54,6 @@ public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
         return Objects.requireNonNull(pasetoProperties.getAccessPublicKey(), "Access Public Key not configured (paseto.access.public.public-key)");
     }
 
-    // Added missing method
     @Override
     public String resolveAccessPrivateKey() {
         return Objects.requireNonNull(pasetoProperties.getAccessPrivateKey(), "Access Private Key not configured (paseto.access.public.private-key)");
@@ -74,7 +69,6 @@ public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
         return Objects.requireNonNull(pasetoProperties.getRefreshSecretKey(), "Refresh Secret Key not configured (paseto.refresh.local.secret-key)");
     }
 
-    // Added missing method
     @Override
     public String resolveRefreshPrivateKey() {
         return Objects.requireNonNull(pasetoProperties.getRefreshPrivateKey(), "Refresh Private Key not configured (paseto.refresh.public.private-key)");
