@@ -26,12 +26,12 @@ public class PhoneNumberValidator implements ConstraintValidator<Phone, PhoneNum
 
     @Override
     public boolean isValid(PhoneNumber phoneNumber, ConstraintValidatorContext context) {
-        if(phoneNumber.getLocale()==null || phoneNumber.getValue()==null){
+        if(phoneNumber.getLocale()==null || phoneNumber.getPhoneNumber()==null){
             return false;
         }
         try{
             PhoneNumberUtil phoneNumberUtil = PhoneNumberUtil.getInstance();
-            return phoneNumberUtil.isValidNumber(phoneNumberUtil.parse(phoneNumber.getValue(), phoneNumber.getLocale()));
+            return phoneNumberUtil.isValidNumber(phoneNumberUtil.parse(phoneNumber.getPhoneNumber(), phoneNumber.getLocale()));
         }
         catch (NumberParseException e){
             return false;
