@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.security.paseto;
 
 
+import io.micrometer.core.instrument.MeterRegistry;
 import me.amlu.shop.amlume_shop.exceptions.TokenRevocationException;
 import me.amlu.shop.amlume_shop.exceptions.TokenRevokedException;
 import me.amlu.shop.amlume_shop.security.model.RevokedToken;
@@ -19,7 +20,9 @@ import org.paseto4j.commons.PasetoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +38,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
 
     private static final String REVOKED_TOKEN_PREFIX = "revoked_tokens:"; // Prefix for Valkey keys
 
+    private final MeterRegistry meterRegistry;
     private final RevokedTokenRepository revokedTokenRepository;
     private final RedisTemplate<String, Object> redisTemplate;
     private final TokenRevocationService self;
@@ -44,10 +48,11 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
 
     // Modify constructor
     public TokenRevocationServiceImpl(
-            RevokedTokenRepository revokedTokenRepository,
+            MeterRegistry meterRegistry, RevokedTokenRepository revokedTokenRepository,
             RedisTemplate<String, Object> redisTemplate, // Inject RedisTemplate
-            TokenRevocationService self
+            @Lazy TokenRevocationService self
     ) {
+        this.meterRegistry = meterRegistry;
         this.revokedTokenRepository = revokedTokenRepository;
         this.redisTemplate = redisTemplate; // Assign injected RedisTemplate
         this.self = self;
@@ -93,6 +98,39 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
         }
     }
 
+    // --- Async Persistence (Optional) ---
+    // If revokeToken performance is critical, you could make DB persistence async.
+    // Note: This adds complexity regarding transactionality and cache consistency.
+
+    @Async
+    @Transactional
+    @Override
+    public void revokeTokenAsync(String tokenId, String reason) {
+        // This method is intended to be called internally if async persistence is desired.
+        // The primary revokeToken method would handle the cache update immediately
+        // and then call this async method.
+
+        if (tokenId == null || tokenId.isBlank()) {
+            log.warn("[Async] Attempted to revoke a null or blank token ID.");
+            return;
+        }
+        Instant now = Instant.now();
+        try {
+            // Check if already exists in DB before saving (optional, save handles upsert if ID exists)
+            if (!revokedTokenRepository.existsByTokenId(tokenId)) {
+                RevokedToken revokedToken = new RevokedToken(tokenId, reason);
+                revokedTokenRepository.save(revokedToken);
+                log.info("[Async] Persisted revocation record for token ID: {}", tokenId);
+                meterRegistry.counter("paseto.token.revoked.async").increment();
+            } else {
+                log.debug("[Async] Revocation record for token ID {} already exists in DB.", tokenId);
+            }
+        } catch (Exception e) {
+            log.error("[Async] Failed to persist revocation record for token ID: {}", tokenId, e);
+            // Error handling for async operation (e.g., logging, metrics)
+        }
+    }
+
     // Method to check revocation status using RedisTemplate
     // This method now encapsulates cache checking, DB fallback, and cache updates (including negative caching)
     private boolean isTokenRevoked(String tokenId) {
@@ -110,6 +148,7 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
                 // Ensure it's actually a Boolean before casting
                 if (cachedResult instanceof Boolean) {
                     log.trace("Revocation status for token {} found in cache: {}", tokenId, cachedResult);
+                    meterRegistry.counter("paseto.token.revocation.check.cache.hit").increment();
                     return (Boolean) cachedResult;
                 } else {
                     // Data in cache is corrupted or unexpected type
@@ -117,6 +156,8 @@ public class TokenRevocationServiceImpl implements TokenRevocationService {
                     // Proceed to DB check, cache will be overwritten
                 }
             }
+
+            meterRegistry.counter("paseto.token.revocation.check.cache.miss").increment();
             log.trace("Revocation status for token {} not found in cache. Checking database.", tokenId);
 
             // 2. If not in cache, check the database
