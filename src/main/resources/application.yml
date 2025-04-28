@@ -626,9 +626,9 @@ spring:
     password: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Match docker-compose env
     driverClassName: com.mysql.cj.jdbc.Driver # Usually inferred
 
-  h2:
-    console:
-      enabled: false
+#  h2:
+#    console:
+#      enabled: false
 #      path: /h2-console
 #    datasource:
 #      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
