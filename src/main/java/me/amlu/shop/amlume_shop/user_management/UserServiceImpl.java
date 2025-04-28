@@ -28,6 +28,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 // Import UsernameNotFoundException from Spring Security if used, or custom UserNotFoundException
 // import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -40,9 +41,13 @@ import java.util.Set;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
+/**
+ * Service implementation for managing users, including registration, retrieval, updates,
+ * and integration with Spring Security's UserDetailsService.
+ */
 @Service
 @Transactional // Apply transactionality to all public methods by default
-public class UserServiceImpl implements UserService {
+public class UserServiceImpl implements UserService, UserDetailsService {
 
     private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
@@ -51,6 +56,13 @@ public class UserServiceImpl implements UserService {
     // Removed self-injection: private final UserServiceImpl userService;
     private final CacheService cacheService; // Keep if providing specific caching beyond annotations
 
+    /**
+     * Constructor for dependency injection.
+     *
+     * @param userRepository  The repository for user data access.
+     * @param passwordEncoder The encoder for hashing passwords.
+     * @param cacheService    The service for custom caching operations.
+     */
     public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, CacheService cacheService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
@@ -59,6 +71,14 @@ public class UserServiceImpl implements UserService {
 
     // --- Registration ---
 
+    /**
+     * Registers a new user based on the provided request details.
+     *
+     * @param request The user registration request DTO.
+     * @return The newly created and saved User entity.
+     * @throws RoleNotFoundException      If the default role cannot be found (should not happen with hardcoded default).
+     * @throws UserAlreadyExistsException If the username or email is already taken.
+     */
     @Override
     public User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException, UserAlreadyExistsException {
         Assert.notNull(request, "Registration request cannot be null");
@@ -127,6 +147,13 @@ public class UserServiceImpl implements UserService {
 
     // --- User Retrieval ---
 
+    /**
+     * Finds a user by their username string. Results are cached.
+     *
+     * @param username The username string to search for.
+     * @return The found User entity.
+     * @throws UserNotFoundException If no user is found with the given username.
+     */
     @Override
     // Consider caching UserDetails instead of the full User entity for security context.
     // However, since User implements UserDetails and uses embedded objects, caching
@@ -152,16 +179,30 @@ public class UserServiceImpl implements UserService {
         return user;
     }
 
+    /**
+     * Retrieves a user by their unique ID. Results are cached.
+     *
+     * @param userId The ID of the user to retrieve.
+     * @return The found User entity.
+     * @throws UserNotFoundException If no user is found with the given ID.
+     */
     @Override
-     @Cacheable(value = USERS_CACHE, key = "#userId")
+    @Cacheable(value = USERS_CACHE, key = "#userId")
     public User getUserById(Long userId) {
         Assert.notNull(userId, "User ID must not be null");
         return userRepository.findById(userId)
                 .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + userId));
     }
 
+    /**
+     * Retrieves a user by their email address.
+     *
+     * @param email The email address to search for.
+     * @return The found User entity.
+     * @throws UserNotFoundException If no user is found with the given email.
+     */
     @Override
-//     @Cacheable(value = USERS_CACHE, key = "'email:' + #email")
+//     @Cacheable(value = USERS_CACHE, key = "'email:' + #email") // Consider caching if frequently used
     public User getUserByEmail(String email) {
         Assert.hasText(email, "Email must not be empty");
         // Assuming repository method returns Optional now for consistency
@@ -169,6 +210,13 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found with email: " + email));
     }
 
+    /**
+     * Retrieves a user by either their username string or email address.
+     *
+     * @param usernameOrEmail The username string or email address to search for.
+     * @return The found User entity.
+     * @throws UserNotFoundException If no user is found with the given identifier.
+     */
     @Override
     public User getUserByUsernameOrEmail(String usernameOrEmail) {
         Assert.hasText(usernameOrEmail, "Username or email must not be empty");
@@ -177,19 +225,36 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new UserNotFoundException("User not found with username or email: " + usernameOrEmail));
     }
 
+    /**
+     * Implementation of {@link UserDetailsService#loadUserByUsername(String)}.
+     * Loads user-specific data by username for Spring Security authentication.
+     * Delegates to {@link #findUserByUsername(String)} and converts the exception type.
+     *
+     * @param username the username identifying the user whose data is required.
+     * @return a fully populated user record (never {@code null}).
+     * @throws UsernameNotFoundException if the user could not be found or the user has no GrantedAuthority.
+     */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         // Delegate to findUserByUsername which throws custom exception
         // Spring Security expects UsernameNotFoundException
         try {
+            // findUserByUsername is already cached
             return findUserByUsername(username);
         } catch (UserNotFoundException e) {
+            // Convert custom exception to Spring Security's exception
             throw new UsernameNotFoundException(e.getMessage(), e);
         }
     }
 
     // --- Current User ---
 
+    /**
+     * Retrieves the currently authenticated user from the SecurityContext.
+     *
+     * @return The authenticated User entity.
+     * @throws UnauthorizedException If no user is authenticated or the user is anonymous.
+     */
     @Override
     // Caching the current user can be tricky due to keying and potential staleness.
     // Often better to fetch when necessary or cache specific, less volatile data.
@@ -203,16 +268,31 @@ public class UserServiceImpl implements UserService {
 
         String currentUsername = authentication.getName();
         // Fetch user by username from the authentication context
-        return findUserByUsername(currentUsername); // Reuse existing method
+        // This reuses the cached findUserByUsername method
+        return findUserByUsername(currentUsername);
     }
 
+    /**
+     * Retrieves the ID of the currently authenticated user.
+     *
+     * @return The ID of the authenticated user.
+     * @throws UnauthorizedException If no user is authenticated or the user is anonymous.
+     */
     @Override
     public Long getCurrentUserId() {
+        // Delegates to getCurrentUser() which handles authentication checks
         return this.getCurrentUser().getUserId();
     }
 
     // --- User Details for Caching (Example using CacheService) ---
 
+    /**
+     * Retrieves UserDetails for a given user ID, utilizing the custom CacheService.
+     *
+     * @param userId The ID of the user.
+     * @return The UserDetails object (which is the User entity itself).
+     * @throws UserNotFoundException If the user is not found.
+     */
     @Override
     public UserDetails getUserDetails(Long userId) { // Changed parameter to Long
         Assert.notNull(userId, "User ID must not be null");
@@ -222,23 +302,33 @@ public class UserServiceImpl implements UserService {
                 USERS_CACHE,
                 cacheKey,
                 () -> userRepository.findById(userId) // Fetch the full User entity
-                        .map(user -> (UserDetails) user) // Cast to UserDetails
+                        .map(user -> (UserDetails) user) // Cast to UserDetails (User implements it)
                         .orElseThrow(() -> new UserNotFoundException("User not found for UserDetails lookup with ID: " + userId))
         );
     }
 
     // --- User Updates (Targeted and Safer) ---
 
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId")
+    /**
+     * Updates non-sensitive profile information for a user.
+     * Evicts relevant caches upon successful update.
+     *
+     * @param userId         The ID of the user to update.
+     * @param profileRequest The DTO containing the profile updates.
+     * @return The updated User entity.
+     * @throws UserNotFoundException If the user with the given ID is not found.
+     */
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict based on updated user's ID
     @Override
     public User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest) {
         Assert.notNull(userId, "User ID must not be null");
         Assert.notNull(profileRequest, "Profile request cannot be null");
 
-        User userToUpdate = getUserById(userId); // Fetch the existing user
+        User userToUpdate = getUserById(userId); // Fetch the existing user (uses cache if available)
 
         // --- Map *only* profile-related fields from DTO to entity ---
         // Example: Assuming UserProfileUpdateRequest has relevant fields
+        // Use the 'with...' methods assuming ContactInfo is immutable or provides them
         ContactInfo updatedContactInfo = userToUpdate.getContactInfo(); // Get current embedded
         if (profileRequest.getFirstName() != null) {
             updatedContactInfo = updatedContactInfo.withFirstName(profileRequest.getFirstName());
@@ -247,14 +337,18 @@ public class UserServiceImpl implements UserService {
             updatedContactInfo = updatedContactInfo.withLastName(profileRequest.getLastName());
         }
         // Add other updatable profile fields (phone number, etc.)
-        userToUpdate.updateContactInfo(updatedContactInfo); // Set the potentially new embedded instance
+        // Example: if (profileRequest.getPhoneNumber() != null) { updatedContactInfo = updatedContactInfo.withPhoneNumber(profileRequest.getPhoneNumber()); }
+
+        // Set the potentially new embedded instance back onto the user entity
+        userToUpdate.updateContactInfo(updatedContactInfo);
 
         // Updating MFA preference (if allowed in profile update)
+        // Consider if this belongs here or in a dedicated security settings update method
         // MfaInfo updatedMfaInfo = userToUpdate.getMfaInfo().withMfaEnabled(profileRequest.isMfaEnabled());
-        // userToUpdate.setMfaInfo(updatedMfaInfo);
+        // userToUpdate.updateMfaInfo(updatedMfaInfo);
 
         // --- DO NOT update sensitive fields like email, username, password, roles here ---
-        // These should have dedicated methods/flows.
+        // These should have dedicated methods/flows with appropriate security checks.
 
         User savedUser = userRepository.save(userToUpdate);
         log.info("Updated profile for user ID: {}", userId);
@@ -268,11 +362,18 @@ public class UserServiceImpl implements UserService {
 
     // --- Deletion (Soft Delete) ---
 
+    /**
+     * Soft deletes a user by marking them as deleted (assuming BaseEntity handles this).
+     * Evicts relevant caches upon successful deletion.
+     *
+     * @param userId The ID of the user to delete.
+     * @throws UserNotFoundException If the user with the given ID is not found.
+     */
     @Override
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches by user ID
     public void deleteUser(Long userId) {
         Assert.notNull(userId, "User ID must not be null");
-        // Fetch user to ensure it exists before attempting delete
+        // Fetch user to ensure it exists before attempting delete (uses cache if available)
         User userToDelete = this.getUserById(userId);
         // Assuming deleteById triggers the @SoftDelete mechanism via AuditingEntityListener/Hibernate interceptor
         // If not, need a custom repository method: userRepository.softDelete(userToDelete);
@@ -298,6 +399,7 @@ public class UserServiceImpl implements UserService {
     public boolean existsByUsernameOrEmail(String username, String email) {
         Assert.hasText(username, "Username must not be empty");
         Assert.hasText(email, "Email must not be empty");
+        // Efficient check using OR condition
         return userRepository.existsByAuthenticationInfoUsername_Username(username) || userRepository.existsByContactInfoUserEmailEmail(email);
     }
 
@@ -309,88 +411,136 @@ public class UserServiceImpl implements UserService {
 
     // --- Role Check ---
 
+    /**
+     * Checks if a user has a specific role.
+     *
+     * @param user     The User entity.
+     * @param roleName The name of the role (e.g., "ROLE_ADMIN").
+     * @return true if the user has the role, false otherwise.
+     */
     @Override
     public boolean hasRole(User user, String roleName) {
         Assert.notNull(user, "User cannot be null");
         Assert.hasText(roleName, "Role name must not be empty");
+        // Ensure roles collection is not null before streaming
+        if (user.getRoles() == null) {
+            return false;
+        }
         return user.getRoles().stream()
                 .anyMatch(userRole -> {
-                    assert userRole.getRoleName() != null;
+                    // Ensure the roleName enum within UserRole is not null
+                    assert userRole.getRoleName() != null : "UserRole contains a null roleName enum";
+                    // Compare the string representation of the enum
                     return userRole.getRoleName().name().equals(roleName);
                 });
     }
 
     // --- Account Status Management ---
 
-    @Transactional
+    /**
+     * Increments the failed login attempt count for a user. Locks the account if the maximum attempts are reached.
+     * Uses a targeted repository update for efficiency.
+     *
+     * @param username The username of the user.
+     * @throws UserNotFoundException If the user is not found.
+     */
+    @Transactional // Ensures atomicity of read, increment, check, and potential lock
     @Override
+    // No cache eviction here, as only the count changes. Lock operation handles eviction.
     public void incrementFailedLogins(String username) {
-        User user = this.findUserByUsername(username); // Fetch fresh user state
+        // Fetch fresh user state within the transaction to get the current attempt count
+        // Note: findUserByUsername might hit cache, but subsequent DB update will be correct.
+        // Consider if fetching directly from DB is needed for absolute guarantee on count before update.
+        // For now, assuming cache consistency or accepting minor race condition risk.
+        User user = this.findUserByUsername(username);
         int newAttemptCount = user.getAccountStatus().getFailedLoginAttempts() + 1;
 
-        // Use targeted repository update
+        // Use targeted repository update for efficiency
         userRepository.updateFailedLoginAttempts(user.getUserId(), newAttemptCount);
         log.debug("Incremented failed login attempts for user '{}' to {}", username, newAttemptCount);
 
+        // Check if lock threshold is reached
         if (newAttemptCount >= MAX_FAILED_ATTEMPTS) {
-            // Call internal method directly using 'this'
+            // Call internal method directly using 'this' (will participate in the current transaction)
             this.lockUserAccount(user.getUserId()); // Pass ID for consistency
         }
     }
 
+    /**
+     * Locks a user account by setting the lock status and timestamp.
+     * Evicts relevant caches. Uses a targeted repository update.
+     *
+     * @param userId The ID of the user to lock.
+     */
     @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict user details cache
     @Override
     public void lockUserAccount(Long userId) {
         Instant lockTime = Instant.now();
         // Use targeted repository update
-        userRepository.updateAccountLockStatus(userId, false, lockTime); // Assuming false means locked
+        userRepository.updateAccountLockStatus(userId, false, lockTime); // false means locked
         log.warn("Locked account for user ID: {} at {}", userId, lockTime);
     }
 
+    /**
+     * Unlocks a user account if the lock duration has expired.
+     * Resets failed login attempts upon successful unlock.
+     * Evicts relevant caches. Uses targeted repository updates.
+     *
+     * @param userId The ID of the user to check and potentially unlock.
+     * @return true if the account was unlocked, false otherwise.
+     * @throws UserNotFoundException If the user is not found.
+     */
     @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict on potential unlock
     @Override
     public boolean unlockAccountIfExpired(Long userId) {
-        User user = this.getUserById(userId); // Fetch fresh state
+        User user = this.getUserById(userId); // Fetch fresh state (uses cache if available)
         AccountStatus status = user.getAccountStatus();
 
         // Check if already unlocked (accountNonLocked is true)
         if (status.isAccountNonLocked()) {
             log.trace("Account for user ID {} is already unlocked.", userId);
-            return false; // Already unlocked
+            return false; // Already unlocked, nothing to do
         }
 
         // Account is locked, check lock timestamp
         Instant lockTime = status.getLockTime();
         if (lockTime != null) {
             long lockTimeMillis = lockTime.toEpochMilli();
-            long currentTimeMillis = System.currentTimeMillis();
+            long currentTimeMillis = System.currentTimeMillis(); // Use System.currentTimeMillis for efficiency
 
+            // Check if lock duration has passed
             if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
                 // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock timestamp
                 userRepository.updateAccountLockStatus(userId, true, null);
                 // Also reset failed attempts upon successful unlock
-                this.resetFailedLoginAttempts(userId); // Call the existing method
+                this.resetFailedLoginAttempts(userId); // Call the existing method (already transactional and evicts cache)
                 log.info("Unlocked account for user ID: {} due to lock expiration.", userId);
-                return true;
+                return true; // Account was unlocked
             } else {
                 log.trace("Lock duration not yet expired for user ID {}.", userId);
             }
         } else {
-            log.warn("User ID {} is locked but has no lock timestamp recorded.", userId);
-            // Optionally unlock anyway or investigate inconsistency
+            // Handle inconsistency: account is locked but has no lock timestamp
+            log.warn("User ID {} is locked but has no lock timestamp recorded. Unlocking as a safety measure.", userId);
             // For safety, let's unlock if lockTime is null, but the account is locked
             userRepository.updateAccountLockStatus(userId, true, null);
             this.resetFailedLoginAttempts(userId);
             log.info("Unlocked account for user ID: {} due to missing lock timestamp.", userId);
-            return true;
+            return true; // Account was unlocked (due to inconsistency handling)
         }
-        return false;
+        return false; // Account remains locked (duration not expired)
     }
 
+    /**
+     * Resets the failed login attempt count for a user to zero.
+     * Evicts relevant caches. Uses a targeted repository update.
+     *
+     * @param userId The ID of the user.
+     */
     @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
     @Override
     public void resetFailedLoginAttempts(Long userId) {
         // Use targeted repository update
@@ -398,10 +548,16 @@ public class UserServiceImpl implements UserService {
         log.debug("Reset failed login attempts for user ID: {}", userId);
     }
 
-    // Removed redundant resetFailedLogins
+    // Removed redundant resetFailedLogins (was identical to resetFailedLoginAttempts)
 
+    /**
+     * Updates the last login timestamp for a user to the current time.
+     * Evicts relevant caches. Uses a targeted repository update.
+     *
+     * @param userId The ID of the user.
+     */
     @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId")
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
     @Override
     public void updateLastLoginTime(Long userId) {
         // Use targeted repository update
@@ -411,11 +567,9 @@ public class UserServiceImpl implements UserService {
 
     // --- Validation Helper (Use with caution) ---
 
-//    // This is a very basic check.
-//    Consider if it's truly necessary
+//    // This is a very basic check. Consider if it's truly necessary
 //    // or if DTO validation covers requirements.
 //    public boolean isValidUserDto(UserDTO user) {
 //        return user != null && user.getUserId() != null && user.username() != null && user.userEmail() != null;
 //    }
 }
-
