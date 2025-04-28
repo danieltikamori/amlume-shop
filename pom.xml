@@ -39,11 +39,10 @@
     <properties>
         <java.version>21</java.version>
         <maven.compiler.parameters>true</maven.compiler.parameters>
-        <spring.version>6.2.2</spring.version>
+<!--        <spring.version>6.2.2</spring.version>-->
         <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <spring-modulith.version>1.2.4</spring-modulith.version>
         <spring-cloud.version>2024.0.0</spring-cloud.version>
-        <spring-webflux.version>6.2.2</spring-webflux.version>
         <org.mapstruct.version>1.6.0</org.mapstruct.version>
         <org.mapstruct.processor.version>1.6.0</org.mapstruct.processor.version>
         <org.lombok.mapstruct.binding.version>0.2.0</org.lombok.mapstruct.binding.version>
@@ -590,13 +589,7 @@
 
         <dependency>
             <groupId>org.springframework</groupId>
-            <artifactId>spring-webflux</artifactId>
-            <version>${spring-webflux.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework</groupId>
             <artifactId>spring-beans</artifactId>
-            <version>${spring.version}</version>
         </dependency>
 
         <dependency>
