@@ -14,41 +14,41 @@ import me.amlu.shop.amlume_shop.security.model.RevokedToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Optional;
 
 @Repository
 public interface RevokedTokenRepository extends JpaRepository<RevokedToken, String> {
-    void deleteByExpirationDateBefore(Instant date);
-//    List<RevokedToken> findByUsername(String username);
+
+    //    List<RevokedToken> findByUsername(String username);
+
+    //    Page<RevokedToken> findByUsername(String username, Pageable pageable);
+
+    Optional<RevokedToken> findByTokenId(String tokenId);
+
     boolean existsByTokenId(String tokenId);
 
-//    boolean existsByToken(String token);
+    Optional<RevokedToken> findByTokenIdAndRevokedAtIsNotNull(String tokenId);
 
-    // Using this in the new revokeAllUserTokens method
+    boolean existsByTokenIdAndRevokedAtIsNotNull(String tokenId);
+
     /**
-     * Updates the revokedAt and reason fields of a RevokedToken entity
-     * for a given username and a null value for the revokedAt field.
-     *rt.revokedAt IS NULL Is Essential to prevent updating tokens that have already been revoked.
-     * This is to prevent the same token from being revoked multiple times.
-     * Idempotency:
-     *     The rt.revokedAt IS NULL condition ensures that the update operation is idempotent. This means that if you call the revokeAllUserTokens method multiple times for the same user, it will only update the tokens that have not already been revoked.
-     *     Without this condition, each subsequent call would update all tokens, potentially overwriting the revokedAt and reason values.
-     * Concurrency:
-     *     In concurrent environments, multiple threads or processes might attempt to revoke tokens for the same user simultaneously.
-     *     The rt.revokedAt IS NULL condition prevents race conditions and ensures that only one thread or process successfully revokes a token.
-     * Data Integrity:
-     *     It maintains the integrity of the revokedAt field, which should represent the actual time when the token was revoked.
+     * Marks a specific token as revoked by setting its revokedAt timestamp and reason,
+     * only if it hasn't been revoked already (revokedAt is null).
      *
-     * @param username
-     * @param revokedAt
-     * @param reason
+     * @param tokenId   The unique identifier of the token to revoke.
+     * @param revokedAt The timestamp when the revocation occurred.
+     * @param reason    The reason for revocation.
+     * @return The number of tokens updated (should be 0 or 1).
      */
+    @Modifying // Indicate this query modifies data
+    @Query("UPDATE RevokedToken rt SET rt.revokedAt = :revokedAt, rt.reason = :reason WHERE rt.tokenId = :tokenId AND rt.revokedAt IS NULL")
+    int updateRevokedAtAndReasonByTokenIdAndRevokedAtIsNull(@Param("tokenId") String tokenId, @Param("revokedAt") Instant revokedAt, @Param("reason") String reason);
 
-    @Modifying
-    @Query("UPDATE RevokedToken rt SET rt.revokedAt = :revokedAt, rt.reason = :reason WHERE rt.username = :username AND rt.revokedAt IS NULL")
-    void updateRevokedAtAndReasonByUsernameAndRevokedAtIsNull(String username, Instant revokedAt, String reason);
+    int deleteByRevokedAtBefore(Instant cutoff);
 
-    long deleteByRevokedAtBefore(Instant instant);
 }
+
