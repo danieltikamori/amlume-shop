@@ -55,7 +55,10 @@ geoip:
 
 geoip2:
   database:
-    path: /project/geoip/GeoLite2-ASN.mmdb
+    # Path used by GeoIp2Service / AsnConfig
+    # Use 'file:' prefix to load from the filesystem absolute path
+    #    classpath: instruct Spring  to search the file within the compiled resources of the application
+    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
   #    path: classpath:geolite2/GeoLite2-ASN.mmdb
   #    Or if using City database
   #    path: classpath:geolite2/GeoLite2-City.mmdb
