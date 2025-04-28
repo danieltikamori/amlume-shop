@@ -38,6 +38,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
@@ -99,8 +100,8 @@ public class UserAuthenticator implements AuthenticationInterface {
                              PasswordEncoder passwordEncoder,
                              MfaService mfaService,
                              MfaTokenRepository mfaTokenRepository,
-                             PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
-                             TokenRevocationService tokenRevocationService) {
+                             @Lazy PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
+                             @Lazy TokenRevocationService tokenRevocationService) {
         this.cacheService = cacheService;
         this.captchaService = captchaService;
         this.meterRegistry = meterRegistry;
