@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.config;
 
+import com.maxmind.db.CHMCache;
 import com.maxmind.geoip2.DatabaseReader;
 import me.amlu.shop.amlume_shop.security.service.GeoIp2Service;
 import me.amlu.shop.amlume_shop.security.service.GeoIp2ServiceImpl;
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -33,16 +35,43 @@ public class AsnConfig {
 
     private static final Logger log = LoggerFactory.getLogger(AsnConfig.class);
 
+    // Inject ResourceLoader to load the database file
+    private final ResourceLoader resourceLoader;
+
+    public AsnConfig(ResourceLoader resourceLoader) {
+        this.resourceLoader = resourceLoader;
+    }
+
     // Keep @Bean methods for dependencies if they are configured here
     @Bean
     public GeoIp2Service geoIp2Service(ResourceLoader resourceLoader,
-                                       @Value("${geoip2.database.path}") String dbPath) throws IOException {
-        Resource resource = resourceLoader.getResource(dbPath);
-        try (InputStream dbStream = resource.getInputStream()) {
-            DatabaseReader reader = new DatabaseReader.Builder(dbStream).build();
-            return new GeoIp2ServiceImpl(reader);
-        }
-        // Add appropriate error handling
-    }
+                                       @Value("${geoip2.database.path}") String dbPath) throws IOException, FileNotFoundException {
 
+        log.info("Attempting to load GeoIP2 database from path: {}", dbPath);
+
+
+        Resource resource = resourceLoader.getResource(dbPath);
+        // *** Add check to see if the resource actually exists ***
+        if (!resource.exists()) {
+            log.error("GeoIP2 ASN database file not found at path: {}", dbPath);
+            // Throw a specific, informative exception
+            throw new FileNotFoundException("GeoIP2 ASN database file not found at path: " + dbPath +
+                    ". Please ensure the file exists and the path in application.yml (geoip2.database.path) uses the 'file:' prefix (e.g., 'file:/project/geoip/GeoLite2-ASN.mmdb').");
+        }
+
+        try (InputStream dbStream = resource.getInputStream()) {
+
+            // *** Add caching for better performance ***
+            DatabaseReader reader = new DatabaseReader.Builder(dbStream)
+                    .withCache(new CHMCache()) // Enable caching
+                    .build();
+
+            log.info("Successfully loaded GeoIP2 ASN database from: {}", resource.getDescription());
+            return new GeoIp2ServiceImpl(reader);
+        } catch (IOException e) {
+            // Log error during reading
+            log.error("Failed to read GeoIP2 ASN database from path: {}", dbPath, e);
+            throw e; // Re-throw the exception after logging
+        }
+    }
 }
