@@ -59,6 +59,7 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: 7D3212C359485FBF140ABBEBFF4A09CFAB1C0F98 # Change in production
       MYSQL_DATABASE: amlume_db
+      # The non-root user created to deal specifically with this specific database. Have all necessary permissions.
       MYSQL_USER: amlume_user
       MYSQL_PASSWORD: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Change in production
     volumes:
@@ -116,7 +117,7 @@ services:
       VAULT_PATH: "secret/amlume-shop/mfa" # Or override if needed
       ENV_FILE_PATH: "/app/.env" # Path inside the container where .env is mounted
       # Optional: Adjust Vault address if not using 'vault' hostname
-      # VAULT_ADDR: http://vault:8200
+      VAULT_ADDR: http://vault:8200
     volumes:
       # Mount your project's .env file into the container
       - ./.env:/app/.env:ro # Mount as read-only
@@ -127,8 +128,8 @@ services:
     depends_on:
       vault:
         condition: service_healthy # Waits for Vault's healthcheck to pass
-    restart: 'no' # Crucial: Run this container only once
-
+    restart: 'on-failure' # 'no' -> Crucial: Run this container only once
+ #For debugging, you can change restart: 'no' to restart: 'on-failure' or add sleep infinity to the end of entrypoint.sh for debugging, then restart)
 
 # --- Volumes Definition ---
 # Define named volumes for data persistence
