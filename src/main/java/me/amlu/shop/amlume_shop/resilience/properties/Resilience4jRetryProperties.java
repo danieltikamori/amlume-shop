@@ -10,97 +10,186 @@
 
 package me.amlu.shop.amlume_shop.resilience.properties;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.hibernate.validator.constraints.time.DurationMin;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
+import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * Resilience4j Retry properties.
  * <p>
  * This class is used to bind the properties defined in the application.yml file under the
- * "resilience4j.retry.instances.default" prefix to a Java object.
- * </p>
- * <p>
- * The properties can be accessed using the getter methods provided by this class.
+ * "resilience4j.retry" prefix to a Java object, including configurations for multiple instances.
  * </p>
  *
  * @author Daniel Itiro Tikamori
  */
-@ConfigurationProperties(prefix = "resilience4j.retry.instances.default")
-@Validated
+@Component("retryProperties") // Register as a bean with the specific name "retryProperties"
+@ConfigurationProperties(prefix = "resilience4j.retry") // Bind properties from "resilience4j.retry"
+@Validated // Enable validation for this class and nested RetryConfig
 public class Resilience4jRetryProperties {
 
-    /**
-     * The number of retry attempts.
-     * <p>
-     * This property is used to specify the number of times a call should be retried
-     * before giving up. The default value is 3.
-     * </p>
-     */
-    @Min(value = 1, message = "maxRetryAttempts must be greater than or equal to 1")
-    @NotNull
-    private int maxRetryAttempts = 3;
+    // Map to hold configurations for named instances (e.g., asnLookup, vaultService)
+    @Valid // Ensure nested RetryConfig objects are also validated
+    private Map<String, RetryConfig> instances = new HashMap<>();
 
-    /**
-     * The wait duration between retries.
-     * <p>
-     * This property is used to specify the duration to wait between retry attempts.
-     * The default value is 100 milliseconds.
-     * </p>
-     */
-    @Min(value = 0, message = "retryInterval must be greater than or equal to 0")
-    @NotNull
-    private long retryInterval = 1000L;
+    // --- Getters and Setters ---
 
-    /**
-     * The wait duration between retries.
-     * <p>
-     * This property is used to specify the duration to wait between retry attempts.
-     * The default value is 100 milliseconds.
-     * </p>
-     */
-    @DurationMin(millis = 0, message = "retryWaitDuration must be greater than or equal to 0")
-    @NotNull
-    @DurationUnit(ChronoUnit.MILLIS) // Specify unit if property is just a number (e.g., 500)
-    private Duration retryWaitDuration = Duration.ofMillis(500); // Default value
-
-    private boolean useExponentialBackoff = false;
-
-    // --- Getter ---
-
-    public int getMaxRetryAttempts() {
-        return maxRetryAttempts;
+    public Map<String, RetryConfig> getInstances() {
+        return instances;
     }
 
-    public long getRetryInterval() {
-        return retryInterval;
+    public void setInstances(Map<String, RetryConfig> instances) {
+        this.instances = instances;
     }
 
-    public Duration getRetryWaitDuration() {
-        return retryWaitDuration;
+    // --- equals, hashCode, toString ---
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Resilience4jRetryProperties that = (Resilience4jRetryProperties) o;
+        return Objects.equals(instances, that.instances);
     }
 
-    // --- Setter ---
-
-    public void setMaxRetryAttempts(Integer maxRetryAttempts) {
-        this.maxRetryAttempts = maxRetryAttempts;
+    @Override
+    public int hashCode() {
+        return Objects.hash(instances);
     }
 
-    public void setRetryInterval(long retryInterval) {
-        this.retryInterval = retryInterval;
+    @Override
+    public String toString() {
+        return "Resilience4jRetryProperties{" +
+                "instances=" + instances +
+                '}';
     }
 
-    public void setRetryWaitDuration(Duration retryWaitDuration) {
-        this.retryWaitDuration = retryWaitDuration;
-    }
+    // --- Nested Static Class for Instance Configuration ---
+    // This holds the properties defined *within* each instance in the YAML
+    @Validated // Enable validation for fields within RetryConfig
+    public static class RetryConfig {
 
-    public boolean isUseExponentialBackoff() {
-        return useExponentialBackoff;
+        /**
+         * The maximum number of retry attempts (including the initial call).
+         */
+        @Min(value = 1, message = "maxAttempts must be greater than or equal to 1")
+        @NotNull(message = "maxAttempts cannot be null")
+        private Integer maxAttempts = 3; // Default from original class
+
+        /**
+         * The base wait duration between retries.
+         */
+        @DurationMin(millis = 0, message = "waitDuration must be non-negative")
+        @NotNull(message = "waitDuration cannot be null")
+        @DurationUnit(ChronoUnit.MILLIS) // Specify unit if property is just a number (e.g., 500)
+        private Duration waitDuration = Duration.ofMillis(500); // Default from original class (retryWaitDuration)
+
+        /**
+         * Whether to enable exponential backoff.
+         */
+        private boolean enableExponentialBackoff = false; // Default from original class
+
+        /**
+         * Multiplier for exponential backoff. Only used if enableExponentialBackoff is true.
+         */
+        private Double exponentialBackoffMultiplier; // Optional, only relevant if enabled
+
+        /**
+         * List of exceptions that should trigger a retry.
+         */
+        private List<Class<? extends Throwable>> retryExceptions = List.of(); // Default empty
+
+        /**
+         * List of exceptions that should NOT trigger a retry (they cause immediate failure).
+         */
+        private List<Class<? extends Throwable>> ignoreExceptions = List.of(); // Default empty
+
+
+        // --- Getters and Setters for RetryConfig ---
+
+        public Integer getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(Integer maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public Duration getWaitDuration() {
+            return waitDuration;
+        }
+
+        public void setWaitDuration(Duration waitDuration) {
+            this.waitDuration = waitDuration;
+        }
+
+        public boolean isEnableExponentialBackoff() {
+            return enableExponentialBackoff;
+        }
+
+        public void setEnableExponentialBackoff(boolean enableExponentialBackoff) {
+            this.enableExponentialBackoff = enableExponentialBackoff;
+        }
+
+        public Double getExponentialBackoffMultiplier() {
+            return exponentialBackoffMultiplier;
+        }
+
+        public void setExponentialBackoffMultiplier(Double exponentialBackoffMultiplier) {
+            this.exponentialBackoffMultiplier = exponentialBackoffMultiplier;
+        }
+
+        public List<Class<? extends Throwable>> getRetryExceptions() {
+            return retryExceptions;
+        }
+
+        public void setRetryExceptions(List<Class<? extends Throwable>> retryExceptions) {
+            this.retryExceptions = retryExceptions;
+        }
+
+        public List<Class<? extends Throwable>> getIgnoreExceptions() {
+            return ignoreExceptions;
+        }
+
+        public void setIgnoreExceptions(List<Class<? extends Throwable>> ignoreExceptions) {
+            this.ignoreExceptions = ignoreExceptions;
+        }
+
+        // --- equals, hashCode, toString for RetryConfig ---
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            RetryConfig that = (RetryConfig) o;
+            return enableExponentialBackoff == that.enableExponentialBackoff && Objects.equals(maxAttempts, that.maxAttempts) && Objects.equals(waitDuration, that.waitDuration) && Objects.equals(exponentialBackoffMultiplier, that.exponentialBackoffMultiplier) && Objects.equals(retryExceptions, that.retryExceptions) && Objects.equals(ignoreExceptions, that.ignoreExceptions);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(maxAttempts, waitDuration, enableExponentialBackoff, exponentialBackoffMultiplier, retryExceptions, ignoreExceptions);
+        }
+
+        @Override
+        public String toString() {
+            return "RetryConfig{" +
+                    "maxAttempts=" + maxAttempts +
+                    ", waitDuration=" + waitDuration +
+                    ", enableExponentialBackoff=" + enableExponentialBackoff +
+                    ", exponentialBackoffMultiplier=" + exponentialBackoffMultiplier +
+                    ", retryExceptions=" + retryExceptions +
+                    ", ignoreExceptions=" + ignoreExceptions +
+                    '}';
+        }
     }
 }
