@@ -56,7 +56,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static me.amlu.shop.amlume_shop.payload.GetSecretsResponse.*
+import static me.amlu.shop.amlume_shop.payload.GetSecretsResponse.*;
 import static org.springframework.http.HttpStatus.*;
 
 //@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
@@ -68,6 +68,7 @@ public class HCPSecretsService {
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final int INITIAL_RETRY_INTERVAL = 1000;
     private static final int MAX_RETRY_INTERVAL = 5000;
+
 
     private final RestTemplate restTemplate;
     private final HCPTokenService tokenService;
@@ -114,6 +115,7 @@ public class HCPSecretsService {
     public static final String PASETO_ACCESS_SECRET_KEY = "PASETO_ACCESS_SECRET_KEY";
     public static final String PASETO_REFRESH_SECRET_KEY = "PASETO_REFRESH_SECRET_KEY";
 
+    // Token for the secrets cache
     // To be used with the constants above
     public String getSecret(String key) {
         Map<String, String> secrets = getSecrets();
@@ -154,20 +156,24 @@ public class HCPSecretsService {
      * @throws FetchSecretsException if fetching fails after retries.
      */
     private Map<String, String> fetchSecretsWithPagination() {
-        // Map to accumulate secrets from all pages
+        // Map to accumulate secrets from all pages - OK to declare outside, modified via clear/putAll
         Map<String, String> allSecrets = new HashMap<>();
-        String nextPageToken = null; // Start with no page token
+        // REMOVE declaration from here: String nextPageToken = null;
 
         // Retry the entire multi-page fetch process
         return retryTemplate.execute(context -> {
             // Reset state for each retry attempt of the whole process
             allSecrets.clear();
-            nextPageToken = null;
+
+            // --- MOVE DECLARATION INSIDE LAMBDA ---
+            String nextPageToken = null; // Start with no page token FOR THIS EXECUTION
+            // --- END MOVE ---
+
             int pageNum = 1;
             log.info("Starting secrets fetch process (Retry attempt {})", context.getRetryCount() + 1);
 
             do {
-                // Build URL with potential page_token
+                // Build URL with potential page_token (uses the nextPageToken declared INSIDE the lambda)
                 String url = buildPaginatedUrl(nextPageToken);
                 HttpHeaders headers = createHeaders(); // Get fresh token if needed
 
@@ -193,17 +199,19 @@ public class HCPSecretsService {
                                         SecretDetail::name,
                                         detail -> detail.staticVersion().value(),
                                         (existingValue, newValue) -> { // Handle potential duplicate keys across pages (use latest)
-                                            log.warn("Duplicate secret key '{}' found across pages. Using the value from the later page.", existingValue);
+                                            log.warn("Duplicate secret key '{}' found across pages. Using the value from the later page.", existingValue); // Changed key name reference
                                             return newValue;
                                         }
                                 ));
 
                         // Add secrets from the current page to the accumulated map
                         allSecrets.putAll(currentPageSecrets);
-                        log.debug("Fetched {} secrets from page {}. Total secrets so far: {}", currentPageSecrets.size(), pageNum, allSecrets.size());
+//                        log.debug("Fetched {} secrets from page {}. Total secrets so far: {}", currentPageSecrets.size(), pageNum, allSecrets.size());
+                        log.debug("Fetched {} secrets from page {}. Secrets accumulated in current attempt: {}", currentPageSecrets.size(), pageNum, allSecrets.size());
 
                         // Get the token for the next page
                         if (response.getBody().pagination() != null) {
+                            // Modify the nextPageToken declared INSIDE the lambda
                             nextPageToken = response.getBody().pagination().nextPageToken();
                             // Treat blank token same as null (no next page)
                             if (nextPageToken != null && nextPageToken.isBlank()) {
@@ -233,7 +241,8 @@ public class HCPSecretsService {
 
                 pageNum++; // Increment page number for logging
 
-            } while (nextPageToken != null); // Continue loop if there's a next page token
+                // Loop condition uses the nextPageToken declared INSIDE the lambda
+            } while (nextPageToken != null);
 
             log.info("Finished fetching all secrets. Total secrets retrieved: {}", allSecrets.size());
             return allSecrets; // Return the accumulated map after loop finishes
