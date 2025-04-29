@@ -63,11 +63,11 @@ public class HCPTokenService {
             requestBody.add("grant_type", "client_credentials");
             requestBody.add("audience", "https://api.hashicorp.cloud");
 
-            // --- TEMPORARY_DEBUGGING - REMOVE ---
-                    log.info("Attempting to refresh HCP token. Client ID loaded: {}, Client Secret loaded: {}",
-                            (clientId != null && !clientId.isBlank()),
-                            (clientSecret != null && !clientSecret.isBlank()));
-            // --- END_DEBUGGING ---
+//            // --- TEMPORARY_DEBUGGING - REMOVE ---
+//                    log.info("Attempting to refresh HCP token. Client ID loaded: {}, Client Secret loaded: {}",
+//                            (clientId != null && !clientId.isBlank()),
+//                            (clientSecret != null && !clientSecret.isBlank()));
+//            // --- END_DEBUGGING ---
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
@@ -82,9 +82,9 @@ public class HCPTokenService {
                 this.accessToken = response.getBody().accessToken();
                 this.tokenExpiration = Instant.now().plusSeconds(response.getBody().expiresIn());
 
-                // --- TEMPORARY_DEBUGGING - REMOVE ---
-                        log.info("Successfully refreshed HCP access token. Expires at: {}", this.tokenExpiration); // Log success
-                        // --- END_DEBUGGING ---
+//                // --- TEMPORARY_DEBUGGING - REMOVE ---
+//                        log.info("Successfully refreshed HCP access token. Expires at: {}", this.tokenExpiration); // Log success
+//                        // --- END_DEBUGGING ---
             } else {
                 log.error("Empty response body when refreshing token");
                 throw new TokenRefreshException("Empty response body when refreshing token");
