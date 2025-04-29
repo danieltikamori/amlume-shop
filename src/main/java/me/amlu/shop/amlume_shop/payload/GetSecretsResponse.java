@@ -1,67 +1,62 @@
 /*
  * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
- * ... (rest of copyright notice) ...
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
 package me.amlu.shop.amlume_shop.payload;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty; // Import JsonProperty
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
-// Removed unused import: import java.util.Map;
 
 /**
- * Represents the response structure from the HCP Secrets API endpoint (.../secrets:open),
- * including secrets and pagination information.
- *
- * @param secrets    List of secret details retrieved.
- * @param pagination Pagination details from the API response.
+ * Represents the response from the HCP Secrets API endpoint for opening secrets.
+ * Maps to the 'secrets_20231128OpenAppSecretsResponse' definition in the Swagger spec.
+ * Includes nested records for SecretDetail, SecretStaticVersion, and PaginationInfo
+ * based on the structure used in HCPSecretsService.
  */
-@JsonIgnoreProperties(ignoreUnknown = true) // Ignore fields not mapped at the top level
+@JsonIgnoreProperties(ignoreUnknown = true) // Ignore fields not explicitly defined
 public record GetSecretsResponse(
-        List<SecretDetail> secrets, // The "secrets" field is a List
-        Pagination pagination       // Field for the pagination object
+        List<SecretDetail> secrets,
+        PaginationInfo pagination
 ) {
 
     /**
-     * Represents a single secret entry within the response array.
-     *
-     * @param name          The name of the secret (e.g., "MFA_ENCRYPTION_PASSWORD").
-     * @param staticVersion The object containing the actual secret value and its version details.
-     *                      Mapped from the JSON key "static_version".
+     * Represents the static version details of a secret.
+     * Maps to relevant parts of 'secrets_20231128OpenSecretStaticVersion'.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SecretStaticVersion(
+            String value
+            // Other fields like version, createdAt, createdById exist in Swagger but are ignored here
+    ) {}
+
+    /**
+     * Represents the details of a single secret.
+     * Maps to relevant parts of 'secrets_20231128OpenSecret'.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record SecretDetail(
             String name,
-            @JsonProperty("static_version") // Map the JSON key "static_version"
-            SecretVersion staticVersion
+            @JsonProperty("static_version") // Map snake_case JSON field
+            SecretStaticVersion staticVersion
+            // Other fields like type, provider, latest_version, etc., exist in Swagger but are ignored here
     ) {}
 
     /**
-     * Represents the version details of a secret, including its value.
-     * Mapped from the JSON object under the "static_version" key.
-     *
-     * @param version The version number of the secret (integer).
-     * @param value   The actual secret value (string).
+     * Represents pagination information returned by the API.
+     * Maps to relevant parts of 'commonPaginationResponse'.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record SecretVersion(
-            int version, // Correct type: int matches the JSON number
-            String value
-    ) {}
-
-    /**
-     * Represents the pagination details returned by the HCP Secrets API.
-     *
-     * @param nextPageToken     Token to use for fetching the next page of results.
-     * @param previousPageToken Token to use for fetching the previous page of results.
-     */
-    @JsonIgnoreProperties(ignoreUnknown = true) // ADDED: Ignore unknown fields in pagination
-    public record Pagination(
-            @JsonProperty("next_page_token") // Map JSON key to Java field
-            String nextPageToken,
-
-            @JsonProperty("previous_page_token") // Map JSON key to Java field
-            String previousPageToken
+    public record PaginationInfo(
+            @JsonProperty("next_page_token") // Map snake_case JSON field
+            String nextPageToken
+            // previous_page_token exists in Swagger but is ignored here
     ) {}
 }
