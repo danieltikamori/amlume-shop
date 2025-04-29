@@ -43,15 +43,15 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     private final AsnReputationService reputationService;
 
     // --- Injected Config ---
-    @Value("${security.geo.suspicious-distance-km:500.0}")
+//    @Value("${security.geo.suspicious-distance-km:500.0}")
     private double suspiciousDistanceKm; // Instance field
 
     // timeWindowHours is used for cache TTL, configured in ValkeyCacheConfig now
 
-    @Value("${security.geo.known-vpn-asns}")
+//    @Value("${security.geo.known-vpn-asns}")
     private Set<String> knownVpnAsns; // Injected from application.yml
 
-    @Value("${security.geo.high-risk-countries}")
+//    @Value("${security.geo.high-risk-countries}")
     private Set<String> highRiskCountries; // Injected from application.yml
 
     // --- Spring Cache ---
@@ -63,7 +63,10 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                   MetricRegistry metrics,
                                   EnhancedVpnDetectorService vpnDetector,
                                   AsnReputationService reputationService,
-                                  CacheManager cacheManager // Inject CacheManager
+                                  CacheManager cacheManager,
+                                  @Value("${security.geo.suspicious-distance-km}")double suspiciousDistanceKm,
+                                  Set<String> knownVpnAsns,
+                                  Set<String> highRiskCountries// Inject CacheManager
     ) {
         this.maxMindGeoService = maxMindGeoService;
         this.geoIp2Service = geoIp2Service;
@@ -71,6 +74,9 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         this.metrics = metrics;
         this.vpnDetector = vpnDetector;
         this.reputationService = reputationService;
+        this.suspiciousDistanceKm = suspiciousDistanceKm;
+        this.knownVpnAsns = knownVpnAsns;
+        this.highRiskCountries = highRiskCountries;
 
         // Initialize Spring Cache instance
         this.locationHistoryCacheInstance = cacheManager.getCache(ValkeyCacheConfig.GEO_HISTORY_CACHE);
