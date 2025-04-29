@@ -17,7 +17,7 @@ set -e
 #VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}" # Default to service name 'vault'
 VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}" # Default to service name 'vault'
 VAULT_TOKEN="${VAULT_TOKEN}"
-VAULT_PATH="${VAULT_PATH:-secret/amlume-shop/mfa}" # Default path, can be overridden
+VAULT_PATH="${VAULT_PATH:-secret/amlume-shop/local}" # Default path, can be overridden
 ENV_FILE_PATH="${ENV_FILE_PATH:-/.env}"          # Default path where .env is mounted
 VAULT_READY_TIMEOUT="${VAULT_READY_TIMEOUT:-60}" # Max seconds to wait for Vault
 
