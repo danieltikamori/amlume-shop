@@ -556,16 +556,6 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(TooManyDevicesException.class)
-    public ResponseEntity<ErrorResponse> handleTooManyDevices(TooManyDevicesException ex) {
-        ErrorResponse error = new ErrorResponse(
-                "TOO_MANY_DEVICES",
-                ex.getMessage(),
-                HttpStatus.BAD_REQUEST.value()
-        );
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
-    }
-
     @ExceptionHandler
     public ResponseEntity<ApiResponse> maxDevicesExceededException(MaxDevicesExceededException e) {
         String message = e.getMessage();
@@ -723,14 +713,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-//    @ExceptionHandler(UsernameAlreadyExistsException.class)
-//    public ResponseEntity<String> handleException(UsernameAlreadyExistsException ex) {
-//        String message = ex.getMessage();
-//        APIResponse apiResponse = new APIResponse(message, false);
-//        return new ResponseEntity<>(ex.getMessage(), HttpStatus.CONFLICT);
-//    }
-
-    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    @ExceptionHandler
     public ResponseEntity<ApiResponse> emailSendingFailedException(EmailSendingFailedException ex) {
         String message = ex.getMessage();
         ApiResponse apiResponse = new ApiResponse(message, false);
