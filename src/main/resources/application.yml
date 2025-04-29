@@ -65,12 +65,13 @@ geoip2:
   account-id: ${GEOIP2_ACCOUNT_ID}
   license-key: ${GEOIP2_LICENSE_KEY}
 
-#hcp:
-#  client-id: ${HCP_CLIENT_ID}
-#  client-secret: ${HCP_CLIENT_SECRET}
-#  organization-id: ${HCP_ORGANIZATION_ID}
-#  project-id: ${HCP_PROJECT_ID}
-#  app-name: ${HCP_APP_NAME}
+# For HCP Cloud API (Cloud offering)
+hcp:
+  client-id: ${HCP_CLIENT_ID}
+  client-secret: ${HCP_CLIENT_SECRET}
+  organization-id: ${HCP_ORGANIZATION_ID}
+  project-id: ${HCP_PROJECT_ID}
+  app-name: ${HCP_APP_NAME}
 
 jti:
   bloomfilter:
