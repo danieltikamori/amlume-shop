@@ -14,6 +14,7 @@ import io.github.resilience4j.retry.Retry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 /**
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
  * @since 2025-02-16
  * Implementing backoff and retry mechanism for ASN lookup service
  */
+@Primary
 @Service
 @Qualifier("retryingAsnLookup")
 public class RetryingAsnLookupServiceImpl implements AsnLookupService {
