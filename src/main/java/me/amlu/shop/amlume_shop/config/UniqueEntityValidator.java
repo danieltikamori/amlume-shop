@@ -12,34 +12,29 @@ package me.amlu.shop.amlume_shop.config;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.exceptions.EntityUniquenessException;
+import org.slf4j.Logger;
 import org.springframework.context.ApplicationContext;
 import org.springframework.data.domain.Example;
 import org.springframework.data.domain.ExampleMatcher;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Component;
 
-import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
-
 /**
  * @author Daniel Tikamori
- *  This validator is used to check if an entity already exists in the database, based on the fields passed in the annotation.
- *  Use the annotation in your DTOs/Requests:
- *  public class IngredientCategoryRequest {
- *     @UniqueEntity(fields = {"categoryName", "restaurantId"})
- *     private String categoryName;
- *      private Long restaurantId;
- *      // ...
- *  }
+ * This validator is used to check if an entity already exists in the database, based on the fields passed in the annotation.
+ * Use the annotation in your DTOs/Requests:
+ * public class IngredientCategoryRequest {
+ * @UniqueEntity(fields = {"categoryName", "restaurantId"})
+ * private String categoryName;
+ * private Long restaurantId;
+ * // ...
+ * }
  */
 
-@Slf4j
 @Component
 public class UniqueEntityValidator implements ConstraintValidator<UniqueEntity, Object> {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(UniqueEntityValidator.class);
     private final ApplicationContext applicationContext;
     private UniqueEntity annotation;
 

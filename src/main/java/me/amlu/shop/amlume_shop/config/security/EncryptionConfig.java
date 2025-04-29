@@ -10,11 +10,11 @@
 
 package me.amlu.shop.amlume_shop.config.security;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.ConfigurableEnvironment; // Import ConfigurableEnvironment
+import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.security.crypto.encrypt.Encryptors;
 import org.springframework.security.crypto.encrypt.TextEncryptor;
@@ -32,18 +32,18 @@ import org.springframework.util.StringUtils;
  * Prerequisites:
  * 1. `spring-cloud-starter-vault-config` dependency must be included.
  * 2. Vault connection details (`spring.cloud.vault.uri`, `spring.cloud.vault.token`, etc.)
- *    must be configured in `application.yml` or `bootstrap.yml`.
+ * must be configured in `application.yml` or `bootstrap.yml`.
  * 3. `spring.cloud.vault.fail-fast` should be set to `false` in configuration to allow fallback.
  * 4. `spring.config.import` should include `optional:vault://` for graceful startup if Vault is unreachable.
  * 5. The secrets `mfa.encryption.password` and `mfa.encryption.salt` should exist in Vault
- *    under the path configured for Spring Cloud Vault (e.g., `secret/amlume-shop/mfa`).
+ * under the path configured for Spring Cloud Vault (e.g., `secret/amlume-shop/mfa`).
  * 6. Environment variables `MFA_ENCRYPTION_PASSWORD` and `MFA_ENCRYPTION_SALT` must be set
- *    in the deployment environment to serve as the ultimate fallback.
+ * in the deployment environment to serve as the ultimate fallback.
  */
 @Configuration
-@Slf4j
 public class EncryptionConfig {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(EncryptionConfig.class);
     // Inject properties using @Value. Spring Cloud Vault will override these
     // if it successfully fetches them. Defaults to null if not found anywhere.
     @Value("${mfa.encryption.password:#{null}}")

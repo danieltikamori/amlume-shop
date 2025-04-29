@@ -16,21 +16,22 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
+import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.http.HttpHeaders;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 @Service
-@Slf4j
 public class SlackClient {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(SlackClient.class);
     private final WebClient webClient;
     private final String webhookUrl;
     private final ObjectMapper objectMapper;

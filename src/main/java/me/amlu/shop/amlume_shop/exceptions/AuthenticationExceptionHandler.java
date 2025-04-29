@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -25,11 +24,11 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import java.time.LocalDateTime;
 
-@Slf4j
 @ControllerAdvice
 public class AuthenticationExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger authLogger = LoggerFactory.getLogger(AuthenticationExceptionHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(AuthenticationExceptionHandler.class);
 
     // Custom Error Response Class
     public record ErrorResponse(LocalDateTime timestamp, int status, String error, String message, String path) {

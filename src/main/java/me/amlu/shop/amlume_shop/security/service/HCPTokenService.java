@@ -10,9 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenRefreshException;
 import me.amlu.shop.amlume_shop.payload.TokenResponse;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -28,9 +28,10 @@ import java.time.Instant;
 
 //@Profile({"!local","!test"}) // Exclude this service from the local and test profile
 @Service
-@Slf4j
 public class HCPTokenService {
+
     private static final String TOKEN_ENDPOINT = "https://auth.idp.hashicorp.com/oauth2/token";
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPTokenService.class);
     private String accessToken;
     private Instant tokenExpiration;
 
@@ -61,6 +62,12 @@ public class HCPTokenService {
             requestBody.add("grant_type", "client_credentials");
             requestBody.add("audience", "https://api.hashicorp.cloud");
 
+            // --- TEMPORARY_DEBUGGING - REMOVE ---
+                    log.info("Attempting to refresh HCP token. Client ID loaded: {}, Client Secret loaded: {}",
+                            (clientId != null && !clientId.isBlank()),
+                            (clientSecret != null && !clientSecret.isBlank()));
+            // --- END_DEBUGGING ---
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
@@ -73,10 +80,15 @@ public class HCPTokenService {
             if (response.getBody() != null) {
                 this.accessToken = response.getBody().accessToken();
                 this.tokenExpiration = Instant.now().plusSeconds(response.getBody().expiresIn());
+
+                // --- TEMPORARY_DEBUGGING - REMOVE ---
+                        log.info("Successfully refreshed HCP access token. Expires at: {}", this.tokenExpiration); // Log success
+                        // --- END_DEBUGGING ---
             } else {
                 log.error("Empty response body when refreshing token");
                 throw new TokenRefreshException("Empty response body when refreshing token");
             }
+
 
         } catch (HttpClientErrorException e) {
             log.error("Failed to refresh HCP token due to client error: {}", e.getStatusCode(), e);

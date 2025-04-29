@@ -12,9 +12,9 @@ package me.amlu.shop.amlume_shop.config;
 
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.security.service.RoleService;
+import me.amlu.shop.amlume_shop.user_management.UserRole;
+import org.slf4j.Logger;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -28,15 +28,16 @@ import java.util.stream.Collectors;
  * See the SensitiveData annotation for more details.
  * This class is used to validate the SensitiveData annotation.
  * Usage:
+ *
  * @SensitiveData(rolesAllowed = {"ADMIN", "USER"})
  * private String sensitiveField;
  */
 
-@Slf4j
 @Component
 public class DynamicSensitiveDataValidator implements ConstraintValidator<SensitiveData, Object> {
 
-//    @Autowired
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(DynamicSensitiveDataValidator.class);
+    //    @Autowired
     private RoleService roleService; // Make sure this service is properly implemented
 
     private Set<String> staticRolesAllowed;

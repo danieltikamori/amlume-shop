@@ -30,9 +30,9 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
 import me.amlu.shop.amlume_shop.payload.GetSecretsResponse;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -57,8 +57,14 @@ import static org.springframework.http.HttpStatus.*;
 
 //@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
-@Slf4j
 public class HCPSecretsService {
+
+    private static final int CACHE_DURATION_MINUTES = 30;
+    private static final int MAX_RETRY_ATTEMPTS = 3;
+    private static final int INITIAL_RETRY_INTERVAL = 1000;
+    private static final int MAX_RETRY_INTERVAL = 5000;
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPSecretsService.class);
+
     private final RestTemplate restTemplate;
     private final HCPTokenService tokenService;
     private final String organizationId;
@@ -66,11 +72,6 @@ public class HCPSecretsService {
     private final String appName;
     private final RetryTemplate retryTemplate;
     private final Cache<String, Map<String, String>> secretsCache;
-
-    private static final int CACHE_DURATION_MINUTES = 30;
-    private static final int MAX_RETRY_ATTEMPTS = 3;
-    private static final int INITIAL_RETRY_INTERVAL = 1000;
-    private static final int MAX_RETRY_INTERVAL = 5000;
 
     public HCPSecretsService(
             RestTemplate restTemplate,
@@ -133,6 +134,11 @@ public class HCPSecretsService {
             try {
                 String url = buildSecretsUrl();
                 HttpHeaders headers = createHeaders();
+
+                // --- TEMPORARY_DEBUGGING ---
+                log.debug("Attempting to fetch secrets from URL: {}", url);
+                log.debug("Authorization header is set: {}", headers.containsKey(HttpHeaders.AUTHORIZATION));
+                // --- END_DEBUGGING ---
 
                 log.debug("Fetching secrets from HCP");
                 ResponseEntity<GetSecretsResponse> response = restTemplate.exchange(

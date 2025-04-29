@@ -16,16 +16,16 @@ import com.slack.api.methods.request.chat.ChatPostMessageRequest;
 import jakarta.mail.*;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.Properties;
 
-@Slf4j
 @Service
 public class NotificationServiceImpl implements NotificationService {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(NotificationServiceImpl.class);
     //    Implement notification service
     // System.getenv("SLACK_API_TOKEN") - get slack api token from environment variable of the OS. Immutable.
     //System.getProperty("SLACK_API_TOKEN") - get slack api token from system property. Contained within JVM. Mutable.

@@ -11,14 +11,12 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import com.eatthepath.otp.TimeBasedOneTimePasswordGenerator;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.config.properties.MfaProperties;
 import me.amlu.shop.amlume_shop.exceptions.TotpVerificationException;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.bouncycastle.util.encoders.Base32;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.beans.factory.annotation.Value;
-
+import org.slf4j.Logger;
 import org.springframework.security.crypto.keygen.KeyGenerators;
 import org.springframework.stereotype.Service;
 
@@ -29,16 +27,13 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException; // For totpGenerator constructor if needed
-import java.time.Duration; // For totpGenerator constructor if needed
 import java.time.Instant;
 import java.util.Objects;
-import java.util.concurrent.TimeUnit;
 
-@Slf4j
 @Service
 public class TOTPServiceImpl implements TOTPService {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TOTPServiceImpl.class);
     // --- Configuration ---
     private final MfaProperties mfaProperties;
 

@@ -10,13 +10,13 @@
 
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UserScopeMissingException;
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -32,7 +32,6 @@ import java.util.UUID;
  * Utility service for token validation and claim extraction
  */
 
-@Slf4j
 @Service
 public class TokenUtilServiceImpl implements me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService {
 
@@ -40,6 +39,7 @@ public class TokenUtilServiceImpl implements me.amlu.shop.amlume_shop.security.p
     public static final DateTimeFormatter INSTANT_FORMATTER = DateTimeFormatter
             .ofPattern(YYYY_MM_DD_T_HH_MM_SS_Z)
             .withZone(ZoneOffset.UTC);
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TokenUtilServiceImpl.class);
 
     private final UserRepository userRepository;
 
@@ -143,6 +143,7 @@ public class TokenUtilServiceImpl implements me.amlu.shop.amlume_shop.security.p
     /**
      * Takes an object representing an Instant in the PASETO standard format
      * (yyyy-MM-dd'T'HH:mm:ss'Z') and returns the parsed Instant.
+     *
      * @param claimInstant the object to parse, must be a string in the PASETO standard format
      * @return the parsed Instant
      */

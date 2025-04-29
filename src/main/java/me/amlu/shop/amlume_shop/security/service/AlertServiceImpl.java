@@ -13,18 +13,19 @@ package me.amlu.shop.amlume_shop.security.service;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.service.EnvironmentService;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
 @Service
-@Slf4j
 public class AlertServiceImpl implements AlertService {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AlertServiceImpl.class);
     private final AlertNotificationServiceImpl alertNotificationServiceImpl;
     private final MetricRegistry metricRegistry;
     private final Counter alertCounter;

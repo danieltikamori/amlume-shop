@@ -11,15 +11,15 @@
 package me.amlu.shop.amlume_shop.config;
 
 import jakarta.servlet.http.HttpSession;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService;
+import org.slf4j.Logger;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 
 @Component
-@Slf4j
 public class SecurityValidator {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(SecurityValidator.class);
     private HttpSession httpSession;
     private TokenValidationService tokenValidationService;
 

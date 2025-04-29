@@ -10,10 +10,10 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -21,8 +21,8 @@ import org.springframework.stereotype.Service;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URISyntaxException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,8 +30,9 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 
 @Service
-@Slf4j
 public class GeoIpDatabaseUpdater {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(GeoIpDatabaseUpdater.class);
 
 //    // Check if accountId is needed
 //    @Value("${geoip.license.account-id}")

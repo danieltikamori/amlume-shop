@@ -11,21 +11,21 @@
 package me.amlu.shop.amlume_shop.service;
 
 import jakarta.mail.internet.MimeMessage;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.enums.ResponseMessage;
 import me.amlu.shop.amlume_shop.exceptions.EmailSendingFailedException;
 import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
 import me.amlu.shop.amlume_shop.payload.GetResponse;
 import me.amlu.shop.amlume_shop.security.service.EmailService;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
-@Slf4j
 public class EmailServiceImpl implements EmailService {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(EmailServiceImpl.class);
     private JavaMailSender javaMailSender;
 
     @Value("${spring.mail.username}")

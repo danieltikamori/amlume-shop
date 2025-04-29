@@ -13,9 +13,9 @@ package me.amlu.shop.amlume_shop.security.service;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.IpValidationException;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.net.InetAddress;
@@ -24,31 +24,32 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
-@Slf4j
 @Service
 public class IpValidationService {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(IpValidationService.class);
     private final LoadingCache<String, Boolean> ipValidationCache;
     private final Pattern ipv4Pattern;
-    
+
     public IpValidationService() {
         // Compile pattern once during initialization
         this.ipv4Pattern = Pattern.compile(
 //            "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
                 "^((25[0-5]|2[0-4]\\d|\\d{1,2})\\.){3}(25[0-5]|2[0-4]\\d|\\d{1,2})$"
         );
-        
+
         // Initialize cache
         this.ipValidationCache = CacheBuilder.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(1, TimeUnit.HOURS)
-            .recordStats()
-            .build(new CacheLoader<>() {
-                @NotNull
-                @Override
-                public Boolean load(String ip) {
-                    return performIpValidation(ip);
-                }
-            });
+                .maximumSize(10_000)
+                .expireAfterWrite(1, TimeUnit.HOURS)
+                .recordStats()
+                .build(new CacheLoader<>() {
+                    @NotNull
+                    @Override
+                    public Boolean load(String ip) {
+                        return performIpValidation(ip);
+                    }
+                });
     }
 
     public boolean isValidIp(String ip) {

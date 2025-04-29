@@ -10,9 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.service.SlackClient;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -26,11 +26,8 @@ import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 @Service
-@Slf4j
 public class AlertNotificationServiceImpl implements AlertNotificationService {
-    private final JavaMailSender emailSender;
-    private final SlackClient slackClient;
-    private final Queue<SecurityAlert> alertQueue;
+
     private static final int QUEUE_SIZE = 1000;
 
     @Value("${notification.email.from}")
@@ -38,6 +35,12 @@ public class AlertNotificationServiceImpl implements AlertNotificationService {
 
     @Value("${notification.email.to}")
     private String toEmail;
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AlertNotificationServiceImpl.class);
+
+    private final JavaMailSender emailSender;
+    private final SlackClient slackClient;
+    private final Queue<SecurityAlert> alertQueue;
 
     public AlertNotificationServiceImpl(JavaMailSender emailSender, SlackClient slackClient) {
         this.emailSender = emailSender;
@@ -78,7 +81,7 @@ public class AlertNotificationServiceImpl implements AlertNotificationService {
     public void processAlertQueue() {
         List<SecurityAlert> batch = new ArrayList<>();
         SecurityAlert alert;
-        
+
         while ((alert = alertQueue.poll()) != null && batch.size() < 100) {
             batch.add(alert);
         }
@@ -108,21 +111,21 @@ public class AlertNotificationServiceImpl implements AlertNotificationService {
 
     private String buildAlertMessage(SecurityAlert alert) {
         return String.format("""
-            Security Alert: %s
-            User ID: %s
-            Timestamp: %s
-            Environment: %s
-            Severity: %s
-            
-            Details:
-            %s
-            """,
-            alert.getType(),
-            alert.getUserId(),
-            alert.getTimestamp(),
-            alert.getEnvironment(),
-            alert.getSeverity(),
-            formatMetadata(alert.getMetadata())
+                        Security Alert: %s
+                        User ID: %s
+                        Timestamp: %s
+                        Environment: %s
+                        Severity: %s
+                        
+                        Details:
+                        %s
+                        """,
+                alert.getType(),
+                alert.getUserId(),
+                alert.getTimestamp(),
+                alert.getEnvironment(),
+                alert.getSeverity(),
+                formatMetadata(alert.getMetadata())
         );
     }
 
@@ -130,10 +133,10 @@ public class AlertNotificationServiceImpl implements AlertNotificationService {
         if (metadata == null || metadata.isEmpty()) {
             return "No additional details";
         }
-        
+
         StringBuilder sb = new StringBuilder();
-        metadata.forEach((key, value) -> 
-            sb.append(String.format("- %s: %s%n", key, value))
+        metadata.forEach((key, value) ->
+                sb.append(String.format("- %s: %s%n", key, value))
         );
         return sb.toString();
     }

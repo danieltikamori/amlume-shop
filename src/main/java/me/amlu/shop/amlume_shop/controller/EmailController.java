@@ -10,26 +10,29 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
 import me.amlu.shop.amlume_shop.payload.GetResponse;
 import me.amlu.shop.amlume_shop.security.service.EmailService;
+import org.slf4j.Logger;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import io.swagger.v3.oas.annotations.Operation;
 
 @RestController
 @RequestMapping("/emailService")
-@Slf4j
-@RequiredArgsConstructor
 @CrossOrigin("*")
 public class EmailController {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(EmailController.class);
     private final EmailService emailService;
+
+    public EmailController(EmailService emailService) {
+        this.emailService = emailService;
+    }
 
     @PostMapping("/send")
     @Operation(summary = "Send EMail", description = "Send Email to the given Email Address")
