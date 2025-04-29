@@ -28,14 +28,17 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-
-import com.google.common.cache.Cache;
-import com.google.common.cache.CacheBuilder;
+import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
 import me.amlu.shop.amlume_shop.payload.GetAppSecretResponse;
 import me.amlu.shop.amlume_shop.payload.GetSecretsResponse;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.*;
 import org.springframework.retry.backoff.ExponentialBackOffPolicy;
@@ -49,7 +52,6 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static me.amlu.shop.amlume_shop.payload.GetSecretsResponse.SecretDetail;
@@ -67,13 +69,12 @@ import static org.springframework.http.HttpStatus.*;
 
 @Profile({"!local", "!prod", "!docker", "!kubernetes"}) // Only active in profiles other than "local" and others listed
 //@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
-
-
 @Service
+@CacheConfig(cacheNames = Constants.HCP_SECRETS_CACHE) // Set default cache name for this class
 public class HCPSecretsService {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPSecretsService.class);
-    private static final int CACHE_DURATION_MINUTES = 30;
+    // Removed CACHE_DURATION_MINUTES as TTL is now managed by ValkeyCacheConfig
     private static final int MAX_RETRY_ATTEMPTS = 3;
     private static final int INITIAL_RETRY_INTERVAL = 1000;
     private static final int MAX_RETRY_INTERVAL = 5000;
@@ -84,31 +85,27 @@ public class HCPSecretsService {
     private final String projectId;
     private final String appName;
     private final RetryTemplate retryTemplate;
-    // --- Cache Change: Key is secret name, Value is secret value ---
-    private final Cache<String, String> secretsCache;
-    // --- End Cache Change ---
+    private final CacheManager cacheManager; // Inject Spring CacheManager
+
 
     public HCPSecretsService(
             RestTemplate restTemplate,
             HCPTokenService tokenService,
             @Value("${hcp.organization-id}") String organizationId,
             @Value("${hcp.project-id}") String projectId,
-            @Value("${hcp.app-name}") String appName) {
+            @Value("${hcp.app-name}") String appName,
+            CacheManager cacheManager) { // Inject CacheManager
         this.restTemplate = restTemplate;
         this.tokenService = tokenService;
         this.organizationId = organizationId;
         this.projectId = projectId;
         this.appName = appName;
+        this.cacheManager = cacheManager; // Assign CacheManager
         this.retryTemplate = createRetryTemplate();
-        // --- Cache Change: Build Cache<String, String> ---
-        this.secretsCache = CacheBuilder.newBuilder()
-                .expireAfterWrite(CACHE_DURATION_MINUTES, TimeUnit.MINUTES)
-                .maximumSize(1000) // Optional: Add a size limit
-                .build();
-        // --- End Cache Change ---
     }
 
     private RetryTemplate createRetryTemplate() {
+        // ... (retry template creation remains the same) ...
         ExponentialBackOffPolicy backOffPolicy = new ExponentialBackOffPolicy();
         backOffPolicy.setInitialInterval(INITIAL_RETRY_INTERVAL);
         backOffPolicy.setMaxInterval(MAX_RETRY_INTERVAL);
@@ -128,110 +125,89 @@ public class HCPSecretsService {
     public static final String PASETO_ACCESS_PUBLIC_KEY = "PASETO_ACCESS_PUBLIC_KEY";
     public static final String PASETO_ACCESS_SECRET_KEY = "PASETO_ACCESS_SECRET_KEY";
     public static final String PASETO_REFRESH_SECRET_KEY = "PASETO_REFRESH_SECRET_KEY";
-    // Add other constants like MFA_ENCRYPTION_PASSWORD etc. if fetched from HCP
     public static final String MFA_ENCRYPTION_PASSWORD = "MFA_ENCRYPTION_PASSWORD";
     public static final String MFA_ENCRYPTION_SALT = "MFA_ENCRYPTION_SALT";
 
-
     /**
-     * Retrieves a specific secret value by its key.
-     * Attempts to get the secret from the cache. If not found,
-     * it triggers fetching the single secret from HCP via fetchSingleSecret.
+     * Retrieves a specific secret value by its key using Spring Cache.
+     * If the secret is not in the cache (Constants.HCP_SECRETS_CACHE),
+     * this method's body will be executed to fetch it directly from HCP.
+     * The result (or exception) will be cached.
      *
      * @param key The name of the secret to retrieve.
      * @return The secret value.
-     * @throws FetchSecretsException if the secret cannot be found or fetched.
+     * @throws FetchSecretsException if the secret cannot be found or fetched after retries.
      */
-    public String getSecret(String key) {
-        try {
-            // Use cache's get method with a Callable loader
-            return secretsCache.get(key, () -> fetchSingleSecret(key));
-        } catch (ExecutionException e) {
-            log.error("Failed to get secret '{}' from cache loader. Cause: {}.", key, e.getCause() != null ? e.getCause() : e);
-            Throwable cause = e.getCause();
-            // Handle specific exceptions thrown by fetchSingleSecret
-            switch (cause) {
-                case FetchSecretsException fetchSecretsException -> throw fetchSecretsException;
-                case HttpClientErrorException.NotFound notFound ->
-                    // Specifically handle 404 from fetchSingleSecret
-                        throw new FetchSecretsException("Secret not found: " + key, cause);
-                case RuntimeException runtimeException -> throw runtimeException;
-                case null, default ->
-                        throw new FetchSecretsException("Failed to fetch secret '" + key + "' due to cache execution error", e);
-            }
-        }
-    }
-
-    /**
-     * Fetches a single secret directly from HCP by its name.
-     * This method is intended to be called by the cache loader in getSecret.
-     *
-     * @param secretName The name of the secret to fetch.
-     * @return The secret value.
-     * @throws FetchSecretsException if the secret cannot be fetched or is not found (404).
-     */
-    private String fetchSingleSecret(String secretName) throws FetchSecretsException {
-        log.info("Cache miss for secret '{}'. Fetching directly from HCP.", secretName);
-        String url = buildSingleSecretUrl(secretName);
+    @Cacheable(key = "#key", unless = "#result == null") // Cache based on key, don't cache null results
+    public String getSecret(String key) throws FetchSecretsException {
+        log.info("Cache miss for secret '{}'. Fetching directly from HCP.", key); // Log cache miss
+        String url = buildSingleSecretUrl(key);
         HttpHeaders headers = createHeaders();
 
-        // Use retryTemplate for resilience on single fetch as well
+        // Use retryTemplate for resilience on single fetch
         return retryTemplate.execute(context -> {
-            log.debug("Attempting to fetch single secret '{}' (Retry attempt {})", secretName, context.getRetryCount() + 1);
+            log.debug("Attempting to fetch single secret '{}' (Retry attempt {})", key, context.getRetryCount() + 1);
             try {
                 ResponseEntity<GetAppSecretResponse> response = restTemplate.exchange(
                         url, HttpMethod.GET, new HttpEntity<>(headers), GetAppSecretResponse.class
                 );
 
-                // --- Extract value based on GetAppSecretResponse structure ---
+                // Extract value based on GetAppSecretResponse structure
                 if (response.getBody() != null && response.getBody().secret() != null &&
                         response.getBody().secret().staticVersion() != null &&
                         response.getBody().secret().staticVersion().value() != null)
                 {
                     String value = response.getBody().secret().staticVersion().value();
-                    log.info("Successfully fetched single secret '{}'.", secretName);
-                    return value;
+                    log.info("Successfully fetched single secret '{}' from HCP.", key);
+                    return value; // This value will be cached by Spring
                 } else {
-                    log.error("Received unexpected response structure when fetching single secret '{}'. Body or nested fields null.", secretName);
-                    throw new FetchSecretsException("Unexpected response structure for secret: " + secretName);
+                    log.error("Received unexpected response structure when fetching single secret '{}'. Body or nested fields null.", key);
+                    // Throwing exception prevents caching null/bad response
+                    throw new FetchSecretsException("Unexpected response structure for secret: " + key);
                 }
-                // --- End Extraction ---
 
             } catch (HttpClientErrorException e) {
                 if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
-                    log.error("Secret '{}' not found in HCP (404).", secretName);
-                    // Throw specific exception that getSecret can catch
-                    throw new FetchSecretsException("Secret not found: " + secretName, e);
+                    log.error("Secret '{}' not found in HCP (404).", key);
+                    // Throw specific exception - Spring Cache might cache this exception depending on config
+                    throw new FetchSecretsException("Secret not found: " + key, e);
                 } else {
-                    log.error("Client error fetching single secret '{}': {}", secretName, e.getStatusCode(), e);
+                    log.error("Client error fetching single secret '{}': {}", key, e.getStatusCode(), e);
                     handleClientError(e); // This might wrap and throw FetchSecretsException
                     throw e; // Rethrow for retryTemplate
                 }
             } catch (HttpServerErrorException e) {
-                log.error("Server error fetching single secret '{}': {}", secretName, e.getStatusCode(), e);
+                log.error("Server error fetching single secret '{}': {}", key, e.getStatusCode(), e);
                 handleServerError(e); // This throws FetchSecretsException
                 throw e; // Rethrow for retryTemplate
             } catch (RestClientException e) {
-                log.error("RestClientException fetching single secret '{}': {}", secretName, e.getMessage(), e);
-                throw new FetchSecretsException("Failed to fetch single secret '" + secretName + "' from HCP", e);
+                log.error("RestClientException fetching single secret '{}': {}", key, e.getMessage(), e);
+                throw new FetchSecretsException("Failed to fetch single secret '" + key + "' from HCP", e);
             }
         });
     }
 
+    // --- REMOVED private fetchSingleSecret method - logic moved into getSecret ---
 
     /**
-     * Fetches all secrets from HCP, handling pagination, and populates the cache.
-     * This method is primarily intended for scheduled refresh or initial population.
+     * Fetches all secrets from HCP via pagination and populates the Spring Cache.
+     * Intended for scheduled refresh.
      *
      * @throws FetchSecretsException if fetching fails after retries, or if pagination gets stuck.
      */
     private void fetchSecretsWithPagination() throws FetchSecretsException {
-        // This method now returns void and populates the cache directly.
+        // Get the target cache instance
+        Cache cache = cacheManager.getCache(Constants.HCP_SECRETS_CACHE);
+        if (cache == null) {
+            log.error("Could not find cache named '{}'. Cannot populate secrets.", Constants.HCP_SECRETS_CACHE);
+            throw new FetchSecretsException("Cache '" + Constants.HCP_SECRETS_CACHE + "' not configured.");
+        }
+
         retryTemplate.execute(context -> {
             String nextPageToken = null;
             int pageNum = 1;
-            int totalSecretsProcessed = 0; // Track total secrets processed in this run
-            log.info("Starting full secrets fetch process (Retry attempt {})", context.getRetryCount() + 1);
+            int totalSecretsProcessed = 0;
+            log.info("Starting full secrets fetch to populate cache (Retry attempt {})", context.getRetryCount() + 1);
 
             String previousPageToken = null;
             int stuckTokenCounter = 0;
@@ -240,7 +216,7 @@ public class HCPSecretsService {
             do {
                 final int currentPageNum = pageNum;
                 String currentRequestToken = nextPageToken;
-                String url = buildPaginatedListUrl(currentRequestToken); // Use the list URL
+                String url = buildPaginatedListUrl(currentRequestToken);
                 HttpHeaders headers = createHeaders();
 
                 log.debug("Fetching secrets page {} from HCP. URL: {}", currentPageNum, url);
@@ -248,7 +224,6 @@ public class HCPSecretsService {
                 log.debug("Authorization header being sent: {}", (tokenUsed != null ? tokenUsed.substring(0, Math.min(tokenUsed.length(), 15)) + "..." : "null"));
 
                 try {
-                    // Use GetSecretsResponse for the list endpoint
                     ResponseEntity<GetSecretsResponse> response = restTemplate.exchange(
                             url, HttpMethod.GET, new HttpEntity<>(headers), GetSecretsResponse.class
                     );
@@ -257,18 +232,18 @@ public class HCPSecretsService {
                         int secretsOnPage = 0;
                         for (SecretDetail detail : response.getBody().secrets()) {
                             if (detail != null && detail.name() != null && detail.staticVersion() != null && detail.staticVersion().value() != null) {
-                                // --- Cache Change: Put individual secrets ---
-                                secretsCache.put(detail.name(), detail.staticVersion().value());
+                                // --- Use Spring Cache API to put entries ---
+                                cache.put(detail.name(), detail.staticVersion().value());
+                                // --- End Change ---
                                 secretsOnPage++;
-                                // --- End Cache Change ---
                             } else {
                                 log.warn("Skipping invalid secret entry on page {}: {}", currentPageNum, detail);
                             }
                         }
                         totalSecretsProcessed += secretsOnPage;
-                        log.debug("Processed {} secrets from page {}. Total secrets processed in this run: {}", secretsOnPage, currentPageNum, totalSecretsProcessed);
+                        log.debug("Processed and cached {} secrets from page {}. Total secrets processed in this run: {}", secretsOnPage, currentPageNum, totalSecretsProcessed);
 
-                        // --- Pagination Logic (remains mostly the same) ---
+                        // --- Pagination Logic ---
                         if (response.getBody().pagination() != null) {
                             String receivedToken = response.getBody().pagination().nextPageToken();
                             log.debug("Page {}: Received next page token: '{}'", currentPageNum, receivedToken);
@@ -308,7 +283,7 @@ public class HCPSecretsService {
                         String responseBody = e429.getResponseBodyAsString();
                         if (responseBody != null && responseBody.contains("try again in ")) {
                             String secondsStr = responseBody.substring(responseBody.indexOf("try again in ") + "try again in ".length()).split(" ")[0];
-                            secondsStr = secondsStr.replaceAll("\\D", "");
+                            secondsStr = secondsStr.replaceAll("[^\\d]", "");
                             if (!secondsStr.isEmpty()) {
                                 delaySeconds = Long.parseLong(secondsStr);
                                 delaySeconds = Math.max(1, Math.min(delaySeconds + 2, 300));
@@ -347,14 +322,11 @@ public class HCPSecretsService {
             } while (nextPageToken != null);
 
             log.info("Finished fetching all secrets via pagination. Total secrets processed and cached in this run: {}", totalSecretsProcessed);
-            return null; // Return type of execute is Void now
+            return null; // Return type of execute is Void
         });
     }
 
-
-    /**
-     * Builds the base URL for fetching the list of secrets (secrets:open).
-     */
+    // --- URL Builders ---
     private String buildBaseListUrl() {
         return String.format(
                 "https://api.cloud.hashicorp.com/secrets/2023-11-28/organizations/%s/projects/%s/apps/%s/secrets:open",
@@ -362,9 +334,6 @@ public class HCPSecretsService {
         );
     }
 
-    /**
-     * Builds the URL for fetching the list of secrets, including pagination token.
-     */
     private String buildPaginatedListUrl(String pageToken) {
         UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(buildBaseListUrl());
         if (pageToken != null && !pageToken.isBlank()) {
@@ -373,51 +342,40 @@ public class HCPSecretsService {
         return builder.toUriString();
     }
 
-    /**
-     * Builds the URL for fetching a single secret by name.
-     */
     private String buildSingleSecretUrl(String secretName) {
-        // IMPORTANT: Use the correct endpoint path for fetching a single secret
-        // This assumes the path is /secrets/{secret_name} - VERIFY THIS with HCP Docs
+        // VERIFY THIS PATH with HCP Docs for fetching a single secret by name
         return String.format(
                 "https://api.cloud.hashicorp.com/secrets/2023-11-28/organizations/%s/projects/%s/apps/%s/secrets/%s",
                 organizationId, projectId, appName, secretName
         );
-        // If the single secret endpoint is different (e.g., uses :open with a filter), adjust accordingly.
     }
 
+    // --- createHeaders ---
     private HttpHeaders createHeaders() {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(tokenService.getAccessToken());
         return headers;
     }
 
-    // --- Convenience getters ---
+    // --- Convenience getters (remain the same, they now use the @Cacheable getSecret) ---
     public String getPasetoAccessPrivateKey() {
         return getSecret(PASETO_ACCESS_PRIVATE_KEY);
     }
-
     public String getPasetoAccessPublicKey() {
         return getSecret(PASETO_ACCESS_PUBLIC_KEY);
     }
-
     public String getPasetoAccessSecretKey() {
         return getSecret(PASETO_ACCESS_SECRET_KEY);
     }
-
     public String getPasetoRefreshSecretKey() {
         return getSecret(PASETO_REFRESH_SECRET_KEY);
     }
-
     public String getMfaEncryptionPassword() {
         return getSecret(MFA_ENCRYPTION_PASSWORD);
     }
-
     public String getMfaEncryptionSalt() {
         return getSecret(MFA_ENCRYPTION_SALT);
     }
-    // --- End Convenience getters ---
-
 
     // --- Error Handling ---
     private void handleClientError(HttpClientErrorException e) {
@@ -428,31 +386,26 @@ public class HCPSecretsService {
             default: throw new FetchSecretsException("Client error (" + e.getStatusCode() + ") while fetching secrets", e);
         }
     }
-
     private void handleServerError(HttpServerErrorException e) {
         throw new FetchSecretsException("Server error (" + e.getStatusCode() + ") while fetching secrets", e);
     }
-    // --- End Error Handling ---
-
 
     /**
      * Scheduled task to refresh all secrets by invalidating the cache
      * and triggering a full fetch via pagination.
+     * Uses @CacheEvict to clear the cache before execution.
      */
     @Scheduled(fixedRateString = "${hcp.secrets.refresh-interval:1800000}") // Default 30 minutes
+    @CacheEvict(allEntries = true, beforeInvocation = true) // Evict all entries in HCP_SECRETS_CACHE before method runs
     public void refreshSecrets() {
         try {
-            log.info("Starting scheduled secrets refresh...");
-            // --- Cache Change: Invalidate all entries ---
-            secretsCache.invalidateAll();
-            log.info("Secrets cache invalidated.");
-            // --- End Cache Change ---
-
+            log.info("Starting scheduled secrets refresh (cache evicted)...");
             // Trigger reload by calling the pagination fetch method directly
+            // The @CacheEvict annotation handles the cache clearing.
             fetchSecretsWithPagination();
             log.info("Completed scheduled secrets refresh. Cache repopulated.");
         } catch (Exception e) {
-            log.error("Scheduled secrets refresh failed.", e);
+            log.error("Scheduled secrets refresh failed after cache eviction.", e);
             // Allow scheduler to continue
         }
     }
