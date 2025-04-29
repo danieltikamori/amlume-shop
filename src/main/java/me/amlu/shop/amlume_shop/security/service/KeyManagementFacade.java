@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import jakarta.annotation.PostConstruct;
 import me.amlu.shop.amlume_shop.config.properties.PasetoProperties; // Import PasetoProperties
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
 import me.amlu.shop.amlume_shop.security.model.KeyPair;
@@ -30,7 +31,10 @@ public class KeyManagementFacade {
 
     // --- Other secrets if needed by this facade or passed through ---
     // Keep @Value for secrets NOT managed within PasetoProperties
-    @Value("${mfa-encryption-password}")
+    // TODO: Ensure 'mfa-encryption-password' is correctly defined in Vault or application properties
+    //       If it's meant to be in Vault under 'secret/amlume-shop/mfa', use @Value("${mfa.encryption.password}")
+    //       and ensure Vault integration is working. If it's a direct property, ensure it's set.
+    @Value("${mfa.encryption.password}") // Assuming it maps to mfa.encryption.password now
     private String mfaEncryptionPassword;
 
     // Constructor updated to inject PasetoProperties
@@ -39,9 +43,39 @@ public class KeyManagementFacade {
         log.info("KeyManagementFacade initialized. PASETO secrets will be retrieved via PasetoProperties bean.");
     }
 
+    // --- TEMPORARY DEBUG ---
+    @PostConstruct
+    public void checkInjectedProperties() {
+        log.info("--- KeyManagementFacade PostConstruct ---");
+
+        // Log the MFA password value
+        log.info("MFA Encryption Password (@Value): '{}'", mfaEncryptionPassword != null ? "[REDACTED]" : "null"); // Redact actual value
+
+        if (pasetoProperties == null) {
+            log.error("PasetoProperties bean is NULL in KeyManagementFacade!");
+        } else {
+            log.info("PasetoProperties.access: {}", pasetoProperties.getAccess());
+            if (pasetoProperties.getAccess() != null) {
+                log.info("PasetoProperties.access.pub: {}", pasetoProperties.getAccess().getPub());
+                if (pasetoProperties.getAccess().getPub() != null) {
+                    // Log if private key is null or not
+                    log.info("PasetoProperties.access.pub.privateKey is null? {}", pasetoProperties.getAccess().getPub().getPrivateKey() == null);
+                    // Avoid logging the actual key value even if it were present
+                } else {
+                    log.warn("PasetoProperties.access.pub is NULL");
+                }
+            } else {
+                log.warn("PasetoProperties.access is NULL");
+            }
+            // You can add similar checks for refresh keys if needed
+        }
+        log.info("--- End KeyManagementFacade PostConstruct ---");
+    }
+    // --- END TEMPORARY DEBUG ---
+
     /**
      * Retrieves the asymmetric key pair strings for the given purpose.
-     * Now retrieves values from the injected PasetoProperties bean.
+     * Now retrieves values from the injected PasetoProperties bean using nested access.
      *
      * @param purpose Typically "ACCESS" or potentially "REFRESH" if asymmetric refresh keys are used.
      * @return KeyPair record containing the private and public key strings.
@@ -54,15 +88,16 @@ public class KeyManagementFacade {
         String privateKeyPropertyPath;
         String publicKeyPropertyPath;
 
+        // Use nested accessors
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            privateKey = pasetoProperties.getAccessPrivateKey();
-            publicKey = pasetoProperties.getAccessPublicKey();
+            privateKey = pasetoProperties.getAccess().getPub().getPrivateKey();
+            publicKey = pasetoProperties.getAccess().getPub().getPublicKey();
             privateKeyPropertyPath = "paseto.access.public.private-key";
             publicKeyPropertyPath = "paseto.access.public.public-key";
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
             // Assuming REFRESH might also use asymmetric keys (adjust if not)
-            privateKey = pasetoProperties.getRefreshPrivateKey();
-            publicKey = pasetoProperties.getRefreshPublicKey();
+            privateKey = pasetoProperties.getRefresh().getPub().getPrivateKey();
+            publicKey = pasetoProperties.getRefresh().getPub().getPublicKey();
             privateKeyPropertyPath = "paseto.refresh.public.private-key";
             publicKeyPropertyPath = "paseto.refresh.public.public-key";
         } else {
@@ -79,7 +114,7 @@ public class KeyManagementFacade {
 
     /**
      * Retrieves the symmetric secret key string for the given purpose.
-     * Now retrieves values from the injected PasetoProperties bean.
+     * Now retrieves values from the injected PasetoProperties bean using nested access.
      *
      * @param purpose Typically "ACCESS" or "REFRESH".
      * @return The secret key string.
@@ -90,11 +125,12 @@ public class KeyManagementFacade {
         String key;
         String propertyName; // For logging the expected property path
 
+        // Use nested accessors
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            key = pasetoProperties.getAccessSecretKey();
+            key = pasetoProperties.getAccess().getLocal().getSecretKey();
             propertyName = "paseto.access.local.secret-key";
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
-            key = pasetoProperties.getRefreshSecretKey();
+            key = pasetoProperties.getRefresh().getLocal().getSecretKey();
             propertyName = "paseto.refresh.local.secret-key";
         } else {
             log.warn("Symmetric key requested for unsupported purpose: {}", purpose);
@@ -110,7 +146,7 @@ public class KeyManagementFacade {
     // --- Optional: Getter for other injected secrets if needed elsewhere ---
     public String getMfaEncryptionPassword() {
         // Use Objects.requireNonNull
-        Objects.requireNonNull(mfaEncryptionPassword, "MFA encryption password is not available (check Vault/environment variable: mfa-encryption-password)");
+        Objects.requireNonNull(mfaEncryptionPassword, "MFA encryption password is not available (check Vault/environment variable/YAML path: mfa.encryption.password)");
         return mfaEncryptionPassword;
     }
 
