@@ -10,23 +10,21 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import me.amlu.shop.amlume_shop.exceptions.KeyConversionException;
+import me.amlu.shop.amlume_shop.exceptions.KeyConversionException; // Keep for potential Base64 errors
 import me.amlu.shop.amlume_shop.exceptions.KeyInitializationException;
 import me.amlu.shop.amlume_shop.security.model.KeyPair; // Use the KeyPair record from facade
 import me.amlu.shop.amlume_shop.security.service.KeyManagementFacade;
+import org.paseto4j.commons.Version; // Import Version again
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.KeyFactory;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+// Import paseto4j key types
+import org.paseto4j.commons.PrivateKey;
+import org.paseto4j.commons.PublicKey;
+import org.paseto4j.commons.SecretKey;
+
 import java.util.Base64;
 import java.util.Objects;
 
@@ -35,7 +33,6 @@ public class KeyManagementService {
 
     private static final Logger log = LoggerFactory.getLogger(KeyManagementService.class);
     private final KeyManagementFacade keyManagementFacade;
-    private static final KeyFactory KEY_FACTORY_ED25519;
 
     // Use volatile for thread safety with double-checked locking pattern
     private volatile KeyPairHolder accessKeyPairHolder;
@@ -44,63 +41,61 @@ public class KeyManagementService {
     private volatile SecretKeyHolder secretKeyHolder;
     private final Object initLock = new Object(); // Lock object for synchronization
 
-    static {
-        try {
-            // Initialize the specific KeyFactory needed (e.g., Ed25519 for v4.public)
-            KEY_FACTORY_ED25519 = KeyFactory.getInstance("Ed25519");
-            log.info("Initialized Ed25519 KeyFactory.");
-        } catch (NoSuchAlgorithmException e) {
-            log.error("FATAL: Ed25519 algorithm not supported by the security provider!", e);
-            throw new IllegalStateException("Required Ed25519 algorithm not available", e);
-        }
-    }
-
     // Constructor injection
     public KeyManagementService(KeyManagementFacade keyManagementFacade) {
         this.keyManagementFacade = keyManagementFacade;
-        log.info("KeyManagementService initialized. Keys will be loaded lazily.");
+        log.info("KeyManagementService initialized. Keys will be loaded lazily using paseto4j types.");
     }
-
-    // --- REMOVED @PostConstruct initializeKeys() method ---
 
     // --- Lazy Initialization Method ---
     private void ensureKeysInitialized() {
-        // Double-checked locking pattern to minimize synchronization overhead
+        // Double-checked locking pattern
         if (accessKeyPairHolder == null || secretKeyHolder == null /* || add other holders */) {
             synchronized (initLock) {
-                // Check again inside synchronized block to prevent redundant initialization
+                // Check again inside synchronized block
                 if (accessKeyPairHolder == null || secretKeyHolder == null /* || add other holders */) {
-                    log.info("Lazily initializing PASETO keys...");
+                    log.info("Lazily initializing PASETO keys using paseto4j types...");
                     try {
                         // --- Asymmetric Keys (ACCESS) ---
-                        // Now this call happens later, hopefully after PasetoProperties is fully bound
-                        KeyPair accessKeys = keyManagementFacade.getAsymmetricKeys("ACCESS");
-                        PrivateKey accessPrivateKey = convertToPrivateKey(accessKeys.privateKey());
-                        PublicKey accessPublicKey = convertToPublicKey(accessKeys.publicKey());
-                        this.accessKeyPairHolder = new KeyPairHolder(accessPrivateKey, accessPublicKey);
-                        log.debug("Access asymmetric keys loaded and converted.");
+                        KeyPair accessKeyStrings = keyManagementFacade.getAsymmetricKeys("ACCESS");
+                        Objects.requireNonNull(accessKeyStrings.privateKey(), "Access private key string is null");
+                        Objects.requireNonNull(accessKeyStrings.publicKey(), "Access public key string is null");
+
+                        // Use deprecated paseto4j Key constructors (accepting byte[] and Version)
+                        // Acknowledging the deprecation warning as it's the only way shown to create from bytes.
+                        PrivateKey pasetoAccessPrivateKey = new PrivateKey(Base64.getDecoder().decode(accessKeyStrings.privateKey()), Version.V4);
+                        PublicKey pasetoAccessPublicKey = new PublicKey(Base64.getDecoder().decode(accessKeyStrings.publicKey()), Version.V4);
+
+                        this.accessKeyPairHolder = new KeyPairHolder(pasetoAccessPrivateKey, pasetoAccessPublicKey);
+                        log.debug("Access asymmetric keys loaded and created using paseto4j constructors.");
 
                         // --- Asymmetric Keys (REFRESH - if applicable) ---
-                        // Uncomment and adapt if refresh tokens also use public keys
-                        // KeyPair refreshKeys = keyManagementFacade.getAsymmetricKeys("REFRESH");
-                        // PrivateKey refreshPrivateKey = convertToPrivateKey(refreshKeys.privateKey());
-                        // PublicKey refreshPublicKey = convertToPublicKey(refreshKeys.publicKey());
-                        // this.refreshKeyPairHolder = new KeyPairHolder(refreshPrivateKey, refreshPublicKey);
-                        // log.debug("Refresh asymmetric keys loaded and converted.");
+                        // KeyPair refreshKeyStrings = keyManagementFacade.getAsymmetricKeys("REFRESH");
+                        // PrivateKey pasetoRefreshPrivateKey = new PrivateKey(Base64.getDecoder().decode(refreshKeyStrings.privateKey()), Version.V4); // Use deprecated
+                        // PublicKey pasetoRefreshPublicKey = new PublicKey(Base64.getDecoder().decode(refreshKeyStrings.publicKey()), Version.V4); // Use deprecated
+                        // this.refreshKeyPairHolder = new KeyPairHolder(pasetoRefreshPrivateKey, pasetoRefreshPublicKey);
+                        // log.debug("Refresh asymmetric keys loaded and created using paseto4j constructors.");
 
                         // --- Symmetric Keys ---
                         String accessSecretStr = keyManagementFacade.getSymmetricKey("ACCESS");
                         String refreshSecretStr = keyManagementFacade.getSymmetricKey("REFRESH");
-                        SecretKey accessSecretKey = convertToSecretKey(accessSecretStr);
-                        SecretKey refreshSecretKey = convertToSecretKey(refreshSecretStr);
-                        this.secretKeyHolder = new SecretKeyHolder(accessSecretKey, refreshSecretKey);
-                        log.debug("Symmetric keys loaded and converted.");
+                        Objects.requireNonNull(accessSecretStr, "Access secret key string is null");
+                        Objects.requireNonNull(refreshSecretStr, "Refresh secret key string is null");
+
+                        // Use deprecated paseto4j Key constructors (accepting byte[] and Version)
+                        SecretKey pasetoAccessSecretKey = new SecretKey(Base64.getDecoder().decode(accessSecretStr), Version.V4);
+                        SecretKey pasetoRefreshSecretKey = new SecretKey(Base64.getDecoder().decode(refreshSecretStr), Version.V4);
+
+                        this.secretKeyHolder = new SecretKeyHolder(pasetoAccessSecretKey, pasetoRefreshSecretKey);
+                        log.debug("Symmetric keys loaded and created using paseto4j constructors.");
 
                         log.info("PASETO keys initialized successfully (lazily).");
 
-                    } catch (Exception e) {
+                    } catch (IllegalArgumentException e) { // Catch Base64 decoding errors or constructor errors
+                        log.error("Failed to decode/construct key during lazy initialization", e);
+                        throw new KeyInitializationException("Invalid key string or format", e);
+                    } catch (Exception e) { // Catch other potential errors
                         log.error("Failed to lazily initialize PASETO keys", e);
-                        // Wrap in a runtime exception to indicate critical failure during lazy load
                         throw new KeyInitializationException("Failed to initialize PASETO keys during lazy loading", e);
                     }
                 }
@@ -109,83 +104,37 @@ public class KeyManagementService {
     }
 
 
-    // --- Getter methods now ensure initialization ---
+    // --- Getter methods now ensure initialization and return paseto4j types ---
 
-    public PrivateKey getAccessPrivateKey() {
-        ensureKeysInitialized(); // Ensure keys are loaded before returning
+    public PrivateKey getAccessPrivateKey() { // Return paseto4j PrivateKey
+        ensureKeysInitialized();
         Objects.requireNonNull(accessKeyPairHolder, "Access KeyPairHolder not initialized after lazy load attempt");
         Objects.requireNonNull(accessKeyPairHolder.privateKey(), "Access PrivateKey not initialized after lazy load attempt");
         return accessKeyPairHolder.privateKey();
     }
 
-    public PublicKey getAccessPublicKey() {
-        ensureKeysInitialized(); // Ensure keys are loaded before returning
+    public PublicKey getAccessPublicKey() { // Return paseto4j PublicKey
+        ensureKeysInitialized();
         Objects.requireNonNull(accessKeyPairHolder, "Access KeyPairHolder not initialized after lazy load attempt");
         Objects.requireNonNull(accessKeyPairHolder.publicKey(), "Access PublicKey not initialized after lazy load attempt");
         return accessKeyPairHolder.publicKey();
     }
 
-    public SecretKey getAccessSecretKey() {
-        ensureKeysInitialized(); // Ensure keys are loaded before returning
+    public SecretKey getAccessSecretKey() { // Return paseto4j SecretKey
+        ensureKeysInitialized();
         Objects.requireNonNull(secretKeyHolder, "SecretKeyHolder not initialized after lazy load attempt");
         Objects.requireNonNull(secretKeyHolder.accessKey(), "Access SecretKey not initialized after lazy load attempt");
         return secretKeyHolder.accessKey();
     }
 
-    public SecretKey getRefreshSecretKey() {
-        ensureKeysInitialized(); // Ensure keys are loaded before returning
+    public SecretKey getRefreshSecretKey() { // Return paseto4j SecretKey
+        ensureKeysInitialized();
         Objects.requireNonNull(secretKeyHolder, "SecretKeyHolder not initialized after lazy load attempt");
         Objects.requireNonNull(secretKeyHolder.refreshKey(), "Refresh SecretKey not initialized after lazy load attempt");
         return secretKeyHolder.refreshKey();
     }
 
-    // --- Conversion Methods (Ensure these handle potential nulls/errors) ---
-
-    private PrivateKey convertToPrivateKey(String keyString) throws KeyConversionException {
-        Objects.requireNonNull(keyString, "Private key string cannot be null for conversion");
-        try {
-            byte[] keyBytes = Base64.getDecoder().decode(keyString);
-            PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-            return KEY_FACTORY_ED25519.generatePrivate(keySpec);
-        } catch (InvalidKeySpecException | IllegalArgumentException e) {
-            log.error("Failed to convert string to Ed25519 PrivateKey: {}", e.getMessage());
-            throw new KeyConversionException("Invalid private key format or data", e);
-        }
-    }
-
-    private PublicKey convertToPublicKey(String keyString) throws KeyConversionException {
-        Objects.requireNonNull(keyString, "Public key string cannot be null for conversion");
-        try {
-            byte[] keyBytes = Base64.getDecoder().decode(keyString);
-            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(keyBytes);
-            return KEY_FACTORY_ED25519.generatePublic(keySpec);
-        } catch (InvalidKeySpecException | IllegalArgumentException e) {
-            log.error("Failed to convert string to Ed25519 PublicKey: {}", e.getMessage());
-            throw new KeyConversionException("Invalid public key format or data", e);
-        }
-    }
-
-    private SecretKey convertToSecretKey(String keyString) throws KeyConversionException {
-        Objects.requireNonNull(keyString, "Secret key string cannot be null for conversion");
-        try {
-            byte[] keyBytes = Base64.getDecoder().decode(keyString);
-            // v4.local uses a 32-byte key
-            if (keyBytes.length != 32) {
-                log.warn("Expected 32-byte secret key for v4.local, but got {} bytes.", keyBytes.length);
-                // Consider throwing if strict length is required by your PASETO library
-                // throw new KeyConversionException("Invalid secret key length: Expected 32 bytes, got " + keyBytes.length);
-            }
-            // Algorithm name for SecretKeySpec is often "AES" for libraries using AES-GCM.
-            return new SecretKeySpec(keyBytes, "AES");
-        } catch (IllegalArgumentException e) {
-            log.error("Failed to decode Base64 secret key string: {}", e.getMessage());
-            throw new KeyConversionException("Invalid Base64 encoding for secret key", e);
-        }
-    }
-
-    // --- Internal Holder Records ---
-    // Using records for simple, immutable data carriers
-    private record KeyPairHolder(PrivateKey privateKey, PublicKey publicKey) {}
-    private record SecretKeyHolder(SecretKey accessKey, SecretKey refreshKey) {}
+    // --- Internal Holder Records (Update types) ---
+    private record KeyPairHolder(PrivateKey privateKey, PublicKey publicKey) {} // Use paseto4j types
+    private record SecretKeyHolder(SecretKey accessKey, SecretKey refreshKey) {} // Use paseto4j types
 }
-    
