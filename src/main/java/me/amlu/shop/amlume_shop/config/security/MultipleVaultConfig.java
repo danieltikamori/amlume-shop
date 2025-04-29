@@ -31,10 +31,10 @@ import java.net.URI;
 public class MultipleVaultConfig {
 
     // --- Properties for Kubernetes Vault ---
-    @Value("${vault.kubernetes.uri}") // e.g., http://vault.default.svc.cluster.local:8200
+    @Value("${vault.kubernetes.uri:http://vault.default.svc.cluster.local:8200}") // e.g., http://vault.default.svc.cluster.local:8200
     private String k8sVaultUri;
 
-    @Value("${vault.kubernetes.role}") // The Vault role configured for your K8s service account
+    @Value("${vault.kubernetes.role:reader}") // The Vault role configured for your K8s service account
     private String k8sVaultRole;
 
     @Value("${vault.kubernetes.auth-path:kubernetes}") // Default K8s auth path
