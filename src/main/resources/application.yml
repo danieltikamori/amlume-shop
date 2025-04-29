@@ -195,36 +195,34 @@ notification:
 # application.yml
 
 paseto:
-  token-no-footer:
-    parts: 3
-  token-with-footer:
-    parts: 4
+  token-no-footer-parts: 3 #Maps to PasetoProperties.tokenNoFooterParts
+  token-with-footer-parts: 4 #Maps to PasetoProperties.tokenWithFooterParts
   access:
     expiration: 3600 # Default expiration for access tokens
     local:
       # Define the properties expected by PasetoProperties.Access.Local
       # Use ${ENV_VAR_NAME:default_value} to read from environment or provide a default
-      secret-key: ${PASETO_ACCESS_SECRET_KEY:} # Read from env, default to empty if not set
-      kid: ${PASETO_ACCESS_LOCAL_KID:}       # Read from env, default to empty if not set
+      secret-key: ${PASETO_ACCESS_SECRET_KEY:""} # Read from env, default to empty if not set
+      kid: ${PASETO_ACCESS_LOCAL_KID:""}       # Read from env, default to empty if not set
       # expiration: 3600 # Optional: Override default if needed for local access tokens specifically
     public:
       # Define the properties expected by PasetoProperties.Access.Public
-      private-key: ${PASETO_ACCESS_PRIVATE_KEY:} # Read from env
-      public-key: ${PASETO_ACCESS_PUBLIC_KEY:}  # Read from env
-      kid: ${PASETO_ACCESS_PUBLIC_KID:}       # Read from env
+      private-key: ${PASETO_ACCESS_PRIVATE_KEY:""} # Read from env
+      public-key: ${PASETO_ACCESS_PUBLIC_KEY:""}  # Read from env
+      kid: ${PASETO_ACCESS_PUBLIC_KID:""}       # Read from env
       expiration: 3600 # Can override default access expiration if needed for public access tokens
   refresh:
     expiration: 86400 # Default expiration for refresh tokens
     local:
       # Define the properties expected by PasetoProperties.Refresh.Local
-      secret-key: ${PASETO_REFRESH_SECRET_KEY:} # Read from env
-      kid: ${PASETO_REFRESH_LOCAL_KID:}       # Read from env
+      secret-key: ${PASETO_REFRESH_SECRET_KEY:""} # Read from env
+      kid: ${PASETO_REFRESH_LOCAL_KID:""}       # Read from env
       # expiration: 86400 # Optional: Override default if needed for local refresh tokens
     public:
       # Define the properties expected by PasetoProperties.Refresh.Public
-      private-key: ${PASETO_REFRESH_PRIVATE_KEY:} # Read from env
-      public-key: ${PASETO_REFRESH_PUBLIC_KEY:}  # Read from env
-      kid: ${PASETO_REFRESH_PUBLIC_KID:}       # Read from env
+      private-key: ${PASETO_REFRESH_PRIVATE_KEY:""} # Read from env
+      public-key: ${PASETO_REFRESH_PUBLIC_KEY:""}  # Read from env
+      kid: ${PASETO_REFRESH_PUBLIC_KID:""}       # Read from env
       expiration: 86400 # Can override default refresh expiration if needed for public refresh tokens
 
 recaptcha:
@@ -636,13 +634,14 @@ spring:
       enabled: true
       fail-fast: false  # <<< IMPORTANT: Allow fallback if Vault fails
       uri: http://localhost:8200 # Example fallback URI
+      authentication: TOKEN # Authentication method (e.g., TOKEN, APPROLE, KUBERNETES)
 #      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
-      token: ${VAULT_TOKEN:} # Allow empty token for fallback testing if needed
+      token: ${VAULT_TOKEN:token} # Allow empty token for fallback testing if needed
       kv:
         enabled: true
         backend: secret  # Path where KV v2 engine is mounted
         application-name: ${spring.application.name} # Uses spring.application.name by default
-        default-context: mfa # Looks for secrets under secret/amlume-shop/mfa
+        default-context: "" # Looks for secrets under secret/amlume-shop/mfa
         # profile-separator: '/' # Usually default is fine
   config:
     import: "optional:vault://" # <<< IMPORTANT: Makes Vault optional at startup
