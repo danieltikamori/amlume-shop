@@ -10,20 +10,86 @@
 
 package me.amlu.shop.amlume_shop.config.security;
 
-import org.springframework.context.annotation.Configuration;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.Objects;
 
-@Configuration
+@Component
+@ConfigurationProperties(prefix = "token.validation")
 public class TokenValidationConfig {
-    private final Duration clockSkewTolerance;
-    private final String issuer;
-    private final String audience;
+    /**
+     * The maximum allowed clock skew for token validation.
+     * This is used to account for potential time differences between the server and the client.
+     * Default is 5 minutes.
+     */
+    private Duration clockSkewTolerance;
+    private String issuer;
+    private String audience;
 
 
-    public TokenValidationConfig(Duration clockSkewTolerance, String issuer, String audience) {
+    public TokenValidationConfig() {
+    }
+
+    public Duration getClockSkewTolerance() {
+        return clockSkewTolerance;
+    }
+
+    public void setClockSkewTolerance(Duration clockSkewTolerance) {
         this.clockSkewTolerance = clockSkewTolerance;
+    }
+
+    public String getIssuer() {
+        return issuer;
+    }
+
+    public void setIssuer(String issuer) {
         this.issuer = issuer;
+    }
+
+    public String getAudience() {
+        return audience;
+    }
+
+    public void setAudience(String audience) {
         this.audience = audience;
+    }
+
+
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof TokenValidationConfig other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$clockSkewTolerance = this.getClockSkewTolerance();
+        final Object other$clockSkewTolerance = other.getClockSkewTolerance();
+        if (!Objects.equals(this$clockSkewTolerance, other$clockSkewTolerance))
+            return false;
+        final Object this$issuer = this.getIssuer();
+        final Object other$issuer = other.getIssuer();
+        if (!Objects.equals(this$issuer, other$issuer)) return false;
+        final Object this$audience = this.getAudience();
+        final Object other$audience = other.getAudience();
+        return Objects.equals(this$audience, other$audience);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof TokenValidationConfig;
+    }
+
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $clockSkewTolerance = this.getClockSkewTolerance();
+        result = result * PRIME + ($clockSkewTolerance == null ? 43 : $clockSkewTolerance.hashCode());
+        final Object $issuer = this.getIssuer();
+        result = result * PRIME + ($issuer == null ? 43 : $issuer.hashCode());
+        final Object $audience = this.getAudience();
+        result = result * PRIME + ($audience == null ? 43 : $audience.hashCode());
+        return result;
+    }
+
+    public String toString() {
+        return "TokenValidationConfig(clockSkewTolerance=" + this.getClockSkewTolerance() + ", issuer=" + this.getIssuer() + ", audience=" + this.getAudience() + ")";
     }
 }
