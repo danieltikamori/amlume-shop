@@ -13,8 +13,10 @@ package me.amlu.shop.amlume_shop.config.security;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.vault.config.VaultProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.vault.authentication.ClientAuthentication;
 import org.springframework.vault.authentication.KubernetesAuthentication;
 import org.springframework.vault.authentication.KubernetesAuthenticationOptions;
@@ -40,6 +42,9 @@ public class MultipleVaultConfig {
     @Value("${vault.kubernetes.auth-path:kubernetes}") // Default K8s auth path
     private String k8sAuthPath;
 
+    // --- Properties for Local (Docker) container ---
+    // Is defined at VaultProperties
+
     // --- Properties for (Docker) Container Vault ---
     // Injects the Vault server URI from the 'vault.uri' property.
     @Value("${vault.docker.uri}")
@@ -59,19 +64,46 @@ public class MultipleVaultConfig {
 
     // --- Bean Definition for Kubernetes Vault Template ---
     @Bean(name = "kubernetesVaultTemplate")
-    public VaultTemplate kubernetesVaultTemplate() {
-        VaultEndpoint endpoint = VaultEndpoint.from(URI.create(k8sVaultUri));
+    @Profile("kubernetes")
+//    @Profile("vault.kubernetes.enabled")
+    public VaultTemplate kubernetesVaultTemplate(
+            ClientAuthentication clientAuthentication, // Ensure this is the K8s auth bean
+            VaultEndpoint vaultEndpoint // Ensure this points to the correct Vault instance
+    ) {
+        // The existing logic for creating the template using Kubernetes auth
+        // likely involves creating KubernetesAuthenticationOptions and KubernetesAuthentication
+        // which eventually leads to the error if run locally.
+        // The @Profile annotation prevents this method from being called locally.
+
+//        VaultEndpoint endpoint = VaultEndpoint.from(URI.create(k8sVaultUri));
 
         // Configure Kubernetes Authentication
         KubernetesAuthenticationOptions options = KubernetesAuthenticationOptions.builder()
                 .role(k8sVaultRole)
                 .path(k8sAuthPath) // Specify the mount path if not default
-                // .serviceAccountTokenFile(...) // Optional: specify token file if not default
-                .build();
-        ClientAuthentication authentication = new KubernetesAuthentication(options, restOperations()); // restOperations() is provided by Spring Vault
+                // .serviceAccountTokenFile(...) // Optional: specify token file if not default (if not set, it will use the default token file)
+                .build(); // Causes the error if run locally
 
-        return new VaultTemplate(endpoint, authentication);
+        // Assuming ClientAuthentication is correctly set up for k8s elsewhere
+//        ClientAuthentication authentication = new KubernetesAuthentication(options, restOperations()); // restOperations() is provided by Spring Vault
+
+        return new VaultTemplate(vaultEndpoint, clientAuthentication);
     }
+
+    // --- Ensure you have other VaultTemplate beans for other profiles ---
+
+    // For local development using Token Auth:
+    @Bean
+    @Profile("local") // Active for local profile
+    public VaultTemplate localVaultTemplate(VaultProperties vaultProperties) {
+        assert vaultProperties.getUri() != null;
+        VaultEndpoint vaultEndpoint = VaultEndpoint.from(vaultProperties.getUri()); // Use local URI
+        // Use TokenAuthentication for local development
+        assert vaultProperties.getToken() != null;
+        ClientAuthentication tokenAuth = new TokenAuthentication(vaultProperties.getToken());
+        return new VaultTemplate(vaultEndpoint, tokenAuth);
+    }
+
 
     // --- Bean Definition for (Docker) Container Vault Template (Token Auth) ---
     @Bean(name = "containerVaultTemplate")
@@ -87,6 +119,7 @@ public class MultipleVaultConfig {
 
     // --- Bean Definition for HCP Vault Template (Token Auth) ---
     @Bean(name = "hcpVaultTemplate")
+    @Profile("hcp") // Active for HCP profile
     public VaultTemplate hcpVaultTemplate() {
         VaultEndpoint endpoint = VaultEndpoint.from(URI.create(hcpVaultUri));
 
