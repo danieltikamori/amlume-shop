@@ -23,7 +23,7 @@ services:
       - "8200:8200"
     environment:
       # Vault Dev Mode Configuration (Insecure - For Development ONLY)
-      VAULT_DEV_ROOT_TOKEN_ID: "95eba8ed-f6fc-958a-f490-c7fd0eda5e9e" # Use this token in your Spring app config
+      VAULT_DEV_ROOT_TOKEN_ID: "token" # Use this token in your Spring app config
       VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200" # Listen on all interfaces inside container
       # --- Optional: Set VAULT_ADDR for CLI inside the container ---
       VAULT_ADDR: "http://127.0.0.1:8200" # Usually needed if you exec into the container
@@ -114,8 +114,8 @@ services:
     container_name: vault-seeder-job
     environment:
       # Pass the token and target path to the script
-      VAULT_TOKEN: "95eba8ed-f6fc-958a-f490-c7fd0eda5e9e"
-      VAULT_PATH: "secret/amlume-shop/mfa" # Or override if needed
+      VAULT_TOKEN: "token"
+      VAULT_PATH: "secret/amlume-shop/local" # Or override if needed. It overrides the path in the entrypoint.sh script.
       ENV_FILE_PATH: "/app/.env" # Path inside the container where .env is mounted
       # Optional: Adjust Vault address if not using 'vault' hostname
       VAULT_ADDR: http://vault:8200
