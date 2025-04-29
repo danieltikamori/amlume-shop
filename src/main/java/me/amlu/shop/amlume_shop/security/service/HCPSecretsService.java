@@ -199,7 +199,9 @@ public class HCPSecretsService {
                                         SecretDetail::name,
                                         detail -> detail.staticVersion().value(),
                                         (existingValue, newValue) -> { // Handle potential duplicate keys across pages (use latest)
-                                            log.warn("Duplicate secret key '{}' found across pages. Using the value from the later page.", existingValue); // Changed key name reference
+//                                            log.warn("Duplicate secret value found across pages (key not shown here). Using the value from the later page.");
+                                            log.warn("Duplicate secret key found ON PAGE {}. Using the value from the later entry on this page.", pageNum);
+//                                            log.warn("Duplicate secret key '{}' found across pages. Using the value from the later page.", existingValue); // Changed key name reference
                                             return newValue;
                                         }
                                 ));
@@ -211,13 +213,17 @@ public class HCPSecretsService {
 
                         // Get the token for the next page
                         if (response.getBody().pagination() != null) {
+                            String receivedToken = response.getBody().pagination().nextPageToken(); // Log the token received
+                            log.debug("Page {}: Received next page token: '{}'",pageNum, receivedToken);
                             // Modify the nextPageToken declared INSIDE the lambda
-                            nextPageToken = response.getBody().pagination().nextPageToken();
+                            nextPageToken = receivedToken; // Use the token for the next iteration
+//                            nextPageToken = response.getBody().pagination().nextPageToken();
                             // Treat blank token same as null (no next page)
                             if (nextPageToken != null && nextPageToken.isBlank()) {
                                 nextPageToken = null;
                             }
                         } else {
+                            log.debug("Page {}: No pagination object received in response. Stopping pagination.", pageNum);
                             nextPageToken = null; // No pagination object means no more pages
                         }
                     } else {
