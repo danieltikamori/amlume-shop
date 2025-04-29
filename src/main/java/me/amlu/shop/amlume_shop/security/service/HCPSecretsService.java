@@ -34,6 +34,7 @@ import me.amlu.shop.amlume_shop.exceptions.FetchSecretsException;
 import me.amlu.shop.amlume_shop.payload.GetSecretsResponse;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -59,7 +60,17 @@ import java.util.stream.Collectors;
 import static me.amlu.shop.amlume_shop.payload.GetSecretsResponse.*;
 import static org.springframework.http.HttpStatus.*;
 
-//@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
+/**
+ * IMPORTANT: NOT COMPLETELY FUNCTIONAL
+ * IT DOES WORK FOR THE FIRST PAGE OF SECRETS. WE CANNOT GET OTHER PAGES SECRETS.
+ * TODO: SOLVE PAGINATION ISSUE, LIKELY PROVIDER SIDE
+ * This service handles fetching secrets from HCP (HashiCorp Cloud Platform) using the HCP API.
+ * It manages token generation, caching, and pagination for retrieving secrets.
+ * <p>
+ * The service is designed to be used in a Spring application and is not intended for local or test profiles.
+ */
+
+@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
 public class HCPSecretsService {
 
@@ -146,112 +157,152 @@ public class HCPSecretsService {
         }
     }
 
-
     /**
-     * Fetches secrets from HCP, handling pagination.
-     * This method will loop through pages until all secrets are retrieved.
-     * The entire multi-page fetch operation is wrapped in a retry mechanism.
+     * Fetches secrets from HCP, handling pagination and potential stuck tokens.
+     * This method will loop through pages until all secrets are retrieved or an issue occurs.
+     * The entire multi-page fetch operation is wrapped in a retry mechanism via retryTemplate.
      *
      * @return A map containing all secrets fetched across all pages.
-     * @throws FetchSecretsException if fetching fails after retries.
+     * @throws FetchSecretsException if fetching fails after retries, or if pagination gets stuck.
      */
     private Map<String, String> fetchSecretsWithPagination() {
-        // Map to accumulate secrets from all pages - OK to declare outside, modified via clear/putAll
         Map<String, String> allSecrets = new HashMap<>();
-        // REMOVE declaration from here: String nextPageToken = null;
 
-        // Retry the entire multi-page fetch process
         return retryTemplate.execute(context -> {
-            // Reset state for each retry attempt of the whole process
             allSecrets.clear();
-
-            // --- MOVE DECLARATION INSIDE LAMBDA ---
-            String nextPageToken = null; // Start with no page token FOR THIS EXECUTION
-            // --- END MOVE ---
-
-            int pageNum = 1;
+            String nextPageToken = null;
+            int pageNum = 1; // Declared in outer lambda scope
             log.info("Starting secrets fetch process (Retry attempt {})", context.getRetryCount() + 1);
 
-            do {
-                // Build URL with potential page_token (uses the nextPageToken declared INSIDE the lambda)
-                String url = buildPaginatedUrl(nextPageToken);
-                HttpHeaders headers = createHeaders(); // Get fresh token if needed
+            String previousPageToken = null;
+            int stuckTokenCounter = 0;
+            final int MAX_STUCK_ATTEMPTS = 3;
 
-                log.debug("Fetching secrets page {} from HCP. URL: {}", pageNum, url);
+            do {
+                // --- Create effectively final variable for inner lambda ---
+                final int currentPageNum = pageNum; // This holds the value for THIS iteration
+                // --- End change ---
+
+                String currentRequestToken = nextPageToken;
+                String url = buildPaginatedUrl(currentRequestToken);
+                HttpHeaders headers = createHeaders();
+
+                log.debug("Fetching secrets page {} from HCP. URL: {}", currentPageNum, url); // Use currentPageNum for consistency if desired
                 String tokenUsed = headers.getFirst(HttpHeaders.AUTHORIZATION);
                 log.debug("Authorization header being sent: {}", (tokenUsed != null ? tokenUsed.substring(0, Math.min(tokenUsed.length(), 15)) + "..." : "null"));
 
                 try {
-                    // Make the HTTP request for the current page
                     ResponseEntity<GetSecretsResponse> response = restTemplate.exchange(
-                            url,
-                            HttpMethod.GET,
-                            new HttpEntity<>(headers),
-                            GetSecretsResponse.class
+                            url, HttpMethod.GET, new HttpEntity<>(headers), GetSecretsResponse.class
                     );
 
-                    // Process the response body
                     if (response.getBody() != null && response.getBody().secrets() != null) {
-                        // Transform the list of secrets from the current page into a Map
                         Map<String, String> currentPageSecrets = response.getBody().secrets().stream()
                                 .filter(detail -> detail != null && detail.name() != null && detail.staticVersion() != null && detail.staticVersion().value() != null)
                                 .collect(Collectors.toMap(
                                         SecretDetail::name,
                                         detail -> detail.staticVersion().value(),
-                                        (existingValue, newValue) -> { // Handle potential duplicate keys across pages (use latest)
-//                                            log.warn("Duplicate secret value found across pages (key not shown here). Using the value from the later page.");
-                                            log.warn("Duplicate secret key found ON PAGE {}. Using the value from the later entry on this page.", pageNum);
-//                                            log.warn("Duplicate secret key '{}' found across pages. Using the value from the later page.", existingValue); // Changed key name reference
+                                        (existingValue, newValue) -> {
+                                            // --- Use the effectively final variable ---
+                                            log.warn("Duplicate secret key found ON PAGE {}. Using the value from the later entry on this page.", currentPageNum);
+                                            // --- End change ---
                                             return newValue;
                                         }
                                 ));
 
-                        // Add secrets from the current page to the accumulated map
                         allSecrets.putAll(currentPageSecrets);
-//                        log.debug("Fetched {} secrets from page {}. Total secrets so far: {}", currentPageSecrets.size(), pageNum, allSecrets.size());
-                        log.debug("Fetched {} secrets from page {}. Secrets accumulated in current attempt: {}", currentPageSecrets.size(), pageNum, allSecrets.size());
+                        log.debug("Fetched {} secrets from page {}. Secrets accumulated in current attempt: {}", currentPageSecrets.size(), currentPageNum, allSecrets.size()); // Use currentPageNum
 
-                        // Get the token for the next page
                         if (response.getBody().pagination() != null) {
-                            String receivedToken = response.getBody().pagination().nextPageToken(); // Log the token received
-                            log.debug("Page {}: Received next page token: '{}'",pageNum, receivedToken);
-                            // Modify the nextPageToken declared INSIDE the lambda
-                            nextPageToken = receivedToken; // Use the token for the next iteration
-//                            nextPageToken = response.getBody().pagination().nextPageToken();
-                            // Treat blank token same as null (no next page)
+                            String receivedToken = response.getBody().pagination().nextPageToken();
+                            log.debug("Page {}: Received next page token: '{}'", currentPageNum, receivedToken); // Use currentPageNum
+
+                            if (receivedToken != null && receivedToken.equals(currentRequestToken)) {
+                                stuckTokenCounter++;
+                                log.warn("Received the same page token ('{}') again. Stuck count: {}", receivedToken, stuckTokenCounter);
+                                if (stuckTokenCounter >= MAX_STUCK_ATTEMPTS) {
+                                    log.error("Page token appears stuck after {} attempts. Aborting pagination.", stuckTokenCounter);
+                                    throw new FetchSecretsException("Pagination failed: Page token stuck after page " + currentPageNum); // Use currentPageNum
+                                }
+                            } else {
+                                stuckTokenCounter = 0;
+                            }
+                            nextPageToken = receivedToken;
                             if (nextPageToken != null && nextPageToken.isBlank()) {
                                 nextPageToken = null;
                             }
                         } else {
-                            log.debug("Page {}: No pagination object received in response. Stopping pagination.", pageNum);
-                            nextPageToken = null; // No pagination object means no more pages
+                            log.debug("Page {}: No pagination object found in response.", currentPageNum); // Use currentPageNum
+                            nextPageToken = null;
+                            stuckTokenCounter = 0;
                         }
                     } else {
-                        log.warn("Received null body or null secrets list from HCP on page {}. Stopping pagination.", pageNum);
-                        nextPageToken = null; // Stop pagination if response is malformed
+                        log.warn("Received null body or null secrets list from HCP on page {}. Stopping pagination.", currentPageNum); // Use currentPageNum
+                        nextPageToken = null;
+                        stuckTokenCounter = 0;
                     }
 
-                } catch (HttpClientErrorException e) {
-                    log.error("Client error fetching page {} from HCP: {}", pageNum, e.getStatusCode(), e);
-                    handleClientError(e); // This might throw FetchSecretsException
-                    throw e; // Rethrow to be handled by retryTemplate
+                } catch (HttpClientErrorException.TooManyRequests e429) {
+                    log.error("Client error fetching page {} from HCP: {}", currentPageNum, e429.getStatusCode(), e429); // Log full error first
+
+                    long delaySeconds = 120; // INCREASED AS 60 IS NOT ENOUGH. Default 60 from error message or general safe default
+                    try {
+                        // Basic parsing (improve if needed for robustness)
+                        String responseBody = e429.getResponseBodyAsString();
+                        if (responseBody != null && responseBody.contains("try again in ")) {
+                            String secondsStr = responseBody.substring(responseBody.indexOf("try again in ") + "try again in ".length()).split(" ")[0];
+                            // Remove non-digit characters just in case
+                            secondsStr = secondsStr.replaceAll("[^\\d]", "");
+                            if (!secondsStr.isEmpty()) {
+                                delaySeconds = Long.parseLong(secondsStr);
+                                // Add a small buffer and sanity check
+                                delaySeconds = Math.max(1, Math.min(delaySeconds + 2, 300)); // e.g., wait at least 1s, max 5 mins + buffer
+                            }
+                        }
+                    } catch (Exception parseEx) {
+                        log.warn("Could not parse delay from 429 message, defaulting to {} seconds.", delaySeconds, parseEx);
+                    }
+
+                    log.warn("Rate limit hit on page {}. Waiting for {} seconds before allowing retry...", currentPageNum, delaySeconds);
+                    try {
+                        TimeUnit.SECONDS.sleep(delaySeconds);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Interrupted while waiting for rate limit cooldown on page {}", currentPageNum);
+                        // Wrap and throw immediately if interrupted, don't proceed to normal rethrow
+                        throw new FetchSecretsException("Interrupted while waiting for rate limit cooldown", ie);
+                    }
+                    // Now rethrow the original exception so the outer retryTemplate handles the retry attempt logic
+                    // The handleClientError might wrap it, but we still need the retryTemplate to see an exception.
+                    handleClientError(e429); // Ensure it's wrapped appropriately if needed by handleClientError logic
+                    throw e429; // Rethrow the original 429 error
+
+                    // --- END: ADDED 429 CATCH BLOCK ---
+
+                } catch (HttpClientErrorException e) { // <-- Catch other HttpClientErrors AFTER TooManyRequests
+                    log.error("Client error fetching page {} from HCP: {}", currentPageNum, e.getStatusCode(), e); // Use currentPageNum
+                    handleClientError(e); // This might wrap and throw FetchSecretsException
+                    throw e; // Rethrow so retryTemplate can handle it
+
                 } catch (HttpServerErrorException e) {
-                    log.error("Server error fetching page {} from HCP: {}", pageNum, e.getStatusCode(), e);
-                    handleServerError(e); // This might throw FetchSecretsException
-                    throw e; // Rethrow to be handled by retryTemplate
+                    log.error("Server error fetching page {} from HCP: {}", currentPageNum, e.getStatusCode(), e); // Use currentPageNum
+                    handleServerError(e); // This throws FetchSecretsException
+                    throw e; // Rethrow so retryTemplate can handle it
+
                 } catch (RestClientException e) {
-                    log.error("RestClientException fetching page {} from HCP: {}", pageNum, e.getMessage(), e);
-                    // Wrap in FetchSecretsException if not already handled
-                    throw new FetchSecretsException("Failed to fetch secrets from HCP on page " + pageNum, e);
+                    log.error("RestClientException fetching page {} from HCP: {}", currentPageNum, e.getMessage(), e); // Use currentPageNum
+                    // Wrap in FetchSecretsException if not already handled by specific handlers
+                    throw new FetchSecretsException("Failed to fetch secrets from HCP on page " + currentPageNum, e); // Use currentPageNum
                 }
+                // Note: FetchSecretsException thrown by stuck token detection will also be caught by the outer retryTemplate mechanism
 
-                pageNum++; // Increment page number for logging
+                pageNum++; // Modify the original pageNum for the next loop iteration
+                previousPageToken = currentRequestToken;
 
-                // Loop condition uses the nextPageToken declared INSIDE the lambda
-            } while (nextPageToken != null);
+            } while (nextPageToken != null); // <-- End of the do-while loop
 
             log.info("Finished fetching all secrets. Total secrets retrieved: {}", allSecrets.size());
-            return allSecrets; // Return the accumulated map after loop finishes
+            return allSecrets;
 
         }); // End of retryTemplate.execute
     }
@@ -277,7 +328,7 @@ public class HCPSecretsService {
      * @return The full URL string with the page_token query parameter if applicable.
      */
     private String buildPaginatedUrl(String pageToken) {
-        UriComponentsBuilder builder = UriComponentsBuilder.fromHttpUrl(buildBaseSecretsUrl());
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(buildBaseSecretsUrl());
         if (pageToken != null && !pageToken.isBlank()) {
             builder.queryParam("page_token", pageToken); // Add page_token query parameter
         }
