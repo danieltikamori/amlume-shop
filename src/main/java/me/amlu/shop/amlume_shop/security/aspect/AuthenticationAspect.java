@@ -17,11 +17,12 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.lettuce.core.RedisConnectionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
-import me.amlu.shop.amlume_shop.config.ResilienceConfig;
+// Removed unused import: import me.amlu.shop.amlume_shop.config.ResilienceConfig;
+import me.amlu.shop.amlume_shop.config.properties.AuthenticationAspectProperties; // Import the correct properties class
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
-import me.amlu.shop.amlume_shop.resilience.properties.Resilience4jRetryProperties;
+// Removed unused import: import me.amlu.shop.amlume_shop.resilience.properties.Resilience4jRetryProperties;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService; // Assuming this validates your Bearer token
 import me.amlu.shop.amlume_shop.user_management.UserService; // Use interface
 import org.aspectj.lang.JoinPoint;
@@ -42,8 +43,8 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.NonNull;
 import org.springframework.retry.RetryPolicy;
-import org.springframework.retry.backoff.ExponentialBackOffPolicy;
-import org.springframework.retry.backoff.ExponentialRandomBackOffPolicy;
+// Removed unused import: import org.springframework.retry.backoff.ExponentialBackOffPolicy;
+// Removed unused import: import org.springframework.retry.backoff.ExponentialRandomBackOffPolicy;
 import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.policy.BinaryExceptionClassifierRetryPolicy;
 import org.springframework.retry.policy.CompositeRetryPolicy;
@@ -85,46 +86,47 @@ public class AuthenticationAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuthenticationAspect.class);
 
-    private final long retryInterval;
+    // These fields are for the internal Spring RetryTemplate
+    private final long retryInterval; // Changed to long to match FixedBackOffPolicy setter
     private final int maxRetryAttempts;
 
     private final UserService userService; // Use interface
     private final TokenValidationService tokenValidationService; // Service to validate the token
     private final MeterRegistry meterRegistry;
-    private final CircuitBreaker circuitBreaker;
-    private final RetryTemplate retryTemplate;
-    // Keep RedisTemplate/ObjectMapper if needed for other caching, but removed direct user caching from aspect
-    // private final StringRedisTemplate redisTemplate;
-    // private final ObjectMapper objectMapper;
+    private final CircuitBreaker circuitBreaker; // Resilience4j Circuit Breaker
+    private final RetryTemplate retryTemplate; // Spring Retry Template
 
+    // Constructor updated to inject AuthenticationAspectProperties
     public AuthenticationAspect(
-            @NonNull UserService userService, // Use interface
+            @NonNull UserService userService,
             @NonNull TokenValidationService tokenValidationService,
             @NonNull MeterRegistry meterRegistry,
-            @Qualifier("circuitBreakerRegistry") CircuitBreakerRegistry circuitBreakerRegistry, // Inject registry
-            // Keep Redis/ObjectMapper if used elsewhere
-            // @NonNull StringRedisTemplate redisTemplate,
-            // @NonNull ObjectMapper objectMapper,
-            @Qualifier("retryRegistry") RetryRegistry retryRegistry, // Inject registry
-            @Qualifier("retryProperties") Resilience4jRetryProperties retryProperties // Inject properties if needed
+            @Qualifier("circuitBreakerRegistry") CircuitBreakerRegistry circuitBreakerRegistry, // Inject Resilience4j registry
+            @Qualifier("retryRegistry") RetryRegistry resilience4jRetryRegistry, // Inject Resilience4j registry (keep if used elsewhere or intended)
+            // Inject the specific properties class for this aspect's retry config
+            AuthenticationAspectProperties authAspectProperties
     ) {
         this.userService = userService;
         this.tokenValidationService = tokenValidationService;
         this.meterRegistry = meterRegistry;
-        // this.redisTemplate = redisTemplate;
-        // this.objectMapper = objectMapper;
-        this.retryInterval = retryProperties.getRetryInterval(); // Use properties for interval
-        this.maxRetryAttempts = retryProperties.getMaxRetryAttempts(); // Use properties for max attempts
 
-        // Get or create specific instances from registries
+        // --- Initialize fields using the correct properties bean ---
+        // Convert Duration from properties to long millis for FixedBackOffPolicy
+        this.retryInterval = authAspectProperties.getRetryInterval().toMillis();
+        this.maxRetryAttempts = authAspectProperties.getMaxRetryAttempts();
+
+        // --- Resilience4j Circuit Breaker Setup ---
         this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("authenticationAspectBreaker", createCircuitBreakerConfig());
-        configureCircuitBreakerMetrics(this.circuitBreaker); // Configure metrics for the specific breaker
+        configureCircuitBreakerMetrics(this.circuitBreaker);
 
-        this.retryTemplate = createRetryTemplate(retryRegistry); // Pass registry to factory method
+        // --- Spring Retry Template Setup (using values from authAspectProperties) ---
+        // Pass the Resilience4j retryRegistry if you intend to integrate listeners later, otherwise it's unused here
+        this.retryTemplate = createRetryTemplate(resilience4jRetryRegistry);
     }
 
     // --- Resilience Configuration ---
 
+    // Resilience4j Circuit Breaker Config (Remains the same)
     private CircuitBreakerConfig createCircuitBreakerConfig() {
         return CircuitBreakerConfig.custom()
                 .failureRateThreshold(50)
@@ -148,30 +150,27 @@ public class AuthenticationAspect {
                 .build();
     }
 
-    private RetryTemplate createRetryTemplate(RetryRegistry retryRegistry) {
+    // Spring Retry Template Factory (Uses fields initialized from AuthenticationAspectProperties)
+    private RetryTemplate createRetryTemplate(RetryRegistry resilience4jRetryRegistry) { // Parameter kept for potential future use
         RetryTemplate localRetryTemplate = new RetryTemplate();
 
-        CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy(this.maxRetryAttempts);
+        CompositeRetryPolicy retryPolicy = getCompositeRetryPolicy(this.maxRetryAttempts); // Use field
 
         // For user authentication, usually the fixed policy is more adequate.
         FixedBackOffPolicy backOffPolicy = new FixedBackOffPolicy();
-        backOffPolicy.setBackOffPeriod(retryInterval); // Use the retry interval from properties
-
-          // For applications - sets deterministic randomization (Jitter)
-//        ExponentialRandomBackOffPolicy backOffPolicy = new ExponentialRandomBackOffPolicy();
-//        backOffPolicy.setInitialInterval(200);
-//        backOffPolicy.setMaxInterval(6000000);
-//        backOffPolicy.setMultiplier(2);
+        backOffPolicy.setBackOffPeriod(this.retryInterval); // Use field (already in millis)
 
         localRetryTemplate.setRetryPolicy(retryPolicy);
         localRetryTemplate.setBackOffPolicy(backOffPolicy);
 
-        // Optional: Add listeners from RetryRegistry if necessary
+        // Optional: Add listeners (potentially bridging from Resilience4j registry if needed)
+        // resilience4jRetryRegistry.retry("someInstanceName").getEventPublisher()...
         // localRetryTemplate.registerListener(...);
 
         return localRetryTemplate;
     }
 
+    // Spring Retry Policy Factory (Remains the same)
     @NotNull
     private static CompositeRetryPolicy getCompositeRetryPolicy(int maxRetryAttempts) {
         BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
@@ -183,13 +182,13 @@ public class AuthenticationAspect {
 
         CompositeRetryPolicy retryPolicy = new CompositeRetryPolicy();
         BinaryExceptionClassifierRetryPolicy binaryExceptionRetryPolicy = new BinaryExceptionClassifierRetryPolicy(defaultClassifier);
-        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(maxRetryAttempts);
+        MaxAttemptsRetryPolicy maxAttemptsRetryPolicy = new MaxAttemptsRetryPolicy(maxRetryAttempts); // Use parameter
 
         retryPolicy.setPolicies(new RetryPolicy[]{binaryExceptionRetryPolicy, maxAttemptsRetryPolicy});
         return retryPolicy;
     }
 
-    // --- Metrics Configuration ---
+    // --- Metrics Configuration (Remains the same) ---
 
     private void configureCircuitBreakerMetrics(CircuitBreaker circuitBreaker) {
         circuitBreaker.getEventPublisher()
@@ -202,7 +201,7 @@ public class AuthenticationAspect {
                 .onCallNotPermitted(event -> meterRegistry.counter("circuit_breaker.calls", "name", circuitBreaker.getName(), "type", "not_permitted").increment());
     }
 
-    // --- Core Authentication Logic ---
+    // --- Core Authentication Logic (Remains the same, uses configured circuitBreaker and retryTemplate) ---
 
     @Around("@annotation(requiresAuthenticationAnnotation)")
     public Object authenticateAndProceed(ProceedingJoinPoint joinPoint, RequiresAuthentication requiresAuthenticationAnnotation) throws Throwable {
@@ -221,6 +220,7 @@ public class AuthenticationAspect {
             }
 
             // 2. Validate Token and Get User (with Resilience)
+            // Uses Resilience4j CircuitBreaker and Spring Retry RetryTemplate
             UserDetails userDetails = circuitBreaker.executeSupplier(() -> // Execute within circuit breaker
                             retryTemplate.execute(context -> { // Execute within retry policy
                                 try {
@@ -302,6 +302,7 @@ public class AuthenticationAspect {
         }
     }
 
+    // --- extractBearerToken (Remains the same) ---
     private String extractBearerToken() {
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes == null) {
@@ -318,7 +319,7 @@ public class AuthenticationAspect {
         return null;
     }
 
-    // --- Role Check Logic ---
+    // --- Role Check Logic (Remains the same) ---
 
     @Before("@annotation(requiresRole)")
     public void checkRole(JoinPoint joinPoint, RequiresRole requiresRole) throws UnauthorizedException {
@@ -354,7 +355,7 @@ public class AuthenticationAspect {
         meterRegistry.counter("authorization.success", "type", "role", "role", roleNames, "class", className, "method", methodName).increment();
     }
 
-    // --- Metrics Recording Helpers ---
+    // --- Metrics Recording Helpers (Remains the same) ---
 
     private void recordAuthenticationAttempt(String className, String methodName) {
         meterRegistry.counter("authentication.attempts", "class", className, "method", methodName).increment();
@@ -385,7 +386,7 @@ public class AuthenticationAspect {
                 .increment();
     }
 
-    // --- Exception Handlers (Consider moving to a @ControllerAdvice) ---
+    // --- Exception Handlers (Remains the same) ---
 
     @ExceptionHandler(AuthenticationException.class) // Spring Security's base exception
     public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex) {
@@ -425,15 +426,4 @@ public class AuthenticationAspect {
                     }
                 });
     }
-
-    // --- Removed Methods ---
-    // - checkAuthentication (@Before advice)
-    // - validateToken (logic moved into authenticateAndProceed)
-    // - getCachedAnnotation (overly complex, read directly)
-    // - getOrFetchAuthenticatedUser (logic moved into authenticateAndProceed)
-    // - cacheAuthenticationResult (caching responsibility moved to UserService)
-    // - reportCacheMetrics (can be kept if useful, but removed for simplicity here)
-    // - evictExpiredCaches (can be kept if useful, but removed for simplicity here)
-    // - validateConfiguration (can be kept if useful)
-    // - recordMetrics (replaced by more detailed metrics helpers)
 }
