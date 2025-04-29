@@ -133,11 +133,12 @@ public class HCPSecretsService {
         return retryTemplate.execute(context -> {
             try {
                 String url = buildSecretsUrl();
-                HttpHeaders headers = createHeaders();
+                HttpHeaders headers = createHeaders(); // Calls tokenService.getAccessToken()
 
                 // --- TEMPORARY_DEBUGGING ---
+                String tokenUsed = headers.getFirst(HttpHeaders.AUTHORIZATION);
                 log.debug("Attempting to fetch secrets from URL: {}", url);
-                log.debug("Authorization header is set: {}", headers.containsKey(HttpHeaders.AUTHORIZATION));
+                log.debug("Authorization header being sent: {}", (tokenUsed != null ? tokenUsed.substring(0, Math.min(tokenUsed.length(), 15)) + "..." : "null")); // Log prefix + Bearer
                 // --- END_DEBUGGING ---
 
                 log.debug("Fetching secrets from HCP");

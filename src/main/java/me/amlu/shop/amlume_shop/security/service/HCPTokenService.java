@@ -30,16 +30,17 @@ import java.time.Instant;
 @Service
 public class HCPTokenService {
 
-    private static final String TOKEN_ENDPOINT = "https://auth.idp.hashicorp.com/oauth2/token";
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPTokenService.class);
-    private String accessToken;
-    private Instant tokenExpiration;
-
     @Value("${HCP_CLIENT_ID}")
     private String clientId;
 
     @Value("${HCP_CLIENT_SECRET}")
     private String clientSecret;
+
+    private static final String TOKEN_ENDPOINT = "https://auth.idp.hashicorp.com/oauth2/token";
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPTokenService.class);
+
+    private String accessToken;
+    private Instant tokenExpiration;
 
     private final RestTemplate restTemplate;
 
