@@ -26,6 +26,7 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.Instant;
 
+//@Profile({"!local","!test"}) // Exclude this service from the local and test profile
 @Service
 @Slf4j
 public class HCPTokenService {

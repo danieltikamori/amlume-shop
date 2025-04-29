@@ -55,6 +55,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.springframework.http.HttpStatus.*;
 
+//@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
 @Slf4j
 public class HCPSecretsService {
