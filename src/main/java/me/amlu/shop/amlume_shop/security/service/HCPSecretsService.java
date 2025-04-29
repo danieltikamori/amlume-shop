@@ -70,7 +70,8 @@ import static org.springframework.http.HttpStatus.*;
  * The service is designed to be used in a Spring application and is not intended for local or test profiles.
  */
 
-@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
+@Profile({"!local", "!prod", "!docker", "!kubernetes"}) // Only active in profiles other than "local" and others listed
+//@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
 public class HCPSecretsService {
 

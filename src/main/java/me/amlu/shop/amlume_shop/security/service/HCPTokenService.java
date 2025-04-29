@@ -14,6 +14,7 @@ import me.amlu.shop.amlume_shop.exceptions.TokenRefreshException;
 import me.amlu.shop.amlume_shop.payload.TokenResponse;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -26,7 +27,16 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.Instant;
 
-//@Profile({"!local","!test"}) // Exclude this service from the local and test profile
+/**
+ * IMPORTANT: This class is working correctly, but dependant the HCPSecretsService is not fully functional.
+ * <p>
+ * Service to handle HCP token management.
+ * This service is responsible for obtaining and refreshing the HCP access token.
+ * It uses the client credentials grant type to authenticate with the HCP OAuth2 server.
+ */
+
+@Profile({"!local", "!prod", "!docker", "!kubernetes"}) // Only active in profiles other than "local" and others listed
+//@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
 public class HCPTokenService {
 
