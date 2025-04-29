@@ -32,4 +32,28 @@ public class AuthenticationAspectProperties {
     private Duration retryInterval = Duration.ofSeconds(1);
     
     // getters and setters
+
+    public Duration getCacheTimeout() {
+        return cacheTimeout;
+    }
+
+    public void setCacheTimeout(Duration cacheTimeout) {
+        this.cacheTimeout = cacheTimeout;
+    }
+
+    public int getMaxRetryAttempts() {
+        return maxRetryAttempts;
+    }
+
+    public void setMaxRetryAttempts(int maxRetryAttempts) {
+        this.maxRetryAttempts = maxRetryAttempts;
+    }
+
+    public Duration getRetryInterval() {
+        return retryInterval;
+    }
+
+    public void setRetryInterval(Duration retryInterval) {
+        this.retryInterval = retryInterval;
+    }
 }
