@@ -15,11 +15,14 @@ import io.github.resilience4j.bulkhead.BulkheadRegistry;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.retry.Retry; // Import Retry
 import io.github.resilience4j.retry.RetryConfig;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
 import me.amlu.shop.amlume_shop.resilience.properties.*;
+import org.slf4j.Logger; // Import Logger
+import org.slf4j.LoggerFactory; // Import LoggerFactory
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,6 +31,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.SocketTimeoutException;
+import java.time.Duration; // Import Duration
+import java.util.Map; // Import Map
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -40,19 +45,21 @@ import java.util.concurrent.ScheduledExecutorService;
 @EnableConfigurationProperties({Resilience4jBulkheadProperties.class,
         Resilience4jCircuitBreakerProperties.class,
         Resilience4jExecutorProperties.class,
-        Resilience4jExponentialBackoffProperties.class,
+        Resilience4jExponentialBackoffProperties.class, // Keep this if used for exponential backoff params
         Resilience4jRetryProperties.class,
         Resilience4jTimeLimiterProperties.class,
         RestTemplateProperties.class
 })
 public class ResilienceConfig {
 
+    private static final Logger log = LoggerFactory.getLogger(ResilienceConfig.class); // Add logger
+
     private final RestTemplateProperties restTemplateProperties;
     private final Resilience4jBulkheadProperties bulkheadProperties;
     private final Resilience4jCircuitBreakerProperties circuitBreakerProperties;
     private final Resilience4jExecutorProperties executorProperties;
-    private final Resilience4jExponentialBackoffProperties exponentialBackoffProperties;
-    private final Resilience4jRetryProperties retryProperties;
+    private final Resilience4jExponentialBackoffProperties exponentialBackoffProperties; // Keep if used
+    private final Resilience4jRetryProperties retryProperties; // Keep this injection
     private final Resilience4jTimeLimiterProperties timeLimiterProperties;
 
     public ResilienceConfig(RestTemplateProperties restTemplateProperties, Resilience4jBulkheadProperties bulkheadProperties, Resilience4jCircuitBreakerProperties circuitBreakerProperties, Resilience4jExecutorProperties executorProperties, Resilience4jExponentialBackoffProperties exponentialBackoffProperties, Resilience4jRetryProperties retryProperties, Resilience4jTimeLimiterProperties timeLimiterProperties) {
@@ -115,41 +122,83 @@ public class ResilienceConfig {
     }
 
     /**
-     * Configures a RetryRegistry bean with custom retry settings.
+     * Configures a RetryRegistry bean by creating Retry instances for each configuration
+     * defined under `resilience4j.retry.instances` in the properties.
      *
-     * @return a RetryRegistry instance.
+     * @return a RetryRegistry instance populated with configured Retry instances.
      */
     @Bean
     public RetryRegistry retryRegistry() {
-        RetryConfig.Builder<Object> builder = RetryConfig.custom()
-                .maxAttempts(retryProperties.getMaxRetryAttempts()) // Retry up to 5 times
-                .waitDuration(retryProperties.getRetryWaitDuration()) // Wait initially 200 ms between retries
-                // If the client is a real person,
-                // evaluate exponential backoff is really necessary (critical use cases where reliability is a must).
-                // For non-human clients, like application, exponential backoff may make sense.
-//                .intervalFunction(IntervalFunction.ofExponentialRandomBackoff(
-//                        INITIAL_INTERVAL_MILLIS, EB_MULTIPLIER,RANDOMIZATION_FACTOR, MAX_INTERVAL_MILLIS)
-//                ) // Use exponential backoff with Jittered (randomness) IntervalFunction to avoid collisions for retry intervals.
-//                .retryExceptions(RestClientException.class) // Simpler retry on specific exceptions
-                // t.getMessage() may throw NullPointerException if the message is null, so always check for null
-                // Simplify and avoid potential runtime errors by just handling specific exceptions
-                .retryOnException(t -> t instanceof RestClientException || (t instanceof SocketTimeoutException /*&& t.getMessage() != null && t.getMessage().toLowerCase().contains("timeout")*/)) // Retry on specific exceptions and conditions
-                // Optional: Customize retry conditions further
-                .retryOnResult(Objects::isNull); // Retry on a specific result
-        // .retryOnPredicate(Predicate.not(response -> response.getStatusCode().is2xxSuccessful())) // Retry on non-2xx status codes
+        RetryRegistry registry = RetryRegistry.ofDefaults(); // Start with an empty/default registry
 
-        // Conditionally add exponential backoff based on configuration if desired
-        // Boolean flag in RetryDefaultProperties: useExponentialBackoff=true/false
-        if (retryProperties.isUseExponentialBackoff()) {
-            builder.intervalFunction(IntervalFunction.ofExponentialRandomBackoff(
-                    exponentialBackoffProperties.getInitialIntervalMillis(),
-                    exponentialBackoffProperties.getEbMultiplier(),
-                    exponentialBackoffProperties.getRandomizationFactor(),
-                    exponentialBackoffProperties.getMaxIntervalMillis()
-            ));
+        log.info("Configuring Resilience4j Retry instances...");
+        // Iterate through the configured instances from properties
+        for (Map.Entry<String, Resilience4jRetryProperties.RetryConfig> entry : retryProperties.getInstances().entrySet()) {
+            String instanceName = entry.getKey();
+            Resilience4jRetryProperties.RetryConfig instanceConfig = entry.getValue(); // Get the nested config
+
+            log.debug("Building Retry config for instance: {}", instanceName);
+
+            // --- Build RetryConfig using values from instanceConfig ---
+            RetryConfig.Builder<Object> builder = RetryConfig.custom();
+
+            // Max Attempts (Error was getMaxRetryAttempts)
+            builder.maxAttempts(instanceConfig.getMaxAttempts()); // Use getter from nested config
+
+            // Wait Duration (Error was getRetryWaitDuration/getRetryInterval)
+            Duration waitDuration = instanceConfig.getWaitDuration(); // Use getter from nested config
+
+            // Interval Function (Error was isUseExponentialBackoff)
+            IntervalFunction intervalFunction;
+            // Use the enable flag from the specific instance config
+            if (instanceConfig.isEnableExponentialBackoff()) {
+                log.debug("Exponential backoff enabled for instance: {}", instanceName);
+                // Use global exponential backoff properties if enabled for this instance
+                intervalFunction = IntervalFunction.ofExponentialRandomBackoff(
+                        exponentialBackoffProperties.getInitialIntervalMillis(), // Use global initial interval
+                        exponentialBackoffProperties.getEbMultiplier(), // Use global multiplier
+                        exponentialBackoffProperties.getRandomizationFactor(), // Use global randomization
+                        exponentialBackoffProperties.getMaxIntervalMillis() // Use global max interval
+                );
+                // Note: instanceConfig.getWaitDuration() is effectively ignored when exponential backoff is enabled here.
+            } else {
+                log.debug("Fixed interval wait enabled for instance: {}", instanceName);
+                intervalFunction = IntervalFunction.of(waitDuration); // Use instance-specific fixed duration
+            }
+            builder.intervalFunction(intervalFunction);
+
+            // Retry Exceptions
+            if (instanceConfig.getRetryExceptions() != null && !instanceConfig.getRetryExceptions().isEmpty()) {
+                builder.retryExceptions(instanceConfig.getRetryExceptions().toArray(new Class[0])); // Use retryOnExceptions
+                log.debug("Configured retryExceptions for {}: {}", instanceName, instanceConfig.getRetryExceptions());
+            }
+
+            // Ignore Exceptions
+            if (instanceConfig.getIgnoreExceptions() != null && !instanceConfig.getIgnoreExceptions().isEmpty()) {
+                builder.ignoreExceptions(instanceConfig.getIgnoreExceptions().toArray(new Class[0]));
+                log.debug("Configured ignoreExceptions for {}: {}", instanceName, instanceConfig.getIgnoreExceptions());
+            }
+
+            // --- Deprecated/Removed Logic from original code ---
+            // The original code had complex retryOnException/retryOnResult logic here.
+            // This logic should ideally be defined per-instance in the YAML/RetryConfig if needed,
+            // or applied when decorating specific methods, not globally in the registry setup.
+            // builder.retryOnException(t -> t instanceof RestClientException || (t instanceof SocketTimeoutException));
+            // builder.retryOnResult(Objects::isNull);
+            // --- End Deprecated/Removed Logic ---
+
+            // Build the final RetryConfig for this instance
+            RetryConfig finalRetryConfig = builder.build();
+
+            // Create and register the Retry instance
+            Retry retry = registry.retry(instanceName, finalRetryConfig);
+            log.info("Successfully configured and registered Resilience4j Retry instance: {}", instanceName);
+
+            // Optional: Add event listeners here if needed globally for this instance
+            // retry.getEventPublisher().onRetry(event -> log.info("Retrying operation {} attempt #{}", instanceName, event.getNumberOfRetryAttempts()));
         }
 
-        return RetryRegistry.of(builder.build());
+        return registry;
     }
 
     /**
@@ -168,13 +217,12 @@ public class ResilienceConfig {
     /**
      * Configures a ScheduledExecutorService bean for managing timeouts on captcha validation calls.
      *
-     * @return a ScheduledExecutorService instance with a thread pool size of 4?.
+     * @return a ScheduledExecutorService instance with a thread pool size based on properties.
      */
     @Bean(name = "captchaTimeLimiterExecutor") // Use the specific name required by the @Qualifier
     public ScheduledExecutorService captchaTimeLimiterExecutor() {
-        // Choose an appropriate pool size.
-        // Start with a small number and monitor.
-        // This pool is specifically for managing timeouts on captcha validation calls.
-        return Executors.newScheduledThreadPool(executorProperties.getCorePoolSize()); // Pool size
+        // Choose an appropriate pool size based on properties.
+        log.info("Creating ScheduledExecutorService 'captchaTimeLimiterExecutor' with core pool size: {}", executorProperties.getCorePoolSize());
+        return Executors.newScheduledThreadPool(executorProperties.getCorePoolSize()); // Pool size from properties
     }
 }
