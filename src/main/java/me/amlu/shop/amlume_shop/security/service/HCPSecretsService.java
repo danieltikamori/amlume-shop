@@ -147,18 +147,17 @@ public class HCPSecretsService {
             // Use cache's get method with a Callable loader
             return secretsCache.get(key, () -> fetchSingleSecret(key));
         } catch (ExecutionException e) {
-            log.error("Failed to get secret '{}' from cache loader", key, e.getCause() != null ? e.getCause() : e);
+            log.error("Failed to get secret '{}' from cache loader. Cause: {}.", key, e.getCause() != null ? e.getCause() : e);
             Throwable cause = e.getCause();
             // Handle specific exceptions thrown by fetchSingleSecret
-            if (cause instanceof FetchSecretsException) {
-                throw (FetchSecretsException) cause;
-            } else if (cause instanceof HttpClientErrorException.NotFound) {
-                // Specifically handle 404 from fetchSingleSecret
-                throw new FetchSecretsException("Secret not found: " + key, cause);
-            } else if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            } else {
-                throw new FetchSecretsException("Failed to fetch secret '" + key + "' due to cache execution error", e);
+            switch (cause) {
+                case FetchSecretsException fetchSecretsException -> throw fetchSecretsException;
+                case HttpClientErrorException.NotFound notFound ->
+                    // Specifically handle 404 from fetchSingleSecret
+                        throw new FetchSecretsException("Secret not found: " + key, cause);
+                case RuntimeException runtimeException -> throw runtimeException;
+                case null, default ->
+                        throw new FetchSecretsException("Failed to fetch secret '" + key + "' due to cache execution error", e);
             }
         }
     }
@@ -302,14 +301,14 @@ public class HCPSecretsService {
                     }
 
                 } catch (HttpClientErrorException.TooManyRequests e429) {
-                    // --- 429 Handling (remains the same) ---
+                    // --- 429 Handling ---
                     log.error("Client error fetching page {} from HCP: {}", currentPageNum, e429.getStatusCode(), e429);
                     long delaySeconds = 120;
                     try {
                         String responseBody = e429.getResponseBodyAsString();
                         if (responseBody != null && responseBody.contains("try again in ")) {
                             String secondsStr = responseBody.substring(responseBody.indexOf("try again in ") + "try again in ".length()).split(" ")[0];
-                            secondsStr = secondsStr.replaceAll("[^\\d]", "");
+                            secondsStr = secondsStr.replaceAll("\\D", "");
                             if (!secondsStr.isEmpty()) {
                                 delaySeconds = Long.parseLong(secondsStr);
                                 delaySeconds = Math.max(1, Math.min(delaySeconds + 2, 300));
@@ -393,7 +392,7 @@ public class HCPSecretsService {
         return headers;
     }
 
-    // --- Convenience getters remain the same ---
+    // --- Convenience getters ---
     public String getPasetoAccessPrivateKey() {
         return getSecret(PASETO_ACCESS_PRIVATE_KEY);
     }
@@ -420,7 +419,7 @@ public class HCPSecretsService {
     // --- End Convenience getters ---
 
 
-    // --- Error Handling remains the same ---
+    // --- Error Handling ---
     private void handleClientError(HttpClientErrorException e) {
         switch (e.getStatusCode()) {
             case UNAUTHORIZED: throw new FetchSecretsException("Unauthorized to fetch secrets", e);
