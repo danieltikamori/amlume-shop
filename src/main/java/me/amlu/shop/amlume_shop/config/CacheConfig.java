@@ -19,8 +19,8 @@ import org.springframework.context.annotation.Configuration;
  * Specific CacheManager and Redis configurations are in ValkeyCacheConfig.
  * In-memory Guava caches and custom metrics have been removed in favor of Redis and Actuator.
  */
-@EnableCaching
-@Configuration
+//@EnableCaching
+//@Configuration
 public class CacheConfig {
 
     // --- Logging/Comments about removed features ---

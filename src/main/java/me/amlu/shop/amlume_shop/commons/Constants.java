@@ -30,39 +30,45 @@ public final class Constants {
 
     // --- Cache Names ---
     // Define constants for cache names used in the application
-    public static final String USERS_CACHE = "users";
+    public static final String USERS_CACHE = "usersCache";
     public static final String CURRENT_USER_CACHE = "currentUser";
-    public static final String AUTH_CACHE = "auth";
-    public static final String PRODUCTS_CACHE = "products";
-    public static final String PRODUCT_LIST_CACHE = "product";
-    public static final String CATEGORIES_CACHE = "categories";
-    public static final String ROLES_CACHE = "roles";
-    public static final String ASN_CACHE = "asn";
-    public static final String TOKENS_CACHE = "tokens";
-    public static final String AUTH_ANNOTATIONS_CACHE = "authAnnotations";
+    public static final String AUTH_CACHE = "authCache";
+    public static final String PRODUCTS_CACHE = "productsCache";
+    public static final String PRODUCT_LIST_CACHE = "productListCache";
+    public static final String CATEGORIES_CACHE = "categoriesCache";
+    public static final String ROLES_CACHE = "rolesCache";
+    public static final String ASN_CACHE = "asnCache";
+    public static final String TOKENS_CACHE = "tokensCache";
+    public static final String AUTH_ANNOTATIONS_CACHE = "authAnnotationsCache";
+    public static final String HCP_SECRETS_CACHE = "hcpSecretsCache";
     public static final String TEMPORARY_CACHE = "temporaryCache"; // Used by CacheMaintenanceService
 
 
     // --- Cache Keys ---
-//    public static final String USER_CACHE_KEY_PREFIX = "user::";
     public static final String AUTH_CACHE_KEY_PREFIX = "auth:";
     public static final String LOCK_PREFIX = "auth:lock:";
+//    public static final String USER_CACHE_KEY_PREFIX = "user::";
     public static final String USER_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":user:";
     public static final String ANNOTATION_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":annotation:";
     public static final String CAPTCHA_RATELIMIT_KEY = "captcha:";
     public static final String AUTH_SW_RATELIMIT_KEY = "auth-sw:";
 
-    // --- Cache Durations ---
+    // --- Cache Durations - TTLs (Time-To-Live)---
     public static final Duration ANNOTATION_CACHE_DURATION = Duration.ofHours(24);
     public static final Duration USER_CACHE_DURATION = Duration.ofMinutes(30);
     public static final Duration LOCK_TIMEOUT = Duration.ofSeconds(10);
     public static final Duration USERS_CACHE_TTL = Duration.ofMinutes(15); // User details - shorter TTL
     public static final Duration ROLES_CACHE_TTL = Duration.ofHours(4);
+//    public static final Duration ROLES_CACHE_TTL = Duration.ofHours(2);
     public static final Duration TOKENS_CACHE_TTL = Duration.ofHours(1); // Tokens - TTL should match token validity
     public static final Duration AUTH_CACHE_TTL = Duration.ofHours(6);
     public static final Duration PRODUCTS_CACHE_TTL = Duration.ofDays(3);
+//    public static final Duration PRODUCTS_CACHE_TTL = Duration.ofMinutes(30);
     public static final Duration CATEGORIES_CACHE_TTL = Duration.ofDays(7);
+//    public static final Duration CATEGORIES_CACHE_TTL = Duration.ofHours(1);
     public static final Duration ASN_CACHE_TTL = Duration.ofDays(15);
+//    public static final Duration ASN_CACHE_TTL = Duration.ofDays(7);
+    public static final Duration HCP_SECRETS_CACHE_TTL = Duration.ofMinutes(35); // (e.g., slightly longer than secrets refresh interval)
     public static final Duration TEMPORARY_CACHE_TTL = Duration.ofMinutes(10); // Cleaned by maintenance service
 
 

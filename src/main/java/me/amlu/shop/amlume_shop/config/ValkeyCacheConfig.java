@@ -184,6 +184,7 @@ public class ValkeyCacheConfig {
                 .withCacheConfiguration(Constants.ASN_CACHE, defaultCacheConfig.entryTtl(ASN_CACHE_TTL))
                 .withCacheConfiguration(Constants.TOKENS_CACHE, defaultCacheConfig.entryTtl(TOKENS_CACHE_TTL))
                 .withCacheConfiguration(Constants.TEMPORARY_CACHE, defaultCacheConfig.entryTtl(TEMPORARY_CACHE_TTL))
+                .withCacheConfiguration(Constants.HCP_SECRETS_CACHE, defaultCacheConfig.entryTtl(HCP_SECRETS_CACHE_TTL))
                 // Add any other caches defined in Constants that need specific TTLs
                 // e.g., .withCacheConfiguration(Constants.AUTH_CACHE, defaultCacheConfig.entryTtl(AUTH_CACHE_TTL))
 
@@ -192,6 +193,14 @@ public class ValkeyCacheConfig {
                 .transactionAware(); // Enable if cache operations should participate in Spring transactions
     }
 
+    // --- Optional: Explicit CacheManager Bean (if needed elsewhere, otherwise customizer is enough) ---
+    // @Bean
+    // public CacheManager cacheManager(RedisConnectionFactory connectionFactory, RedisCacheConfiguration defaultCacheConfig, RedisCacheManagerBuilderCustomizer customizer) {
+    //     RedisCacheManager.RedisCacheManagerBuilder builder = RedisCacheManager.builder(connectionFactory)
+    //             .cacheDefaults(defaultCacheConfig);
+    //     customizer.customize(builder); // Apply customizations
+    //     return builder.build();
+    // }
 
     // Keep Lua script bean if used for rate limiting or other custom Redis operations
     @Bean
