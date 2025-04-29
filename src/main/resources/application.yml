@@ -162,6 +162,7 @@ notification:
     webhook-url: ${SLACK_WEBHOOK_URL}
     channel: ${SLACK_CHANNEL_NAME}
     channel-id: ${SLACK_CHANNEL_ID}
+    token: ${SLACK_API_TOKEN}
 
 #paseto:
 #  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
@@ -203,27 +204,27 @@ paseto:
     local:
       # Define the properties expected by PasetoProperties.Access.Local
       # Use ${ENV_VAR_NAME:default_value} to read from environment or provide a default
-      secret-key: ${PASETO_ACCESS_SECRET_KEY:""} # Read from env, default to empty if not set
-      kid: ${PASETO_ACCESS_LOCAL_KID:""}       # Read from env, default to empty if not set
+      secret-key:
+      kid:
       # expiration: 3600 # Optional: Override default if needed for local access tokens specifically
     public:
       # Define the properties expected by PasetoProperties.Access.Public
-      private-key: ${PASETO_ACCESS_PRIVATE_KEY:""} # Read from env
-      public-key: ${PASETO_ACCESS_PUBLIC_KEY:""}  # Read from env
-      kid: ${PASETO_ACCESS_PUBLIC_KID:""}       # Read from env
+      private-key:
+      public-key:
+      kid:
       expiration: 3600 # Can override default access expiration if needed for public access tokens
   refresh:
     expiration: 86400 # Default expiration for refresh tokens
     local:
       # Define the properties expected by PasetoProperties.Refresh.Local
-      secret-key: ${PASETO_REFRESH_SECRET_KEY:""} # Read from env
-      kid: ${PASETO_REFRESH_LOCAL_KID:""}       # Read from env
+      secret-key:
+      kid:
       # expiration: 86400 # Optional: Override default if needed for local refresh tokens
     public:
       # Define the properties expected by PasetoProperties.Refresh.Public
-      private-key: ${PASETO_REFRESH_PRIVATE_KEY:""} # Read from env
-      public-key: ${PASETO_REFRESH_PUBLIC_KEY:""}  # Read from env
-      kid: ${PASETO_REFRESH_PUBLIC_KID:""}       # Read from env
+      private-key:
+      public-key:
+      kid:
       expiration: 86400 # Can override default refresh expiration if needed for public refresh tokens
 
 recaptcha:
@@ -486,85 +487,82 @@ security:
     suspicious-distance-km: 500.0 # Default distance in KM for impossible travel check
     time-window-hours: 24       # Default time window in hours for location history cache TTL
     known-vpn-asns: # List of ASNs considered likely VPNs/Proxies
-      - "AS9009"  # M247
-      - "AS12876" # ONLINE S.A.S.
-      - "AS16276" # OVH SAS
-      - "AS14061" # DigitalOcean
-      - "AS45102" # Alibaba
-      - "AS7552"  # Viettel
-      - "AS4766"  # Korea Telecom
-      - "AS9299"  # Philippine Long Distance Telephone
-      - "AS4134"  # Chinanet
-      - "AS3356"  # Level3 (Lumen)
-      - "AS3257"  # GTT Communications
-      - "AS6939"  # Hurricane Electric
-      - "AS174"   # Cogent Communications
-      - "AS2914"  # NTT America
-      - "AS3491"  # PCCW Global
-      - "AS1299"  # Telia Carrier
-      - "AS7018"  # AT&T
-      - "AS3320"  # Deutsche Telekom
-      - "AS6461"  # Zayo Bandwidth
-      - "AS6453"  # TATA Communications
-      - "AS20473" # Choopa, LLC (Vultr)
-      - "AS51167" # Contabo GmbH
-      - "AS24940" # Hetzner Online GmbH
-      - "AS14618" # Amazon
-      - "AS16509" # Amazon AWS
-      - "AS8075"  # Microsoft Azure
-      - "AS15169" # Google
-      - "AS396982" # Google Cloud
-      - "AS13335" # Cloudflare
-      - "AS45090" # Tencent Cloud
-      - "AS37963" # Alibaba Cloud
-      - "AS4837"  # China Unicom
-      - "AS9808"  # China Mobile
-      - "AS4808"  # CHINA169-BJ
-      - "AS4538"  # China Education and Research Network
-      - "AS17621" # China Unicom Shanghai
-      - "AS4812"  # China Telecom
-      - "AS9394"  # China TieTong
-      - "AS9929"  # China Netcom
-      - "AS58593" # Microsoft Mobile
-      - "AS132203" # Tencent Building, Kejizhongyi Avenue
-      - "AS45102" # Alibaba (China) Technology Co., Ltd.
-      - "AS55967" # Beijing Baidu Netcom Science and Technology Co., Ltd.
-      - "AS137971" # Perfect Online Technology
-      - "AS134105" # KATECH
-      - "AS9269"  # Hong Kong Broadband Network
-      - "AS4760"  # HKT Limited
-      - "AS9304"  # HGC Global Communications Limited
-      - "AS4515"  # ERX-STAR HKT Limited
-      - "AS7713"  # PT Telekomunikasi Indonesia
-      - "AS7473"  # Singapore Telecommunications Limited
-      - "AS4657"  # StarHub Ltd
-      - "AS9892"  # Mobile One Ltd
-      - "AS9443"  # Link Broadband
-      - "AS9583"  # Sify Limited
-      - "AS55410" # VnCloud
-      - "AS38001" # NewMedia Express
-      - "AS45899" # VNPT Corp
-      - "AS131429" # Megatron
-      - "AS135905" # VNPT
-      - "AS45543" # SingNet
-      - "AS56308" # Telin
-      - "AS24203" # NAPXLNET
-      - "AS24378" # ENGTAC
-      - "AS133752" # LEASEWEB-APAC-HKG-10
-      - "AS133480" # INTERGRID
-      - "AS132816" # SIMPLERCLOUD-AS-AP
-      - "AS132787" # MNSPL
-      - "AS132203" # TENCENT
-      - "AS131584" # TAIFO
-      - "AS45102" # CNNIC-ALIBABA-CN-NET-AP
-      - "AS38283" # CHINANET
-      - "AS23724" # CHINANET-IDC
-      - "AS17621" # CNCGROUP-SH
-      - "AS4134"   # CHINANET-BACKBONE
+      - "AS174"
+      - "AS1299"
+      - "AS2914"
+      - "AS3257"
+      - "AS3320"
+      - "AS3356"
+      - "AS3491"
+      - "AS4134"
+      - "AS4515"
+      - "AS4538"
+      - "AS4657"
+      - "AS4760"
+      - "AS4766"
+      - "AS4808"
+      - "AS4812"
+      - "AS4837"
+      - "AS6453"
+      - "AS6461"
+      - "AS6939"
+      - "AS7018"
+      - "AS7473"
+      - "AS7552"
+      - "AS7713"
+      - "AS8075"
+      - "AS9009"
+      - "AS9269"
+      - "AS9299"
+      - "AS9304"
+      - "AS9394"
+      - "AS9443"
+      - "AS9583"
+      - "AS9808"
+      - "AS9892"
+      - "AS9929"
+      - "AS12876"
+      - "AS13335"
+      - "AS14061"
+      - "AS14618"
+      - "AS15169"
+      - "AS16276"
+      - "AS16509"
+      - "AS17621"
+      - "AS20473"
+      - "AS23724"
+      - "AS24203"
+      - "AS24378"
+      - "AS24940"
+      - "AS37963"
+      - "AS38001"
+      - "AS38283"
+      - "AS45090"
+      - "AS45102"
+      - "AS45543"
+      - "AS45899"
+      - "AS51167"
+      - "AS55410"
+      - "AS55967"
+      - "AS56308"
+      - "AS58593"
+      - "AS131429"
+      - "AS131584"
+      - "AS132203"
+      - "AS132787"
+      - "AS132816"
+      - "AS133480"
+      - "AS133752"
+      - "AS134105"
+      - "AS135905"
+      - "AS137971"
+      - "AS396982"
       # ... Add others as necessary ...
     high-risk-countries: # List of ISO country codes considered high-risk
       - "IR" # Iran
       # Add other relevant countries based on risk assessment
+    known-vpn-ip-ranges: "" # List of known VPN IP ranges (CIDR format)
+    known-datacenter-ranges: "" # List of known datacenter IP ranges (CIDR format)
   ip:
     suspicious-requests-threshold: 5
     block-threshold: 10
@@ -645,7 +643,8 @@ spring:
         default-context: "" # Looks for secrets under secret/amlume-shop/mfa
         # profile-separator: '/' # Usually default is fine
   config:
-    import: "optional:vault://" # <<< IMPORTANT: Makes Vault optional at startup
+        # Explicitly import vault (optional) AND the secrets file from the classpath (optional)
+    import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"]
     gateway:
       routes:
         - id: asn_lookup_route
@@ -712,11 +711,6 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
-  main:
-    #    allow-circular-references: true
-    keep-alive: true
-    web-application-type: servlet # or reactive if using WebFlux
-
   mail:
     host: ${MAIL_HOST}
     username: ${MAIL_USERNAME}
@@ -729,9 +723,10 @@ spring:
             enable: ${MAIL_STARTTLS_ENABLE}
           auth: ${MAIL_AUTH_ENABLE}
 
-# --- Spring Profiles - local, dev, or this main ---
-  profiles:
-    active: local
+  main:
+    #    allow-circular-references: true
+    keep-alive: true
+    web-application-type: servlet
 
   threads:
     virtual:
@@ -811,6 +806,13 @@ token:
     validity: 86400 # 24 hours
     auto-refresh: true
   validation:
+    # Use a duration format (e.g., 10s for 10 seconds)
+    # This value comes from Constants.CLOCK_SKEW_TOLERANCE, let's use 10s as example
+    clock-skew-tolerance: 10s
+    # These likely come from other properties or defaults
+    issuer: ${service.name:amlume-shop} # Use service name or default
+    audience: ${service.audience:amlume-audience} # Use audience property or default
+
     rate-limit:
       permits-per-second: 10
       max-attempts: 5
@@ -822,9 +824,9 @@ token:
       lockout-duration-days: 1
 
 valkey:
-  nodes: ${VALKEY_HOST}:${VALKEY_PORT:6379}
-  host: ${VALKEY_HOST:localhost}
-  port: ${VALKEY_PORT:6379}
+  nodes: ${VALKEY_HOST}:${VALKEY_PORT}
+  host: ${VALKEY_HOST}
+  port: ${VALKEY_PORT}
   password: ${VALKEY_PASSWORD:}
   database: ${VALKEY_DATABASE}
   timeout: 5000
@@ -861,23 +863,27 @@ valkey:
     jmx-name-prefix: "valkey.pool"
 
 # Rely primarily on spring.cloud.vault. * properties
-#vault:
+vault:
 #  uri: ${VAULT_URI}
 #  token: ${VAULT_TOKEN}
 #  secret:
 #    base-path: secret/data/amlume-shop
 #    database-path: secret/data/amlume-shop/database
-#  kubernetes:
-#    uri: http://vault.default.svc.cluster.local:8200
-#    role: "vault_role" # Placeholder for now
+  docker:
+    uri: http://localhost:8200
+    token: ${VAULT_TOKEN}
+    approle: reader
+  kubernetes:
+    uri: http://vault.default.svc.cluster.local:8200
+    role: "vault_role" # Placeholder for now
 #  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
-#  hcp:
-#    uri: ${VAULT_HCP_URI}
-#    token: ${VAULT_HCP_TOKEN}
-#    approle: # AppRple - fetch secret-id securely
-#      path: ${VAULT_HCP_APP_ROLE_PATH}
-#      role-id: ${VAULT_HCP_APP_ROLE_ID}
-#      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
+  hcp:
+    uri: ${VAULT_HCP_URI}
+    token: ${VAULT_HCP_TOKEN}
+    approle: # AppRple - fetch secret-id securely
+      path: ${VAULT_HCP_APP_ROLE_PATH}
+      role-id: ${VAULT_HCP_APP_ROLE_ID}
+      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
 
 web:
   cors:
