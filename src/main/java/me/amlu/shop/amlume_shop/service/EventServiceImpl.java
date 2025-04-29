@@ -11,11 +11,13 @@
 package me.amlu.shop.amlume_shop.service;
 
 import me.amlu.shop.amlume_shop.model.Event;
+import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.stream.Collectors;
 import java.util.List;
 
+@Service
 public class EventServiceImpl implements EventServiceInterface {
 
     private final List<Event> events = List.of(
