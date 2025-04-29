@@ -15,6 +15,7 @@ import jakarta.annotation.PostConstruct;
 import me.amlu.shop.amlume_shop.config.SecurityAuditorAware;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
 import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
+import me.amlu.shop.amlume_shop.config.security.TokenValidationConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -41,7 +42,7 @@ import java.util.TimeZone;
 @EnableTransactionManagement
 @EnableJpaAuditing(auditorAwareRef = "auditorAware") // Ensure you have an AuditorAware bean named "auditorAware"
 @ConfigurationPropertiesScan
-@EnableConfigurationProperties({TokenCacheProperties.class, AsnProperties.class})
+@EnableConfigurationProperties({TokenCacheProperties.class, AsnProperties.class, TokenValidationConfig.class})
 public class AmlumeShopApplication {
 
     /**
@@ -72,8 +73,14 @@ public class AmlumeShopApplication {
         // --- Load .env file VERY EARLY ---
         Dotenv dotenv = Dotenv.configure()
                 .ignoreIfMissing() // Optional: won't fail if .env is not there
+                .systemProperties() // Load system properties
                 .load();
         // ---------------------------------
+
+        // --- TEMPORARY DEBUG LOG ---
+        System.out.println("DEBUG: PASETO_ACCESS_PRIVATE_KEY from System Properties: " + System.getProperty("PASETO_ACCESS_PRIVATE_KEY"));
+
+
         SpringApplication.run(AmlumeShopApplication.class, args);
 
         // Log the available beans
