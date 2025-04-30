@@ -1,0 +1,58 @@
+# Title: Authentication Migration Strategy: Embracing Keycloak and Vault, Phasing Out Custom PASETO
+
+## The Question: Should we retain our custom PASETO implementation alongside Keycloak? Should we integrate Vault for secret management in conjunction with Keycloak?
+
+## Status: Accepted
+
+## Context
+
+Our current architecture includes a custom PASETO-based authentication mechanism. We are planning to integrate Keycloak, a standard Identity and Access Management (IAM) solution, to centralize our authentication and authorization processes. Additionally, we are considering leveraging Vault for secure secret management.
+
+Keycloak offers comprehensive IAM features, including user management, authentication (supporting protocols like OAuth2 and OpenID Connect), authorization, and Single Sign-On (SSO). It issues standard JWTs for authenticated users.
+
+PASETO (Platform-Agnostic Security Tokens) is a secure, stateless token format. Our application currently uses a custom implementation for generating and validating PASETO tokens.
+
+Vault is a secrets management tool designed for securely storing and accessing sensitive information like API keys, passwords, and certificates. It provides robust access control and audit logging.
+
+## Decision
+
+We will adopt the following strategy:
+
+1.  **Replace our custom PASETO implementation for user authentication with Keycloak's standard JWTs.** Keycloak will become the central authority for issuing and managing user authentication tokens. Our applications will be configured as OAuth2 Resource Servers (and potentially OIDC Clients) to validate these JWTs.
+
+2.  **Integrate Vault (or HCP Secrets, pending resolution of observed issues) for managing application secrets.** Vault will serve as the secure repository for sensitive information, including database credentials, API keys (such as those for payment gateways), and the Keycloak client secret.
+
+## Consequences
+
+**Positive Consequences:**
+
+* **Simplified Security Architecture:** Eliminating the custom PASETO implementation for user authentication will reduce complexity and code maintenance within our applications.
+* **Adherence to Standards:** Utilizing Keycloak's JWTs aligns us with industry-standard protocols (OIDC/OAuth2), improving interoperability and leveraging a wider ecosystem of tools and knowledge.
+* **Enhanced Security:** Centralizing identity management with Keycloak and secret management with Vault strengthens our overall security posture.
+* **Leveraging Keycloak Features:** We can fully utilize Keycloak's advanced features like SSO, MFA, and centralized user management.
+* **Secure Secret Management:** Vault provides a robust and auditable way to manage sensitive application secrets, reducing the risk of exposure.
+* **Improved Development Efficiency:** Relying on standard, well-supported tools simplifies development and reduces the likelihood of security vulnerabilities arising from custom implementations.
+
+**Negative Consequences:**
+
+* **Migration Effort:** Refactoring our applications to integrate with Keycloak for authentication and Vault for secrets will require development effort. This includes updating security configurations and removing the existing PASETO-related code.
+* **Dependency on External Services:** We will introduce dependencies on Keycloak and Vault, which need to be properly managed, secured, and made highly available.
+* **Learning Curve:** Developers will need to become proficient in integrating with Keycloak and Vault.
+* **Potential Performance Considerations:** Introducing external service calls for authentication and secret retrieval might have minor performance implications, which will need to be monitored and optimized.
+
+## Related Decisions
+
+{/* * [20250430-Authentication-migration](./20250430-Authentication-migration.mdx) (This ADR is a direct outcome of the analysis in the linked document) */}
+
+## References
+
+* [Keycloak](https://www.keycloak.org/)
+* [Paseto](https://paseto.io/)
+* [Vault](https://www.vaultproject.io/)
+
+## Notes
+
+* This decision prioritizes adopting industry standards and leveraging dedicated tools for identity and secret management to enhance security and simplify our application architecture.
+* The transition will be carefully planned to minimize disruption to existing services.
+* We will invest in training and documentation to ensure the team(myself) is proficient in using Keycloak and Vault.
+* The choice between local Docker Vault and HCP Secrets for production will be revisited based on the resolution of the observed issues with HCP Secrets and our specific operational requirements.
