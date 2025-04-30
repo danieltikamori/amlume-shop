@@ -61,6 +61,9 @@ import static org.springframework.http.HttpStatus.*;
  * IMPORTANT: NOT COMPLETELY FUNCTIONAL
  * IT DOES WORK FOR THE FIRST PAGE OF SECRETS. WE CANNOT GET OTHER PAGES SECRETS.
  * TODO: SOLVE PAGINATION ISSUE, LIKELY PROVIDER SIDE
+ *
+ * IMPORTANT 2: DO NOT USE CACHING AS IT IS NOT SECURE. THIS WAY WE DO NOT INCREASE ATTACK SURFACE.
+ *
  * This service handles fetching secrets from HCP (HashiCorp Cloud Platform) using the HCP API.
  * It manages token generation, caching, and pagination for retrieving secrets.
  * <p>
@@ -70,7 +73,7 @@ import static org.springframework.http.HttpStatus.*;
 @Profile({"!local", "!prod", "!docker", "!kubernetes"}) // Only active in profiles other than "local" and others listed
 //@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
 @Service
-@CacheConfig(cacheNames = Constants.HCP_SECRETS_CACHE) // Set default cache name for this class
+//@CacheConfig(cacheNames = Constants.HCP_SECRETS_CACHE) // Set default cache name for this class
 public class HCPSecretsService {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPSecretsService.class);
@@ -138,7 +141,7 @@ public class HCPSecretsService {
      * @return The secret value.
      * @throws FetchSecretsException if the secret cannot be found or fetched after retries.
      */
-    @Cacheable(key = "#key", unless = "#result == null") // Cache based on key, don't cache null results
+//    @Cacheable(key = "#key", unless = "#result == null") // Cache based on key, don't cache null results
     public String getSecret(String key) throws FetchSecretsException {
         log.info("Cache miss for secret '{}'. Fetching directly from HCP.", key); // Log cache miss
         String url = buildSingleSecretUrl(key);
@@ -390,23 +393,24 @@ public class HCPSecretsService {
         throw new FetchSecretsException("Server error (" + e.getStatusCode() + ") while fetching secrets", e);
     }
 
-    /**
-     * Scheduled task to refresh all secrets by invalidating the cache
-     * and triggering a full fetch via pagination.
-     * Uses @CacheEvict to clear the cache before execution.
-     */
-    @Scheduled(fixedRateString = "${hcp.secrets.refresh-interval:1800000}") // Default 30 minutes
-    @CacheEvict(allEntries = true, beforeInvocation = true) // Evict all entries in HCP_SECRETS_CACHE before method runs
-    public void refreshSecrets() {
-        try {
-            log.info("Starting scheduled secrets refresh (cache evicted)...");
-            // Trigger reload by calling the pagination fetch method directly
-            // The @CacheEvict annotation handles the cache clearing.
-            fetchSecretsWithPagination();
-            log.info("Completed scheduled secrets refresh. Cache repopulated.");
-        } catch (Exception e) {
-            log.error("Scheduled secrets refresh failed after cache eviction.", e);
-            // Allow scheduler to continue
-        }
-    }
-}
+    // AVOID CACHING TO NOT INCREASE ATTACK SURFACE
+//    /**
+//     * Scheduled task to refresh all secrets by invalidating the cache
+//     * and triggering a full fetch via pagination.
+//     * Uses @CacheEvict to clear the cache before execution.
+//     */
+//    @Scheduled(fixedRateString = "${hcp.secrets.refresh-interval:1800000}") // Default 30 minutes
+////    @CacheEvict(allEntries = true, beforeInvocation = true) // Evict all entries in HCP_SECRETS_CACHE before method runs
+//    public void refreshSecrets() {
+//        try {
+//            log.info("Starting scheduled secrets refresh (cache evicted)...");
+//            // Trigger reload by calling the pagination fetch method directly
+//            // The @CacheEvict annotation handles the cache clearing.
+//            fetchSecretsWithPagination();
+//            log.info("Completed scheduled secrets refresh. Cache repopulated.");
+//        } catch (Exception e) {
+//            log.error("Scheduled secrets refresh failed after cache eviction.", e);
+//            // Allow scheduler to continue
+//        }
+//    }
+//}
