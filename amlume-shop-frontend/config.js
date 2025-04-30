@@ -8,8 +8,6 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
-
-public interface AsnSimpleCacheService {
-    String getAsn(String ip);
-}
+export const API_ENDPOINTS = {
+    deviceFingerprint: process.env.DEVICE_FINGERPRINT_ENDPOINT || '/api/device-fingerprint'
+};

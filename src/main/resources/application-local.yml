@@ -8,81 +8,10 @@
 # Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
 #
 
-alert:
-  max-batch-size: 100
-
-asn:
-  ratelimit:
-    window-seconds: 60
-    max-requests: 100
-    capacity: 100
-  stale-threshold: 30d # days for DB cleanup
-  cleanup-schedule: "0 0 3 * * *" # Cron expression for daily cleanup
-  reputation:
-    # ttl: 31d # Optional: Explicit TTL for Redis reputation entries
-    decay:
-      schedule: "0 1 4 * * *" # Schedule for the (currently no-op) decay task
-  update:
-    schedule: 0 0 0 * * *
-
-cache:
-  revoked-token:
-    ttl-seconds: 3600 # TTL in seconds (e.g., 3600 for 1 hour)
-  token:
-    initial-capacity: ${CACHE_INITIAL_CAPACITY:100}
-    maximum-size: ${CACHE_MAXIMUM_SIZE:10000}
-    expiration-minutes: ${CACHE_EXPIRATION_MINUTES:30}
-    revoked-cache:
-      max-size: 10000
-  stats:
-    report:
-      interval: 60000  # milliseconds
-  asn:
-    size: 10000
-    expiration: 1h
-
-cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS}
-  allowed-methods: ${CORS_ALLOWED_METHODS}
-
-geoip:
-  database:
-    #    path: classpath:GeoLite2-Country.mmdb
-    path: classpath:/project/geoip/GeoLite2-City.mmdb
-  license:
-    account-id: ${GEOIP2_ACCOUNT_ID}
-    key: ${GEOIP2_LICENSE_KEY}
-
-geoip2:
-  database:
-    # Path used by GeoIp2Service / AsnConfig
-    # Use 'file:' prefix to load from the filesystem absolute path
-#    classpath: instruct Spring  to search the file within the compiled resources of the application
-    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
-  #    path: classpath:geolite2/GeoLite2-ASN.mmdb
-  #    Or if using City database
-  #    path: classpath:geolite2/GeoLite2-City.mmdb
-  account-id: ${GEOIP2_ACCOUNT_ID}
-  license-key: ${GEOIP2_LICENSE_KEY}
-
-hcp:
-  client-id: ${HCP_CLIENT_ID}
-  client-secret: ${HCP_CLIENT_SECRET}
-  organization-id: ${HCP_ORGANIZATION_ID}
-  project-id: ${HCP_PROJECT_ID}
-  app-name: ${HCP_APP_NAME}
-
-jti:
-  bloomfilter:
-    expected-insertions: 1000000
-    false-positive-probability: 0.01
-  cleanup:
-    rate-ms: 300000 # Cleanup every 5 minutes (300,000 ms)
-
+# --- Logging ---
 logging:
   level:
     org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
-    #    root: DEBUG
     me.amlu.shop.amlume_shop: DEBUG
     me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
     me.amlu.shop.amlume_shop.service: DEBUG
@@ -93,515 +22,14 @@ logging:
     me.amlu.shop.amlume_shop.exception: DEBUG
     me.amlu.shop.amlume_shop.model: DEBUG
 
-#mail:
-#  host: ${MAIL_HOST}
-#  username: ${MAIL_USERNAME}
-#  password: ${MAIL_PASSWORD}
-#  port: ${MAIL_PORT}
-#  properties:
-#    mail:
-#      smtp:
-#        starttls:
-#          enable: ${MAIL_STARTTLS_ENABLE}
-#        auth: ${MAIL_AUTH_ENABLE}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics, caches
-  health:
-    livenessState:
-      enabled: true
-    readinessState:
-      enabled: true
-    show-details: when_authorized # always
-  metrics:
-    cache:
-      instrument: true # Enable cache metrics collection
-    enabled: true
-    enable:
-      all: true
-      cache: true
-      redis: true # Ensure Redis metrics are enabled
-    tags:
-      application: ${spring.application.name}
-    distribution:
-      # Enable histogram for specific metrics
-      percentiles-histogram:
-        http.server.requests: true
-        valkey.operation.duration: true
-        paseto.token.validation: true
-      # Define the specific percentiles to compute for enabled histograms
-      percentiles:
-        paseto.token.validation: [ 0.5, 0.95, 0.99 ]
-  prometheus:
-    metrics:
-      export:
-        enabled: true
-        step: 10s
-#          valkey.operation.duration: [0.5, 0.95, 0.99]
-#          http.server.requests: [0.5, 0.95, 0.99]
-
-mfa:
-  encryption:
-    password: ${MFA_ENCRYPTION_PASSWORD}
-    salt: ${MFA_ENCRYPTION_SALT}
-  excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
-  rate-limit:
-    max-attempts: 5
-    window-seconds: 300  # 5 minutes
-    time-window-minutes: 30
-
-notification:
-  email:
-    from: ${NOTIFICATION_EMAIL_FROM}
-    to: ${NOTIFICATION_EMAIL_TO}
-  slack:
-    webhook-url: ${SLACK_WEBHOOK_URL}
-    channel: ${SLACK_CHANNEL_NAME}
-    channel-id: ${SLACK_CHANNEL_ID}
-    token: ${SLACK_API_TOKEN}
-
-#paseto:
-#  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
-#  expiration: 3600                  # Non-sensitive config is fine here
-#  access:
-#    expiration: 3600
-#    local:
-#      expiration: 3600
-#      secret-key: ${PASETO_ACCESS_SECRET_KEY}
-#      kid: ${PASETO_ACCESS_LOCAL_KID}
-#    public:
-#      expiration: 3600
-#      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
-#      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
-#      kid: ${PASETO_ACCESS_PUBLIC_KID}
-#  refresh:
-#    expiration: 86400
-#    local:
-#      expiration: 86400
-#      secret-key: ${PASETO_REFRESH_SECRET_KEY}
-#      kid: ${PASETO_REFRESH_LOCAL_KID}
-#    public:
-#      expiration: 86400
-#      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
-#      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
-#      kid: ${PASETO_REFRESH_PUBLIC_KID}
-#  token-no-footer:
-#    parts: 3
-#  token-with-footer:
-#    parts: 4
-
-# application.yml
-
-paseto:
-  token-no-footer-parts: 3 #Maps to PasetoProperties.tokenNoFooterParts
-  token-with-footer-parts: 4 #Maps to PasetoProperties.tokenWithFooterParts
-  access:
-    expiration: 3600 # Default expiration for access tokens
-    local:
-      # Define the properties expected by PasetoProperties.Access.Local
-      # Use ${ENV_VAR_NAME:default_value} to read from environment or provide a default
-      secret-key:
-      kid:
-      # expiration: 3600 # Optional: Override default if needed for local access tokens specifically
-    public:
-      # Define the properties expected by PasetoProperties.Access.Public
-      private-key:
-      public-key:
-      kid:
-      expiration: 3600 # Can override default access expiration if needed for public access tokens
-  refresh:
-    expiration: 86400 # Default expiration for refresh tokens
-    local:
-      # Define the properties expected by PasetoProperties.Refresh.Local
-      secret-key:
-      kid:
-      # expiration: 86400 # Optional: Override default if needed for local refresh tokens
-    public:
-      # Define the properties expected by PasetoProperties.Refresh.Public
-      private-key:
-      public-key:
-      kid:
-      expiration: 86400 # Can override default refresh expiration if needed for public refresh tokens
-
-recaptcha:
-  secret: ${RECAPTCHA_SECRET_KEY}
-  site-key: ${RECAPTCHA_SITE_KEY}
-
-project:
-  image:
-    path: /project/images
-  file:
-    path: /project/files
-  geoip:
-    path: /project/geoip
-
-rate-limiter:
-  redis-key-prefix: "ratelimit:sw:"
-  global-filter-limiter-name: global
-  fail-open: false # Default: deny requests if Redis fails
-  defaults:
-    limit: 100 # Default limit per window
-    window-duration: 1m # Default window duration (1 minute)
-  limiters:
-    captcha: # Specific config for captcha
-      limit: 50
-      window-duration: 1h
-    global:
-      limit: 50
-      window-duration: 1h
-    login: # Specific config for login
-      limit: 10
-      window-duration: 15m
-    authentication: # Specific config for authentication
-      limit: 100
-      window-duration: 1h
-      fail-open: false
-    asnLookup: # Specific config for ASN lookups
-      limit: 200
-      window-duration: 1m
-    deviceFingerprintRegister: # Specific config for device registration
-      limit: 5
-      window-duration: 1h
-    ipSuspicionCheck: # Specific config for suspicious IPs inside IpSecurityServiceImpl
-      limit: 20
-      window-duration: 1m
-    # Add other specific limiters as needed
-
-  token:
-    validation: 200.0
-  claims:
-    validation: 200.0
-  capacity: 100.0
-  duration: 1
-  time-unit: MINUTES
-
-resilience4j:
-  bulkhead:
-    instances:
-      default:
-        max-concurrent-calls: 100
-        max-wait-duration: 300
-      valkeyService:
-        max-concurrent-calls: 100
-
-  circuitbreaker:
-    instances:
-      default:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 20 #
-        recordExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-
-      asnDnsLookup:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 30000 # ms - How long to stay open
-        # recordExceptions: # Exceptions that count as failures
-        #   - java.io.IOException
-        #   - java.util.concurrent.TimeoutException
-        # ignoreExceptions: # Exceptions that *don't* count as failures
-        #   - me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException
-      asnWhoisLookup:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 30000 # ms - How long to stay open
-        # recordExceptions: # Exceptions that count as failures
-        #   - java.io.IOException
-        #   - java.util.concurrent.TimeoutException
-        # ignoreExceptions: # Exceptions that *don't* count as failures
-        #   - me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException
-
-      captchaValidation:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 30000
-
-      rateLimiterRedis:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 20 #
-        recordExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-
-      valkeyService:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 20s
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowType: COUNT_BASED
-
-      vaultService:
-        failureRateThreshold: 50 # Percentage of failures to open
-        registerHealthIndicator: true
-        slidingWindowType: COUNT_BASED
-        slidingWindowSize: 10 # Number of calls to monitor when closed. Monitor last x calls
-        minimumNumberOfCalls: 5 # Need at least x calls before calculating failure rate
-        permittedNumberOfCallsInHalfOpenState: 3 # Allow x calls ins half-open
-        #        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        waitDurationInOpenState: 10s # How long to stay open. Wait x before transitioning to half-open
-        recordExceptions:
-          - org.springframework.vault.VaultException # Retry on Vault exceptions
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions: # Exceptions that *don't* count as failures
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-  #          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException
-
-  executor:
-    instances:
-      default:
-        core-pool-size: 4
-        max-pool-size: 10
-        queue-capacity: 100
-        keep-alive-time: 60s
-        max-wait-time: 30s
-        max-concurrent-calls: 100
-
-  exponential-backoff:
-    instances:
-      default:
-        initial-interval-millis: 200
-        max-interval-millis: 86400000 # 24h
-        eb-multiplier: 1.5
-        randomization-factor: 0.36
-
-  retry:
-    instances:
-      asnLookup:
-        maxAttempts: 3
-        waitDuration: 500ms # Start with 500ms
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions:
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
-          - jakarta.validation.ValidationException
-
-      captchaValidation:
-        maxAttempts: 3
-        waitDuration: 1s
-        enableExponentialBackoff: true
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions:
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-
-      default:
-        max-attempts: 3
-        max-requests-per-minute: 100
-        retry-interval: 1000
-        retry-wait-duration: 200
-
-      rateLimiterRedis:
-        maxAttempts: 3
-        waitDuration: 200ms
-        #        enableExponentialBackoff: true
-        #        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - org.springframework.dao.DataAccessException # Retry on Redis connection issues exceptions
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitException # Retry if our wrapper is thrown due to backend/Redis error
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions: # Exceptions that should NOT trigger a retry
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
-          - jakarta.validation.ValidationException
-
-      vaultService:
-        maxAttempts: 3
-        waitDuration: 500ms # Wait 500 ms between entries
-        enableExponentialBackoff: false # No exponential backoff
-        exponentialBackoffMultiplier: 2
-        retryExceptions:
-          - org.springframework.vault.VaultException # Retry on Vault exceptions
-          - java.io.IOException
-          - java.util.concurrent.TimeoutException
-        ignoreExceptions: # Exceptions not to retry
-          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
-  #          - me.amlu.shop.amlume_shop.exceptions.VaultOperationException # Example: Don't retry our specific exception if thrown directly
-
-  timelimiter:
-    instances:
-      valkeyService:
-        timeoutDuration: 1s
-      #        cancelRunningFuture: true
-      default:
-        timeout-duration: 5
-
-  timeout:
-    instances:
-      valkeyService:
-        timeoutDuration: 1s
-
-  rest-template:
-    connect-timeout: 5000
-    read-timeout: 10000
-
-security:
-  max-devices-per-user: 5
-  max-concurrent-sessions: 2
-  device-fingerprint:
-    hash-algorithm: ${HASH_ALGORITHM}
-    hash-encoding: ${HASH_ENCODING}
-    fingerprint-salt: ${FINGERPRINT_SALT}
-    block-unknown: true
-    excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
-
-    verification-timeout-seconds: 300
-    storage:
-      type: database  # or redis/hazelcast
-    trusted-device:
-      expiration-days: 30
-
-  geo:
-    suspicious-distance-km: 500.0 # Default distance in KM for impossible travel check
-    time-window-hours: 24       # Default time window in hours for location history cache TTL
-    known-vpn-asns: # List of ASNs considered likely VPNs/Proxies
-      - "AS174"
-      - "AS1299"
-      - "AS2914"
-      - "AS3257"
-      - "AS3320"
-      - "AS3356"
-      - "AS3491"
-      - "AS4134"
-      - "AS4515"
-      - "AS4538"
-      - "AS4657"
-      - "AS4760"
-      - "AS4766"
-      - "AS4808"
-      - "AS4812"
-      - "AS4837"
-      - "AS6453"
-      - "AS6461"
-      - "AS6939"
-      - "AS7018"
-      - "AS7473"
-      - "AS7552"
-      - "AS7713"
-      - "AS8075"
-      - "AS9009"
-      - "AS9269"
-      - "AS9299"
-      - "AS9304"
-      - "AS9394"
-      - "AS9443"
-      - "AS9583"
-      - "AS9808"
-      - "AS9892"
-      - "AS9929"
-      - "AS12876"
-      - "AS13335"
-      - "AS14061"
-      - "AS14618"
-      - "AS15169"
-      - "AS16276"
-      - "AS16509"
-      - "AS17621"
-      - "AS20473"
-      - "AS23724"
-      - "AS24203"
-      - "AS24378"
-      - "AS24940"
-      - "AS37963"
-      - "AS38001"
-      - "AS38283"
-      - "AS45090"
-      - "AS45102"
-      - "AS45543"
-      - "AS45899"
-      - "AS51167"
-      - "AS55410"
-      - "AS55967"
-      - "AS56308"
-      - "AS58593"
-      - "AS131429"
-      - "AS131584"
-      - "AS132203"
-      - "AS132787"
-      - "AS132816"
-      - "AS133480"
-      - "AS133752"
-      - "AS134105"
-      - "AS135905"
-      - "AS137971"
-      - "AS396982"
-      # ... Add others as necessary ...
-    high-risk-countries: # List of ISO country codes considered high-risk
-      - "IR" # Iran
-      # Add other relevant countries based on risk assessment
-    known-vpn-ip-ranges: "" # List of known VPN IP ranges (CIDR format)
-    known-datacenter-ranges: "" # List of known datacenter IP ranges (CIDR format)
-  ip:
-    suspicious-requests-threshold: 5
-    block-threshold: 10
-  token:
-    revoked-cache:
-      max-size: 10000
-
-  #      expiration-seconds: 3600
-  user:
-    rate-limit:
-      max-attempts: 5
-      window-seconds: 300  # 5 minutes
-      time-window-minutes: 30
-      lockout-duration-minutes: 30
-    password:
-      min-length: 12
-      max-length: 127
-      strength:
-        min-score: 3
-        min-entropy: 30
-        min-uppercase: 1
-        min-lowercase: 1
-        min-digits: 1
-        min-special: 1
-  vpn:
-    min-suspicious-factors: 2
-
-service:
-  name: ${SERVICE_NAME}
-  audience: ${SERVICE_AUDIENCE}
-  version: ${SERVICE_VERSION}
-  environment: ${SERVICE_ENVIRONMENT}
-
+# --- Spring Boot Core ---
 spring:
   application:
     name: ${SERVICE_NAME:amlume-shop}
     version: ${SERVICE_VERSION}
     environment: ${SERVICE_ENVIRONMENT}
     description: ${SERVICE_DESCRIPTION}
-    audience: ${SERVICE_AUDIENCE}
+    audience: ${SERVICE_AUDIENCE} # Used by token.validation.audience default
     contact:
       name: ${SERVICE_CONTACT_NAME}
       url: ${SERVICE_CONTACT_URL}
@@ -616,107 +44,55 @@ spring:
         url: ${SERVICE_LICENSE_CONTACT_URL}
         email: ${SERVICE_LICENSE_CONTACT_EMAIL}
 
+  # --- Caching (Minimal - Details in ValkeyCacheConfig) ---
   cache:
-    type: redis  # redis/valkey
-    cache-names: mfaTokens
-    redis:
-      # These properties provide defaults that can be overridden by ValkeyCacheConfig
-      time-to-live: 30m # Default TTL if not specified in Java config (matches ValkeyCacheConfig default)
-      cache-null-values: false # Consistent with ValkeyCacheConfig
-      key-prefix: "${spring.application.name}:cache:" # Optional: Add a prefix to all cache keys
-      use-key-prefix: true # Optional: Enable the prefix
+    type: redis # Tell Spring Boot to use Redis/Valkey caching
 
+  # --- Vault Integration ---
   cloud:
     vault:
-#      path: "secret/amlume-shop/mfa"
       enabled: true
-      fail-fast: false  # <<< IMPORTANT: false allows fallback if Vault fails
-#      uri: http://localhost:8200
+      fail-fast: false # Allow app to start if Vault is down initially
       uri: http://vault:8200 # Docker service name
       connection-timeout: 5000 # 5 seconds
       read-timeout: 15000 # 15 seconds
-      ssl:
-        trust-store: classpath:vault-truststore.jks
-        trust-store-password: your_truststore_password
-        key-store: classpath:vault-keystore.jks
-        key-store-password: your_keystore_password
+      # --- Authentication (AppRole Recommended) ---
+      authentication: TOKEN # Use TOKEN for simplicity in local dev
+      token: "token" # Placeholder, not used in AppRole mode
 
-      # --- Authentication (Choose ONE method) ---
-      # Option A: Token Authentication (Easiest for local dev, use root token or a generated one)
-#      authentication: TOKEN # Use APPROLE or Kubernetes auth method
-#      token: token # Use environment variable ${VAULT_TOKEN} or default value, MUST match with docker-compose
-#      token: 95eba8ed-f6fc-958a-f490-c7fd0eda5e9e
-
-      # Option B: AppRole Authentication (More secure, better for non-dev) recommended for production
-      authentication: APPROLE
-      app-role:
-        role-id: ${VAULT_ROLE_ID}   # Read from environment variable
-        secret-id: ${VAULT_SECRET_ID} # Read from environment variable
-        role: "amlume-shop-role" # Optional: Custom role name if not default
-        app-role-path: "approle"   # Optional: Custom AppRole auth backend path
-
+        # Uncomment and configure if using AppRole authentication
+#      authentication: APPROLE
+#      app-role:
+#        role-id: ${VAULT_ROLE_ID}   # Read from environment variable
+#        secret-id: ${VAULT_SECRET_ID} # Read from environment variable
+#        role: "amlume-shop-role" # Optional: Custom role name if not default
+#        app-role-path: "approle"   # Optional: Custom AppRole auth backend path
       # --- KV Secrets Engine Configuration ---
       kv:
         enabled: true
-        backend: secret        # Mount path of KV v2 engine in Vault (default is often 'secret')
+        backend: secret # Mount path of KV v2 engine (default is often 'secret')
         application-name: ${spring.application.name} # Uses spring.application.name by default
-        # application-name: amlume-shop # Explicitly set if needed, often inferred
-        # Default context path: /secret/{spring.application.name} -> /secret/amlume-shop
-        # default-context: secret/amlume-shop # Override the default path construction
         default-context: "local" # Looks for secrets under secret/amlume-shop/local
-        # Optional: Specify the profile separator if you want to use a different one
-        # profile-separator: '/' # Use / instead of , for profiles in paths
+        # profile-separator: '/' # Optional: Specify separator if needed
+      # --- Optional: TLS Configuration (if using HTTPS for local Vault) ---
+      # ssl:
+      #   trust-store: classpath:vault-truststore.jks
+      #   trust-store-password: your_truststore_password # LOAD SECURELY
+      #   key-store: classpath:vault-keystore.jks
+      #   key-store-password: your_keystore_password # LOAD SECURELY
 
-        # --- Optional: TLS Configuration (if using HTTPS for local Vault) ---
-        # ssl:
-        #   trust-store: classpath:vault-truststore.jks
-        #   trust-store-password: your_truststore_password
-        #   key-store: classpath:vault-keystore.jks
-        #   key-store-password: your_keystore_password
-
-        # profile-separator: '/' # Usually default is fine
+  # --- Import Vault ---
   config:
-        # Explicitly import vault (optional) AND the secrets file from the classpath (optional)
-    import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"]
-    gateway:
-      routes:
-        - id: asn_lookup_route
-          uri: lb://asn-lookup-service
-          predicates:
-            - Path=/asn/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-
-  data:
-    redis:
-      password: ${VALKEY_PASSWORD}
-
-  #  datasource:
-  #    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-  #    username: ${DB_USER}
-  #    password: ${DB_PASSWORD}
-  #    driverClassName: org.postgresql.Driver
+    import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"] # Import Vault and optional local secrets override
 
   # --- Datasource (Connect to Docker MySQL) ---
   datasource:
     url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
     username: amlume_user
-    password: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Match docker-compose env
-    driverClassName: com.mysql.cj.jdbc.Driver # Usually inferred
+    password: ${DB_PASSWORD:C0961F7D8F83574BEA49E9B412BBA60704CD720C} # LOAD SECURELY (Env Var preferred)
+    driverClassName: com.mysql.cj.jdbc.Driver
 
-#  h2:
-#    console:
-#      enabled: false
-  #      path: /h2-console
-  #    datasource:
-  #      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-  #      username: sa
-  #      password:
-  #      driverClassName: org.h2.Driver
-
+  # --- Jackson ---
   jackson:
     default-property-inclusion: non_null
     deserialization:
@@ -730,14 +106,12 @@ spring:
     property-naming-strategy: SNAKE_CASE
     time-zone: UTC
 
-  jpa: # To store events in a database
+  # --- JPA / Hibernate ---
+  jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
-    #    database-platform: org.hibernate.dialect.PostgreSQLDialect
-    show-sql: true # Show SQL generated by JPA queries in the console
+    show-sql: true
     hibernate:
-      ddl-auto: update #create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production. validate or none for more control
-      #        dialect: org.hibernate.dialect.MySQLDialect
-      #        dialect: org.hibernate.dialect.PostgreSQLDialect
+      ddl-auto: update # Use "update" for dev, "validate" or "none" for prod
       show-sql: true
     properties:
       hibernate:
@@ -747,77 +121,434 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
+  # --- Mail ---
   mail:
     host: ${MAIL_HOST}
     username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
+    password: ${MAIL_PASSWORD} # LOAD SECURELY
     port: ${MAIL_PORT}
     properties:
       mail:
         smtp:
           starttls:
-            enable: ${MAIL_STARTTLS_ENABLE}
-          auth: ${MAIL_AUTH_ENABLE}
+            enable: ${MAIL_STARTTLS_ENABLE:true}
+          auth: ${MAIL_AUTH_ENABLE:true}
 
+  # --- Main App Settings ---
   main:
-    #    allow-circular-references: true
+    # allow-circular-references: true # Avoid if possible
     keep-alive: true
     web-application-type: servlet
 
+  # --- OAuth2 Resource Server (Keycloak) ---
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/${spring.application.name}/protocol/openid-connect/certs
-          jwk-set-uri: ${spring.application.name}/.well-known/jwks.json # Use service name for JWK set URI
-          jwk-set-cache:
-            cache-size: 1000 # Size of the JWK set cache
-            cache-expiration: 3600s # Expiration time for the cache
-        # If your app also needs to ACT as a client (e.g., for login flow initiation)
-        # Add client registration properties too:
-        #  client:
-        #    registration:
-        #      keycloak: # Or a custom name
-        #        client-id: amlume-shop-backend
-        #        client-secret: ${keycloak.client-secret} # Load from Vault via Spring Cloud Vault
-        #        scope: openid, profile, email # etc.
-        #        authorization-grant-type: authorization_code
-        #        redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
-        #    provider:
-        #      keycloak: # Matches registration name
-        #        issuer-uri: http://localhost:8080/realms/amlume-shop-realm
+          # IMPORTANT: Adjust realm name as needed
+          issuer-uri: http://localhost:8080/realms/amlume-shop-realm # Keycloak issuer URI
+          # jwk-set-uri: # Often inferred from issuer-uri
 
+  # --- Spring Security Filters ---
+  # security: # Merged under spring.security above
+  #   filter-dispatcher-types: async, error, request # Default is usually fine
+  #   filter-order: 1000 # Default order for Spring Security filters
+  #   filter-chain-order: 1000 # Default order for Spring Security filter chains
 
-    filter-dispatcher-types: async, error, request
-    filter-order: 1000 # Default order for Spring Security filters
-    filter-chain-order: 1000 # Default order for Spring Security filter chains
-
-
+  # --- Virtual Threads ---
   threads:
     virtual:
       enabled: true
-      enabled.manually: false
-      name-prefix: ${SERVICE_NAME}
 
-  # --- Valkey Connection Details ---
-  # These are correctly picked up by @Value in ValkeyCacheConfig
-  valkey:
-    host: localhost
-    port: 6379
-    #    password: ${VALKEY_PASSWORD:} # Use empty default if no password
-    # database: ${VALKEY_DATABASE:0} # Optional: Specify database index if not 0
-    # timeout: 5000 # Optional: Connection timeout (consider Lettuce properties below)
-    # --- Lettuce specific properties (optional but recommended) ---
-    lettuce:
-      pool:
-        max-active: 8 # Max connections in pool
-        max-idle: 8   # Max idle connections
-        min-idle: 0   # Min idle connections
-        max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
-      shutdown-timeout: 100ms # Timeout for shutting down the pool
+# --- Actuator ---
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,caches # Expose necessary endpoints
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+    show-details: when_authorized
+  metrics:
+    cache:
+      instrument: true # Enable cache metrics collection
+    enabled: true
+    enable:
+      all: true # Enable all metrics sources by default
+      # cache: true # Covered by 'all: true'
+      # redis: true # Covered by 'all: true'
+    tags:
+      application: ${spring.application.name} # Use application name tag
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        # Add other metrics needing histograms, e.g., valkey.operation.duration if available
+        paseto.token.validation: true
+      percentiles:
+        paseto.token.validation: [ 0.5, 0.95, 0.99 ]
+        # http.server.requests: [0.5, 0.95, 0.99] # Define if needed
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+        step: 10s
 
-# Thread Pool Configuration
-threadpool:
+# --- Custom Application Properties ---
+
+# --- ASN Lookup & Reputation ---
+asn:
+  stale-threshold: 30d # days for DB cleanup
+  cleanup-schedule: "0 0 3 * * *" # Cron expression for daily cleanup
+  reputation:
+    decay:
+      schedule: "0 1 4 * * *" # Schedule for the decay task
+
+# --- Authentication Aspect Retry ---
+auth:
+  aspect:
+    cacheTimeout: 1h # Example, if used by the aspect
+    maxRetryAttempts: 3
+    retryInterval: 1s
+
+# --- Cache Specific TTLs (Handled in ValkeyCacheConfig, but keep properties if beans read them) ---
+cache:
+  revoked-token:
+    ttl-seconds: 3600 # Used by TokenRevocationServiceImpl
+  token: # Used by TokenCacheProperties
+    initial-capacity: 100 # Example default
+    maximum-size: 10000 # Example default
+    expiration-minutes: 30 # Used by TokenCacheProperties
+
+# --- GeoIP / GeoIP2 ---
+geoip:
+  database:
+    path: classpath:/project/geoip/GeoLite2-City.mmdb
+  license:
+    account-id: ${GEOIP_ACCOUNT_ID} # LOAD SECURELY
+    key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
+
+geoip2:
+  database:
+    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
+  account-id: ${GEOIP2_ACCOUNT_ID} # LOAD SECURELY
+  license-key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
+
+# --- HCP (Secrets should be loaded securely) ---
+hcp:
+  client-id: ${HCP_CLIENT_ID} # LOAD SECURELY
+  client-secret: ${HCP_CLIENT_SECRET} # LOAD SECURELY
+  organization-id: ${HCP_ORGANIZATION_ID} # LOAD SECURELY
+  project-id: ${HCP_PROJECT_ID} # LOAD SECURELY
+  app-name: ${HCP_APP_NAME} # LOAD SECURELY
+
+# --- JTI Bloom Filter ---
+jti:
+  bloomfilter:
+    expected-insertions: 1000000
+    false-positive-probability: 0.01
+  cleanup:
+    rate-ms: 300000 # Cleanup every 5 minutes
+
+# --- MFA ---
+mfa:
+  encryption:
+    password: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+    salt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
+  excluded-uris: "/api/auth/,/public/,/health,/favicon.ico,/error,/actuator/**" # Added common exclusions
+  rate-limit:
+    max-attempts: 5
+    window-seconds: 300
+    time-window-minutes: 30 # Redundant if window-seconds is set? Choose one.
+
+# --- Notifications (Secrets should be loaded securely) ---
+notification:
+  email:
+    from: ${NOTIFICATION_EMAIL_FROM:${spring.mail.username}} # Default to spring.mail.username
+    to: ${NOTIFICATION_EMAIL_TO} # LOAD SECURELY
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL} # LOAD SECURELY
+    channel: ${SLACK_CHANNEL} # LOAD SECURELY
+    channel-id: ${SLACK_CHANNEL_ID} # LOAD SECURELY
+    token: ${SLACK_TOKEN} # LOAD SECURELY
+
+# --- PASETO (Keys are empty, loaded via Vault/Env by PasetoProperties) ---
+paseto:
+  token-no-footer-parts: 3
+  token-with-footer-parts: 4
+  access:
+    expiration: 3600 # Default expiration for access tokens
+    local:
+      secret-key: "" # Loaded via Vault/Env
+      kid: ""        # Loaded via Vault/Env
+    public:
+      private-key: "" # Loaded via Vault/Env
+      public-key: ""  # Loaded via Vault/Env
+      kid: ""         # Loaded via Vault/Env
+  refresh:
+    expiration: 86400 # Default expiration for refresh tokens
+    local:
+      secret-key: "" # Loaded via Vault/Env
+      kid: ""        # Loaded via Vault/Env
+    public:
+      private-key: "" # Loaded via Vault/Env
+      public-key: ""  # Loaded via Vault/Env
+      kid: ""         # Loaded via Vault/Env
+
+# --- Project Paths ---
+project:
+  image:
+    path: /project/images
+  file:
+    path: /project/files
+  geoip:
+    path: /project/geoip
+
+# --- Rate Limiter ---
+rate-limiter: # Used by RateLimiterProperties
+  redis-key-prefix: "ratelimit:sw:"
+  global-filter-limiter-name: global
+  fail-open: false
+  defaults:
+    limit: 100
+    window-duration: 1m
+  limiters:
+    captcha:
+      limit: 50
+      window-duration: 1h
+    global:
+      limit: 50
+      window-duration: 1h
+    login:
+      limit: 10
+      window-duration: 15m
+    authentication:
+      limit: 100
+      window-duration: 1h
+      fail-open: false
+    asnLookup:
+      limit: 200
+      window-duration: 1m
+    deviceFingerprintRegister:
+      limit: 5
+      window-duration: 1h
+    ipSuspicionCheck:
+      limit: 20
+      window-duration: 1m
+
+# --- reCAPTCHA (Secret should be loaded securely) ---
+recaptcha:
+  secret: ${RECAPTCHA_SECRET} # LOAD SECURELY
+  site-key: ${RECAPTCHA_SITE_KEY} # Site key is often public
+
+# --- Resilience4j ---
+resilience4j: # Used by ResilienceConfig and related properties beans
+  bulkhead:
+    instances:
+      default:
+        max-concurrent-calls: 100
+        max-wait-duration: 300ms # Use duration format
+      valkeyService: # Renamed from valkeyService for consistency
+        max-concurrent-calls: 100
+  circuitbreaker:
+    instances:
+      default:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 2s # Use duration format
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 20s # Use duration format
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+      asnDnsLookup:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      asnWhoisLookup:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      captchaValidation:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      rateLimiterRedis:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 20s
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+      valkeyService: # Renamed from valkeyService
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowType: COUNT_BASED
+      vaultService:
+        failureRateThreshold: 50
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        recordExceptions:
+          - org.springframework.vault.VaultException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+  executor: # Used by ResilienceConfig
+    instances:
+      default:
+        core-pool-size: 4
+        max-pool-size: 10
+        queue-capacity: 100
+        keep-alive-time: 60s
+        max-wait-time: 30s
+        # max-concurrent-calls: 100 # This seems like a bulkhead property, not executor
+  exponential-backoff: # Used by ResilienceConfig
+    instances:
+      default:
+        initial-interval-millis: 200
+        max-interval-millis: 86400000 # 24h
+        eb-multiplier: 1.5
+        randomization-factor: 0.36
+  retry: # Used by ResilienceConfig via Resilience4jRetryProperties
+    instances:
+      asnLookup:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: true
+        # exponentialBackoffMultiplier: 2 # Uses global exponential config if enabled
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+          - jakarta.validation.ValidationException
+      captchaValidation:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        # exponentialBackoffMultiplier: 2 # Uses global exponential config if enabled
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+      # default: # Define explicit defaults if needed, otherwise Resilience4j defaults apply
+      #   maxAttempts: 3
+      #   waitDuration: 500ms
+      rateLimiterRedis:
+        maxAttempts: 3
+        waitDuration: 200ms
+        retryExceptions:
+          - org.springframework.dao.DataAccessException
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+          - jakarta.validation.ValidationException
+      vaultService:
+        maxAttempts: 3
+        waitDuration: 500ms
+        enableExponentialBackoff: false
+        retryExceptions:
+          - org.springframework.vault.VaultException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
+  timelimiter: # Used by ResilienceConfig
+    instances:
+      valkeyService: # Renamed from valkeyService
+        timeoutDuration: 1s
+      default:
+        timeoutDuration: 5s # Use duration format
+
+  # --- RestTemplate Config (Used by ResilienceConfig) ---
+  rest-template:
+    connect-timeout: 5000 # ms
+    read-timeout: 10000 # ms
+
+# --- Custom Security Settings ---
+security: # Used by various security services/configs
+  max-devices-per-user: 5
+  max-concurrent-sessions: 2
+  device-fingerprint:
+    hash-algorithm: ${HASH_ALGORITHM:SHA-256} # Provide default if sensible
+    hash-encoding: ${HASH_ENCODING:Base64} # Provide default if sensible
+    fingerprint-salt: ${FINGERPRINT_SALT} # LOAD SECURELY
+    block-unknown: true
+    excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
+    verification-timeout-seconds: 300
+    storage:
+      type: database
+    trusted-device:
+      expiration-days: 30
+  geo:
+    suspicious-distance-km: 500.0
+    time-window-hours: 24 # Used by ValkeyCacheConfig
+    known-vpn-asns: # Used by EnhancedVpnDetectorServiceImpl
+      - "AS15169" # Example
+      # Add others
+    high-risk-countries: # Used?
+      - "IR"
+    known-vpn-ip-ranges: ${KNOWN_VPN_IP_RANGES:} # Load from Env Var, empty default
+    known-datacenter-ranges: ${KNOWN_DATACENTER_RANGES:} # Load from Env Var, empty default
+  ip: # Used?
+    suspicious-requests-threshold: 5
+    block-threshold: 10
+  token: # Used?
+    revoked-cache:
+      max-size: 10000
+  user: # Used?
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 300
+      lockout-duration-minutes: 30
+    password:
+      min-length: 12
+      max-length: 127
+      strength:
+        min-score: 3
+        min-entropy: 30
+        min-uppercase: 1
+        min-lowercase: 1
+        min-digits: 1
+        min-special: 1
+  vpn: # Used by EnhancedVpnDetectorServiceImpl
+    min-suspicious-factors: 2
+
+# --- Service Metadata ---
+service: # Used? (Maybe for info endpoint)
+  name: ${spring.application.name}
+  audience: ${spring.application.audience}
+  version: ${spring.application.version}
+  environment: ${spring.application.environment}
+
+# --- Custom Thread Pools ---
+threadpool: # Used?
   io:
     core-pool-size: 20
     max-pool-size: 200
@@ -835,136 +566,41 @@ threadpool:
     keep-alive-seconds: 120
     thread-name-prefix: my-scalable-token-
 
-token:
+# --- Custom Token Settings ---
+token: # Used by TokenValidationConfig and others?
   access:
-    validity: 3600 # 1 hour
+    validity: 3600
     auto-refresh: true
   claims:
     validity: 3600
     auto-refresh: true
     auto-refresh-attempts: 3
     auto-refresh-interval: 300000
-    validation:
+    validation: # Sub-section for validation rate limit? Seems redundant with rate-limiter block
       rate-limit:
         permits-per-second: 10
-        max-attempts: 5
-        window-seconds: 300  # 5 minutes
-        time-window-minutes: 30
-        lockout-duration-minutes: 30
-        lockout-duration-seconds: 300
-        lockout-duration-hours: 1
-        lockout-duration-days: 1
-  local:
-  processing:
+  # local: # Empty? Remove?
+  processing: # Rate limit for processing?
     rate-limit:
       permits-per-second: 10
-      max-attempts: 5
-      window-seconds: 300  # 5 minutes
-      time-window-minutes: 30
-      lockout-duration-minutes: 30
-      lockout-duration-seconds: 300
-      lockout-duration-hours: 1
-      lockout-duration-days: 1
-    batch:
-      size: 100
   refresh:
-    validity: 86400 # 24 hours
+    validity: 86400
     auto-refresh: true
-  validation:
-    # Use a duration format (e.g., 10s for 10 seconds)
-    # This value comes from Constants.CLOCK_SKEW_TOLERANCE, let's use 10s as example
+  validation: # Used by TokenValidationConfig
     clock-skew-tolerance: 10s
-    # These likely come from other properties or defaults
-    issuer: ${service.name:amlume-shop} # Use service name or default
-    audience: ${service.audience:amlume-audience} # Use audience property or default
+    issuer: ${spring.application.name} # Use standard property
+    audience: ${spring.application.audience} # Use standard property
 
-    rate-limit:
-      permits-per-second: 10
-      max-attempts: 5
-      window-seconds: 300  # 5 minutes
-      time-window-minutes: 30
-      lockout-duration-minutes: 30
-      lockout-duration-seconds: 300
-      lockout-duration-hours: 1
-      lockout-duration-days: 1
-
+# --- Valkey Connection (Used by @Value in ValkeyCacheConfig) ---
 valkey:
-  nodes: ${VALKEY_HOST}:${VALKEY_PORT}
-  # host and ports are now set in ValkeyCacheConfig bean
-#  host: ${VALKEY_HOST:valkey-cache}
-#  port: ${VALKEY_PORT}
-  password: ${VALKEY_PASSWORD:your-valkey-password}
-  database: ${VALKEY_DATABASE}
-  timeout: 5000
-  cluster:
-    enabled: false
-    nodes: ${VALKEY_HOST}:${VALKEY_PORT}
-    password: ${VALKEY_CLUSTER_PASSWORD}
-    timeout: 5000
-  max-attempts: 5
-  max-batch-size: 100
-  max-pipeline-requests: 100
-  max-connections: 100
-  max-connections-per-node: 100
-  max-connections-per-node-per-route: 100
-  max-connections-per-route: 100
+  host: localhost # Connect to host machine's port mapped from Docker
+  port: 6379
+  password: ${VALKEY_PASSWORD:your-valkey-password} # LOAD SECURELY (Env Var preferred)
 
-  pool:
-    max-active: 8
-    max-idle: 8
-    min-idle: 0
-    max-wait-millis: 10000
-    min-evictable-idle-time-millis: 10000
-    num-tests-per-eviction-run: 3
-    time-between-eviction-runs-millis: 10000
-    test-while-idle: true
-    test-on-borrow: true
-    test-on-return: true
-    block-when-exhausted: true
-    soft-min-evictable-idle-time-millis: 10000
-    lifo: false
-    eviction-policy-class-name: org.apache.commons.pool2.impl.DefaultEvictionPolicy
-    jmx-enabled: true
-    jmx-name-base: connection-pool
-    jmx-name-prefix: "valkey.pool"
-
-# Rely primarily on spring.cloud.vault. * properties
-vault:
-#  uri: ${VAULT_URI}
-#  token: ${VAULT_TOKEN}
-#  secret:
-#    base-path: secret/data/amlume-shop
-#    database-path: secret/data/amlume-shop/database
-  docker:
-    uri: http://localhost:8200
-    token: ${VAULT_TOKEN}
-    approle: reader
-  kubernetes:
-    uri: http://vault.default.svc.cluster.local:8200
-    role: "vault_role" # Placeholder for now
-#  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
-  hcp:
-    uri: ${VAULT_HCP_URI}
-    token: ${VAULT_HCP_TOKEN}
-    approle: # AppRple - fetch secret-id securely
-      path: ${VAULT_HCP_APP_ROLE_PATH}
-      role-id: ${VAULT_HCP_APP_ROLE_ID}
-      secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
-
+# --- Web Settings ---
 web:
-  cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS}
-    allowed-methods: ${CORS_ALLOWED_METHODS}
-    allowed-headers: ${CORS_ALLOWED_HEADERS}
-    exposed-headers: ${CORS_EXPOSED_HEADERS}
-    allow-credentials: ${CORS_ALLOW_CREDENTIALS}
-    max-age: ${CORS_MAX_AGE}
-  whois:
-    server: ${WHOIS_SERVER}
-    port: ${WHOIS_PORT}
-    timeout: ${WHOIS_TIMEOUT}
-
-#whois:
-#  server: ${WHOIS_SERVER}
-#  port: ${WHOIS_PORT}
-#  timeout: ${WHOIS_TIMEOUT}
+  # cors: # Configure via Spring Security or WebMvcConfigurer
+  whois: # Used by CoreAsnLookupServiceImpl
+    server: ${WHOIS_SERVER:whois.cymru.com} # Provide default
+    port: ${WHOIS_PORT:43} # Provide default
+    timeout: ${WHOIS_TIMEOUT:5000} # Provide default (ms)

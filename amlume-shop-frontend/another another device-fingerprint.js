@@ -8,30 +8,31 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+// ... (other code)
 
-import lombok.Data;
-import org.springframework.scheduling.annotation.Scheduled;
-
-import java.time.Instant;
-import java.util.concurrent.TimeUnit;
-
-public interface AsnTimeBasedCacheService {
-    String getAsn(String ip);
-
-    // Periodic backgroud refresh strategy to maintain cache consistency
-    // Peridodically refresh the cache to ensure that the ASN information is up to date
-    @Scheduled(fixedRate = 12, timeUnit = TimeUnit.HOURS)
-    void refreshCache();
-
-    @Data
-    public static class CachedAsn {
-        private final String asn;
-        private final Instant timestamp;
-
-        CachedAsn(String asn) {
-            this.asn = asn;
-            this.timestamp = Instant.now();
-        }
-    }
+function getDeviceFingerprint() {
+    return {
+        userAgent: navigator.userAgent,
+        screenWidth: window.screen.width.toString(),
+        screenHeight: window.screen.height.toString()
+    };
 }
+
+// ... (in your login function)
+
+const fingerprintData = getDeviceFingerprint();
+
+fetch('/api/login', { // Or your login endpoint
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        username: '...',
+        password: '...',
+        userAgent: fingerprintData.userAgent,  // Send User-Agent
+        screenWidth: fingerprintData.screenWidth, // Send screen width
+        screenHeight: fingerprintData.screenHeight, // Send screen height
+        // ... other data
+    })
+});

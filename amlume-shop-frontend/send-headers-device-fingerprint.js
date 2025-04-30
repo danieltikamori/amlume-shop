@@ -8,16 +8,23 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop;
+import { API_ENDPOINTS } from './config'; // Assuming a config file for endpoints
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+const {timeZone} = Intl.DateTimeFormat().resolvedOptions();
+const screenResolution = `${window.screen.width}x${window.screen.height}`;
+const {colorDepth} = window.screen;
+const touchSupport = navigator.maxTouchPoints > 0;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, classes = AmlumeShopApplication.class)
-class AmlumeShopApplicationTests {
-
-	@Test
-	void contextLoads() {
-	}
-
-}
+fetch(API_ENDPOINTS.deviceFingerprint, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Time-Zone': timeZone,
+        'Screen-Resolution': screenResolution,
+        'Color-Depth': colorDepth,
+        'Touch-Support': touchSupport
+    },
+    // ... other request options
+})
+.then(response => { /* ... */ })
+.catch(error => { /* ... */ });
