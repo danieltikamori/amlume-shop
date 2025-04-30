@@ -93,11 +93,17 @@ public class ValkeyCacheConfig {
                 JsonTypeInfo.As.PROPERTY); // Store type info as a property (e.g., "@class")
     }
 
+    /**
+     * Must use Valkey password
+     * @return configuration
+     */
     @Bean
     public RedisStandaloneConfiguration redisStandaloneConfiguration() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
         config.setHostName(redisHost);
         config.setPort(redisPort);
+
+        // Read password from @Value or secure source
         if (StringUtils.hasText(redisPassword)) {
             config.setPassword(redisPassword);
         }
