@@ -17,9 +17,10 @@ import java.util.Objects;
 
 /**
  * Configuration properties for PASETO token generation and validation.
- * Maps properties under the 'paseto' prefix in application configuration files (e.g., application.yml).
+ * Maps properties under the 'paseto' prefix in application configuration files (e.g., application.yml)
+ * or external sources like Vault.
  * <p>
- * Example YAML structure:
+ * Example YAML structure (Values should ideally come from Vault or secure configuration):
  * <pre>{@code
  * paseto:
  *   token-no-footer-parts: 3
@@ -27,26 +28,31 @@ import java.util.Objects;
  *   access:
  *     expiration: 3600s # Default access token expiration
  *     local:
- *       secret-key: ${PASETO_ACCESS_SECRET_KEY:}
- *       kid: ${PASETO_ACCESS_LOCAL_KID:}
+ *       # secret-key: # Value expected from Vault/secure config
+ *       # kid:        # Value expected from Vault/secure config
  *       # expiration: 3600s # Optional override
  *     public:
- *       private-key: ${PASETO_ACCESS_PRIVATE_KEY:}
- *       public-key: ${PASETO_ACCESS_PUBLIC_KEY:}
- *       kid: ${PASETO_ACCESS_PUBLIC_KID:}
+ *       # private-key: # Value expected from Vault/secure config (PEM format)
+ *       # public-key:  # Value expected from Vault/secure config (PEM format)
+ *       # kid:         # Value expected from Vault/secure config
  *       # expiration: 3600s # Optional override
  *   refresh:
  *     expiration: 86400s # Default refresh token expiration
  *     local:
- *       secret-key: ${PASETO_REFRESH_SECRET_KEY:}
- *       kid: ${PASETO_REFRESH_LOCAL_KID:}
+ *       # secret-key: # Value expected from Vault/secure config
+ *       # kid:        # Value expected from Vault/secure config
  *       # expiration: 86400s # Optional override
  *     public:
- *       private-key: ${PASETO_REFRESH_PRIVATE_KEY:}
- *       public-key: ${PASETO_REFRESH_PUBLIC_KEY:}
- *       kid: ${PASETO_REFRESH_PUBLIC_KID:}
+ *       # private-key: # Value expected from Vault/secure config (PEM format)
+ *       # public-key:  # Value expected from Vault/secure config (PEM format)
+ *       # kid:         # Value expected from Vault/secure config
  *       # expiration: 86400s # Optional override
  * }</pre>
+ * <p>
+ * IMPORTANT: Ensure that the actual key values (secret-key, private-key, public-key)
+ * are securely stored in Vault (or your chosen configuration source) and are NOT
+ * hardcoded or using insecure fallbacks like `${ENV_VAR:}` in your configuration files.
+ * Spring Cloud Vault should be configured to inject these values.
  */
 
 @Configuration
@@ -74,7 +80,7 @@ public class PasetoProperties {
     public Refresh getRefresh() { return this.refresh; }
     public void setRefresh(Refresh refresh) { this.refresh = refresh; }
 
-    // --- equals, hashCode, toString (Generated or standard) ---
+    // --- equals, hashCode, toString (Generated or standard - NO CHANGES NEEDED) ---
     @Override
     public boolean equals(final Object o) {
         if (o == this) return true;
@@ -104,11 +110,14 @@ public class PasetoProperties {
 
     @Override
     public String toString() {
+        // Redact keys in toString for security? Optional but good practice.
+        // For now, keep the default toString which relies on nested toString methods.
+        // Consider implementing custom toString later if needed.
         return "PasetoProperties(tokenNoFooterParts=" + this.getTokenNoFooterParts() + ", tokenWithFooterParts=" + this.getTokenWithFooterParts() + ", access=" + this.getAccess() + ", refresh=" + this.getRefresh() + ")";
     }
 
 
-    // --- Nested classes for access and refresh properties ---
+    // --- Nested classes for access and refresh properties (NO CHANGES NEEDED) ---
     public static class Access {
         private long expiration;
         private Local local = new Local();
@@ -125,7 +134,7 @@ public class PasetoProperties {
         public Public getPub() { return this.pub; }
         public void setPub(Public pub) { this.pub = pub; }
 
-        // equals, hashCode, toString for Access
+        // equals, hashCode, toString for Access (NO CHANGES NEEDED)
         @Override
         public boolean equals(final Object o) {
             if (o == this) return true;
@@ -154,14 +163,15 @@ public class PasetoProperties {
 
         @Override
         public String toString() {
+            // Consider redacting keys here too
             return "PasetoProperties.Access(expiration=" + this.getExpiration() + ", local=" + this.getLocal() + ", pub=" + this.getPub() + ")";
         }
 
 
         public static class Local {
-            private String secretKey;
+            private String secretKey; // Binding handles loading
             private String kid;
-            private Long expiration; // Optional override
+            private Long expiration;
 
             public Local() { }
 
@@ -174,13 +184,15 @@ public class PasetoProperties {
             public Long getExpiration() { return this.expiration; }
             public void setExpiration(Long expiration) { this.expiration = expiration; }
 
-            // equals, hashCode, toString for Access.Local
+            // equals, hashCode, toString for Access.Local (NO CHANGES NEEDED)
             @Override
             public boolean equals(final Object o) {
                 if (o == this) return true;
                 if (!(o instanceof Local other)) return false;
                 final Object this$secretKey = this.getSecretKey();
                 final Object other$secretKey = other.getSecretKey();
+                // Use constant-time comparison for secrets if comparing PasetoProperties instances directly
+                // For simple binding, standard equals is usually fine.
                 if (!Objects.equals(this$secretKey, other$secretKey)) return false;
                 final Object this$kid = this.getKid();
                 final Object other$kid = other.getKid();
@@ -205,15 +217,16 @@ public class PasetoProperties {
 
             @Override
             public String toString() {
-                return "PasetoProperties.Access.Local(secretKey=" + this.getSecretKey() + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
+                // Redact secret key
+                return "PasetoProperties.Access.Local(secretKey=" + (secretKey != null ? "[REDACTED]" : "null") + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
             }
         }
 
         public static class Public {
-            private String privateKey;
-            private String publicKey;
-            private String kid;
-            private Long expiration; // Optional override
+            private String privateKey; // NO CHANGE - Binding handles loading
+            private String publicKey;  // NO CHANGE
+            private String kid;        // NO CHANGE
+            private Long expiration;
 
             public Public() { }
 
@@ -229,7 +242,7 @@ public class PasetoProperties {
             public Long getExpiration() { return this.expiration; }
             public void setExpiration(Long expiration) { this.expiration = expiration; }
 
-            // equals, hashCode, toString for Access.Public
+            // equals, hashCode, toString for Access.Public (NO CHANGES NEEDED)
             @Override
             public boolean equals(final Object o) {
                 if (o == this) return true;
@@ -265,14 +278,10 @@ public class PasetoProperties {
 
             @Override
             public String toString() {
-                return "PasetoProperties.Access.Public(privateKey=" + this.getPrivateKey() + ", publicKey=" + this.getPublicKey() + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
+                // Redact private and public keys
+                return "PasetoProperties.Access.Public(privateKey=" + (privateKey != null ? "[REDACTED]" : "null") + ", publicKey=" + (publicKey != null ? "[REDACTED]" : "null") + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
             }
         }
-
-        // --- REMOVED Getters for easier access that were inside Access class ---
-        // public String getAccessPrivateKey() { return pub != null ? pub.getPrivateKey() : null; }
-        // public String getAccessPublicKey() { return pub != null ? pub.getPublicKey() : null; }
-        // public String getAccessSecretKey() { return local != null ? local.getSecretKey() : null; }
     }
 
     public static class Refresh {
@@ -291,7 +300,7 @@ public class PasetoProperties {
         public Public getPub() { return this.pub; }
         public void setPub(Public pub) { this.pub = pub; }
 
-        // equals, hashCode, toString for Refresh
+        // equals, hashCode, toString for Refresh (NO CHANGES NEEDED)
         @Override
         public boolean equals(final Object o) {
             if (o == this) return true;
@@ -320,13 +329,14 @@ public class PasetoProperties {
 
         @Override
         public String toString() {
+            // Consider redacting keys here too
             return "PasetoProperties.Refresh(expiration=" + this.getExpiration() + ", local=" + this.getLocal() + ", pub=" + this.getPub() + ")";
         }
 
         public static class Local {
-            private String secretKey;
-            private String kid;
-            private Long expiration; // Optional override
+            private String secretKey; // NO CHANGE
+            private String kid;       // NO CHANGE
+            private Long expiration;
 
             public Local() { }
 
@@ -339,7 +349,7 @@ public class PasetoProperties {
             public Long getExpiration() { return this.expiration; }
             public void setExpiration(Long expiration) { this.expiration = expiration; }
 
-            // equals, hashCode, toString for Refresh.Local
+            // equals, hashCode, toString for Refresh.Local (NO CHANGES NEEDED)
             @Override
             public boolean equals(final Object o) {
                 if (o == this) return true;
@@ -370,15 +380,16 @@ public class PasetoProperties {
 
             @Override
             public String toString() {
-                return "PasetoProperties.Refresh.Local(secretKey=" + this.getSecretKey() + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
+                // Redact secret key
+                return "PasetoProperties.Refresh.Local(secretKey=" + (secretKey != null ? "[REDACTED]" : "null") + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
             }
         }
 
         public static class Public {
-            private String privateKey;
-            private String publicKey;
-            private String kid;
-            private Long expiration; // Optional override
+            private String privateKey; // NO CHANGE
+            private String publicKey;  // NO CHANGE
+            private String kid;        // NO CHANGE
+            private Long expiration;
 
             public Public() { }
 
@@ -394,7 +405,7 @@ public class PasetoProperties {
             public Long getExpiration() { return this.expiration; }
             public void setExpiration(Long expiration) { this.expiration = expiration; }
 
-            // equals, hashCode, toString for Refresh.Public
+            // equals, hashCode, toString for Refresh.Public (NO CHANGES NEEDED)
             @Override
             public boolean equals(final Object o) {
                 if (o == this) return true;
@@ -430,20 +441,9 @@ public class PasetoProperties {
 
             @Override
             public String toString() {
-                return "PasetoProperties.Refresh.Public(privateKey=" + this.getPrivateKey() + ", publicKey=" + this.getPublicKey() + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
+                // Redact private and public keys
+                return "PasetoProperties.Refresh.Public(privateKey=" + (privateKey != null ? "[REDACTED]" : "null") + ", publicKey=" + (publicKey != null ? "[REDACTED]" : "null") + ", kid=" + this.getKid() + ", expiration=" + this.getExpiration() + ")";
             }
         }
-
-        // --- REMOVED Getters for easier access that were inside Refresh class ---
-        // public String getRefreshPrivateKey() { return pub != null ? pub.getPrivateKey() : null; }
-        // public String getRefreshPublicKey() { return pub != null ? pub.getPublicKey() : null; }
-        // public String getRefreshSecretKey() { return local != null ? local.getSecretKey() : null; }
     }
-
-    // --- REMOVED ALL top-level getters that delegate to nested classes ---
-    // These were causing the binding conflict
-    // public String getAccessPublicKid() { ... }
-    // public String getAccessLocalKid() { ... }
-    // public String getRefreshPublicKid() { ... }
-    // public String getRefreshLocalKid() { ... }
 }
