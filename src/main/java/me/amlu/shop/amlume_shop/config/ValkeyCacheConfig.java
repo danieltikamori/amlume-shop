@@ -77,20 +77,22 @@ public class ValkeyCacheConfig {
         // Enable default typing for polymorphic types if needed, adjust security as necessary
         // Use NON_FINAL for flexibility, consider specific type registration for stricter security
 
-        // Create a PolymorphicTypeValidator instance.
-        // BasicPolymorphicTypeValidator is a standard implementation.
-        // allowIfSubType(Object.class) is a permissive setting suitable for
-        // internal caching where you trust the types being cached.
-        // For stricter security, you might use allowIfBaseType or allowIfSubTypeIsArray etc.
-        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType(Object.class) // Allows any subtype of Object
-                .build();
-
-        // Pass the validator instance to activateDefaultTyping
-        this.objectMapper.activateDefaultTyping(
-                ptv, // Use the created validator
-                ObjectMapper.DefaultTyping.NON_FINAL, // Or OBJECT_AND_NON_CONCRETE
-                JsonTypeInfo.As.PROPERTY); // Store type info as a property (e.g., "@class")
+        // --- IMPLEMENTING ENCRYPTION - COMMENTED OUT FOR THE IMPLEMENTATION WORK ---
+//        // Create a PolymorphicTypeValidator instance.
+//        // BasicPolymorphicTypeValidator is a standard implementation.
+//        // allowIfSubType(Object.class) is a permissive setting suitable for
+//        // internal caching where you trust the types being cached.
+//        // For stricter security, you might use allowIfBaseType or allowIfSubTypeIsArray etc.
+//        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+//                .allowIfSubType(Object.class) // Allows any subtype of Object
+//                .build();
+//
+//        // Pass the validator instance to activateDefaultTyping
+//        this.objectMapper.activateDefaultTyping(
+//                ptv, // Use the created validator
+//                ObjectMapper.DefaultTyping.NON_FINAL, // Or OBJECT_AND_NON_CONCRETE
+//                JsonTypeInfo.As.PROPERTY); // Store type info as a property (e.g., "@class")
+        // --- END ENCRYPTION IMPLEMENTATION RELATED COMMENT ---
     }
 
     /**
@@ -112,7 +114,25 @@ public class ValkeyCacheConfig {
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory(RedisStandaloneConfiguration standaloneConfig) {
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig);
+        LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder = LettuceClientConfiguration.builder();
+
+        // Enable SSL/TLS
+        clientConfigBuilder.useSsl();
+
+        // --- Trust Configuration (Choose one) ---
+        // Option A: Disable peer verification (ONLY for self-signed certs in DEV/TEST, insecure for prod)
+         clientConfigBuilder.disablePeerVerification();
+
+        // Option B: Configure a Truststore (Recommended for production)
+        // Requires creating a JKS truststore containing the Valkey server's CA cert or self-signed cert
+        // clientConfigBuilder.clientOptions(ClientOptions.builder()
+        //         .socketOptions(SocketOptions.builder().keepAlive(true).build())
+        //         .sslOptions(SslOptions.builder()
+        //                 .truststore(new File("/path/to/truststore.jks"), "truststorePassword") // Or use Resource
+        //                 .build())
+        //         .build());
+
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig, clientConfigBuilder.build());
         factory.setShareNativeConnection(true);
         factory.setValidateConnection(true);
         return factory;
@@ -144,6 +164,9 @@ public class ValkeyCacheConfig {
 
     @Bean
     public RedisCacheConfiguration defaultCacheConfiguration() {
+        // IMPORTANT NOTE for ENCRYPTION:
+        // ENSURE  the serializer uses the ObjectMapper *without* default typing
+
         // Define the default cache configuration (serializers, default TTL, null values)
         // Use the ObjectMapper configured in the constructor
         GenericJackson2JsonRedisSerializer jsonSerializer = new GenericJackson2JsonRedisSerializer(this.objectMapper);
