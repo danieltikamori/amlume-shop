@@ -153,28 +153,29 @@ public class ValkeyCacheConfig {
         // Example using keytool:
         // keytool -importcert -file ./certificates/valkey.crt -alias valkey-dev -keystore truststore.jks -storepass your_truststore_password -noprompt
 
-        try {
+    try {
             // Adjust path and password as needed
-            File truststoreFile = new File("./path/to/your/truststore.jks");
+            File truststoreFile = new File("./path/to/your/truststore.jks"); // Or use SslOptions.Resource
             String truststorePassword = "your_truststore_password";
 
-            SslOptions sslOptions = SslOptions.builder()
-                    .truststore(truststoreFile, truststorePassword)
+            SslOptions sslOptionsB = SslOptions.builder()
+                    .truststore(truststoreFile, truststorePassword) // Use the correct method
                     .build();
 
-            ClientOptions clientOptions = ClientOptions.builder()
-                    .sslOptions(sslOptions)
+            ClientOptions clientOptionsB = ClientOptions.builder()
+                    .sslOptions(sslOptionsB)
                     .build();
 
-            clientConfigBuilder.clientOptions(clientOptions);
+            clientConfigBuilder.clientOptions(clientOptionsB);
 
         } catch (Exception e) {
             throw new IllegalStateException("Failed to configure Lettuce SSL options with truststore", e);
         }
         // --- End Option B ---
+
         */
 
-        // Build the client configuration
+        // Build the final client configuration
         LettuceClientConfiguration clientConfiguration = clientConfigBuilder.build();
 
         // Create the factory using standalone config and client config
