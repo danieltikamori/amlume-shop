@@ -5,22 +5,22 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo; // For default typing
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule; // For Java 8+ time types
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SslOptions;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer; // Use customizer
+import org.springframework.boot.autoconfigure.cache.RedisCacheManagerBuilderCustomizer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
-// import org.springframework.data.redis.cache.RedisCacheManager; // BuilderCustomizer is preferred
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -32,9 +32,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
-// Removed HashMap and Map imports as BuilderCustomizer is used
 
-// Import static constants for TTLs
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
 /**
@@ -55,13 +53,13 @@ public class ValkeyCacheConfig {
     public static final String GEO_HISTORY_CACHE = "geoHistoryCache";
 
     // Inject properties using @Value
-    @Value("${valkey.host:localhost}")
+    @Value("${valkey.host:localhost}") // Default to localhost for local development
     private String redisHost;
 
-    @Value("${valkey.port:6379}")
+    @Value("${valkey.port:6379}") // Now TLS port
     private int redisPort;
 
-    @Value("${valkey.password:#{null}}")
+    @Value("${valkey.password:#{null}}") // Ensure this is set in application.yml or environment
     private String redisPassword;
 
     @Value("${security.geo.time-window-hours:24}")
@@ -97,46 +95,95 @@ public class ValkeyCacheConfig {
 
     /**
      * Must use Valkey password
+     *
      * @return configuration
      */
     @Bean
     public RedisStandaloneConfiguration redisStandaloneConfiguration() {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
-        config.setHostName(redisHost);
-        config.setPort(redisPort);
+        // Connect to the HOSTNAME defined in docker-compose (valkey-cache)
+        // OR use localhost if running app outside docker but connecting to exposed port
+        // Using service name is generally better within docker network
+        config.setHostName("valkey-cache"); // <-- Use Docker service name
+        config.setPort(redisPort); // Port 6379 (which is now the TLS port)
 
-        // Read password from @Value or secure source
         if (StringUtils.hasText(redisPassword)) {
-            config.setPassword(redisPassword);
+            config.setPassword(redisPassword); // Set password
+        } else {
+            // Consider throwing an error if password is required but missing
+            throw new IllegalStateException("Valkey password is required but not configured!");
         }
         return config;
     }
 
     @Bean
     public LettuceConnectionFactory redisConnectionFactory(RedisStandaloneConfiguration standaloneConfig) {
+        // --- Configure Lettuce Client for TLS ---
         LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder = LettuceClientConfiguration.builder();
 
-        // Enable SSL/TLS
+        // 1. Enable SSL/TLS
         clientConfigBuilder.useSsl();
 
-        // --- Trust Configuration (Choose one) ---
-        // Option A: Disable peer verification (ONLY for self-signed certs in DEV/TEST, insecure for prod)
-         clientConfigBuilder.disablePeerVerification();
+        // 2. Configure Trust Strategy (Choose ONE)
 
-        // Option B: Configure a Truststore (Recommended for production)
-        // Requires creating a JKS truststore containing the Valkey server's CA cert or self-signed cert
-        // clientConfigBuilder.clientOptions(ClientOptions.builder()
-        //         .socketOptions(SocketOptions.builder().keepAlive(true).build())
-        //         .sslOptions(SslOptions.builder()
-        //                 .truststore(new File("/path/to/truststore.jks"), "truststorePassword") // Or use Resource
-        //                 .build())
-        //         .build());
+        // --- Option A: Disable Peer Verification (INSECURE - Development/Testing ONLY) ---
+        // This trusts *any* certificate presented by the server. Convenient for self-signed certs locally.
+        // DO NOT USE IN PRODUCTION.
+        // This uses the hook provided by Lettuce to configure the underlying Netty SslContextBuilder
+        // to trust all certificates using Netty's InsecureTrustManagerFactory.
+        clientConfigBuilder.clientOptions(ClientOptions.builder()
+                .sslOptions(SslOptions.builder()
+                        .sslContext(sslCustomizer -> { // Use the Consumer<SslContextBuilder>
+                            try {
+                                // Configure the Netty SslContextBuilder to use the insecure trust manager
+                                sslCustomizer.trustManager(InsecureTrustManagerFactory.INSTANCE);
+                            } catch (Exception e) {
+                                // Handle potential exceptions during customization, though unlikely here
+                                throw new RuntimeException("Failed to configure Lettuce SSL context with insecure trust manager", e);
+                            }
+                        })
+                        .build()) // Build SslOptions
+                .build()); // Build ClientOptions
+        // --- End Option A ---
 
-        LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig, clientConfigBuilder.build());
-        factory.setShareNativeConnection(true);
-        factory.setValidateConnection(true);
+
+        /*
+        // --- Option B: Use a Truststore (SECURE - Recommended for Production) ---
+        // Requires creating a JKS truststore containing the server's CA or self-signed cert.
+        // Example using keytool:
+        // keytool -importcert -file ./certificates/valkey.crt -alias valkey-dev -keystore truststore.jks -storepass your_truststore_password -noprompt
+
+        try {
+            // Adjust path and password as needed
+            File truststoreFile = new File("./path/to/your/truststore.jks");
+            String truststorePassword = "your_truststore_password";
+
+            SslOptions sslOptions = SslOptions.builder()
+                    .truststore(truststoreFile, truststorePassword)
+                    .build();
+
+            ClientOptions clientOptions = ClientOptions.builder()
+                    .sslOptions(sslOptions)
+                    .build();
+
+            clientConfigBuilder.clientOptions(clientOptions);
+
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to configure Lettuce SSL options with truststore", e);
+        }
+        // --- End Option B ---
+        */
+
+        // Build the client configuration
+        LettuceClientConfiguration clientConfiguration = clientConfigBuilder.build();
+
+        // Create the factory using standalone config and client config
+        LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig, clientConfiguration);
+        factory.setShareNativeConnection(true); // Usually recommended
+        factory.setValidateConnection(true); // Validate connections on checkout
         return factory;
     }
+
 
     // Keep RedisTemplate beans if they are used directly elsewhere in the application
     @Bean
