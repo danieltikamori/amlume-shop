@@ -28,56 +28,208 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
+/**
+ * Service to update the GeoIP2 database from MaxMind.
+ * <p>
+ * This service downloads the latest GeoIP2 databases (City, ASN, and Country) from MaxMind's servers
+ * and extracts them to a specified directory. It runs on a scheduled basis (every Wednesday at midnight).
+ * <p>
+ * Database	Update Schedule
+ * GeoIP2 Country	Every Tuesday and Friday.
+ * GeoIP2 City	Every Tuesday and Friday.
+ * GeoIP2 Connection Type	Every Tuesday and Friday.
+ * GeoIP2 ISP	Every Tuesday and Friday.
+ * GeoIP2 Domain Name	Every Tuesday and Friday.
+ * GeoIP2 Anonymous IP	Every day.
+ * GeoIP2 Enterprise	Every Tuesday and Friday.
+ * GeoLite2 Country	Every Tuesday and Friday.
+ * GeoLite2 City	Every Tuesday and Friday.
+ * GeoLite2 ASN	Every day.
+ */
+
 
 @Service
 public class GeoIpDatabaseUpdater {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(GeoIpDatabaseUpdater.class);
 
-//    // Check if accountId is needed
-//    @Value("${geoip.license.account-id}")
+//    //    // accountId is not needed
+//    @Value("${geoip2.license.account-id}")
 //    private String accountId;
 
-    @Value("${geoip.license.key}")
+    @Value("${geoip2.license.license-key}")
     private String licenseKey;
 
-    @Value("${geoip.database.path}")
-    private String databasePath;
+    @Value("${geoip2.download-path}")
+    private String downloadPath;
 
+    @Value("${geoip2.database-directory}")
+    private String databaseDirectory;
+
+    /**
+     * Scheduled task to update the GeoIP2 database.
+     * This method is scheduled to run every Wednesday at midnight.
+     * It downloads the latest databases from MaxMind and extracts them to the specified directory.
+     * <p>
+     * Considerations:
+     * - Ensure that the database directory is writable by the application.
+     * - Handle exceptions appropriately to avoid application crashes.
+     * - Consider logging the success or failure of the update process.
+     * - Ensure that the database files are not in use while being updated.
+     * - Consider implementing a backup strategy for the existing database files before updating.
+     * - Ensure that the application has internet access to download the databases.
+     * - Consider using a more robust error handling strategy, such as retrying the download on failure.
+     * - Consider using a library for downloading files that can handle large files and resume downloads.
+     * - Consider using a library for extracting tar.gz files that can handle large files and errors.
+     * * Note: The cron expression "0 0 0 * * WED" means "At 00:00 (midnight) on Wednesday".
+     * * @throws IOException        If an I/O error occurs during the download or extraction.
+     * * @throws URISyntaxException If the URL is malformed.
+     * * @throws InterruptedException If the thread is interrupted during sleep.
+     */
     @Scheduled(cron = "0 0 0 * * WED") // Run every Wednesday at midnight
     public void updateDatabase() {
+        log.info("Starting GeoIP2 database update at {}", Instant.now());
+        log.info("Database path: {}", databaseDirectory);
+
         try {
+            // For City database
             String url = String.format(
                     "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz",
                     licenseKey
             );
 
-//            String url = String.format(
-//                "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=%s&suffix=tar.gz",
-//                    "https://git.io/GeoLite2-City.mmdb",
-////                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=%s&suffix=tar.gz",
-//                licenseKey
-//            );
+            // For ASN database
+            String asnUrl = String.format(
+                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-ASN&license_key=%s&suffix=tar.gz",
+                    licenseKey
+            );
+
+            // For Country database
+            String countryUrl = String.format(
+                    "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-Country&license_key=%s&suffix=tar.gz",
+                    licenseKey
+            );
+
+            Path databaseDirectoryPath = Paths.get(databaseDirectory);
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+            String timestamp = LocalDateTime.now().format(formatter);
+
+            String[] databaseFileNames = {"GeoLite2-City.mmdb", "GeoLite2-ASN.mmdb", "GeoLite2-Country.mmdb"};
+
+            for (String fileName : databaseFileNames) {
+                Path sourcePath = databaseDirectoryPath.resolve(fileName);
+                Path backupDirectory = databaseDirectoryPath.resolve("backup");
+                Path backupPath = backupDirectory.resolve(fileName + "_" + timestamp);
+                try {
+                    Files.createDirectories(backupDirectory);
+                    if (Files.exists(sourcePath)) {
+                        Files.copy(sourcePath, backupPath, StandardCopyOption.REPLACE_EXISTING);
+                        log.info("Backed up {} to {}", sourcePath, backupPath);
+                    }
+                } catch (IOException e) {
+                    log.error("Error creating backup of {}", sourcePath, e);
+                }
+            }
 
             // Download and extract new database
             downloadAndUpdateDatabase(url);
-            log.info("GeoIP database updated successfully");
+            downloadAndUpdateDatabase(asnUrl);
+            log.info("GeoIP2 database updated successfully");
         } catch (Exception e) {
-            log.error("Failed to update GeoIP database", e);
+            log.error("Failed to update GeoIP2 database through Maxmind, trying to download from fallback", e);
+            // Attempt to download from fallback URL
+            try {
+                // Fallback URL for City database
+                String cityUrlFallback = "https://git.io/GeoLite2-City.mmdb";
+                Path cityDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-City.mmdb");
+                downloadFile(cityUrlFallback, cityDestinationFallback);
+                log.info("GeoIP2 City database updated successfully from fallback URL");
+
+                // Fallback URL for ASN database
+                String asnUrlFallback = "https://git.io/GeoLite2-ASN.mmdb";
+                Path asnDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-ASN.mmdb");
+                downloadFile(asnUrlFallback, asnDestinationFallback);
+                log.info("GeoIP2 ASN database updated successfully from fallback URL");
+
+                // Fallback URL for Country database
+                String countryUrlFallback = "https://git.io/GeoLite2-Country.mmdb";
+                Path countryDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-Country.mmdb");
+                downloadFile(countryUrlFallback, countryDestinationFallback);
+                log.info("GeoIP2 Country database updated successfully from fallback URL");
+
+            } catch (Exception fallbackException) {
+                log.error("Failed to update GeoIP2 database from fallback URL", fallbackException);
+            }
         }
     }
 
-    private void downloadAndUpdateDatabase(String url) throws IOException, URISyntaxException {
-//        Path localDatabasePath = Paths.get(this.databasePath);
-//        Path tempFile = localDatabasePath.resolve("geoip.tar.gz");
-        Path tempFile = Paths.get(this.databasePath).resolve("geoip.tar.gz");
+    /**
+     * Downloads the GeoIP2 database from the specified URL and extracts it to the database directory.
+     *
+     * @param url The URL to download the GeoIP2 database from.
+     * @throws IOException        If an I/O error occurs during the download or extraction.
+     * @throws URISyntaxException If the URL is malformed.
+     */
 
+    private void downloadAndUpdateDatabase(String url) throws IOException, URISyntaxException {
+
+        int maxRetries = 3;
+        int retryDelaySeconds = 10;
+        
+        // Retry downloading the database up to maxRetries times
+        for (int i = 0; i < maxRetries; i++) {
+            Path downloadDirectory = Paths.get(this.downloadPath);
+            Files.createDirectories(downloadDirectory); // Ensure the directory exists
+            String filename = url.substring(url.lastIndexOf('/') + 1);
+            Path tempFile = downloadDirectory.resolve(filename);
+
+            try (InputStream in = new URI(url).toURL().openStream()) {
+                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+                String substring = url.substring(url.length() - 10);
+                log.info("Successfully downloaded GeoIP2 database from link ending with: {}", substring);
+                log.info("Downloaded GeoIP2 database to: {}", tempFile);
+                extractDatabase(tempFile);
+                log.info("Successfully extracted GeoIP2 database from link ending with: : {}", substring);
+                log.info("Successfully downloaded after {} attempts.", i + 1);
+                return; // Exit the method on success
+
+            } catch (IOException e) {
+                log.error("Error downloading from {} (attempt {}/{}), retrying in {} seconds: {}",
+                        url, i + 1, maxRetries, retryDelaySeconds, e.getMessage());
+                if (i < maxRetries - 1) {
+                    try {
+                        Thread.sleep(retryDelaySeconds * 1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Download retry interrupted.");
+                        throw new IOException("Download interrupted after " + (i + 1) + " attempts.", ie);
+                    }
+                } else {
+                    throw new IOException("Failed to download from " + url + " after " + maxRetries + " attempts.", e);
+                }
+            } finally {
+                Files.deleteIfExists(tempFile);
+                log.info("Temporary file deleted: {}, path: {} at time: {}", tempFile, tempFile.toAbsolutePath(), Instant.now());
+            }
+        }
+    }
+
+    /**
+     * Downloads a file from the specified URL and saves it to the specified destination.
+     *
+     * @param url         The URL to download the file from.
+     * @param destination The path where the downloaded file will be saved.
+     * @throws IOException        If an I/O error occurs during the download.
+     * @throws URISyntaxException If the URL is malformed.
+     */
+    private void downloadFile(String url, Path destination) throws IOException, URISyntaxException {
         try (InputStream in = new URI(url).toURL().openStream()) {
-            Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
-            extractDatabase(tempFile);
-        } finally {
-            Files.deleteIfExists(tempFile);
-            log.info("Temporary file deleted: {}, path: {} at time: {}", tempFile, tempFile.toAbsolutePath(), Instant.now());
+            Files.createDirectories(destination.getParent());
+            Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Downloaded file from {} to {}", url, destination);
         }
     }
 
@@ -85,6 +237,7 @@ public class GeoIpDatabaseUpdater {
         // Implementation of tar.gz extraction
         Path localDatabasePath = tarGzFile.getParent();
         try (TarArchiveInputStream tarArchiveInputStream = new TarArchiveInputStream(new GzipCompressorInputStream(new FileInputStream(tarGzFile.toFile())))) {
+            log.info("Extracting database from: {}", tarGzFile);
             TarArchiveEntry entry;
             while ((entry = tarArchiveInputStream.getNextEntry()) != null) {
                 Path filePath = localDatabasePath.resolve(entry.getName());
@@ -94,7 +247,15 @@ public class GeoIpDatabaseUpdater {
                 }
                 copyFile(tarArchiveInputStream, filePath);
                 if (filePath.getFileName().toString().endsWith(".mmdb")) {
-                    log.info("Extracted GeoIP database: {}", filePath);
+                    log.info("Extracted GeoIP2 database: {}", filePath);
+                    Path destinationPath = Paths.get(databaseDirectory, filePath.getFileName().toString());
+                    try {
+                        Files.createDirectories(destinationPath.getParent()); // Ensure directory exists
+                        Files.move(filePath, destinationPath, StandardCopyOption.REPLACE_EXISTING);
+                        log.info("Moved extracted database to: {}", destinationPath);
+                    } catch (IOException e) {
+                        log.error("Error moving extracted database to destination", e);
+                    }
                 }
             }
         }
