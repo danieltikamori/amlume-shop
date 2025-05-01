@@ -72,16 +72,35 @@ services:
   valkey-cache:
     image: valkey/valkey:latest
     container_name: valkey-cache
-    ports:
-      # Expose Valkey on host port 6379
-      - "6379:6379"
+    # Add command to set password and potentially disable persistence if not needed
+    # MUST MATCH .env VALKEY_PASSWORD
+    command: >
+      valkey-server
+      --requirepass "your-valkey-password" # <-- IMPORTANT: Replace with your actual strong password
+      --appendonly no                           # Disable persistence (as decided earlier)
+      --port 0                                  # Disable non-TLS port
+      --tls-port 6379                           # Enable TLS on port 6379
+      --tls-cert-file /certs/valkey.crt         # Path to cert inside container
+      --tls-key-file /certs/valkey.key          # Path to key inside container
+      --tls-auth-clients no                     # Client certificate authentication not required
+
+    # IMPORTANT: TLS - as we will use certificates, we must have persistent volumes to store them.
     volumes:
-      # Optional: Persist Valkey data (useful if appendonly is enabled)
-      - valkey_data:/data
     # Optional: Enable persistence (AOF)
-    command: ["valkey-server", "--appendonly", "yes"]
+      # Assuming the certificates are generated and stored in ./certificates of the project directory
+      # Mount the certificates directory (read-only)
+      - ./certificates:/certs:ro
+      # Optional: Keep data volume if needed for other reasons, but persistence is off
+      - valkey_data:/data
+    # --- REMOVE ports mapping for production/security ---
+    # Exposing the TLS port directly might be okay for local dev, but unnecessary if only app connects
+    # ports:
+    #  - "6379:6379" # Exposes the TLS port 6379 on the host
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Modify healthcheck to use TLS if redis-cli supports it, or use a simpler check
+      # This basic ping might work even without explicit TLS flags in older redis-cli
+      # For more robust check, might need a custom script or newer redis-cli with TLS support
+      test: ["CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "--insecure", "-a", "YOUR_STRONG_PASSWORD_HERE", "ping"] # <-- Add password and TLS flags
       interval: 5s
       timeout: 3s
       retries: 5
