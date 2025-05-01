@@ -46,6 +46,10 @@ public final class TokenConstants {
     public static final String PASETO_ACCESS_KID = "${PASETO_ACCESS_KID}";
     public static final String PASETO_ACCESS_LOCAL_KID = "${PASETO_ACCESS_LOCAL_KID}";
     public static final String PASETO_REFRESH_LOCAL_KID = "${PASETO_REFRESH_LOCAL_KID}";
+    public static final String PASETO_PUBLIC_ACCESS_KID = "${paseto.public.access.kid}";
+//    public static final String PASETO_PUBLIC_REFRESH_KID = "${paseto.public.refresh.kid}";
+    public static final String PASETO_LOCAL_ACCESS_KID = "${paseto.local.access.kid}";  
+    public static final String PASETO_LOCAL_REFRESH_KID = "${paseto.local.refresh.kid}";
     public static final String CLAIM_SUBJECT = "sub";
     public static final String CLAIM_ISSUER = "iss";
     public static final String CLAIM_AUDIENCE = "aud";
