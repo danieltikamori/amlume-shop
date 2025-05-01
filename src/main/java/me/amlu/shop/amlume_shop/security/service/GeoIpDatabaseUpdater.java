@@ -13,7 +13,14 @@ package me.amlu.shop.amlume_shop.security.service;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.HttpClientResponseHandler;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -30,6 +37,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Service to update the GeoIP2 database from MaxMind.
@@ -54,7 +62,7 @@ import java.time.format.DateTimeFormatter;
 @Service
 public class GeoIpDatabaseUpdater {
 
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(GeoIpDatabaseUpdater.class);
+    private static final Logger log = LoggerFactory.getLogger(GeoIpDatabaseUpdater.class);
 
 //    //    // accountId is not needed
 //    @Value("${geoip2.license.account-id}")
@@ -144,20 +152,17 @@ public class GeoIpDatabaseUpdater {
             try {
                 // Fallback URL for City database
                 String cityUrlFallback = "https://git.io/GeoLite2-City.mmdb";
-                Path cityDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-City.mmdb");
-                downloadFile(cityUrlFallback, cityDestinationFallback);
+                downloadFile(cityUrlFallback);
                 log.info("GeoIP2 City database updated successfully from fallback URL");
 
                 // Fallback URL for ASN database
                 String asnUrlFallback = "https://git.io/GeoLite2-ASN.mmdb";
-                Path asnDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-ASN.mmdb");
-                downloadFile(asnUrlFallback, asnDestinationFallback);
+                downloadFile(asnUrlFallback);
                 log.info("GeoIP2 ASN database updated successfully from fallback URL");
 
                 // Fallback URL for Country database
                 String countryUrlFallback = "https://git.io/GeoLite2-Country.mmdb";
-                Path countryDestinationFallback = Paths.get(databaseDirectory, "GeoLite2-Country.mmdb");
-                downloadFile(countryUrlFallback, countryDestinationFallback);
+                downloadFile(countryUrlFallback);
                 log.info("GeoIP2 Country database updated successfully from fallback URL");
 
             } catch (Exception fallbackException) {
@@ -178,7 +183,7 @@ public class GeoIpDatabaseUpdater {
 
         int maxRetries = 3;
         int retryDelaySeconds = 10;
-        
+
         // Retry downloading the database up to maxRetries times
         for (int i = 0; i < maxRetries; i++) {
             Path downloadDirectory = Paths.get(this.downloadPath);
@@ -186,16 +191,40 @@ public class GeoIpDatabaseUpdater {
             String filename = url.substring(url.lastIndexOf('/') + 1);
             Path tempFile = downloadDirectory.resolve(filename);
 
-            try (InputStream in = new URI(url).toURL().openStream()) {
-                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
-                String substring = url.substring(url.length() - 10);
-                log.info("Successfully downloaded GeoIP2 database from link ending with: {}", substring);
-                log.info("Downloaded GeoIP2 database to: {}", tempFile);
-                extractDatabase(tempFile);
-                log.info("Successfully extracted GeoIP2 database from link ending with: : {}", substring);
-                log.info("Successfully downloaded after {} attempts.", i + 1);
-                return; // Exit the method on success
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+                HttpGet httpGet = new HttpGet(url);
+                AtomicReference<String> substring = new AtomicReference<>();
+                HttpClientResponseHandler<Boolean> responseHandler = response -> {
+                    final int status = response.getCode();
+                    if (status >= 200 && status < 300) {
+                        final HttpEntity entity = response.getEntity();
 
+                        if (entity != null) {
+                            try (InputStream in = entity.getContent()) {
+                                Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+                                substring.set(url.substring(url.length() - 10));
+                                log.info("Successfully downloaded GeoIP2 database from link ending with: {} using Apache HttpClient 5.", substring);
+                                log.info("Downloaded GeoIP2 database to: {}", tempFile);
+                                return true;
+                            }
+                        } else {
+                            log.warn("Empty content received from {}", url);
+                            return false;
+                        }
+                    } else {
+                        log.error("Received unexpected status code {} from {}", status, url);
+                        return false;
+                    }
+                };
+
+                boolean success = httpClient.execute(httpGet, responseHandler);
+                if (success) {
+                    extractDatabase(tempFile);
+                    log.info("Successfully extracted GeoIP2 database from link ending with: : {}", substring);
+                    log.info("Successfully downloaded after {} attempts.", i + 1);
+                } else {
+                    throw new IOException("Failed to download or process the response from " + url);
+                }
             } catch (IOException e) {
                 log.error("Error downloading from {} (attempt {}/{}), retrying in {} seconds: {}",
                         url, i + 1, maxRetries, retryDelaySeconds, e.getMessage());
@@ -221,16 +250,79 @@ public class GeoIpDatabaseUpdater {
      * Downloads a file from the specified URL and saves it to the specified destination.
      *
      * @param url         The URL to download the file from.
-     * @param destination The path where the downloaded file will be saved.
      * @throws IOException        If an I/O error occurs during the download.
      * @throws URISyntaxException If the URL is malformed.
      */
-    private void downloadFile(String url, Path destination) throws IOException, URISyntaxException {
-        try (InputStream in = new URI(url).toURL().openStream()) {
-            Files.createDirectories(destination.getParent());
-            Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
-            log.info("Downloaded file from {} to {}", url, destination);
+    private void downloadFile(String url) throws IOException, URISyntaxException {
+
+        int maxRetries = 3;
+        int retryDelaySeconds = 10;
+
+        // Retry downloading the database up to maxRetries times
+        for (int i = 0; i < maxRetries; i++) {
+            Path downloadDirectory = Paths.get(this.downloadPath);
+            Files.createDirectories(downloadDirectory); // Ensure the directory exists
+            String filename = url.substring(url.lastIndexOf('/') + 1);
+            Path tempFile = downloadDirectory.resolve(filename);
+
+            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+
+                HttpGet httpGet = new HttpGet(url);
+                HttpClientResponseHandler<Boolean> responseHandler = getBooleanHttpClientResponseHandler(url, tempFile);
+
+                boolean success = httpClient.execute(httpGet, responseHandler);
+                if (success) {
+                    log.info("Successfully downloaded after {} attempts.", i + 1);
+                } else {
+                    throw new IOException("Failed to download or process the response from " + url);
+                }
+            } catch (IOException e) {
+                log.error("Error downloading from {} (attempt {}/{}), retrying in {} seconds: {}",
+                        url, i + 1, maxRetries, retryDelaySeconds, e.getMessage());
+                if (i < maxRetries - 1) {
+                    try {
+                        Thread.sleep(retryDelaySeconds * 1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Download retry interrupted.");
+                        throw new IOException("Download interrupted after " + (i + 1) + " attempts.", ie);
+                    }
+                } else {
+                    throw new IOException("Failed to download from " + url + " after " + maxRetries + " attempts.", e);
+                }
+            } finally {
+                Files.deleteIfExists(tempFile);
+                log.info("Temporary file deleted: {}, path: {} at time: {}", tempFile, tempFile.toAbsolutePath(), Instant.now());
+            }
         }
+    }
+
+    @NotNull
+    private static HttpClientResponseHandler<Boolean> getBooleanHttpClientResponseHandler(String url, Path tempFile) {
+        AtomicReference<String> substring = new AtomicReference<>();
+        HttpClientResponseHandler<Boolean> responseHandler = response -> {
+            final int status = response.getCode();
+            if (status >= 200 && status < 300) {
+                final HttpEntity entity = response.getEntity();
+
+                if (entity != null) {
+                    try (InputStream in = entity.getContent()) {
+                        Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
+                        substring.set(url.substring(url.length() - 10));
+                        log.info("Successfully downloaded GeoIP2 database from link ending with: {} using Apache HttpClient 5.", substring);
+                        log.info("Downloaded GeoIP2 database to: {}", tempFile);
+                        return true;
+                    }
+                } else {
+                    log.warn("Empty content received from {}", url);
+                    return false;
+                }
+            } else {
+                log.error("Received unexpected status code {} from {}", status, url);
+                return false;
+            }
+        };
+        return responseHandler;
     }
 
     private void extractDatabase(Path tarGzFile) throws IOException {
