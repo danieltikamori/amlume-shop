@@ -8,13 +8,12 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security;
+package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.properties.AsnProperties; // Import properties
 import me.amlu.shop.amlume_shop.repositories.AsnRepository;
 import me.amlu.shop.amlume_shop.security.model.AsnEntry;
-import me.amlu.shop.amlume_shop.security.service.AsnLookupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
