@@ -223,18 +223,30 @@ cache:
     expiration-minutes: 30 # Used by TokenCacheProperties
 
 # --- GeoIP / GeoIP2 ---
-geoip:
-  database:
-    path: classpath:/project/geoip/GeoLite2-City.mmdb
-  license:
-    account-id: ${GEOIP_ACCOUNT_ID} # LOAD SECURELY
-    key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
-
 geoip2:
-  database:
-    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
-  account-id: ${GEOIP2_ACCOUNT_ID} # LOAD SECURELY
-  license-key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
+  download-path: /tmp/geoip-updates # Or another suitable writable directory
+  license:
+    account-id: ${GEOIP2_ACCOUNT_ID} # LOAD SECURELY
+    license-key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
+    # --- GeoIP2 Databases ---
+    # Note: These paths should be writable by the application
+    # or use a shared volume if running in Docker
+  database-directory: /opt/geoip-databases # Or another suitable writable directory
+  city-database:
+    path: ${geoip2.database-directory}/GeoLite2-City.mmdb
+  asn-database:
+    path: ${geoip2.database-directory}/GeoLite2-ASN.mmdb
+  country-database:
+    path: ${geoip2.database-directory}/GeoLite2-Country.mmdb
+
+    # Note: Use classpath: if you want to package the databases with your app
+    # Ensure the databases are included in your build process (e.g., Maven/Gradle)
+#  city-database:
+#    path: classpath:/project/geoip/GeoLite2-City.mmdb
+#  asn-database:
+#    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
+#  country-database:
+#    path: classpath:/project/geoip/GeoLite2-Country.mmdb
 
 # --- HCP (Secrets should be loaded securely) ---
 hcp:
@@ -275,27 +287,31 @@ notification:
     token: ${SLACK_TOKEN} # LOAD SECURELY
 
 # --- PASETO (Keys are empty, loaded via Vault/Env by PasetoProperties) ---
+# Example: src/main/resources/application-local.yml (or bootstrap.yml if keys are only in Vault)
+
 paseto:
   token-no-footer-parts: 3
   token-with-footer-parts: 4
-  access:
-    expiration: 3600 # Default expiration for access tokens
-    local:
-      secret-key: "" # Loaded via Vault/Env
-      kid: ""        # Loaded via Vault/Env
-    public:
-      private-key: "" # Loaded via Vault/Env
-      public-key: ""  # Loaded via Vault/Env
-      kid: ""         # Loaded via Vault/Env
-  refresh:
-    expiration: 86400 # Default expiration for refresh tokens
-    local:
-      secret-key: "" # Loaded via Vault/Env
-      kid: ""        # Loaded via Vault/Env
-    public:
-      private-key: "" # Loaded via Vault/Env
-      public-key: ""  # Loaded via Vault/Env
-      kid: ""         # Loaded via Vault/Env
+  public: # Public (Asymmetric) Keys
+    access:
+      # private-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-access -> private-key
+      # public-key:  # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-access -> public-key
+      # kid:         # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-access -> kid
+      expiration: 3600s # Optional override for access token expiration (e.g., 1 hour)
+    refresh: # If using asymmetric refresh keys
+      # private-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-refresh -> private-key
+      # public-key:  # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-refresh -> public-key
+      # kid:         # Loaded from Vault: secret/data/amlume-shop/local/paseto-public-refresh -> kid
+      expiration: 86400s # Optional override for refresh token expiration (e.g., 1 day)
+  local: # Local (Symmetric) Keys
+    access:
+      # secret-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-access -> secret-key
+      # kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-access -> kid
+      expiration: 3600s # Optional override
+    refresh:
+      # secret-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> secret-key
+      # kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> kid
+      expiration: 86400s # Optional override
 
 # --- Project Paths ---
 project:
