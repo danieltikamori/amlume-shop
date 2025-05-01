@@ -27,12 +27,11 @@ import java.io.InputStream;
 
 @Configuration
 public class GeoIp2Config {
-//    @Value("${geoip2.license.key}")
-    @Value("${GEOIP2_LICENSE_KEY}")
+
+    @Value("${geoip2.license.license-key}")
     private String licenseKey;
 
-//    @Value("${geoip2.account.id}")
-    @Value("${GEOIP2_ACCOUNT_ID}")
+    @Value("${geoip2.license.account-id}")
     private int accountId;
 
     private static final Logger log = LoggerFactory.getLogger(GeoIp2Config.class);
@@ -41,7 +40,7 @@ public class GeoIp2Config {
     private final ResourceLoader resourceLoader;
 
     // Inject the path to the database file from application properties
-    @Value("${geoip2.database.path}") // e.g., classpath:geolite2/GeoLite2-ASN.mmdb or file:/path/to/GeoLite2-ASN.mmdb
+    @Value("${geoip2.asn-database.path}") // e.g., classpath:geolite2/GeoLite2-ASN.mmdb or file:/path/to/GeoLite2-ASN.mmdb
     private String databasePath;
 
     public GeoIp2Config(ResourceLoader resourceLoader) {
@@ -49,7 +48,7 @@ public class GeoIp2Config {
     }
 
     // For local MaxMind database file
-//    @Value("${geoip2.database.path}")
+//    @Value("${geoip2.asn-database.path}")
 //    private String databasePath;
 
     @Bean
