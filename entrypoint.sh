@@ -26,7 +26,7 @@ ENV_FILE_PATH="${ENV_FILE_PATH:-/.env}"
 VAULT_READY_TIMEOUT="${VAULT_READY_TIMEOUT:-60}"
 
 echo "Seeder: Starting up."
-echo "Seeder: Target Vault Addr: $VAULT_ADDR"
+echo "Seeder: Target Vault Addr: ${VAULT_ADDR}"
 echo "Seeder: Target Base Vault Path: $BASE_VAULT_PATH" # Log base path
 echo "Seeder: Source Env File: $ENV_FILE_PATH"
 echo "Seeder: Using Vault Token: $(echo "$VAULT_TOKEN" | head -c 5)... (masked)"
@@ -63,12 +63,25 @@ done
 
 # --- Source the .env file to load variables into the script's environment ---
 echo "Seeder: Sourcing environment variables from $ENV_FILE_PATH..."
+# Check if the .env file exists
+ls -l "$ENV_FILE_PATH" || { echo "Seeder: Error - Env file not found at $ENV_FILE_PATH"; exit 1; }
+# Check if the .env file is readable
+if [ ! -r "$ENV_FILE_PATH" ]; then
+    echo "Seeder: Error - Env file is not readable at $ENV_FILE_PATH"
+    exit 1
+fi
+
 # Use 'set -a' to export all variables defined in the .env file
 set -a
 # shellcheck source=/dev/null # Tell shellcheck to ignore SC1090/SC1091 if needed
 . "$ENV_FILE_PATH"
-set +a
-echo "Seeder: Environment variables sourced."
+ set +a
+        echo "Seeder: Environment variables sourced."
+        # --- DEBUGGING ECHO STATEMENTS ---
+        echo "DEBUG: DB_PASSWORD length: ${#DB_PASSWORD}" # Check length instead of value
+        echo "DEBUG: PASETO_PUBLIC_ACCESS_PRIVATE_KEY length: ${#PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"
+        echo "DEBUG: CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}" # Example non-sensitive
+        # --- END DEBUGGING ---
 
 # --- Populate Vault with Specific Secrets ---
 echo "Seeder: Populating specific secrets into Vault..."
