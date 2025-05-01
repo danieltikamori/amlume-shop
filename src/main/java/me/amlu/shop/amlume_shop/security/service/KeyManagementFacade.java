@@ -47,27 +47,25 @@ public class KeyManagementFacade {
     @PostConstruct
     public void checkInjectedProperties() {
         log.info("--- KeyManagementFacade PostConstruct ---");
-
-        // Log the MFA password value
-        log.info("MFA Encryption Password (@Value): '{}'", mfaEncryptionPassword != null ? "[REDACTED]" : "null"); // Redact actual value
+        log.info("MFA Encryption Password (@Value): '{}'", mfaEncryptionPassword != null ? "[REDACTED]" : "null");
 
         if (pasetoProperties == null) {
             log.error("PasetoProperties bean is NULL in KeyManagementFacade!");
         } else {
-            log.info("PasetoProperties.access: {}", pasetoProperties.getAccess());
-            if (pasetoProperties.getAccess() != null) {
-                log.info("PasetoProperties.access.pub: {}", pasetoProperties.getAccess().getPub());
-                if (pasetoProperties.getAccess().getPub() != null) {
-                    // Log if private key is null or not
-                    log.info("PasetoProperties.access.pub.privateKey is null? {}", pasetoProperties.getAccess().getPub().getPrivateKey() == null);
-                    // Avoid logging the actual key value even if it were present
-                } else {
-                    log.warn("PasetoProperties.access.pub is NULL");
-                }
+            log.info("PasetoProperties: {}", pasetoProperties); // Log the whole structure (uses updated toString)
+
+            // More specific checks using the new structure
+            if (pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null) {
+                log.info("PasetoProperties.pub.access.privateKey is null? {}", pasetoProperties.getPub().getAccess().getPrivateKey() == null);
             } else {
-                log.warn("PasetoProperties.access is NULL");
+                log.warn("PasetoProperties.pub or PasetoProperties.pub.access is NULL");
             }
-            // You can add similar checks for refresh keys if needed
+            if (pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getAccess() != null) {
+                log.info("PasetoProperties.local.access.secretKey is null? {}", pasetoProperties.getLocal().getAccess().getSecretKey() == null);
+            } else {
+                log.warn("PasetoProperties.local or PasetoProperties.local.access is NULL");
+            }
+            // Add checks for refresh keys if needed
         }
         log.info("--- End KeyManagementFacade PostConstruct ---");
     }
@@ -90,24 +88,24 @@ public class KeyManagementFacade {
 
         // Use nested accessors
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            privateKey = pasetoProperties.getAccess().getPub().getPrivateKey();
-            publicKey = pasetoProperties.getAccess().getPub().getPublicKey();
-            privateKeyPropertyPath = "paseto.access.public.private-key";
-            publicKeyPropertyPath = "paseto.access.public.public-key";
+            privateKey = pasetoProperties.getPub().getAccess().getPrivateKey();
+            publicKey = pasetoProperties.getPub().getAccess().getPublicKey();
+            privateKeyPropertyPath = "paseto.public.access.private-key";
+            publicKeyPropertyPath = "paseto.public.access.public-key";  
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
-            // Assuming REFRESH might also use asymmetric keys (adjust if not)
-            privateKey = pasetoProperties.getRefresh().getPub().getPrivateKey();
-            publicKey = pasetoProperties.getRefresh().getPub().getPublicKey();
-            privateKeyPropertyPath = "paseto.refresh.public.private-key";
-            publicKeyPropertyPath = "paseto.refresh.public.public-key";
+            // Assuming REFRESH might also use asymmetric keys
+            privateKey = pasetoProperties.getPub().getRefresh().getPrivateKey();
+            publicKey = pasetoProperties.getPub().getRefresh().getPublicKey();
+            privateKeyPropertyPath = "paseto.public.refresh.private-key";
+            publicKeyPropertyPath = "paseto.public.refresh.public-key";  
         } else {
             log.warn("Asymmetric keys requested for unsupported purpose: {}", purpose);
             throw new KeyManagementException("Unsupported purpose for asymmetric keys: " + purpose);
         }
 
-        // Use Objects.requireNonNull for cleaner null checks
-        Objects.requireNonNull(privateKey, "Private key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + privateKeyPropertyPath + ")");
-        Objects.requireNonNull(publicKey, "Public key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + publicKeyPropertyPath + ")");
+        // Use Objects.requireNonNull for cleaner null check
+        Objects.requireNonNull(privateKey, "Private key for purpose '" + purpose + "' is not available (check Vault/config path: " + privateKeyPropertyPath + ")");
+        Objects.requireNonNull(publicKey, "Public key for purpose '" + purpose + "' is not available (check Vault/config path: " + publicKeyPropertyPath + ")");
 
         return new KeyPair(privateKey, publicKey);
     }
@@ -123,25 +121,26 @@ public class KeyManagementFacade {
     public String getSymmetricKey(String purpose) {
         log.debug("Retrieving symmetric key for purpose: {}", purpose);
         String key;
-        String propertyName; // For logging the expected property path
+        String propertyName;
 
-        // Use nested accessors
+        // Use NEW nested accessors
         if ("ACCESS".equalsIgnoreCase(purpose)) {
-            key = pasetoProperties.getAccess().getLocal().getSecretKey();
-            propertyName = "paseto.access.local.secret-key";
+            key = pasetoProperties.getLocal().getAccess().getSecretKey();
+            propertyName = "paseto.local.access.secret-key";
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
-            key = pasetoProperties.getRefresh().getLocal().getSecretKey();
-            propertyName = "paseto.refresh.local.secret-key";
+            key = pasetoProperties.getLocal().getRefresh().getSecretKey();
+            propertyName = "paseto.local.refresh.secret-key";
         } else {
             log.warn("Symmetric key requested for unsupported purpose: {}", purpose);
             throw new KeyManagementException("Unsupported purpose for symmetric key: " + purpose);
         }
 
         // Use Objects.requireNonNull for cleaner null check
-        Objects.requireNonNull(key, "Symmetric key for purpose '" + purpose + "' is not available (check Vault/environment variable/YAML path: " + propertyName + ")");
+        Objects.requireNonNull(key, "Symmetric key for purpose '" + purpose + "' is not available (check Vault/config path: " + propertyName + ")");
 
         return key;
     }
+
 
     // --- Optional: Getter for other injected secrets if needed elsewhere ---
     public String getMfaEncryptionPassword() {
