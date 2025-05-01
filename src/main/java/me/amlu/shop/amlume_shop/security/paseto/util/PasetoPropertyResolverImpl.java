@@ -51,78 +51,75 @@ public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
     // --- Key Material Resolvers (Updated previously) ---
     @Override
     public String resolveAccessPublicKey() {
-        String key = pasetoProperties.getAccess() != null && pasetoProperties.getAccess().getPub() != null
-                ? pasetoProperties.getAccess().getPub().getPublicKey()
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getPublicKey()
                 : null;
-        return Objects.requireNonNull(key, "Access Public Key not configured (paseto.access.public.public-key)");
+        return Objects.requireNonNull(key, "Access Public Key not configured (paseto.public.access.public-key)"); // Updated path
     }
 
     @Override
     public String resolveAccessPrivateKey() {
-        String key = pasetoProperties.getAccess() != null && pasetoProperties.getAccess().getPub() != null
-                ? pasetoProperties.getAccess().getPub().getPrivateKey()
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getPrivateKey()
                 : null;
-        return Objects.requireNonNull(key, "Access Private Key not configured (paseto.access.public.private-key)");
+        return Objects.requireNonNull(key, "Access Private Key not configured (paseto.public.access.private-key)"); // Updated path
     }
 
     @Override
     public String resolveAccessSecretKey() {
-        String key = pasetoProperties.getAccess() != null && pasetoProperties.getAccess().getLocal() != null
-                ? pasetoProperties.getAccess().getLocal().getSecretKey()
+        String key = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getAccess() != null
+                ? pasetoProperties.getLocal().getAccess().getSecretKey()
                 : null;
-        return Objects.requireNonNull(key, "Access Secret Key not configured (paseto.access.local.secret-key)");
+        return Objects.requireNonNull(key, "Access Secret Key not configured (paseto.local.access.secret-key)"); // Updated path
     }
 
     @Override
     public String resolveRefreshSecretKey() {
-        String key = pasetoProperties.getRefresh() != null && pasetoProperties.getRefresh().getLocal() != null
-                ? pasetoProperties.getRefresh().getLocal().getSecretKey()
+        String key = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getRefresh() != null
+                ? pasetoProperties.getLocal().getRefresh().getSecretKey()
                 : null;
-        return Objects.requireNonNull(key, "Refresh Secret Key not configured (paseto.refresh.local.secret-key)");
+        return Objects.requireNonNull(key, "Refresh Secret Key not configured (paseto.local.refresh.secret-key)"); // Updated path
     }
 
     @Override
     public String resolveRefreshPrivateKey() {
-        String key = pasetoProperties.getRefresh() != null && pasetoProperties.getRefresh().getPub() != null
-                ? pasetoProperties.getRefresh().getPub().getPrivateKey()
+        // Assuming public refresh keys if this method exists
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getRefresh() != null
+                ? pasetoProperties.getPub().getRefresh().getPrivateKey()
                 : null;
-        return Objects.requireNonNull(key, "Refresh Private Key not configured (paseto.refresh.public.private-key)");
+        return Objects.requireNonNull(key, "Refresh Private Key not configured (paseto.public.refresh.private-key)"); // Updated path
     }
 
     // --- KID Resolvers (Updated NOW) ---
     @Override
     public String resolvePublicAccessKid() {
-        // Updated access path
-        String kid = pasetoProperties.getAccess() != null && pasetoProperties.getAccess().getPub() != null
-                ? pasetoProperties.getAccess().getPub().getKid()
+        String kid = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getKid()
                 : null;
-        return Objects.requireNonNull(kid, "Public Access KID not configured (paseto.access.public.kid)");
+        return Objects.requireNonNull(kid, "Public Access KID not configured (paseto.public.access.kid)"); // Updated path
     }
 
     @Override
     public String resolvePublicRefreshKid() {
-        // Updated access path
-        String kid = pasetoProperties.getRefresh() != null && pasetoProperties.getRefresh().getPub() != null
-                ? pasetoProperties.getRefresh().getPub().getKid()
+        String kid = pasetoProperties.getPub() != null && pasetoProperties.getPub().getRefresh() != null
+                ? pasetoProperties.getPub().getRefresh().getKid()
                 : null;
-        return Objects.requireNonNull(kid, "Public Refresh KID not configured (paseto.refresh.public.kid)");
+        return Objects.requireNonNull(kid, "Public Refresh KID not configured (paseto.public.refresh.kid)"); // Updated path
     }
 
     @Override
     public String resolveLocalAccessKid() {
-        // Updated access path
-        String kid = pasetoProperties.getAccess() != null && pasetoProperties.getAccess().getLocal() != null
-                ? pasetoProperties.getAccess().getLocal().getKid()
+        String kid = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getAccess() != null
+                ? pasetoProperties.getLocal().getAccess().getKid()
                 : null;
-        return Objects.requireNonNull(kid, "Local Access KID not configured (paseto.access.local.kid)");
+        return Objects.requireNonNull(kid, "Local Access KID not configured (paseto.local.access.kid)"); // Updated path
     }
 
     @Override
     public String resolveLocalRefreshKid() {
-        // Updated access path
-        String kid = pasetoProperties.getRefresh() != null && pasetoProperties.getRefresh().getLocal() != null
-                ? pasetoProperties.getRefresh().getLocal().getKid()
+        String kid = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getRefresh() != null
+                ? pasetoProperties.getLocal().getRefresh().getKid()
                 : null;
-        return Objects.requireNonNull(kid, "Local Refresh KID not configured (paseto.refresh.local.kid)");
+        return Objects.requireNonNull(kid, "Local Refresh KID not configured (paseto.local.refresh.kid)"); // Updated path
     }
 }
