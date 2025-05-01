@@ -16,15 +16,20 @@ import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.model.CountryResponse;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import me.amlu.shop.amlume_shop.config.properties.GeoIp2Properties;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.BeanInitializationException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
  * Service to interact with MaxMind's GeoIP2 database.
@@ -39,14 +44,30 @@ import java.net.InetAddress;
  * <p>
  * TODO: Check if it is necessary to use several databases (ASN, City, Country).
  */
+@DependsOn("geoIpDatabaseDownloader") // Ensures downloader runs first
 @Service
 public class MaxMindGeoService {
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(MaxMindGeoService.class);
 
     @Value("${geoip2.city-database.path}")
     private Resource geoipDatabase;
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(MaxMindGeoService.class);
+
+    private final DatabaseReader cityReader;
     private DatabaseReader reader;
+
+    // Constructor will run AFTER geoIpDatabaseDownloader.checkAndPrepareDatabases()
+    public MaxMindGeoService(GeoIp2Properties properties /*, other dependencies */) {
+        try {
+            Path cityDbPath = Paths.get(properties.getCityDatabase().getPath());
+            this.cityReader = new DatabaseReader.Builder(cityDbPath.toFile()).build();
+            // ... initialize other readers ...
+        } catch (IOException e) {
+            log.error("FATAL: Could not initialize MaxMind DatabaseReader in constructor. Path: {}", properties.getCityDatabase().getPath(), e);
+            // Throwing here will prevent bean creation
+            throw new BeanInitializationException("Failed to initialize MaxMindGeoService readers", e);
+        }
+    }
 
     @PostConstruct
     public void init() throws IOException {
