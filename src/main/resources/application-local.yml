@@ -242,11 +242,11 @@ geoip2:
     # Note: Use classpath: if you want to package the databases with your app
     # Ensure the databases are included in your build process (e.g., Maven/Gradle)
 #  city-database:
-#    path: classpath:/project/geoip/GeoLite2-City.mmdb
+#    path: classpath:/project/geoip2/GeoLite2-City.mmdb
 #  asn-database:
-#    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
+#    path: classpath:/project/geoip2/GeoLite2-ASN.mmdb
 #  country-database:
-#    path: classpath:/project/geoip/GeoLite2-Country.mmdb
+#    path: classpath:/project/geoip2/GeoLite2-Country.mmdb
 
 # --- HCP (Secrets should be loaded securely) ---
 hcp:
