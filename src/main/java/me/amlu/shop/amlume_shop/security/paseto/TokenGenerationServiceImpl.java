@@ -54,14 +54,14 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
     private final TokenClaimsService tokenClaimsService;
     private final HttpServletRequest httpServletRequest;
 
-    @Value("${paseto.access.public.kid}")
-    private String pasetoAccessPublicKid;
+    @Value("${paseto.public.access.kid}") // Updated path
+    private String pasetoPublicAccessKid; // Renamed field
 
-    @Value("${paseto.access.local.kid}")
-    private String pasetoAccessLocalKid;
+    @Value("${paseto.local.access.kid}") // Updated path
+    private String pasetoLocalAccessKid; // Kept field name
 
-    @Value("${paseto.refresh.local.kid}")
-    private String pasetoRefreshLocalKid;
+    @Value("${paseto.local.refresh.kid}") // Updated path
+    private String pasetoLocalRefreshKid; // Kept field name
 
     // Constructor updated to inject MeterRegistry and remove PrometheusMeterRegistry/TokenCacheService
     public TokenGenerationServiceImpl(
@@ -95,7 +95,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
         try {
             String payload = objectMapper.writeValueAsString(claims);
 
-            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoAccessPublicKid);
+            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoPublicAccessKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
             generatedToken = Paseto.sign(keyManagementService.getAccessPrivateKey(), payload, footer);
@@ -141,7 +141,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
         try {
             String payload = objectMapper.writeValueAsString(claims);
 
-            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoAccessLocalKid);
+            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoLocalAccessKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
             generatedToken = Paseto.encrypt(keyManagementService.getAccessSecretKey(), payload, footer);
@@ -181,7 +181,7 @@ public class TokenGenerationServiceImpl implements TokenGenerationService {
             PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(String.valueOf(user.getUserId()), authenticationInterface.getRefreshTokenDuration());
             String payload = objectMapper.writeValueAsString(claims);
 
-            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoRefreshLocalKid);
+            PasetoClaims footerClaims = tokenClaimsService.createPasetoFooterClaims(pasetoLocalRefreshKid);
             String footer = objectMapper.writeValueAsString(footerClaims);
 
             refreshToken = Paseto.encrypt(keyManagementService.getRefreshSecretKey(), payload, footer);
