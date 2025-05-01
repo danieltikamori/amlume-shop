@@ -26,11 +26,24 @@ import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 
+/**
+ * Service to interact with MaxMind's GeoIP2 database.
+ * This service provides methods to get country codes, geolocation data,
+ * check if an IP is in a specific country, and calculate distances between two IPs.
+ * <p>
+ * This service uses the MaxMind GeoIP2 Java API to read the database files.
+ * It requires the database files to be present in the specified path.
+ * <p>
+ * The database files can be downloaded from MaxMind's website.
+ * Make sure to keep the database files updated regularly.
+ * <p>
+ * TODO: Check if it is necessary to use several databases (ASN, City, Country).
+ */
 @Service
 public class MaxMindGeoService {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(MaxMindGeoService.class);
 
-    @Value("${geoip.database.path}")
+    @Value("${geoip2.city-database.path}")
     private Resource geoipDatabase;
 
     private DatabaseReader reader;
