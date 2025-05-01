@@ -45,7 +45,7 @@ public class AsnConfig {
     // Keep @Bean methods for dependencies if they are configured here
     @Bean
     public GeoIp2Service geoIp2Service(ResourceLoader resourceLoader,
-                                       @Value("${geoip2.database.path}") String dbPath) throws IOException, FileNotFoundException {
+                                       @Value("${geoip2.asn-database.path}") String dbPath) throws IOException, FileNotFoundException {
 
         log.info("Attempting to load GeoIP2 database from path: {}", dbPath);
 
@@ -56,7 +56,7 @@ public class AsnConfig {
             log.error("GeoIP2 ASN database file not found at path: {}", dbPath);
             // Throw a specific, informative exception
             throw new FileNotFoundException("GeoIP2 ASN database file not found at path: " + dbPath +
-                    ". Please ensure the file exists and the path in application.yml (geoip2.database.path) uses the 'file:' prefix (e.g., 'file:/project/geoip/GeoLite2-ASN.mmdb').");
+                    ". Please ensure the file exists and the path in application.yml (geoip2.asn-database.path) uses the 'file:' prefix (e.g., 'file:/project/geoip2/GeoLite2-ASN.mmdb').");
         }
 
         try (InputStream dbStream = resource.getInputStream()) {
