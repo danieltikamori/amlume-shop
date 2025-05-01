@@ -24,6 +24,7 @@ import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -131,12 +132,17 @@ public class SecurityConfig {
                 // Register the custom MFA Authentication Provider
                 .authenticationProvider(mfaAuthenticationProvider)
 
+//                .oauth2ResourceServer(oauth2 -> oauth2
+//                        .jwt(Customizer.withDefaults()) // Use default JWT decoder validation using issuer uri
+//                )
+////                        .jwt(jwt -> jwt.jwtAuthenticationConverter(new PasetoAuthenticationConverter(pasetoTokenService))) // Use PASETO for JWT
+////                )
                 // --- Filter Chain Order ---
                 // 1. Global Rate Limiting (Very Early)
                 .addFilterBefore(globalRateLimitingFilter, UsernamePasswordAuthenticationFilter.class) // Or CsrfFilter.class if CSRF is earlier
 
-                // 2. PASETO Token Authentication (Attempt token auth first)
-                .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class)
+//                // 2. PASETO Token Authentication (Attempt token auth first)
+//                .addFilterBefore(new PasetoAuthenticationFilter(pasetoTokenService), UsernamePasswordAuthenticationFilter.class)
 
                 // 3. Custom Username/Password Authentication (If token fails or not present)
                 // This filter should attempt authentication and set SecurityContext if successful (potentially partially if MFA needed)
@@ -152,6 +158,16 @@ public class SecurityConfig {
                 .addFilterAfter(deviceFingerprintVerificationFilter, AuthorizationFilter.class)
 
                 // --- Authorization Rules ---
+
+                // Keycloak Authorization (if using Keycloak)
+//                .authorizeHttpRequests(authz -> authz
+//                        .requestMatchers("/public/**").permitAll()
+//                        // Add rules based on roles/scopes from Keycloak JWT
+//                        .requestMatchers("/admin/**").hasRole("ADMIN") // Roles from JWT 'roles' or 'groups' claim
+//                        .requestMatchers("/api/orders/**").hasAuthority("SCOPE_orders.read") // Scopes from JWT 'scope' claim
+//                        .anyRequest().authenticated()
+//                );
+
                 .authorizeHttpRequests(auth -> auth
                                 .requestMatchers(
                                         // Authentication endpoints
