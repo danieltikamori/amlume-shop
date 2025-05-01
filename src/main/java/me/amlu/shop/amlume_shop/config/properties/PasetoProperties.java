@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.config.properties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+import java.time.Duration;
 import java.util.Objects;
 
 /**
@@ -166,7 +167,7 @@ public class PasetoProperties {
             private String privateKey;
             private String publicKey;
             private String kid;
-            private Long expiration;
+            private Duration expiration;
 
             public KeyConfig() {
             }
@@ -195,11 +196,11 @@ public class PasetoProperties {
                 this.kid = kid;
             }
 
-            public Long getExpiration() {
+            public Duration getExpiration() {
                 return this.expiration;
             }
 
-            public void setExpiration(Long expiration) {
+            public void setExpiration(Duration expiration) {
                 this.expiration = expiration;
             }
 
@@ -280,7 +281,7 @@ public class PasetoProperties {
         public static class KeyConfig {
             private String secretKey;
             private String kid;
-            private Long expiration;
+            private Duration expiration;
 
             public KeyConfig() {
             }
@@ -301,11 +302,11 @@ public class PasetoProperties {
                 this.kid = kid;
             }
 
-            public Long getExpiration() {
+            public Duration getExpiration() {
                 return this.expiration;
             }
 
-            public void setExpiration(Long expiration) {
+            public void setExpiration(Duration expiration) {
                 this.expiration = expiration;
             }
 
