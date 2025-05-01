@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.service; // Or a suitable package
+package me.amlu.shop.amlume_shop.service;
 
 import jakarta.annotation.PostConstruct;
 import me.amlu.shop.amlume_shop.config.properties.GeoIp2Properties;
@@ -52,7 +52,7 @@ public class GeoIpDatabaseDownloader {
                 // Fail fast - application likely won't work
                 throw new IllegalStateException("GeoIP2 path is not a directory: " + dbDirectory);
             } else {
-                 log.debug("GeoIP2 database directory exists: {}", dbDirectory);
+                log.debug("GeoIP2 database directory exists: {}", dbDirectory);
             }
 
             // 2. Check Individual Database Files (Example for City DB)
@@ -90,9 +90,9 @@ public class GeoIpDatabaseDownloader {
                     needsDownload = true;
                 }
             } catch (IOException e) {
-                 log.error("Could not determine age of GeoIP2 database file: {}", filePath, e);
-                 // Decide if you want to force download on error or not
-                 // needsDownload = true;
+                log.error("Could not determine age of GeoIP2 database file: {}", filePath, e);
+                // Decide if you want to force download on error or not
+                // needsDownload = true;
             }
         }
 
@@ -102,11 +102,11 @@ public class GeoIpDatabaseDownloader {
             // OR: implementDirectDownload(filePath, dbName); // Use RestTemplate/WebClient
 
             if (!success) {
-                 log.error("Failed to download/update {} database. The application might not function correctly.", dbName);
-                 // Decide if failure is critical
-                 // throw new RuntimeException("Failed to download required GeoIP database: " + dbName);
+                log.error("Failed to download/update {} database. The application might not function correctly.", dbName);
+                // Decide if failure is critical
+                // throw new RuntimeException("Failed to download required GeoIP database: " + dbName);
             } else {
-                 log.info("Successfully downloaded/updated {} database.", dbName);
+                log.info("Successfully downloaded/updated {} database.", dbName);
             }
         }
     }
@@ -149,9 +149,9 @@ public class GeoIpDatabaseDownloader {
             boolean finished = process.waitFor(2, TimeUnit.MINUTES); // 2-minute timeout
 
             if (!finished) {
-                 log.error("geoipupdate command timed out after 2 minutes.");
-                 process.destroyForcibly();
-                 return false;
+                log.error("geoipupdate command timed out after 2 minutes.");
+                process.destroyForcibly();
+                return false;
             }
 
             int exitCode = process.exitValue();
@@ -172,10 +172,35 @@ public class GeoIpDatabaseDownloader {
             Thread.currentThread().interrupt();
             return false;
         } catch (Exception e) {
-             log.error("Unexpected error running geoipupdate.", e);
-             return false;
+            log.error("Unexpected error running geoipupdate.", e);
+            return false;
         }
     }
+
+//    Configure geoipupdate (Recommended Approach):
+//    The runGeoIpUpdateTool method relies on the external geoipupdate command. We need to:
+//    •Install geoipupdate: Download and install it from MaxMind (https://github.com/maxmind/geoipupdate/releases). Make sure it's accessible in your system's PATH or provide the full path in runGeoIpUpdateTool.
+//    •Create GeoIP.conf: Create a configuration file (usually /etc/GeoIP.conf on Linux, or you can specify a path with -f). Populate it with your credentials and desired databases:
+    //    # /etc/GeoIP.conf Example
+    //    # Use 'YOUR_ACCOUNT_ID' and 'YOUR_LICENSE_KEY' from MaxMind account.
+    //    AccountID YOUR_ACCOUNT_ID
+    //    LicenseKey YOUR_LICENSE_KEY
+    //
+    //    # Specify the Edition IDs of the databases you want to download.
+    //    # Use 'GeoLite2-ASN', 'GeoLite2-City', 'GeoLite2-Country' for GeoLite2.
+    //    EditionIDs GeoLite2-ASN GeoLite2-City GeoLite2-Country
+    //
+    //    # Set the directory where the databases will be stored.
+    //    # Make sure this matches geoip2.database-directory in application-local.yml
+    //    DatabaseDirectory C:/dev/geoip-databases
+    //    # Use /opt/geoip-databases for Linux/Docker environments
+    //
+    //    # Optional: Proxy settings if needed
+    //    # Proxy user:password@host:port
+    //
+
+//    •Security: Store AccountID and LicenseKey securely (environment variables, Vault) and potentially generate GeoIP.conf dynamically at startup if needed, rather than committing credentials.
+
 
     // Placeholder for direct download implementation (more complex)
     /*
