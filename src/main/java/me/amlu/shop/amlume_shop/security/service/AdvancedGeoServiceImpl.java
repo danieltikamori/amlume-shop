@@ -14,12 +14,14 @@ import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
 import me.amlu.shop.amlume_shop.config.ValkeyCacheConfig;
+import me.amlu.shop.amlume_shop.config.properties.GeoProperties;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.enums.RiskLevel;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import me.amlu.shop.amlume_shop.security.model.GeoLocationHistory;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -41,6 +43,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     private final MetricRegistry metrics;
     private final EnhancedVpnDetectorService vpnDetector;
     private final AsnReputationService reputationService;
+    private final GeoProperties geoProperties;
 
     // --- Injected Config ---
 //    @Value("${security.geo.suspicious-distance-km:500.0}")
@@ -49,10 +52,9 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     // timeWindowHours is used for cache TTL, configured in ValkeyCacheConfig now
 
 //    @Value("${security.geo.known-vpn-asns}")
-    private Set<String> knownVpnAsns; // Injected from application.yml
+    private final Set<String> knownVpnAsns; // Injected from application.yml
 
-//    @Value("${security.geo.high-risk-countries}")
-    private Set<String> highRiskCountries; // Injected from application.yml
+//    private Set<String> highRiskCountries; // Injected now from GeoProperties
 
     // --- Spring Cache ---
     private final Cache locationHistoryCacheInstance;
@@ -62,11 +64,12 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                   AlertService alertService,
                                   MetricRegistry metrics,
                                   EnhancedVpnDetectorService vpnDetector,
-                                  AsnReputationService reputationService,
+                                  AsnReputationService reputationService, GeoProperties geoProperties,
                                   CacheManager cacheManager,
                                   @Value("${security.geo.suspicious-distance-km}")double suspiciousDistanceKm,
-                                  Set<String> knownVpnAsns,
-                                  Set<String> highRiskCountries// Inject CacheManager
+                                  @Qualifier("knownVpnAsns") Set<String> knownVpnAsns,
+                                  @Qualifier("highRiskCountries") Set<String> highRiskCountries
+
     ) {
         this.maxMindGeoService = maxMindGeoService;
         this.geoIp2Service = geoIp2Service;
@@ -74,9 +77,9 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         this.metrics = metrics;
         this.vpnDetector = vpnDetector;
         this.reputationService = reputationService;
+        this.geoProperties = geoProperties;
         this.suspiciousDistanceKm = suspiciousDistanceKm;
         this.knownVpnAsns = knownVpnAsns;
-        this.highRiskCountries = highRiskCountries;
 
         // Initialize Spring Cache instance
         this.locationHistoryCacheInstance = cacheManager.getCache(ValkeyCacheConfig.GEO_HISTORY_CACHE);
@@ -85,7 +88,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         log.info("AdvancedGeoServiceImpl initialized.");
         // Log injected config for verification during startup (optional)
         log.debug("Known VPN ASNs count: {}", knownVpnAsns != null ? knownVpnAsns.size() : 0);
-        log.debug("High Risk Countries count: {}", highRiskCountries != null ? highRiskCountries.size() : 0);
+        log.debug("High Risk Countries count: {}", geoProperties.getHighRiskCountries() != null ? geoProperties.getHighRiskCountries().size() : 0);
     }
 
     @Override
@@ -286,10 +289,10 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
     // --- highRiskCountries ---
     @Override
     public boolean isHighRiskCountry(String countryCode) {
-        if (countryCode == null || highRiskCountries == null) {
+        if (countryCode == null || geoProperties.getHighRiskCountries() == null) {
             return false;
         }
-        boolean isHighRisk = highRiskCountries.contains(countryCode);
+        boolean isHighRisk = geoProperties.getHighRiskCountries().contains(countryCode);
         if (isHighRisk) {
             metrics.counter("geo.high.risk.country").inc();
             log.debug("High-risk country detected: {}", countryCode);
