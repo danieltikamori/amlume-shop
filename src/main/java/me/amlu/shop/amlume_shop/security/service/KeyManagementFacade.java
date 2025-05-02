@@ -11,7 +11,8 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.annotation.PostConstruct;
-import me.amlu.shop.amlume_shop.config.properties.PasetoProperties; // Import PasetoProperties
+import me.amlu.shop.amlume_shop.config.properties.MfaProperties;
+import me.amlu.shop.amlume_shop.config.properties.PasetoProperties;
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
 import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import org.slf4j.Logger;
@@ -29,17 +30,20 @@ public class KeyManagementFacade {
     // --- Injected Paseto Properties Bean ---
     private final PasetoProperties pasetoProperties;
 
+    private final MfaProperties mfaProperties;
+
     // --- Other secrets if needed by this facade or passed through ---
     // Keep @Value for secrets NOT managed within PasetoProperties
-    // TODO: Ensure 'mfa-encryption-password' is correctly defined in Vault or application properties
-    //       If it's meant to be in Vault under 'secret/amlume-shop/mfa', use @Value("${mfa.encryption.password}")
-    //       and ensure Vault integration is working. If it's a direct property, ensure it's set.
-    @Value("${mfa.encryption.password}") // Assuming it maps to mfa.encryption.password now
-    private String mfaEncryptionPassword;
+
+    // DONE: SECURITY - Move MFA password to Vault (e.g., secret/amlume-shop/mfa)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., MfaProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
+//    private String mfaEncryptionPassword;
 
     // Constructor updated to inject PasetoProperties
-    public KeyManagementFacade(PasetoProperties pasetoProperties) {
+    public KeyManagementFacade(PasetoProperties pasetoProperties, MfaProperties mfaProperties) {
         this.pasetoProperties = pasetoProperties;
+        this.mfaProperties = mfaProperties;
         log.info("KeyManagementFacade initialized. PASETO secrets will be retrieved via PasetoProperties bean.");
     }
 
@@ -47,7 +51,7 @@ public class KeyManagementFacade {
     @PostConstruct
     public void checkInjectedProperties() {
         log.info("--- KeyManagementFacade PostConstruct ---");
-        log.info("MFA Encryption Password (@Value): '{}'", mfaEncryptionPassword != null ? "[REDACTED]" : "null");
+        log.info("MFA Encryption Password (@Value): '{}'", mfaProperties.getMfaEncryptionPassword() != null ? "[REDACTED]" : "null");
 
         if (pasetoProperties == null) {
             log.error("PasetoProperties bean is NULL in KeyManagementFacade!");
@@ -145,8 +149,8 @@ public class KeyManagementFacade {
     // --- Optional: Getter for other injected secrets if needed elsewhere ---
     public String getMfaEncryptionPassword() {
         // Use Objects.requireNonNull
-        Objects.requireNonNull(mfaEncryptionPassword, "MFA encryption password is not available (check Vault/environment variable/YAML path: mfa.encryption.password)");
-        return mfaEncryptionPassword;
+        Objects.requireNonNull(mfaProperties.getMfaEncryptionPassword(), "MFA encryption password is not available (check Vault/environment variable/YAML path: mfa.encryption.password)");
+        return mfaProperties.getMfaEncryptionPassword();
     }
 
     // Removed getCachedKey(), updateKeys(), refreshKeys()
