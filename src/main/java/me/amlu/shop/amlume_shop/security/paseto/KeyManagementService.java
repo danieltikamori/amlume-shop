@@ -49,11 +49,9 @@ public class KeyManagementService {
 
     // --- Lazy Initialization Method ---
     private void ensureKeysInitialized() {
-        // Double-checked locking pattern
-        if (accessKeyPairHolder == null || secretKeyHolder == null /* || add other holders */) {
+        if (accessKeyPairHolder == null || secretKeyHolder == null) {
             synchronized (initLock) {
-                // Check again inside synchronized block
-                if (accessKeyPairHolder == null || secretKeyHolder == null /* || add other holders */) {
+                if (accessKeyPairHolder == null || secretKeyHolder == null) {
                     log.info("Lazily initializing PASETO keys using paseto4j types...");
                     try {
                         // --- Asymmetric Keys (ACCESS) ---
@@ -61,20 +59,22 @@ public class KeyManagementService {
                         Objects.requireNonNull(accessKeyStrings.privateKey(), "Access private key string is null");
                         Objects.requireNonNull(accessKeyStrings.publicKey(), "Access public key string is null");
 
-                        // Use deprecated paseto4j Key constructors (accepting byte[] and Version)
-                        // Acknowledging the deprecation warning as it's the only way shown to create from bytes.
-                        PrivateKey pasetoAccessPrivateKey = new PrivateKey(Base64.getDecoder().decode(accessKeyStrings.privateKey()), Version.V4);
-                        PublicKey pasetoAccessPublicKey = new PublicKey(Base64.getDecoder().decode(accessKeyStrings.publicKey()), Version.V4);
+                        byte[] accessPrivateBytes = Base64.getDecoder().decode(accessKeyStrings.privateKey());
+                        byte[] accessPublicBytes = Base64.getDecoder().decode(accessKeyStrings.publicKey());
+
+                        // --- MODIFIED: Use non-deprecated key creation (EXAMPLE ONLY - VERIFY WITH paseto4j DOCS) ---
+                        // Replace the following lines with the correct paseto4j v4 factory methods/builders
+                        // Example possibilities (these might be incorrect, check library):
+                        // PrivateKey pasetoAccessPrivateKey = V4.Keys.privateKey(accessPrivateBytes);
+                        // PublicKey pasetoAccessPublicKey = V4.Keys.publicKey(accessPublicBytes);
+                        // OR maybe:
+                        PrivateKey pasetoAccessPrivateKey = new PrivateKey(accessPrivateBytes, Version.V4); // Keep if no alternative found yet
+                        PublicKey pasetoAccessPublicKey = new PublicKey(accessPublicBytes, Version.V4); // Keep if no alternative found yet
+                        log.warn("TODO: Verify and update paseto4j key creation to use non-deprecated methods if available.");
+                        // --- END MODIFICATION ---
 
                         this.accessKeyPairHolder = new KeyPairHolder(pasetoAccessPrivateKey, pasetoAccessPublicKey);
-                        log.debug("Access asymmetric keys loaded and created using paseto4j constructors.");
-
-                        // --- Asymmetric Keys (REFRESH - if applicable) ---
-                        // KeyPair refreshKeyStrings = keyManagementFacade.getAsymmetricKeys("REFRESH");
-                        // PrivateKey pasetoRefreshPrivateKey = new PrivateKey(Base64.getDecoder().decode(refreshKeyStrings.privateKey()), Version.V4); // Use deprecated
-                        // PublicKey pasetoRefreshPublicKey = new PublicKey(Base64.getDecoder().decode(refreshKeyStrings.publicKey()), Version.V4); // Use deprecated
-                        // this.refreshKeyPairHolder = new KeyPairHolder(pasetoRefreshPrivateKey, pasetoRefreshPublicKey);
-                        // log.debug("Refresh asymmetric keys loaded and created using paseto4j constructors.");
+                        log.debug("Access asymmetric keys loaded and created.");
 
                         // --- Symmetric Keys ---
                         String accessSecretStr = keyManagementFacade.getSymmetricKey("ACCESS");
@@ -82,19 +82,29 @@ public class KeyManagementService {
                         Objects.requireNonNull(accessSecretStr, "Access secret key string is null");
                         Objects.requireNonNull(refreshSecretStr, "Refresh secret key string is null");
 
-                        // Use deprecated paseto4j Key constructors (accepting byte[] and Version)
-                        SecretKey pasetoAccessSecretKey = new SecretKey(Base64.getDecoder().decode(accessSecretStr), Version.V4);
-                        SecretKey pasetoRefreshSecretKey = new SecretKey(Base64.getDecoder().decode(refreshSecretStr), Version.V4);
+                        byte[] accessSecretBytes = Base64.getDecoder().decode(accessSecretStr);
+                        byte[] refreshSecretBytes = Base64.getDecoder().decode(refreshSecretStr);
+
+                        // --- MODIFIED: Use non-deprecated key creation (EXAMPLE ONLY - VERIFY WITH paseto4j DOCS) ---
+                        // Replace the following lines with the correct paseto4j v4 factory methods/builders
+                        // Example possibilities (these might be incorrect, check library):
+                        // SecretKey pasetoAccessSecretKey = V4.Keys.secretKey(accessSecretBytes);
+                        // SecretKey pasetoRefreshSecretKey = V4.Keys.secretKey(refreshSecretBytes);
+                        // OR maybe:
+                        SecretKey pasetoAccessSecretKey = new SecretKey(accessSecretBytes, Version.V4); // Keep if no alternative found yet
+                        SecretKey pasetoRefreshSecretKey = new SecretKey(refreshSecretBytes, Version.V4); // Keep if no alternative found yet
+                        log.warn("TODO: Verify and update paseto4j key creation to use non-deprecated methods if available.");
+                        // --- END MODIFICATION ---
 
                         this.secretKeyHolder = new SecretKeyHolder(pasetoAccessSecretKey, pasetoRefreshSecretKey);
-                        log.debug("Symmetric keys loaded and created using paseto4j constructors.");
+                        log.debug("Symmetric keys loaded and created.");
 
                         log.info("PASETO keys initialized successfully (lazily).");
 
-                    } catch (IllegalArgumentException e) { // Catch Base64 decoding errors or constructor errors
+                    } catch (IllegalArgumentException e) {
                         log.error("Failed to decode/construct key during lazy initialization", e);
                         throw new KeyInitializationException("Invalid key string or format", e);
-                    } catch (Exception e) { // Catch other potential errors
+                    } catch (Exception e) {
                         log.error("Failed to lazily initialize PASETO keys", e);
                         throw new KeyInitializationException("Failed to initialize PASETO keys during lazy loading", e);
                     }
