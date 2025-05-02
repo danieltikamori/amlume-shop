@@ -11,7 +11,11 @@
 package me.amlu.shop.amlume_shop.config.properties;
 
 public interface RedisConfigPropertiesInterface {
-    String getNodes();
+//    String getNodes();
+
+    String getHost();
+
+    int getPort();
 
     String getPassword();
 }
