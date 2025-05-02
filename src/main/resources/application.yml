@@ -482,6 +482,13 @@ resilience4j:
     connect-timeout: 5000
     read-timeout: 10000
 
+    # NOTE on /bin directory contents:
+    # - src/main/java/me/amlu/shop/amlume_shop/security/paseto/TokenGenerationServiceImpl.class
+    # - src/main/java/me/amlu/shop/amlume_shop/security/paseto/KeyManagementService.class
+    # These appear to be decompiled class files. Their security cannot be fully verified
+    # without reviewing the original source code. Ensure the original source for these
+    # critical security components is available and reviewed.
+    # --- Security Configuration ---
 security:
   max-devices-per-user: 5
   max-concurrent-sessions: 2
