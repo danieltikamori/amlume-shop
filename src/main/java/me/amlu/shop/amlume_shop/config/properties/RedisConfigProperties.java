@@ -22,7 +22,7 @@ public class RedisConfigProperties implements RedisConfigPropertiesInterface {
 
     // ... getters and setters
 
-    @Override
+//    @Override
     public String getNodes() {
         return String.format("%s:%d", host, port); // Format nodes string like Valkey
     }
