@@ -25,6 +25,11 @@ import org.paseto4j.commons.PrivateKey;
 import org.paseto4j.commons.PublicKey;
 import org.paseto4j.commons.SecretKey;
 
+import java.security.KeyFactory;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Objects;
 
@@ -49,6 +54,7 @@ public class KeyManagementService {
 
     // --- Lazy Initialization Method ---
     private void ensureKeysInitialized() {
+        // Double-checked locking pattern
         if (accessKeyPairHolder == null || secretKeyHolder == null) {
             synchronized (initLock) {
                 if (accessKeyPairHolder == null || secretKeyHolder == null) {
@@ -59,24 +65,28 @@ public class KeyManagementService {
                         Objects.requireNonNull(accessKeyStrings.privateKey(), "Access private key string is null");
                         Objects.requireNonNull(accessKeyStrings.publicKey(), "Access public key string is null");
 
-                        byte[] accessPrivateBytes = Base64.getDecoder().decode(accessKeyStrings.privateKey());
-                        byte[] accessPublicBytes = Base64.getDecoder().decode(accessKeyStrings.publicKey());
+                        // 1. Decode Base64 DER strings
+                        byte[] accessPrivateDerBytes = Base64.getDecoder().decode(accessKeyStrings.privateKey());
+                        byte[] accessPublicDerBytes = Base64.getDecoder().decode(accessKeyStrings.publicKey());
 
-                        // --- MODIFIED: Use non-deprecated key creation (EXAMPLE ONLY - VERIFY WITH paseto4j DOCS) ---
-                        // Replace the following lines with the correct paseto4j v4 factory methods/builders
-                        // Example possibilities (these might be incorrect, check library):
-                        // PrivateKey pasetoAccessPrivateKey = V4.Keys.privateKey(accessPrivateBytes);
-                        // PublicKey pasetoAccessPublicKey = V4.Keys.publicKey(accessPublicBytes);
-                        // OR maybe:
-                        PrivateKey pasetoAccessPrivateKey = new PrivateKey(accessPrivateBytes, Version.V4); // Keep if no alternative found yet
-                        PublicKey pasetoAccessPublicKey = new PublicKey(accessPublicBytes, Version.V4); // Keep if no alternative found yet
-                        log.warn("TODO: Verify and update paseto4j key creation to use non-deprecated methods if available.");
-                        // --- END MODIFICATION ---
+                        // 2. Parse DER bytes into java.security keys
+                        KeyFactory keyFactory = KeyFactory.getInstance("EdDSA"); // Algorithm for Ed25519
+
+                        PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(accessPrivateDerBytes);
+                        java.security.PrivateKey javaPrivateKey = keyFactory.generatePrivate(privateKeySpec);
+
+                        X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(accessPublicDerBytes);
+                        java.security.PublicKey javaPublicKey = keyFactory.generatePublic(publicKeySpec);
+
+                        // 3. Create paseto4j keys using the non-deprecated constructors
+                        PrivateKey pasetoAccessPrivateKey = new PrivateKey(javaPrivateKey, Version.V4);
+                        PublicKey pasetoAccessPublicKey = new PublicKey(javaPublicKey, Version.V4);
+                        log.debug("Successfully parsed DER and created paseto4j asymmetric keys.");
 
                         this.accessKeyPairHolder = new KeyPairHolder(pasetoAccessPrivateKey, pasetoAccessPublicKey);
                         log.debug("Access asymmetric keys loaded and created.");
 
-                        // --- Symmetric Keys ---
+                        // --- Symmetric Keys (Logic remains the same) ---
                         String accessSecretStr = keyManagementFacade.getSymmetricKey("ACCESS");
                         String refreshSecretStr = keyManagementFacade.getSymmetricKey("REFRESH");
                         Objects.requireNonNull(accessSecretStr, "Access secret key string is null");
@@ -85,26 +95,22 @@ public class KeyManagementService {
                         byte[] accessSecretBytes = Base64.getDecoder().decode(accessSecretStr);
                         byte[] refreshSecretBytes = Base64.getDecoder().decode(refreshSecretStr);
 
-                        // --- MODIFIED: Use non-deprecated key creation (EXAMPLE ONLY - VERIFY WITH paseto4j DOCS) ---
-                        // Replace the following lines with the correct paseto4j v4 factory methods/builders
-                        // Example possibilities (these might be incorrect, check library):
-                        // SecretKey pasetoAccessSecretKey = V4.Keys.secretKey(accessSecretBytes);
-                        // SecretKey pasetoRefreshSecretKey = V4.Keys.secretKey(refreshSecretBytes);
-                        // OR maybe:
-                        SecretKey pasetoAccessSecretKey = new SecretKey(accessSecretBytes, Version.V4); // Keep if no alternative found yet
-                        SecretKey pasetoRefreshSecretKey = new SecretKey(refreshSecretBytes, Version.V4); // Keep if no alternative found yet
-                        log.warn("TODO: Verify and update paseto4j key creation to use non-deprecated methods if available.");
-                        // --- END MODIFICATION ---
+                        // Use the constructor expecting raw bytes for SecretKey
+                        SecretKey pasetoAccessSecretKey = new SecretKey(accessSecretBytes, Version.V4);
+                        SecretKey pasetoRefreshSecretKey = new SecretKey(refreshSecretBytes, Version.V4);
+                        // Keep warning if factory methods are preferred but unknown
+                        log.warn("TODO: Verify if paseto4j v4 offers factory methods for SecretKey creation.");
 
                         this.secretKeyHolder = new SecretKeyHolder(pasetoAccessSecretKey, pasetoRefreshSecretKey);
                         log.debug("Symmetric keys loaded and created.");
 
                         log.info("PASETO keys initialized successfully (lazily).");
 
-                    } catch (IllegalArgumentException e) {
-                        log.error("Failed to decode/construct key during lazy initialization", e);
-                        throw new KeyInitializationException("Invalid key string or format", e);
-                    } catch (Exception e) {
+                    } catch (IllegalArgumentException | NoSuchAlgorithmException | InvalidKeySpecException e) {
+                        // Catch Base64 errors, KeyFactory errors, KeySpec errors
+                        log.error("Failed to decode/parse/construct key during lazy initialization", e);
+                        throw new KeyInitializationException("Invalid key string, format, or algorithm issue", e);
+                    } catch (Exception e) { // Catch any other unexpected errors
                         log.error("Failed to lazily initialize PASETO keys", e);
                         throw new KeyInitializationException("Failed to initialize PASETO keys during lazy loading", e);
                     }
