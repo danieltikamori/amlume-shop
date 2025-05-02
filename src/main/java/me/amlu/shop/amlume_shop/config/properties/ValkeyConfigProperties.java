@@ -15,6 +15,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
@@ -55,6 +56,11 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
     // --- Nested Pool Properties ---
     @Valid // Enable validation for the nested Pool object
     private Pool pool = new Pool(); // Initialize nested properties
+
+    // --- SSL/TLS Properties ---
+    @Valid // Enable validation for nested SSL properties
+    private Ssl ssl = new Ssl(); // Add nested SSL properties
+
 
     public ValkeyConfigProperties() {
     }
@@ -101,39 +107,15 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
         this.pool = pool;
     }
 
-    // --- equals, hashCode, toString ---
-    // (Updated to include pool)
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof ValkeyConfigProperties that)) return false;
-        if (!that.canEqual(this)) return false;
-        return port == that.port &&
-                Objects.equals(host, that.host) &&
-                Objects.equals(password, that.password) &&
-                Objects.equals(pool, that.pool); // Include pool
+    public Ssl getSsl() {
+        return ssl;
     }
 
-    protected boolean canEqual(final Object other) {
-        return other instanceof ValkeyConfigProperties;
+    public void setSsl(Ssl ssl) {
+        this.ssl = ssl;
     }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(host, port, password, pool); // Include pool
-    }
 
-    @Override
-    public String toString() {
-        // Avoid logging password directly
-        return "ValkeyConfigProperties(" +
-                "host=" + host +
-                ", port=" + port +
-                ", password=" + (password != null ? "[REDACTED]" : "null") +
-                ", pool=" + pool + // Include pool
-                ')';
-    }
 
     // --- Nested Static Class for Pool Configuration ---
     @Validated
@@ -217,6 +199,105 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
                     ", maxWait=" + maxWait +
                     '}';
         }
+    }
+
+    // --- Nested Static Class for SSL Configuration ---
+    @Validated
+    public static class Ssl {
+        private boolean enabled = true; // Default to true since you enabled it in code
+
+        @Valid // Validate nested truststore properties
+        private Truststore truststore = new Truststore();
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public Truststore getTruststore() {
+            return truststore;
+        }
+
+        public void setTruststore(Truststore truststore) {
+            this.truststore = truststore;
+        }
+
+        @Override
+        public String toString() {
+            return "Ssl{" +
+                    "enabled=" + enabled +
+                    ", truststore=" + truststore +
+                    '}';
+        }
+
+        // --- Nested Static Class for Truststore Configuration ---
+        @Validated
+        public static class Truststore {
+            // Use Resource for flexibility (classpath: or file:)
+            private Resource path; // e.g., file:./config/truststore.jks or classpath:truststore.jks
+
+            // Password should be loaded securely (e.g., from Vault/Env)
+            private String password;
+
+            public Resource getPath() {
+                return path;
+            }
+
+            public void setPath(Resource path) {
+                this.path = path;
+            }
+
+            public String getPassword() {
+                return password;
+            }
+
+            public void setPassword(String password) {
+                this.password = password;
+            }
+
+            @Override
+            public String toString() {
+                return "Truststore{" +
+                        "path=" + (path != null ? path.getDescription() : "null") +
+                        ", password=" + (password != null ? "[REDACTED]" : "null") +
+                        '}';
+            }
+        }
+    }
+
+    // --- Update equals, hashCode, toString in ValkeyConfigProperties ---
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        // Use pattern matching for instanceof (requires Java 16+)
+        if (!(o instanceof ValkeyConfigProperties that)) return false;
+
+        // Compare fields
+        return port == that.port &&
+                Objects.equals(host, that.host) &&
+                Objects.equals(password, that.password) &&
+                Objects.equals(pool, that.pool) && // Include pool
+                Objects.equals(ssl, that.ssl); // Include ssl
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(host, port, password, pool, ssl); // Include ssl
+    }
+
+    @Override
+    public String toString() {
+        // Avoid logging password directly
+        return "ValkeyConfigProperties(" +
+                "host=" + host +
+                ", port=" + port +
+                ", password=" + (password != null ? "[REDACTED]" : "null") +
+                ", pool=" + pool +
+                ", ssl=" + ssl + // Include ssl
+                ')';
     }
 
     // If using nodes, implement the logic to parse and set host/port from nodes
