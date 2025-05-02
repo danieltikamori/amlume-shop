@@ -98,14 +98,15 @@ spring:
         enabled: true
         backend: secret # Mount path of KV v2 engine (default is often 'secret')
         application-name: ${spring.application.name} # Uses spring.application.name by default
-        default-context: "local" # Looks for secrets under secret/amlume-shop/local
+#        default-context: "local" # Looks for secrets under secret/amlume-shop/local
         # profile-separator: '/' # Optional: Specify separator if needed
       # --- Optional: TLS Configuration (if using HTTPS for local Vault) ---
-      ssl:
-        # Reference the central truststore properties
-        trust-store: ${app.ssl.trust-store.path}
-        trust-store-password: ${app.ssl.trust-store.password}
+#      ssl:
+#        # Reference the central truststore properties
+#        trust-store: ${app.ssl.trust-store.path}
+#        trust-store-password: ${app.ssl.trust-store.password}
         # trust-store-type: ${app.ssl.trust-store.type} # If type is specified centrally
+#        tls_min_version: TLSv1.2 # Optional: Specify minimum TLS version. tls13
 
       # ssl:
       #   trust-store: classpath:vault-truststore.jks
@@ -115,7 +116,12 @@ spring:
 
   # --- Import Vault ---
   config:
-    import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"] # Import Vault and optional local secrets override
+    import:
+      - "optional:vault://"
+      - "optional:classpath:application-local-secrets.yml"
+#      - "vault://secret/amlume-shop" # Import Vault secrets
+      - "vault://secret/amlume-shop/local" # Import Vault secrets
+#      - "vault://secret/amlume-shop/mfa"# Import Vault and optional local secrets override
 
   # --- Datasource (Connect to Docker MySQL) ---
     # --- Datasource (URL needs modification, preferably programmatically) ---
@@ -123,7 +129,8 @@ spring:
     # We'll configure this programmatically below.
     # Remove ssl params from the URL here if they were hardcoded.
   datasource:
-    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
+    url: jdbc:mysql://localhost:3306/amlume_db?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStorePassword=${app.ssl.trust-store.password}
+#    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
     # url: jdbc:mysql://mysql-db:3306/amlume_db # Use Docker service name if running inside Docker
     username: amlume_user
     password: ${DB_PASSWORD} # LOAD SECURELY (Env Var preferred)
@@ -144,6 +151,7 @@ spring:
     time-zone: UTC
 
   # --- JPA / Hibernate ---
+  # Disable open-in-view for performance
   jpa:
     database-platform: org.hibernate.dialect.MySQLDialect
     show-sql: true
@@ -565,7 +573,7 @@ security: # Used by various security services/configs
     trusted-device:
       expiration-days: 30
   geo:
-    suspicious-distance-km: 500.0
+    suspicious-distance-km: 200.0
     time-window-hours: 24 # Used by ValkeyCacheConfig
     known-vpn-asns: # Used by EnhancedVpnDetectorServiceImpl
       - "AS15169" # Example
