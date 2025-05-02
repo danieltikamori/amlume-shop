@@ -40,9 +40,15 @@ import java.time.Instant;
 @Service
 public class HCPTokenService {
 
+    // TODO: SECURITY - Move HCP credentials to Vault (e.g., secret/amlume-shop/hcp)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., HcpProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
     @Value("${HCP_CLIENT_ID}")
     private String clientId;
 
+    // TODO: SECURITY - Move HCP credentials to Vault (e.g., secret/amlume-shop/hcp)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., HcpProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
     @Value("${HCP_CLIENT_SECRET}")
     private String clientSecret;
 
