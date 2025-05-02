@@ -156,9 +156,13 @@ management:
 #          http.server.requests: [0.5, 0.95, 0.99]
 
 mfa:
-  encryption:
-    password: ${MFA_ENCRYPTION_PASSWORD}
-    salt: ${MFA_ENCRYPTION_SALT}
+  mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+  mfaEncryptionSalt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
+#  totp:
+#    mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+#  encryption:
+#    password: ${MFA_ENCRYPTION_PASSWORD}
+#    salt: ${MFA_ENCRYPTION_SALT}
   excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
   rate-limit:
     max-attempts: 5
