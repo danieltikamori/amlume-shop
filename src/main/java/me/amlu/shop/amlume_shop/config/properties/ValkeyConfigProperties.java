@@ -16,6 +16,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @Data
 @ConfigurationProperties(prefix = "valkey") // Valkey Configuration
 public class ValkeyConfigProperties implements RedisConfigPropertiesInterface {
+
+    private String host;
+    private int port;
+
     private String nodes;
     private String password;
 
@@ -29,5 +33,13 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface {
     @Override
     public String getPassword() {
         return password;
+    }
+
+    public String getHost() {
+        return host;
+    }
+
+    public int getPort() {
+        return port;
     }
 }
