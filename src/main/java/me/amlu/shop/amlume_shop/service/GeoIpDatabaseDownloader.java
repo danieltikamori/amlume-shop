@@ -12,209 +12,278 @@ package me.amlu.shop.amlume_shop.service;
 
 import jakarta.annotation.PostConstruct;
 import me.amlu.shop.amlume_shop.config.properties.GeoIp2Properties;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StreamUtils;
+import org.springframework.web.client.*;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.TimeUnit;
 
-@Service("geoIpDatabaseDownloader") // Give it a specific bean name
+@Service("geoIpDatabaseDownloader")
 public class GeoIpDatabaseDownloader {
 
     private static final Logger log = LoggerFactory.getLogger(GeoIpDatabaseDownloader.class);
-    private static final Duration MAX_AGE_BEFORE_UPDATE_CHECK = Duration.ofDays(7); // Check for updates weekly
+    private static final Duration MAX_AGE_BEFORE_UPDATE_CHECK = Duration.ofDays(7);
+    private static final String MAXMIND_DOWNLOAD_BASE_URL = "https://download.maxmind.com/app/geoip_download";
+    private static final String DOWNLOAD_SUFFIX = "tar.gz";
 
     private final GeoIp2Properties geoIp2Properties;
-    // Optional: Inject RestTemplate or WebClient if implementing download directly
+    private final RestTemplate restTemplate;
 
-    public GeoIpDatabaseDownloader(GeoIp2Properties geoIp2Properties) {
+    public GeoIpDatabaseDownloader(GeoIp2Properties geoIp2Properties, RestTemplate restTemplate) {
         this.geoIp2Properties = geoIp2Properties;
+        this.restTemplate = restTemplate;
     }
 
     @PostConstruct
     public void checkAndPrepareDatabases() {
-        log.info("Checking GeoIP2 database directory and files...");
-        Path dbDirectory = Paths.get(geoIp2Properties.getDatabaseDirectory());
+        log.info("Attempting to check and prepare GeoIP2 database directory and files...");
+        Path dbDirectory = null; // Initialize to null
 
         try {
-            // 1. Ensure Directory Exists
+            // --- Safely get Path ---
+            try {
+                dbDirectory = Paths.get(geoIp2Properties.getDatabaseDirectory());
+            } catch (Exception e) {
+                // Catch potential InvalidPathException or others during path creation
+                log.error("CRITICAL: Invalid GeoIP2 database directory path configured: '{}'. GeoIP features will be unavailable.",
+                        geoIp2Properties.getDatabaseDirectory(), e);
+                // Cannot proceed without a valid directory path object
+                return; // Exit PostConstruct
+            }
+
+            // --- Ensure Directory Exists ---
             if (!Files.exists(dbDirectory)) {
-                log.info("GeoIP2 database directory does not exist. Creating: {}", dbDirectory);
-                Files.createDirectories(dbDirectory);
+                log.info("GeoIP2 database directory does not exist. Attempting to create: {}", dbDirectory);
+                try {
+                    Files.createDirectories(dbDirectory);
+                    log.info("Successfully created GeoIP2 database directory: {}", dbDirectory);
+                } catch (IOException | SecurityException e) {
+                    // Log error but DO NOT throw RuntimeException - allow startup to continue
+                    log.error("Failed to create GeoIP2 database directory: {}. GeoIP features might be unavailable if files cannot be downloaded/placed.", dbDirectory, e);
+                    // Continue, maybe the directory gets created later, or files already exist elsewhere?
+                }
             } else if (!Files.isDirectory(dbDirectory)) {
-                log.error("Configured GeoIP2 database path exists but is not a directory: {}", dbDirectory);
-                // Fail fast - application likely won't work
-                throw new IllegalStateException("GeoIP2 path is not a directory: " + dbDirectory);
+                // Log error but DO NOT throw RuntimeException
+                log.error("Configured GeoIP2 database path exists but is not a directory: {}. GeoIP features will be unavailable.", dbDirectory);
+                // Cannot proceed if it's not a directory
+                return; // Exit PostConstruct
             } else {
                 log.debug("GeoIP2 database directory exists: {}", dbDirectory);
             }
 
-            // 2. Check Individual Database Files (Example for City DB)
+            // --- Check Individual Database Files ---
+            // These calls now only log errors on download failure, they don't throw exceptions upwards
             checkAndDownloadDatabase(geoIp2Properties.getCityDatabase().getPath(), "GeoLite2-City");
             checkAndDownloadDatabase(geoIp2Properties.getAsnDatabase().getPath(), "GeoLite2-ASN");
             checkAndDownloadDatabase(geoIp2Properties.getCountryDatabase().getPath(), "GeoLite2-Country");
 
-            log.info("GeoIP2 database check completed.");
+            log.info("GeoIP2 database preparation check completed.");
 
-        } catch (IOException e) {
-            log.error("Failed to create GeoIP2 database directory: {}", dbDirectory, e);
-            // Depending on requirements, you might want to throw an exception here
-            // to prevent the application from starting without the directory.
-            throw new RuntimeException("Failed to initialize GeoIP2 database directory", e);
         } catch (Exception e) {
-            log.error("An unexpected error occurred during GeoIP2 database preparation", e);
-            throw new RuntimeException("Failed to prepare GeoIP2 databases", e);
+            // Catch any other unexpected errors during the preparation phase
+            // Log error but DO NOT throw RuntimeException
+            log.error("An unexpected error occurred during GeoIP2 database preparation. GeoIP features may be affected.", e);
         }
     }
 
-    private void checkAndDownloadDatabase(String filePathStr, String dbName) {
-        Path filePath = Paths.get(filePathStr);
-        boolean needsDownload = false;
-
-        if (!Files.exists(filePath)) {
-            log.warn("GeoIP2 database file not found: {}. Download required.", filePath);
-            needsDownload = true;
-        } else {
-            log.info("GeoIP2 database file found: {}", filePath);
-            // Optional: Check file age for updates
-            try {
-                Instant lastModified = Files.getLastModifiedTime(filePath).toInstant();
-                if (Instant.now().isAfter(lastModified.plus(MAX_AGE_BEFORE_UPDATE_CHECK))) {
-                    log.warn("GeoIP2 database file {} is older than {}. Triggering update.", filePath, MAX_AGE_BEFORE_UPDATE_CHECK);
-                    needsDownload = true;
-                }
-            } catch (IOException e) {
-                log.error("Could not determine age of GeoIP2 database file: {}", filePath, e);
-                // Decide if you want to force download on error or not
-                // needsDownload = true;
-            }
-        }
-
-        if (needsDownload) {
-            log.info("Attempting to download/update {} database...", dbName);
-            boolean success = runGeoIpUpdateTool(); // Use external tool
-            // OR: implementDirectDownload(filePath, dbName); // Use RestTemplate/WebClient
-
-            if (!success) {
-                log.error("Failed to download/update {} database. The application might not function correctly.", dbName);
-                // Decide if failure is critical
-                // throw new RuntimeException("Failed to download required GeoIP database: " + dbName);
-            } else {
-                log.info("Successfully downloaded/updated {} database.", dbName);
-            }
-        }
-    }
-
-    /**
-     * Executes the external geoipupdate command-line tool.
-     * Relies on the tool being installed and configured correctly
-     * (e.g., via GeoIP.conf pointing to the properties).
-     *
-     * @return true if the command executes successfully (exit code 0), false otherwise.
-     */
-    private boolean runGeoIpUpdateTool() {
-        // Ensure GeoIP.conf is configured correctly with AccountID, LicenseKey, EditionIDs, and DatabaseDirectory
-        // from geoIp2Properties. You might need to generate this file dynamically if not present.
-        // For simplicity, we assume geoipupdate is configured externally or via a standard GeoIP.conf location.
-
-        // Path to the geoipupdate executable (adjust if necessary)
-        String geoipUpdateCommand = "geoipupdate"; // Assumes it's in the system PATH
-
-        // Add arguments, e.g., -v for verbose, -f path/to/GeoIP.conf if needed
-        ProcessBuilder processBuilder = new ProcessBuilder(geoipUpdateCommand, "-v", "-d", geoIp2Properties.getDatabaseDirectory());
-        // Optional: Redirect output/error streams
-        processBuilder.redirectErrorStream(true); // Merge stderr into stdout
-
-        log.info("Executing geoipupdate command...");
+    private void checkAndDownloadDatabase(String filePathStr, String editionId) {
+        Path filePath = null; // Initialize to null
         try {
-            Process process = processBuilder.start();
+            // --- Safely get Path ---
+            try {
+                filePath = Paths.get(filePathStr);
+            } catch (Exception e) {
+                log.error("Invalid file path configured for GeoIP DB '{}': '{}'. Cannot check/download.", editionId, filePathStr, e);
+                return; // Cannot proceed with this file
+            }
 
-            // Capture output
-            StringBuilder output = new StringBuilder();
-            try (var reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append(System.lineSeparator());
-                    log.debug("[geoipupdate] {}", line); // Log output line by line
+            boolean needsDownload = false;
+            boolean fileExists = false;
+
+            // --- Check File Existence and Age (handle potential errors) ---
+            try {
+                fileExists = Files.exists(filePath);
+                if (!fileExists) {
+                    log.warn("GeoIP2 database file not found: {}. Download required.", filePath);
+                    needsDownload = true;
+                } else {
+                    log.info("GeoIP2 database file found: {}", filePath);
+                    // Check age only if file exists
+                    Instant lastModified = Files.getLastModifiedTime(filePath).toInstant();
+                    if (Instant.now().isAfter(lastModified.plus(MAX_AGE_BEFORE_UPDATE_CHECK))) {
+                        log.warn("GeoIP2 database file {} is older than {}. Triggering update.", filePath, MAX_AGE_BEFORE_UPDATE_CHECK);
+                        needsDownload = true;
+                    }
+                }
+            } catch (IOException | SecurityException e) {
+                log.error("Error checking existence or age of GeoIP2 database file: {}. Assuming download is needed.", filePath, e);
+                needsDownload = true; // Attempt download if we can't check
+            }
+
+            // --- Attempt Download if Needed ---
+            if (needsDownload) {
+                log.info("Attempting to download/update {} database (Edition ID: {})...", filePath.getFileName(), editionId);
+                boolean success = downloadDatabaseDirectly(filePath, editionId); // This method now only returns boolean
+
+                if (!success) {
+                    // Log error, but don't throw exception
+                    log.error("Failed to download/update {} database. Service might rely on existing (potentially outdated) file or fail if file is missing.", filePath.getFileName());
+                } else {
+                    log.info("Successfully downloaded/updated {} database.", filePath.getFileName());
                 }
             }
-
-            // Wait for the process to complete with a timeout
-            boolean finished = process.waitFor(2, TimeUnit.MINUTES); // 2-minute timeout
-
-            if (!finished) {
-                log.error("geoipupdate command timed out after 2 minutes.");
-                process.destroyForcibly();
-                return false;
-            }
-
-            int exitCode = process.exitValue();
-            log.info("geoipupdate finished with exit code: {}", exitCode);
-
-            if (exitCode != 0) {
-                log.error("geoipupdate failed. Output:\n{}", output);
-                return false;
-            }
-
-            return true;
-
-        } catch (IOException e) {
-            log.error("IOException while running geoipupdate. Is the tool installed and in PATH?", e);
-            return false;
-        } catch (InterruptedException e) {
-            log.error("Interrupted while waiting for geoipupdate to finish.", e);
-            Thread.currentThread().interrupt();
-            return false;
         } catch (Exception e) {
-            log.error("Unexpected error running geoipupdate.", e);
-            return false;
+            // Catch any other unexpected errors during check/download for a specific file
+            log.error("Unexpected error processing GeoIP database file check/download for edition '{}', path '{}'.", editionId, filePathStr, e);
         }
     }
 
-//    Configure geoipupdate (Recommended Approach):
-//    The runGeoIpUpdateTool method relies on the external geoipupdate command. We need to:
-//    •Install geoipupdate: Download and install it from MaxMind (https://github.com/maxmind/geoipupdate/releases). Make sure it's accessible in your system's PATH or provide the full path in runGeoIpUpdateTool.
-//    •Create GeoIP.conf: Create a configuration file (usually /etc/GeoIP.conf on Linux, or you can specify a path with -f). Populate it with your credentials and desired databases:
-    //    # /etc/GeoIP.conf Example
-    //    # Use 'YOUR_ACCOUNT_ID' and 'YOUR_LICENSE_KEY' from MaxMind account.
-    //    AccountID YOUR_ACCOUNT_ID
-    //    LicenseKey YOUR_LICENSE_KEY
-    //
-    //    # Specify the Edition IDs of the databases you want to download.
-    //    # Use 'GeoLite2-ASN', 'GeoLite2-City', 'GeoLite2-Country' for GeoLite2.
-    //    EditionIDs GeoLite2-ASN GeoLite2-City GeoLite2-Country
-    //
-    //    # Set the directory where the databases will be stored.
-    //    # Make sure this matches geoip2.database-directory in application-local.yml
-    //    DatabaseDirectory C:/dev/geoip-databases
-    //    # Use /opt/geoip-databases for Linux/Docker environments
-    //
-    //    # Optional: Proxy settings if needed
-    //    # Proxy user:password@host:port
-    //
+    private boolean downloadDatabaseDirectly(Path targetFile, String editionId) {
+        // --- 1. Construct URL & Check Credentials (same as before) ---
+        String accountId = geoIp2Properties.getLicense().getAccountId();
+        String licenseKey = geoIp2Properties.getLicense().getLicenseKey();
 
-//    •Security: Store AccountID and LicenseKey securely (environment variables, Vault) and potentially generate GeoIP.conf dynamically at startup if needed, rather than committing credentials.
+        if (accountId == null || accountId.isBlank() || licenseKey == null || licenseKey.isBlank()) {
+            log.error("Cannot download GeoIP database '{}': Account ID or License Key is missing in configuration.", editionId);
+            return false;
+        }
 
+        String downloadUrl;
+        try {
+            downloadUrl = UriComponentsBuilder.fromHttpUrl(MAXMIND_DOWNLOAD_BASE_URL)
+                    .queryParam("edition_id", editionId)
+                    .queryParam("license_key", licenseKey)
+                    .queryParam("suffix", DOWNLOAD_SUFFIX)
+                    .toUriString();
+        } catch (Exception e) {
+            log.error("Failed to build download URL for edition '{}'", editionId, e);
+            return false;
+        }
 
-    // Placeholder for direct download implementation (more complex)
-    /*
-    private boolean implementDirectDownload(Path targetFile, String dbName) {
-        log.warn("Direct download implementation is complex and not fully provided.");
-        // 1. Construct the correct MaxMind download URL (requires knowing the format, often involves account ID/license)
-        //    Example (likely incorrect, check MaxMind docs):
-        //    String downloadUrl = "https://download.maxmind.com/app/geoip_download?edition_id=" + dbName + "&license_key=" + geoIp2Properties.getLicense().getLicenseKey() + "&suffix=tar.gz"; // Or .mmdb directly?
-        // 2. Use RestTemplate/WebClient to perform GET request
-        // 3. Handle authentication (possibly Basic Auth or query params with license)
-        // 4. Stream the response body directly to the targetFile path.
-        // 5. Handle potential compressed formats (e.g., .tar.gz) - requires unzipping/untarring.
-        // 6. Implement robust error handling (network issues, auth errors, file write errors).
-        return false; // Return false as it's not implemented
+        log.info("Attempting download for '{}' from: {}", editionId, downloadUrl.replace(licenseKey, "****"));
+
+        // --- 2. Prepare Request Callback and Response Extractor ---
+        final RequestCallback requestCallback = request -> {
+        }; // No specific headers needed usually
+
+        final ResponseExtractor<Boolean> responseExtractor = response -> {
+            // Check for successful status code
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                String responseBody = "";
+                try {
+                    responseBody = StreamUtils.copyToString(response.getBody(), StandardCharsets.UTF_8);
+                } catch (IOException ignored) { /* Ignore error reading error body */ }
+                log.error("Download failed for '{}' with status: {} {}. Response: {}", editionId, response.getStatusCode(), response.getStatusText(), responseBody);
+                // Do not throw exception here, just return false from extractor
+                return false;
+            }
+
+            Path tempTarGz = null;
+            try {
+                tempTarGz = Files.createTempFile("geoip2_" + editionId + "-", ".tar.gz");
+                log.debug("Streaming download response for '{}' to temporary file: {}", editionId, tempTarGz);
+                Files.copy(response.getBody(), tempTarGz, StandardCopyOption.REPLACE_EXISTING);
+                log.debug("Successfully saved downloaded archive for '{}' to temporary file: {}", editionId, tempTarGz);
+
+                // Extract the tar.gz file to the target directory
+                log.debug("Extracting .mmdb file from archive: {}", tempTarGz);
+                boolean extracted = extractMmdbFromTarGz(tempTarGz, targetFile, editionId);
+
+                if (extracted) {
+                    log.debug("Successfully extracted and saved '{}' to: {}", editionId, targetFile);
+                    return true;
+                } else {
+                    log.error("Failed to find or extract .mmdb file for '{}' from archive: {}", editionId, tempTarGz);
+                    return false;
+                }
+
+            } catch (IOException | SecurityException e) {
+                log.error("IO/Security error during download/extraction for '{}' to {}: {}", editionId, targetFile, e.getMessage(), e);
+                return false;
+            } finally {
+                // Clean up temporary file
+                if (tempTarGz != null) {
+                    try {
+                        Files.deleteIfExists(tempTarGz);
+                    } catch (IOException e) {
+                        log.warn("Failed to delete temporary download file: {}", tempTarGz, e);
+                    }
+                }
+            }
+        };
+
+        // --- 3. Execute the Download using RestTemplate ---
+        try {
+            Boolean success = restTemplate.execute(downloadUrl, HttpMethod.GET, requestCallback, responseExtractor);
+            // Check if file exists *after* execute returns, as execute might return null on some errors
+            return Boolean.TRUE.equals(success) && Files.exists(targetFile);
+
+        } catch (HttpClientErrorException e) {
+            log.error("Client error downloading {} database: {} - {}", editionId, e.getStatusCode(), e.getMessage());
+            String responseBody = e.getResponseBodyAsString();
+            if (!responseBody.isEmpty()) {
+                log.error("Error response body: {}", responseBody);
+            }
+            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.error("Check your MaxMind Account ID and License Key.");
+            }
+            return false; // Return false on client error
+        } catch (HttpServerErrorException e) {
+            log.error("Server error downloading {} database: {} - {}", editionId, e.getStatusCode(), e.getMessage());
+            return false; // Return false on server error
+        } catch (RestClientException e) {
+            // Catch other potential RestTemplate errors (network, etc.)
+            log.error("Network or RestClient error downloading {} database: {}", editionId, e.getMessage());
+            return false; // Return false on other rest client errors
+        } catch (Exception e) {
+            // Catch any other unexpected errors during the execute call
+            log.error("Unexpected error during RestTemplate execute for {} database: {}", editionId, e.getMessage(), e);
+            return false; // Return false on unexpected errors
+        }
     }
-    */
+
+    // Helper method to extract .mmdb from .tar.gz
+    private boolean extractMmdbFromTarGz(Path tarGzFile, Path targetMmdbFile, String editionId) throws IOException {
+        try (InputStream fi = Files.newInputStream(tarGzFile);
+             BufferedInputStream bi = new BufferedInputStream(fi);
+             GzipCompressorInputStream gzi = new GzipCompressorInputStream(bi);
+             TarArchiveInputStream ti = new TarArchiveInputStream(gzi)) {
+
+            TarArchiveEntry entry;
+            while ((entry = ti.getNextEntry()) != null) {
+                // MaxMind archives usually contain a directory like GeoLite2-City_YYYYMMDD/
+                // and the file inside is GeoLite2-City.mmdb
+                log.debug("Found entry in archive: {}", entry.getName());
+                if (!entry.isDirectory() && entry.getName().endsWith(editionId + ".mmdb")) {
+                    log.info("Found target .mmdb file in archive: {}", entry.getName());
+                    // Ensure parent directory exists for the target file
+                    Files.createDirectories(targetMmdbFile.getParent());
+                    // Extract the file content directly to the target path
+                    // Use StandardOpenOption.CREATE to create if not exists, TRUNCATE_EXISTING to overwrite
+                    try (OutputStream outputFileStream = Files.newOutputStream(targetMmdbFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                        StreamUtils.copy(ti, outputFileStream); // Use Spring's StreamUtils
+                    }
+                    log.info("Successfully extracted {} to {}", entry.getName(), targetMmdbFile);
+                    return true; // Found and extracted
+                }
+            }
+        }
+        log.warn("Could not find an entry ending with '{}.mmdb' in the archive: {}", editionId, tarGzFile);
+        return false; // .mmdb file not found in archive
+    }
 }
