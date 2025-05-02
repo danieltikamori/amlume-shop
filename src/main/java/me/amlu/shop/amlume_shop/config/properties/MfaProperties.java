@@ -17,13 +17,19 @@ import jakarta.validation.constraints.NotBlank;
 
 //import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.DEFAULT_ISSUER;
 
-@ConfigurationProperties("mfa.totp")
+@ConfigurationProperties("mfa")
 @Component // Make it a Spring-managed bean
 public class MfaProperties {
 
     // --- Properties ---
 
 //    private String issuer = DEFAULT_ISSUER;
+
+    @NotBlank
+    String mfaEncryptionPassword; // Assuming this is set in the application properties or Vault
+
+    @NotBlank
+    String mfaEncryptionSalt;
 
     @Min(1)
     private int timeStepSeconds = 30;
@@ -42,6 +48,26 @@ public class MfaProperties {
 //    public String getIssuer() {
 //        return issuer;
 //    }
+
+//    public void setIssuer(String issuer) {
+//        this.issuer = issuer;
+//    }
+
+    public String getMfaEncryptionPassword() {
+        return mfaEncryptionPassword;
+    }
+
+    public void setMfaEncryptionPassword(String mfaEncryptionPassword) {
+        this.mfaEncryptionPassword = mfaEncryptionPassword;
+    }
+
+    public String getMfaEncryptionSalt() {
+        return mfaEncryptionSalt;
+    }
+
+    public void setMfaEncryptionSalt(String mfaEncryptionSalt) {
+        this.mfaEncryptionSalt = mfaEncryptionSalt;
+    }
 
     public int getTimeStepSeconds() {
         return timeStepSeconds;
