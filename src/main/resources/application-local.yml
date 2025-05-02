@@ -11,7 +11,19 @@
 # --- Logging ---
 logging:
   level:
+    org.springframework:
+      web: DEBUG
+      web.client: DEBUG
+      web.reactive: DEBUG
+      web.reactive.function.client: DEBUG
+      web.reactive.function.client.ExchangeFunctions: DEBUG
+      web.reactive.function.client.ExchangeStrategies: DEBUG
+      web.reactive.function.client.WebClient: DEBUG
+      web.reactive.function.client.WebClient.Builder: DEBUG
+      web.reactive.function.client.WebClient.RequestHeadersSpec: DEBUG
+      web.reactive.function.client.WebClient.RequestHeadersUriSpec: DEBUG
     org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
+    #    root: DEBUG
     me.amlu.shop.amlume_shop: DEBUG
     me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
     me.amlu.shop.amlume_shop.service: DEBUG
@@ -231,7 +243,8 @@ geoip2:
     # --- GeoIP2 Databases ---
     # Note: These paths should be writable by the application
     # or use a shared volume if running in Docker
-  database-directory: /opt/geoip-databases # Or another suitable writable directory
+  database-directory: C:/dev/geoip-databases # Or another suitable writable directory
+#  database-directory: /opt/geoip-databases # Or another suitable writable directory
   city-database:
     path: ${geoip2.database-directory}/GeoLite2-City.mmdb
   asn-database:
@@ -284,7 +297,7 @@ notification:
     webhook-url: ${SLACK_WEBHOOK_URL} # LOAD SECURELY
     channel: ${SLACK_CHANNEL} # LOAD SECURELY
     channel-id: ${SLACK_CHANNEL_ID} # LOAD SECURELY
-    token: ${SLACK_TOKEN} # LOAD SECURELY
+    token: ${SLACK_API_TOKEN} # LOAD SECURELY
 
 # --- PASETO (Keys are empty, loaded via Vault/Env by PasetoProperties) ---
 # Example: src/main/resources/application-local.yml (or bootstrap.yml if keys are only in Vault)
@@ -310,7 +323,7 @@ paseto:
       expiration: 3600s # Optional override
     refresh:
       # secret-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> secret-key
-      # kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> kid
+      kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> kid
       expiration: 86400s # Optional override
 
 # --- Project Paths ---
@@ -514,7 +527,7 @@ security: # Used by various security services/configs
   device-fingerprint:
     hash-algorithm: ${HASH_ALGORITHM:SHA-256} # Provide default if sensible
     hash-encoding: ${HASH_ENCODING:Base64} # Provide default if sensible
-    fingerprint-salt: ${FINGERPRINT_SALT} # LOAD SECURELY
+    fingerprint-salt: ${DEVICE_FINGERPRINT_SALT} # LOAD SECURELY
     block-unknown: true
     excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
     verification-timeout-seconds: 300
