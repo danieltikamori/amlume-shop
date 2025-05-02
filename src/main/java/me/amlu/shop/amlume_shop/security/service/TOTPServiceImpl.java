@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
@@ -100,21 +99,15 @@ public class TOTPServiceImpl implements TOTPService {
         Objects.requireNonNull(secretKey, "Secret key cannot be null");
         Objects.requireNonNull(issuer, "Issuer cannot be null");
 
-        try {
-            // URL Encode issuer and username for safety
-            String encodedIssuer = URLEncoder.encode(issuer, StandardCharsets.UTF_8.toString()).replace("+", "%20");
-            String encodedUsername = URLEncoder.encode(user.getUsername(), StandardCharsets.UTF_8.toString()).replace("+", "%20");
+        // URL Encode issuer and username for safety
+        String encodedIssuer = URLEncoder.encode(issuer, StandardCharsets.UTF_8).replace("+", "%20");
+        String encodedUsername = URLEncoder.encode(user.getUsername(), StandardCharsets.UTF_8).replace("+", "%20");
 
-            // Ensure secretKey doesn't contain padding characters that might cause issues (though Base32 usually doesn't add them)
-            String url = getUrlString(secretKey, encodedIssuer, encodedUsername);
-            log.debug("Generated QR Code URL for user: {}", user.getUsername());
-            return url;
+        // Ensure secretKey doesn't contain padding characters that might cause issues (though Base32 usually doesn't add them)
+        String url = getUrlString(secretKey, encodedIssuer, encodedUsername);
+        log.debug("Generated QR Code URL for user: {}", user.getUsername());
+        return url;
 
-        } catch (UnsupportedEncodingException e) {
-            // This should not happen with StandardCharsets.UTF_8
-            log.error("Critical error: UTF-8 encoding not supported.", e);
-            throw new IllegalStateException("UTF-8 encoding not supported", e);
-        }
     }
 
     @NotNull
