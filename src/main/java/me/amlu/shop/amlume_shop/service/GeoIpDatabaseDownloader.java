@@ -175,7 +175,10 @@ public class GeoIpDatabaseDownloader {
             return false;
         }
 
-        log.info("Attempting download for '{}' from: {}", editionId, downloadUrl.replace(licenseKey, "****"));
+        // TODO: SECURITY - Consider logging less sensitive information.
+        //       Logging the masked URL is better than plaintext, but logging just the base URL
+        //       and edition ID might be sufficient and avoids potential masking issues.
+        log.info("Attempting download for '{}' from Maxmind GeoIp2 servers.", editionId);
 
         // --- 2. Prepare Request Callback and Response Extractor ---
         final RequestCallback requestCallback = request -> {
