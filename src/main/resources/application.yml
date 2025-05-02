@@ -82,6 +82,17 @@ jti:
 
 logging:
   level:
+    org.springframework:
+      web: ERROR
+      web.client: ERROR
+      web.reactive: ERROR
+      web.reactive.function.client: ERROR
+      web.reactive.function.client.ExchangeFunctions: ERROR
+      web.reactive.function.client.ExchangeStrategies: ERROR
+      web.reactive.function.client.WebClient: ERROR
+      web.reactive.function.client.WebClient.Builder: ERROR
+      web.reactive.function.client.WebClient.RequestHeadersSpec: ERROR
+      web.reactive.function.client.WebClient.RequestHeadersUriSpec: ERROR
     org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
     #    root: DEBUG
     me.amlu.shop.amlume_shop: DEBUG
@@ -473,7 +484,7 @@ security:
   device-fingerprint:
     hash-algorithm: ${HASH_ALGORITHM}
     hash-encoding: ${HASH_ENCODING}
-    fingerprint-salt: ${FINGERPRINT_SALT}
+    fingerprint-salt: ${DEVICE_FINGERPRINT_SALT}
     block-unknown: true
     excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
 
