@@ -12,6 +12,8 @@
 logging:
   level:
     org.springframework:
+      cloud.vault: DEBUG
+      vault.core: DEBUG
       web: DEBUG
       web.client: DEBUG
       web.reactive: DEBUG
@@ -64,13 +66,15 @@ spring:
   cloud:
     vault:
       enabled: true
-      fail-fast: false # Allow app to start if Vault is down initially
-      uri: http://vault:8200 # Docker service name
+      fail-fast: true # Allow app to start if Vault is down initially
+#      uri: http://vault:8200 # Docker service name
+        # uri: http://localhost:8200 # Localhost if running outside Docker
+      uri: http://localhost:8200
       connection-timeout: 5000 # 5 seconds
       read-timeout: 15000 # 15 seconds
       # --- Authentication (AppRole Recommended) ---
       authentication: TOKEN # Use TOKEN for simplicity in local dev
-      token: "token" # Placeholder, not used in AppRole mode
+      token: ${VAULT_TOKEN} # Placeholder, not used in AppRole mode
 
         # Uncomment and configure if using AppRole authentication
 #      authentication: APPROLE
@@ -100,6 +104,7 @@ spring:
   # --- Datasource (Connect to Docker MySQL) ---
   datasource:
     url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
+    # url: jdbc:mysql://mysql-db:3306/amlume_db # Use Docker service name if running inside Docker
     username: amlume_user
     password: ${DB_PASSWORD:C0961F7D8F83574BEA49E9B412BBA60704CD720C} # LOAD SECURELY (Env Var preferred)
     driverClassName: com.mysql.cj.jdbc.Driver
@@ -327,7 +332,7 @@ paseto:
       expiration: 3600s # Optional override
     refresh:
       # secret-key: # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> secret-key
-      kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> kid
+#      kid:        # Loaded from Vault: secret/data/amlume-shop/local/paseto-local-refresh -> kid
       expiration: 86400s # Optional override
 
 # --- Project Paths ---
@@ -624,7 +629,7 @@ token: # Used by TokenValidationConfig and others?
     issuer: ${spring.application.name} # Use standard property
     audience: ${spring.application.audience} # Use standard property
 
-# --- Valkey Connection (Used by @Value in ValkeyCacheConfig) ---
+# --- Valkey Connection (Used by ValkeyConfigProperties in ValkeyCacheConfig) ---
 valkey:
   host: localhost # Connect to host machine's port mapped from Docker
   port: 6379
