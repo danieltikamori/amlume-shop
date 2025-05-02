@@ -21,9 +21,24 @@ BASE_VAULT_PATH_PREFIX="${VAULT_PATH:-secret/amlume-shop/local}"
 ENV_FILE_PATH="${ENV_FILE_PATH:-/.env}"
 VAULT_READY_TIMEOUT="${VAULT_READY_TIMEOUT:-60}"
 
+# --- SECURITY WARNING ---
+# Reading secrets directly from an .env file (ENV_FILE_PATH) is NOT recommended for production.
+# This file might be exposed if the container image is compromised or improperly handled.
+# Consider using Vault Agent sidecar injection or Kubernetes secrets mounted as volumes
+# to inject secrets directly into the application container or make them available securely.
+# --- END SECURITY WARNING ---
+
+# --- SECURITY WARNING ---
+# Passing a long-lived VAULT_TOKEN with write permissions to this script is risky.
+# If this token is compromised, an attacker could modify secrets in Vault.
+# Consider using short-lived tokens, Vault Agent with AppRole/K8s Auth, or other
+# secure authentication methods for Vault instead of passing a static token.
+# --- END SECURITY WARNING ---
+
+
 echo "Seeder: Starting up."
 echo "Seeder: Target Vault Addr: ${VAULT_ADDR}"
-echo "Seeder: Target Base Vault Path Prefix: $BASE_VAULT_PATH_PREFIX" # Log base path prefix
+echo "Seeder: Target Base Vault Path Prefix: $BASE_VAULT_PATH_PREFIX"
 echo "Seeder: Source Env File: $ENV_FILE_PATH"
 echo "Seeder: Using Vault Token: $(echo "$VAULT_TOKEN" | head -c 5)... (masked)"
 
@@ -108,14 +123,10 @@ vault_put_curl() {
     first_pair=true
     for arg in "$@"; do
         # Split arg at the first '='
-#        key=$(echo "$arg" | cut -d'=' -f1)
-#        value=$(echo "$arg" | cut -d'=' -f2-)
         key="${arg%%=*}"
         value="${arg#*=}"
 
-
         # Basic JSON escaping for the value (handle double quotes and backslashes)
-        # This is a simplified escaping, might need improvement for complex values
         escaped_value=$(echo "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
         if [ "$first_pair" = true ]; then
@@ -127,18 +138,7 @@ vault_put_curl() {
     done
 
     json_payload="{\"data\":{$json_data_pairs}}"
-    # echo "DEBUG: JSON Payload: $json_payload" # Uncomment for payload debugging
 
-    # (Keep the variable setup before this block)
-
-    # Make the API call using curl
-    # -f: fail fast (exit non-zero on HTTP error >= 400)
-    # -w: write out custom format (http_code) to stdout
-    # Capture stdout (status code) and stderr separately
-    # Store curl's exit code ($?) immediately after execution
-
-    # --- Temporarily disable exit on error ---
-#    set +e
     # Execute curl, capturing status code to a variable, redirecting body/stderr
     http_status_output=$(curl -f -w "%{http_code}" \
          --request POST \
@@ -149,10 +149,8 @@ vault_put_curl() {
          --output /tmp/curl_response.txt \
          --stderr /tmp/curl_stderr.txt)
     curl_exit_code=$? # Capture exit code IMMEDIATELY
-    # --- Re-enable exit on error ---
-#    set -e
 
-    # Check curl's exit code first (This block should now execute correctly)
+    # Check curl's exit code first
     if [ $curl_exit_code -ne 0 ]; then
         # curl itself failed OR -f caused failure due to HTTP status >= 400
         echo "Seeder: Error writing via curl to API path: $api_path (curl exit code: $curl_exit_code)" >&2
@@ -165,7 +163,6 @@ vault_put_curl() {
              # If curl failed before getting HTTP status, http_status_output might be empty or just contain curl errors
              echo "Seeder: HTTP Status Code: Unknown (curl exit code $curl_exit_code indicated failure. Output was '$http_status_output')" >&2
         fi
-
         echo "--- Seeder: Response Body Start ---" >&2
         cat /tmp/curl_response.txt >&2 || echo "(No response body captured)" >&2
         echo "--- Seeder: Response Body End ---" >&2
@@ -175,17 +172,13 @@ vault_put_curl() {
         rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
         exit 1 # Explicitly exit on error
     else
-        # curl succeeded (exit code 0), HTTP status must be < 400
-        # Log success, including the actual HTTP status returned by Vault (e.g., 200 or 204)
         echo "Seeder: Successfully wrote via curl to API path: $api_path (HTTP Status: $http_status_output)"
         rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
     fi
-
 }
 
-# --- Call the new function, passing the *secret name* and key=value pairs ---
-# Note: The path construction now happens *inside* vault_put_curl
-
+# --- Call the function for each secret group ---
+# ... (calls to vault_put_curl remain the same) ...
 # --- CORS ---
 vault_put_curl "cors" \
     "allowed-origins=${CORS_ALLOWED_ORIGINS}"
@@ -274,8 +267,6 @@ vault_put_curl "whois" \
     "server=${WHOIS_SERVER}" \
     "port=${WHOIS_PORT}" \
     "timeout=${WHOIS_TIMEOUT}"
-
-# --- Add other secrets as needed ---
 
 echo "Seeder: Vault population script finished successfully."
 exit 0
