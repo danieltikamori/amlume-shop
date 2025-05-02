@@ -12,6 +12,8 @@ package me.amlu.shop.amlume_shop.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import io.lettuce.core.ClientOptions;
+import io.lettuce.core.SslOptions;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.properties.ValkeyConfigProperties;
 import org.slf4j.Logger;
@@ -22,6 +24,8 @@ import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
@@ -36,6 +40,7 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.time.Duration;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
@@ -58,22 +63,30 @@ public class ValkeyCacheConfig {
     public static final String GEO_LOCATION_CACHE = "geoLocationCache";
     public static final String GEO_HISTORY_CACHE = "geoHistoryCache";
 
+    @Value("${security.geo.time-window-hours:24}")
+    private int geoHistoryTtlHours;
+
+
+    // TLS connection properties
+    // Inject central SSL properties
+    @Value("${app.ssl.trust-store.path}")
+    private String centralTruststorePath;
+
+    @Value("${app.ssl.trust-store.password}")
+    private String centralTruststorePassword;
+
+    private final ResourceLoader resourceLoader; // Inject ResourceLoader
+
     // Inject properties using ValkeyConfigProperties bean instead of @Value
     private final ValkeyConfigProperties valkeyConfigProperties; // Inject the properties bean
 
-    // Removed @Value injections for host, port, password
-    // private String redisHost;
-    // private int redisPort;
-    // private String redisPassword;
-
-    @Value("${security.geo.time-window-hours:24}")
-    private int geoHistoryTtlHours;
 
     // Inject the application's pre-configured ObjectMapper
     private final ObjectMapper objectMapper;
 
     // Updated constructor to inject ValkeyConfigProperties
-    public ValkeyCacheConfig(ObjectMapper objectMapper, ValkeyConfigProperties valkeyConfigProperties) {
+    public ValkeyCacheConfig(ResourceLoader resourceLoader, ObjectMapper objectMapper, ValkeyConfigProperties valkeyConfigProperties) {
+        this.resourceLoader = resourceLoader;
         this.valkeyConfigProperties = valkeyConfigProperties; // Assign injected properties
 
         // Configure the ObjectMapper specifically for cache serialization needs
@@ -121,81 +134,56 @@ public class ValkeyCacheConfig {
     public LettuceConnectionFactory redisConnectionFactory(RedisStandaloneConfiguration standaloneConfig) {
         LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder = LettuceClientConfiguration.builder();
 
-        // 1. Enable SSL/TLS
-        log.info("Enabling SSL/TLS for Valkey connection.");
-        clientConfigBuilder.useSsl();
+        // Check if Valkey SSL is enabled (using valkey.ssl.enabled property)
+        if (valkeyConfigProperties.getSsl() != null && valkeyConfigProperties.getSsl().isEnabled()) {
+            log.info("Enabling SSL/TLS for Valkey connection.");
+            clientConfigBuilder.useSsl();
 
-        // 2. Configure Trust Strategy (Choose ONE for Production)
+            // --- Configure Trust Strategy using CENTRAL Truststore ---
+            if (StringUtils.hasText(centralTruststorePath) && StringUtils.hasText(centralTruststorePassword)) {
+                try {
+                    // Use ResourceLoader to resolve the path (handles file: and classpath:)
+                    Resource truststoreResource = resourceLoader.getResource(centralTruststorePath);
 
-        // --- REMOVED Option A: Disable Peer Verification (INSECURE) ---
-        log.warn("REMOVED InsecureTrustManagerFactory. Production requires a secure trust strategy (Truststore or System CA).");
-        /*
-        clientConfigBuilder.clientOptions(ClientOptions.builder()
-                .sslOptions(SslOptions.builder()
-                        .sslContext(sslCustomizer -> {
-                            try {
-                                sslCustomizer.trustManager(InsecureTrustManagerFactory.INSTANCE);
-                            } catch (Exception e) {
-                                throw new RuntimeException("Failed to configure Lettuce SSL context with insecure trust manager", e);
-                            }
-                        })
-                        .build())
-                .build());
-        */
-        // --- End REMOVED Option A ---
+                    if (!truststoreResource.exists()) {
+                        log.error("Central truststore resource not found at: {}", centralTruststorePath);
+                        throw new IllegalStateException("Central truststore resource not found for Valkey TLS: " + centralTruststorePath);
+                    }
 
-        // --- Option B: Use a Truststore (SECURE - Recommended for Production) ---
-        // TODO: Uncomment and configure this section for production environments.
-        // Requires creating a JKS truststore containing the server's CA or self-signed cert.
-        // Example using keytool:
-        // keytool -importcert -file ./certificates/valkey.crt -alias valkey-dev -keystore truststore.jks -storepass your_truststore_password -noprompt
-        /*
-        try {
-            // TODO: Externalize truststore path and password (e.g., via Vault/Config Properties)
-            File truststoreFile = new File("./config/truststore.jks"); // Adjust path as needed
-            String truststorePassword = "your_truststore_password"; // GET FROM SECURE CONFIG
+                    log.info("Configuring Valkey TLS using CENTRAL truststore: {}", centralTruststorePath);
 
-            if (!truststoreFile.exists()) {
-                 log.error("Truststore file not found at: {}", truststoreFile.getAbsolutePath());
-                 throw new IllegalStateException("Truststore file not found for Valkey TLS configuration.");
+                    SslOptions sslOptions = SslOptions.builder()
+                            .truststore(truststoreResource, centralTruststorePassword.toCharArray()) // Use Resource
+                            .build();
+
+                    ClientOptions clientOptions = ClientOptions.builder()
+                            .sslOptions(sslOptions)
+                            .build();
+
+                    clientConfigBuilder.clientOptions(clientOptions);
+                    log.info("Successfully configured Lettuce client options with CENTRAL truststore.");
+
+                } catch (IOException e) {
+                    log.error("IOException while accessing central truststore resource: {}", centralTruststorePath, e);
+                    throw new IllegalStateException("Failed to access central truststore resource for Valkey TLS", e);
+                } catch (Exception e) {
+                    log.error("Failed to configure Lettuce SSL options with central truststore: {}", centralTruststorePath, e);
+                    throw new IllegalStateException("Failed to configure Lettuce SSL options with central truststore", e);
+                }
+            } else {
+                log.warn("Central truststore path or password not configured (app.ssl.trust-store.*). " +
+                        "Attempting to use system default trust anchors for Valkey TLS. " +
+                        "This requires the Valkey server's certificate CA to be trusted by the JVM/OS.");
+                // Rely on system defaults (no explicit SslOptions needed)
             }
-            log.info("Configuring Valkey TLS using truststore: {}", truststoreFile.getAbsolutePath());
-
-            SslOptions sslOptionsB = SslOptions.builder()
-                    .truststore(truststoreFile, truststorePassword) // Use the correct method
-                    .build();
-
-            ClientOptions clientOptionsB = ClientOptions.builder()
-                    .sslOptions(sslOptionsB)
-                    .build();
-
-            clientConfigBuilder.clientOptions(clientOptionsB);
-
-        } catch (Exception e) {
-            log.error("Failed to configure Lettuce SSL options with truststore", e);
-            throw new IllegalStateException("Failed to configure Lettuce SSL options with truststore", e);
+        } else {
+            log.info("SSL/TLS is disabled for Valkey connection.");
         }
-        */
-        // --- End Option B ---
 
-        // --- Option C: Use System Trust Anchors (SECURE - If server cert is from a trusted CA) ---
-        // If the Valkey server's certificate is signed by a CA already trusted by the JVM/OS,
-        // Lettuce might pick it up automatically without explicit truststore config.
-        // No specific SslOptions needed here, just ensure the CA is in the system truststore.
-        // log.info("Configuring Valkey TLS using system default trust anchors.");
-        // --- End Option C ---
-
-        // TODO: Ensure ONE secure trust strategy (Option B or C) is configured for production.
-        // If no trust strategy is configured after removing Option A, connection will likely fail
-        // unless the server cert is trusted by the system AND Lettuce defaults work.
-
-        // Build the final client configuration
         LettuceClientConfiguration clientConfiguration = clientConfigBuilder.build();
-
-        // Create the factory using standalone config and client config
         LettuceConnectionFactory factory = new LettuceConnectionFactory(standaloneConfig, clientConfiguration);
-        factory.setShareNativeConnection(true); // Usually recommended
-        factory.setValidateConnection(true); // Validate connections on checkout
+        factory.setShareNativeConnection(true);
+        factory.setValidateConnection(true);
         return factory;
     }
 
@@ -272,5 +260,25 @@ public class ValkeyCacheConfig {
         redisScript.setLocation(new ClassPathResource("scripts/sliding_window_rate_limit_check_first.lua"));
         redisScript.setResultType(Long.class);
         return redisScript;
+    }
+
+    // Make sure the PostConstruct test uses the factory configured above
+    @jakarta.annotation.PostConstruct
+    public void testValkeyConnection() {
+        try {
+            // Get the factory bean which is now configured with central SSL
+            LettuceConnectionFactory factory = redisConnectionFactory(redisStandaloneConfiguration());
+            RedisTemplate<String, Object> template = redisTemplate(factory); // Use the configured factory
+            assert template.getConnectionFactory() != null;
+            String result = template.getConnectionFactory().getConnection().ping();
+            if ("PONG".equalsIgnoreCase(result)) {
+                log.info("Successfully connected to Valkey (using central SSL config) and received PONG.");
+            } else {
+                log.warn("Connected to Valkey (using central SSL config), but PING response was unexpected: {}", result);
+            }
+        } catch (Exception e) {
+            log.error("!!! FAILED TO CONNECT TO VALKEY (using central SSL config) during PostConstruct test !!! Check SSL/TLS configuration, host, port, password, and network.", e);
+            // throw new IllegalStateException("Failed to establish initial connection to Valkey", e);
+        }
     }
 }
