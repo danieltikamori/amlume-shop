@@ -77,19 +77,6 @@ public class AmlumeShopApplication {
                 .load();
         // ---------------------------------
 
-        // --- TEMPORARY DEBUG LOG ---
-        System.out.println("DEBUG: PASETO_ACCESS_PRIVATE_KEY from System Properties: " + System.getProperty("PASETO_ACCESS_PRIVATE_KEY"));
-
-        // In your AmlumeShopApplication.java main method, before SpringApplication.run(...)
-
-        String geoIpKeyFromEnv = System.getenv("GEOIP2_LICENSE_KEY");
-        System.out.println("-----> GEOIP_LICENSE_KEY from System.getenv(): " +
-                (geoIpKeyFromEnv != null ? "'" + geoIpKeyFromEnv + "'" : "null")); // Print the value or null
-
-        // You can also check system properties if you suspect -D arguments
-        String geoIpKeyFromProp = System.getProperty("GEOIP2_LICENSE_KEY");
-        System.out.println("-----> GEOIP_LICENSE_KEY from System.getProperty(): " +
-                (geoIpKeyFromProp != null ? "'" + geoIpKeyFromProp + "'" : "null"));
 
         SpringApplication.run(AmlumeShopApplication.class, args);
 
