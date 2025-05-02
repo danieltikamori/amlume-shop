@@ -279,9 +279,13 @@ jti:
 
 # --- MFA ---
 mfa:
-  encryption:
-    password: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
-    salt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
+  mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+  mfaEncryptionSalt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
+#  totp:
+#    mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+#  encryption:
+#    password: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+#    salt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
   excluded-uris: "/api/auth/,/public/,/health,/favicon.ico,/error,/actuator/**" # Added common exclusions
   rate-limit:
     max-attempts: 5
