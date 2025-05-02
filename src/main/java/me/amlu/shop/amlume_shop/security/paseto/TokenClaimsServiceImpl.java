@@ -12,8 +12,11 @@ package me.amlu.shop.amlume_shop.security.paseto;
 
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.security.enums.TokenType;
+import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
 import me.amlu.shop.amlume_shop.security.service.AuthenticationInterface;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -30,6 +33,7 @@ import java.util.Objects;
 
 @Service
 public class TokenClaimsServiceImpl implements TokenClaimsService {
+    private static final Logger log = LoggerFactory.getLogger(TokenClaimsServiceImpl.class);
 
     @Value("${service.name}")
     private String DEFAULT_ISSUER;
@@ -40,12 +44,14 @@ public class TokenClaimsServiceImpl implements TokenClaimsService {
     private final AuthenticationInterface authenticationInterface;
     private final HttpServletRequest httpServletRequest;
     private final TokenUtilService tokenUtilService;
+    private final PasetoPropertyResolver pasetoPropertyResolver; // Inject the resolver
 
 
-    public TokenClaimsServiceImpl(AuthenticationInterface authenticationInterface, HttpServletRequest httpServletRequest, TokenUtilService tokenUtilService) {
+    public TokenClaimsServiceImpl(AuthenticationInterface authenticationInterface, HttpServletRequest httpServletRequest, TokenUtilService tokenUtilService, PasetoPropertyResolver pasetoPropertyResolver) {
         this.authenticationInterface = authenticationInterface;
         this.httpServletRequest = httpServletRequest;
         this.tokenUtilService = tokenUtilService;
+        this.pasetoPropertyResolver = pasetoPropertyResolver;
     }
 
     /**
@@ -103,15 +109,27 @@ public class TokenClaimsServiceImpl implements TokenClaimsService {
     /**
      * Creates the footer for a PASETO token.
      *
-     * @param keyId the key ID.
+     * @param purpose the purpose of the token (e.g., "public_access", "local_access", "local_refresh").
      *              //     * @param wrappedPaserk the wrapped Paserk.
      * @return the PasetoClaims for the footer.
      */
     @Override
-    public PasetoClaims createPasetoFooterClaims(String keyId) {
+    public PasetoClaims createPasetoFooterClaims(String purpose) {
+        String keyId = switch (purpose) {
+            case "public_access" -> pasetoPropertyResolver.resolvePublicAccessKid();
+            case "local_access" -> pasetoPropertyResolver.resolveLocalAccessKid();
+            case "local_refresh" -> pasetoPropertyResolver.resolveLocalRefreshKid();
+            // Add cases for public_refresh if needed
+            default -> {
+                log.error("Unsupported purpose '{}' for creating PASETO footer claims.", purpose);
+                throw new IllegalArgumentException("Unsupported purpose for footer claims: " + purpose);
+            }
+        };
+        // Resolve KID based on purpose using the resolver
+
         PasetoClaims footerClaims = new PasetoClaims();
         footerClaims.setKeyId(keyId);
-//        footerClaims.setWrappedPaserk(wrappedPaserk);
+        // footerClaims.setWrappedPaserk(wrappedPaserk); // If needed
         return footerClaims;
     }
 
