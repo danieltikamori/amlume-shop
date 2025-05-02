@@ -151,7 +151,9 @@ add_pair "hashing.encoding" "${HASH_ENCODING}"
 
 # MFA properties (match MfaProperties bean)
 add_pair "mfa.mfaEncryptionPassword" "${MFA_ENCRYPTION_PASSWORD}" # Check exact property name in MfaProperties
+add_pair "mfaEncryptionPassword" "${MFA_ENCRYPTION_PASSWORD}" # Check exact property name in MfaProperties
 add_pair "mfa.mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact property name in MfaProperties
+add_pair "mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact property name in MfaProperties
 
 add_pair "observability.loki-url" "${LOKI_URL}" # Assuming property name matches
 
