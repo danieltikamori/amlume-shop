@@ -10,9 +10,8 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
-import lombok.RequiredArgsConstructor;
-import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
+import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -23,11 +22,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/device-fingerprint")
-@RequiredArgsConstructor
 public class DeviceFingerprintController {
 
     private final DeviceFingerprintService deviceFingerprintService;
     private final UserService userService;
+
+    public DeviceFingerprintController(DeviceFingerprintService deviceFingerprintService, UserService userService) {
+        this.deviceFingerprintService = deviceFingerprintService;
+        this.userService = userService;
+    }
 
     @PostMapping("/v1/disable")
     public ResponseEntity<Void> disableDeviceFingerprinting(@AuthenticationPrincipal UserDetails userDetails) {
