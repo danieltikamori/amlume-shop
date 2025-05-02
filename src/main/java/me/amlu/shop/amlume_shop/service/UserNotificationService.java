@@ -43,12 +43,18 @@ import java.util.List;
 @Service
 public class UserNotificationService {
 
-    @Value("${slack.channel}")
+    @Value("${slack.channel}") // Less sensitive, but could still be in config props
     private String slackChannel;
 
+    // TODO: SECURITY - Move Slack token to Vault (e.g., secret/amlume-shop/slack)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., NotificationProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
     @Value("${slack.token}")
     private String slackToken;
 
+    // TODO: SECURITY - Move Mail credentials (if password isn't handled by Spring Boot Mail starter)
+    //       to Vault (e.g., secret/amlume-shop/email) and inject via @ConfigurationProperties
+    //       populated by Spring Cloud Vault instead of using @Value. Username might be less sensitive.
     @Value("${spring.mail.username}")
     private String emailFrom;
 
