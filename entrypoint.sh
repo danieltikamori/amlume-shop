@@ -104,9 +104,8 @@ JSON_DATA_PAIRS=""
 add_pair() {
     key="$1"
     value="$2"
-    # Basic JSON escaping for the value (handle double quotes and backslashes)
-    # More robust escaping might be needed for complex values (newlines, etc.)
-    escaped_value=$(echo "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    # Escape backslashes, then double quotes, then newlines
+    escaped_value=$(echo "$value" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g')
 
     if [ -z "$JSON_DATA_PAIRS" ]; then
         JSON_DATA_PAIRS="\"$key\":\"$escaped_value\""
@@ -155,10 +154,10 @@ add_pair "mfa.mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact 
 add_pair "observability.loki-url" "${LOKI_URL}" # Assuming property name matches
 
 # PASETO properties (match PasetoProperties bean structure)
-add_pair "paseto.public.access.private-key" "${PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"
-add_pair "paseto.public.access.public-key" "${PASETO_PUBLIC_ACCESS_PUBLIC_KEY}"
-add_pair "paseto.public.access.kid" "${PASETO_PUBLIC_ACCESS_KID}"
-# Add paseto.public.access.expiration if needed
+add_pair "paseto.pub.access.private-key" "${PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"
+add_pair "paseto.pub.access.public-key" "${PASETO_PUBLIC_ACCESS_PUBLIC_KEY}"
+add_pair "paseto.pub.access.kid" "${PASETO_PUBLIC_ACCESS_KID}"
+# Add paseto.pub.access.expiration if needed
 
 add_pair "paseto.local.access.secret-key" "${PASETO_LOCAL_ACCESS_SECRET_KEY}"
 add_pair "paseto.local.access.kid" "${PASETO_LOCAL_ACCESS_KID}"
@@ -168,11 +167,11 @@ add_pair "paseto.local.refresh.secret-key" "${PASETO_LOCAL_REFRESH_SECRET_KEY}"
 add_pair "paseto.local.refresh.kid" "${PASETO_LOCAL_REFRESH_KID}"
 # Add paseto.local.refresh.expiration if needed
 
-# Add paseto.public.refresh.* if used
-add_pair "paseto.public.refresh.private-key" "${PASETO_PUBLIC_REFRESH_PRIVATE_KEY}"
-add_pair "paseto.public.refresh.public-key" "${PASETO_PUBLIC_REFRESH_PUBLIC_KEY}"
-add_pair "paseto.public.refresh.kid" "${PASETO_PUBLIC_REFRESH_KID}"
-# Add paseto.public.refresh.expiration if needed
+# Add paseto.pub.refresh.* if used
+add_pair "paseto.pub.refresh.private-key" "${PASETO_PUBLIC_REFRESH_PRIVATE_KEY}"
+add_pair "paseto.pub.refresh.public-key" "${PASETO_PUBLIC_REFRESH_PUBLIC_KEY}"
+add_pair "paseto.pub.refresh.kid" "${PASETO_PUBLIC_REFRESH_KID}"
+# Add paseto.pub.refresh.expiration if needed
 
 # reCAPTCHA properties (match RecaptchaProperties bean or @Value keys)
 add_pair "recaptcha.secret" "${RECAPTCHA_SECRET_KEY}" # Check exact property name used by Spring
