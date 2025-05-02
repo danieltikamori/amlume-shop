@@ -12,10 +12,6 @@ package me.amlu.shop.amlume_shop.order_management;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
-import lombok.ToString;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import org.hibernate.proxy.HibernateProxy;
@@ -24,10 +20,6 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
-@Getter
-@Setter
-@ToString
-@RequiredArgsConstructor
 @Entity
 @Table(name = "orders", indexes = {
         @Index(name = "idx_order_id", columnList = "order_id"),
@@ -55,7 +47,6 @@ public class Order extends BaseEntity {
     private String customerName;
 
     @OneToMany(mappedBy = "order", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
-    @ToString.Exclude
     private List<Product> products;
 
     //    @NotBlank
@@ -68,6 +59,9 @@ public class Order extends BaseEntity {
     @NotBlank
     @Column(name = "order_date")
     private Instant orderDate;
+
+    public Order() {
+    }
 
 //    private String department;
 //
@@ -101,5 +95,65 @@ public class Order extends BaseEntity {
     @Override
     public Long getId() {
         return this.orderId;
+    }
+
+    public Long getOrderId() {
+        return this.orderId;
+    }
+
+    public @NotBlank String getOrderNumber() {
+        return this.orderNumber;
+    }
+
+    public @NotBlank String getCustomerId() {
+        return this.customerId;
+    }
+
+    public String getCustomerName() {
+        return this.customerName;
+    }
+
+    public List<Product> getProducts() {
+        return this.products;
+    }
+
+    public OrderStatus getOrderStatus() {
+        return this.orderStatus;
+    }
+
+    public @NotBlank Instant getOrderDate() {
+        return this.orderDate;
+    }
+
+    public void setOrderId(Long orderId) {
+        this.orderId = orderId;
+    }
+
+    public void setOrderNumber(@NotBlank String orderNumber) {
+        this.orderNumber = orderNumber;
+    }
+
+    public void setCustomerId(@NotBlank String customerId) {
+        this.customerId = customerId;
+    }
+
+    public void setCustomerName(String customerName) {
+        this.customerName = customerName;
+    }
+
+    public void setProducts(List<Product> products) {
+        this.products = products;
+    }
+
+    public void setOrderStatus(OrderStatus orderStatus) {
+        this.orderStatus = orderStatus;
+    }
+
+    public void setOrderDate(@NotBlank Instant orderDate) {
+        this.orderDate = orderDate;
+    }
+
+    public String toString() {
+        return "Order(orderId=" + this.getOrderId() + ", orderNumber=" + this.getOrderNumber() + ", customerId=" + this.getCustomerId() + ", customerName=" + this.getCustomerName() + ", orderStatus=" + this.getOrderStatus() + ", orderDate=" + this.getOrderDate() + ")";
     }
 }
