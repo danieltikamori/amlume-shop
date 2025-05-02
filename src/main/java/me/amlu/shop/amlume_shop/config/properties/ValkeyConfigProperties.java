@@ -10,17 +10,28 @@
 
 package me.amlu.shop.amlume_shop.config.properties;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.convert.DurationUnit;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 
-// TODO: Ensure this bean is populated securely, ideally from Vault via Spring Cloud Vault.
-// TODO: Verify if 'nodes' property is still needed or if 'host' and 'port' are sufficient.
-//       If 'nodes' is used (e.g., for cluster), parsing logic in ValkeyCacheConfig might be needed.
-
+/**
+ * Configuration properties for Valkey (Redis fork) connection and pooling.
+ * Maps properties under the 'valkey' prefix (e.g., valkey.host, valkey.port, valkey.password, valkey.pool.*).
+ * <p>
+ * IMPORTANT: Ensure the 'password' property is populated securely, ideally from Vault via Spring Cloud Vault
+ * in production environments, or via environment variables. Avoid committing default passwords.
+ * <p>
+ * This configuration assumes a standalone Valkey instance using host/port.
+ * For cluster configuration, the 'nodes' property and related logic would need to be added/enabled.
+ */
 @Component // Make it a component so it can be injected
 @Validated // Enable validation if constraints are added
 @ConfigurationProperties(prefix = "valkey") // Valkey Configuration
@@ -31,11 +42,19 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
     // Uncomment if using cluster and remove host/port
 
     // Option 2: Add individual host/port if using standalone (preferred for clarity if standalone)
-    private String host; // Add host field
-    private int port;    // Add port field
+    // --- Standalone Connection Properties ---
+    @NotNull(message = "Valkey host cannot be null")
+    private String host;
 
-    @NotNull // Add validation if password is required
+    @Min(value = 1, message = "Valkey port must be a positive integer")
+    private int port;
+
+    @NotNull(message = "Valkey password cannot be null")
     private String password;
+
+    // --- Nested Pool Properties ---
+    @Valid // Enable validation for the nested Pool object
+    private Pool pool = new Pool(); // Initialize nested properties
 
     public ValkeyConfigProperties() {
     }
@@ -74,36 +93,130 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
         this.password = password;
     }
 
-    public boolean equals(final Object o) {
-        if (o == this) return true;
-        if (!(o instanceof ValkeyConfigProperties other)) return false;
-        if (!other.canEqual((Object) this)) return false;
-        final Object this$host = this.getHost();
-        final Object other$host = other.getHost();
-        if (!Objects.equals(this$host, other$host)) return false;
-        if (this.getPort() != other.getPort()) return false;
-        final Object this$password = this.getPassword();
-        final Object other$password = other.getPassword();
-        return Objects.equals(this$password, other$password);
+    public Pool getPool() {
+        return pool;
+    }
+
+    public void setPool(Pool pool) {
+        this.pool = pool;
+    }
+
+    // --- equals, hashCode, toString ---
+    // (Updated to include pool)
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ValkeyConfigProperties that)) return false;
+        if (!that.canEqual(this)) return false;
+        return port == that.port &&
+                Objects.equals(host, that.host) &&
+                Objects.equals(password, that.password) &&
+                Objects.equals(pool, that.pool); // Include pool
     }
 
     protected boolean canEqual(final Object other) {
         return other instanceof ValkeyConfigProperties;
     }
 
+    @Override
     public int hashCode() {
-        final int PRIME = 59;
-        int result = 1;
-        final Object $host = this.getHost();
-        result = result * PRIME + ($host == null ? 43 : $host.hashCode());
-        result = result * PRIME + this.getPort();
-        final Object $password = this.getPassword();
-        result = result * PRIME + ($password == null ? 43 : $password.hashCode());
-        return result;
+        return Objects.hash(host, port, password, pool); // Include pool
     }
 
+    @Override
     public String toString() {
-        return "ValkeyConfigProperties(host=" + this.getHost() + ", port=" + this.getPort() + ", password=" + this.getPassword() + ")";
+        // Avoid logging password directly
+        return "ValkeyConfigProperties(" +
+                "host=" + host +
+                ", port=" + port +
+                ", password=" + (password != null ? "[REDACTED]" : "null") +
+                ", pool=" + pool + // Include pool
+                ')';
+    }
+
+    // --- Nested Static Class for Pool Configuration ---
+    @Validated
+    public static class Pool {
+
+        // Match properties from application.yml under valkey.pool
+        @Min(0)
+        private int maxActive = 8; // Default from Lettuce
+        @Min(0)
+        private int maxIdle = 8;   // Default from Lettuce
+        @Min(0)
+        private int minIdle = 0;   // Default from Lettuce
+
+        @DurationUnit(ChronoUnit.MILLIS)
+        private Duration maxWait = Duration.ofMillis(-1); // Default from Lettuce (-1 means block indefinitely)
+
+        // Add other pool properties from application.yml if needed
+        // private Duration minEvictableIdleTime;
+        // private Integer numTestsPerEvictionRun;
+        // private Duration timeBetweenEvictionRuns;
+        // private Boolean testWhileIdle;
+        // ... etc.
+
+        // --- Getters and Setters for Pool ---
+
+        public int getMaxActive() {
+            return maxActive;
+        }
+
+        public void setMaxActive(int maxActive) {
+            this.maxActive = maxActive;
+        }
+
+        public int getMaxIdle() {
+            return maxIdle;
+        }
+
+        public void setMaxIdle(int maxIdle) {
+            this.maxIdle = maxIdle;
+        }
+
+        public int getMinIdle() {
+            return minIdle;
+        }
+
+        public void setMinIdle(int minIdle) {
+            this.minIdle = minIdle;
+        }
+
+        public Duration getMaxWait() {
+            return maxWait;
+        }
+
+        public void setMaxWait(Duration maxWait) {
+            this.maxWait = maxWait;
+        }
+
+        // --- equals, hashCode, toString for Pool ---
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Pool pool = (Pool) o;
+            return maxActive == pool.maxActive &&
+                    maxIdle == pool.maxIdle &&
+                    minIdle == pool.minIdle &&
+                    Objects.equals(maxWait, pool.maxWait);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(maxActive, maxIdle, minIdle, maxWait);
+        }
+
+        @Override
+        public String toString() {
+            return "Pool{" +
+                    "maxActive=" + maxActive +
+                    ", maxIdle=" + maxIdle +
+                    ", minIdle=" + minIdle +
+                    ", maxWait=" + maxWait +
+                    '}';
+        }
     }
 
     // If using nodes, implement the logic to parse and set host/port from nodes
