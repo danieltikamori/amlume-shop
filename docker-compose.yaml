@@ -13,6 +13,13 @@
 #The entrypoint.sh script exits, and the vault-seeder container stops (restart: 'no').
 #  Your main Spring Boot application (running outside or started later) can now connect to Vault and find the secrets already populated.
 
+# Best practices:
+#  Use named volumes to simplify backup and migration.
+#
+#  Mount logs separately for easier troubleshooting and rotation.
+#
+#  Use docker volume inspect to view volume metadata and mount points.
+
 services:
   # --- HashiCorp Vault Service ---
   vault:
@@ -60,33 +67,42 @@ services:
     # Note: Dev mode uses in-memory storage by default. Data is lost on restart.
 
   # --- MySQL Database Service ---
+    # XtraBackup enabled MySql database
   mysql:
-    image: mysql:lts # Use Long Term Support version
+    image: percona/percona-server:8.4
+#    image: mysql:lts # Use Long Term Support version
     container_name: mysql-db
+    restart: unless-stopped
     command:
       - --ssl-ca=/etc/mysql/certs/mysql_ca.pem
       - --ssl-cert=/etc/mysql/certs/mysql_certificate.pem
       - --ssl-key=/etc/mysql/certs/mysql_private_key.pem
       - --bind-address=0.0.0.0
       - --require_secure_transport=ON # Explicitly require TLS connections
+#      - --pid-file /var/lib/mysql/mysqld.pid
     ports:
       # Expose MySQL on host port 3306
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: 7D3212C359485FBF140ABBEBFF4A09CFAB1C0F98 # Change in production
-      MYSQL_DATABASE: amlume_db
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
       # The non-root user created to deal specifically with this specific database. Have all necessary permissions.
-      MYSQL_USER: amlume_user
-      MYSQL_PASSWORD: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Change in production
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+#      MYSQL_PASSWORD: "/run/secrets/mysql_user_password"
+#      MYSQL_ROOT_PASSWORD: "/run/secrets/mysql_root_password"
     volumes:
       - ./data:/var/lib/mysql # Check if this should be mysql_data volume instead
       - ./certificates/database:/etc/mysql/certs
       # Persist database data
       - mysql_data:/var/lib/mysql
+      - mysql_logs:/var/log/mysql # MySQL logs
+      - mysql_backups:/backups # XtraBackup output (optional, for future use)
     networks:
-      - amlume-shop-network
 
-#  cert-gen:
+
+      - amlume-shop-network
+  #  cert-gen:
 #    image: alpine
 #    volumes:
 #      - ./certs:/certs
@@ -199,6 +215,8 @@ services:
 volumes:
   vault_logs: {}
   mysql_data: {}
+  mysql_logs: {}
+  mysql_backups: {}
   valkey_data: {} # Define volume for Valkey persistence
 
 # --- Network Definition ---
@@ -206,3 +224,9 @@ volumes:
 networks:
   amlume-shop-network:
     name: amlume-shop-network # Explicitly name the network
+
+#secrets:
+#  mysql-root-password:
+#    file: ./config/mysql_root_password.txt
+#  mysql-password:
+#    file: ./config/mysql_user_password.txt
