@@ -16,7 +16,7 @@ set -e
 # --- Configuration (Read from environment variables) ---
 VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
 VAULT_TOKEN="${VAULT_TOKEN}"
-# BASE_VAULT_PATH is the prefix *before* /data/
+# BASE_VAULT_PATH_PREFIX is the logical path Spring Cloud Vault will read from
 BASE_VAULT_PATH_PREFIX="${VAULT_PATH:-secret/amlume-shop/local}"
 ENV_FILE_PATH="${ENV_FILE_PATH:-/.env}"
 VAULT_READY_TIMEOUT="${VAULT_READY_TIMEOUT:-60}"
@@ -36,9 +36,9 @@ VAULT_READY_TIMEOUT="${VAULT_READY_TIMEOUT:-60}"
 # --- END SECURITY WARNING ---
 
 
-echo "Seeder: Starting up."
+echo "Seeder: Starting up (Single Path Mode)."
 echo "Seeder: Target Vault Addr: ${VAULT_ADDR}"
-echo "Seeder: Target Base Vault Path Prefix: $BASE_VAULT_PATH_PREFIX"
+echo "Seeder: Target Vault Path (Logical): $BASE_VAULT_PATH_PREFIX"
 echo "Seeder: Source Env File: $ENV_FILE_PATH"
 echo "Seeder: Using Vault Token: $(echo "$VAULT_TOKEN" | head -c 5)... (masked)"
 
@@ -53,11 +53,9 @@ if [ ! -f "$ENV_FILE_PATH" ]; then
 fi
 
 # --- Wait for Vault to be Ready ---
-# ... (Vault readiness check remains the same) ...
 echo "Seeder: Waiting for Vault to become ready at $VAULT_ADDR..."
 start_time=$(date +%s)
 while true; do
-  # Use curl's exit code directly
   if curl --output /dev/null --silent --head --fail "$VAULT_ADDR/v1/sys/health"; then
     echo "Seeder: Vault is initialized, unsealed, and active."
     break
@@ -73,200 +71,178 @@ while true; do
   sleep 3
 done
 
-
 # --- Source the .env file ---
 echo "Seeder: Sourcing environment variables from $ENV_FILE_PATH..."
+# ... (File existence and readability checks remain the same) ...
 ls -l "$ENV_FILE_PATH" || { echo "Seeder: Error - Env file not found at $ENV_FILE_PATH"; exit 1; }
 if [ ! -r "$ENV_FILE_PATH" ]; then
-    echo "Seeder: Error - Env file is not readable at $ENV_FILE_PATH"
-    exit 1
+    echo "Seeder: Error - Env file is not readable at $ENV_FILE_PATH"; exit 1;
 fi
 set -a
 # shellcheck source=/dev/null
 . "$ENV_FILE_PATH"
 set +a
 echo "Seeder: Environment variables sourced."
-# --- DEBUGGING ECHO STATEMENTS (Keep for now) ---
-echo "DEBUG: DB_PASSWORD length: ${#DB_PASSWORD}"
-echo "DEBUG: PASETO_PUBLIC_ACCESS_PRIVATE_KEY length: ${#PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"
-echo "DEBUG: CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}"
-# --- END DEBUGGING ---
 
-# --- Populate Vault with Specific Secrets ---
-echo "Seeder: Populating specific secrets into Vault..."
+# --- Construct the SINGLE JSON Payload ---
+echo "Seeder: Constructing JSON payload for Vault..."
 
-# Function to write secrets using curl and KV v2 API
-# Takes the secret name (e.g., "cors", "database") as $1
-# Takes key=value pairs as subsequent arguments ($@)
-vault_put_curl() {
-    secret_name="$1"
-    shift # Remove secret name from arguments
+# NOTE: Using simple string concatenation. For complex values or robustness,
+# consider installing and using 'jq' if available in your container image.
+# Example with jq:
+# JSON_PAYLOAD=$(jq -n \
+#   --arg cors_origins "$CORS_ALLOWED_ORIGINS" \
+#   --arg db_pass "$DB_PASSWORD" \
+#   ... \
+#   '{data: {
+#       "cors.allowed-origins": $cors_origins,
+#       "database.password": $db_pass,
+#       ...
+#    }}')
 
-        # Separate the mount point (first part of BASE_VAULT_PATH_PREFIX) from the logical path
-        VAULT_MOUNT=$(echo "$BASE_VAULT_PATH_PREFIX" | cut -d'/' -f1)
-        VAULT_LOGICAL_PATH=$(echo "$BASE_VAULT_PATH_PREFIX" | cut -d'/' -f2-) # Get the rest of the path
+JSON_DATA_PAIRS=""
+add_pair() {
+    key="$1"
+    value="$2"
+    # Basic JSON escaping for the value (handle double quotes and backslashes)
+    # More robust escaping might be needed for complex values (newlines, etc.)
+    escaped_value=$(echo "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')
 
-        # Construct the correct KVv2 API path: <mount>/data/<logical_path>/<secret_name>
-        # Handle cases where VAULT_LOGICAL_PATH might be empty (though not in our current setup)
-        if [ -z "$VAULT_LOGICAL_PATH" ]; then
-          api_path="${VAULT_MOUNT}/data/${secret_name}"
-        else
-          api_path="${VAULT_MOUNT}/data/${VAULT_LOGICAL_PATH}/${secret_name}"
-        fi
-
-        api_url="${VAULT_ADDR}/v1/${api_path}"
-
-        echo "Seeder: Writing via curl to Corrected API URL: $api_url" # Log the corrected URL
-
-    # Build the JSON data payload: {"data": {"key1":"value1", "key2":"value2"}}
-    json_data_pairs=""
-    first_pair=true
-    for arg in "$@"; do
-        # Split arg at the first '='
-        key="${arg%%=*}"
-        value="${arg#*=}"
-
-        # Basic JSON escaping for the value (handle double quotes and backslashes)
-        escaped_value=$(echo "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')
-
-        if [ "$first_pair" = true ]; then
-            json_data_pairs="\"$key\":\"$escaped_value\""
-            first_pair=false
-        else
-            json_data_pairs="$json_data_pairs,\"$key\":\"$escaped_value\""
-        fi
-    done
-
-    json_payload="{\"data\":{$json_data_pairs}}"
-
-    # Execute curl, capturing status code to a variable, redirecting body/stderr
-    http_status_output=$(curl -f -w "%{http_code}" \
-         --request POST \
-         --header "X-Vault-Token: ${VAULT_TOKEN}" \
-         --header "Content-Type: application/json" \
-         --data "$json_payload" \
-         "$api_url" \
-         --output /tmp/curl_response.txt \
-         --stderr /tmp/curl_stderr.txt)
-    curl_exit_code=$? # Capture exit code IMMEDIATELY
-
-    # Check curl's exit code first
-    if [ $curl_exit_code -ne 0 ]; then
-        # curl itself failed OR -f caused failure due to HTTP status >= 400
-        echo "Seeder: Error writing via curl to API path: $api_path (curl exit code: $curl_exit_code)" >&2
-
-        # Try to determine if it was an HTTP error or other curl failure
-        # Check if http_status_output looks like a valid HTTP code (simple check)
-        if printf '%s' "$http_status_output" | grep -qE '^[1-5][0-9]{2}$'; then
-             echo "Seeder: HTTP Status Code: $http_status_output" >&2
-        else
-             # If curl failed before getting HTTP status, http_status_output might be empty or just contain curl errors
-             echo "Seeder: HTTP Status Code: Unknown (curl exit code $curl_exit_code indicated failure. Output was '$http_status_output')" >&2
-        fi
-        echo "--- Seeder: Response Body Start ---" >&2
-        cat /tmp/curl_response.txt >&2 || echo "(No response body captured)" >&2
-        echo "--- Seeder: Response Body End ---" >&2
-        echo "--- Seeder: Stderr Start ---" >&2
-        cat /tmp/curl_stderr.txt >&2 || echo "(No stderr captured)" >&2
-        echo "--- Seeder: Stderr End ---" >&2
-        rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
-        exit 1 # Explicitly exit on error
+    if [ -z "$JSON_DATA_PAIRS" ]; then
+        JSON_DATA_PAIRS="\"$key\":\"$escaped_value\""
     else
-        echo "Seeder: Successfully wrote via curl to API path: $api_path (HTTP Status: $http_status_output)"
-        rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
+        JSON_DATA_PAIRS="$JSON_DATA_PAIRS,\"$key\":\"$escaped_value\""
     fi
 }
 
-# --- Call the function for each secret group ---
-# ... (calls to vault_put_curl remain the same) ...
-# --- CORS ---
-vault_put_curl "cors" \
-    "allowed-origins=${CORS_ALLOWED_ORIGINS}"
+# --- Add ALL secrets with correct Spring property names (dot-notation) ---
+# Match these keys with your @ConfigurationProperties beans
+add_pair "cors.allowed-origins" "${CORS_ALLOWED_ORIGINS}"
 
-# --- Database Secrets ---
-vault_put_curl "database" \
-    "password=${DB_PASSWORD}" \
-    "username=${DB_USERNAME}"
+add_pair "database.password" "${DB_PASSWORD}"
+add_pair "database.username" "${DB_USERNAME}"
+# Add other database.* properties if needed (e.g., database.url if not hardcoded)
 
-# --- DeviceFingerprint Secrets ---
-vault_put_curl "device-fingerprint" \
-    "salt=${DEVICE_FINGERPRINT_SALT}"
+add_pair "device-fingerprint.salt" "${DEVICE_FINGERPRINT_SALT}" # Assuming property name matches
 
-# --- Email ---
-vault_put_curl "email" \
-    "team-email=${TEAM_EMAIL}" \
-    "alert-email-sender=${ALERT_EMAIL_SENDER}" \
-    "notification-email-to=${NOTIFICATION_EMAIL_TO}" \
-    "notification-email-from=${NOTIFICATION_EMAIL_FROM}" \
-    "email-host=${MAIL_HOST}" \
-    "email-username=${MAIL_USERNAME}" \
-    "email-password=${MAIL_PASSWORD}" \
-    "email-port=${MAIL_PORT}" \
-    "email-starttls-enable=${MAIL_STARTTLS_ENABLE}" \
-    "email-auth-enable=${MAIL_AUTH_ENABLE}"
+# Email properties (match keys in application-local.yml if loaded via @ConfigurationProperties)
+# If using spring.mail.* directly, these might not be needed in Vault unless overridden
+add_pair "email.team-email" "${TEAM_EMAIL}"
+add_pair "email.alert-email-sender" "${ALERT_EMAIL_SENDER}"
+add_pair "email.notification-email-to" "${NOTIFICATION_EMAIL_TO}"
+add_pair "email.notification-email-from" "${NOTIFICATION_EMAIL_FROM}"
+# Spring Mail properties (if you want them in Vault)
+add_pair "spring.mail.host" "${MAIL_HOST}"
+add_pair "spring.mail.username" "${MAIL_USERNAME}"
+add_pair "spring.mail.password" "${MAIL_PASSWORD}"
+add_pair "spring.mail.port" "${MAIL_PORT}"
+add_pair "spring.mail.properties.mail.smtp.starttls.enable" "${MAIL_STARTTLS_ENABLE}"
+add_pair "spring.mail.properties.mail.smtp.auth" "${MAIL_AUTH_ENABLE}"
 
-# --- GeoIP2 Secrets ---
-vault_put_curl "geoip2" \
-    "account-id=${GEOIP2_ACCOUNT_ID}" \
-    "license-key=${GEOIP2_LICENSE_KEY}"
+add_pair "geoip2.account-id" "${GEOIP2_ACCOUNT_ID}"
+add_pair "geoip2.license-key" "${GEOIP2_LICENSE_KEY}"
+# Add other geoip2.* properties if needed (e.g., database paths if loaded from Vault)
 
-# --- Hashing ---
-vault_put_curl "hashing" \
-    "algorithm=${HASHING_ALGORITHM}" \
-    "iterations=${HASHING_ITERATIONS}" \
-    "key-length=${HASHING_KEY_LENGTH}" \
-    "encoding=${HASH_ENCODING}"
+add_pair "hashing.algorithm" "${HASHING_ALGORITHM}"
+add_pair "hashing.iterations" "${HASHING_ITERATIONS}"
+add_pair "hashing.key-length" "${HASHING_KEY_LENGTH}"
+add_pair "hashing.encoding" "${HASH_ENCODING}"
 
-# --- MFA Secrets ---
-vault_put_curl "mfa" \
-    "encryption-password=${MFA_ENCRYPTION_PASSWORD}" \
-    "encryption-salt=${MFA_ENCRYPTION_SALT}"
+# MFA properties (match MfaProperties bean)
+add_pair "mfa.mfaEncryptionPassword" "${MFA_ENCRYPTION_PASSWORD}" # Check exact property name in MfaProperties
+add_pair "mfa.mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact property name in MfaProperties
 
-# --- Observability Secrets ---
-vault_put_curl "observability" \
-    "loki-url=${LOKI_URL}"
+add_pair "observability.loki-url" "${LOKI_URL}" # Assuming property name matches
 
-# --- PASETO Secrets ---
-# Public Access
-vault_put_curl "paseto-pub-access" \
-    "private-key=${PASETO_PUBLIC_ACCESS_PRIVATE_KEY}" \
-    "public-key=${PASETO_PUBLIC_ACCESS_PUBLIC_KEY}" \
-    "kid=${PASETO_PUBLIC_ACCESS_KID}"
+# PASETO properties (match PasetoProperties bean structure)
+add_pair "paseto.public.access.private-key" "${PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"
+add_pair "paseto.public.access.public-key" "${PASETO_PUBLIC_ACCESS_PUBLIC_KEY}"
+add_pair "paseto.public.access.kid" "${PASETO_PUBLIC_ACCESS_KID}"
+# Add paseto.public.access.expiration if needed
 
-# Local Access
-vault_put_curl "paseto-local-access" \
-    "secret-key=${PASETO_LOCAL_ACCESS_SECRET_KEY}" \
-    "kid=${PASETO_LOCAL_ACCESS_KID}"
+add_pair "paseto.local.access.secret-key" "${PASETO_LOCAL_ACCESS_SECRET_KEY}"
+add_pair "paseto.local.access.kid" "${PASETO_LOCAL_ACCESS_KID}"
+# Add paseto.local.access.expiration if needed
 
-# Local Refresh
-vault_put_curl "paseto-local-refresh" \
-    "secret-key=${PASETO_LOCAL_REFRESH_SECRET_KEY}" \
-    "kid=${PASETO_LOCAL_REFRESH_KID}"
+add_pair "paseto.local.refresh.secret-key" "${PASETO_LOCAL_REFRESH_SECRET_KEY}"
+add_pair "paseto.local.refresh.kid" "${PASETO_LOCAL_REFRESH_KID}"
+# Add paseto.local.refresh.expiration if needed
 
-# --- reCAPTCHA Secrets ---
-vault_put_curl "recaptcha" \
-     "secret=${RECAPTCHA_SECRET}" \
-     "site-key=${RECAPTCHA_SITE_KEY}"
+# Add paseto.public.refresh.* if used
+add_pair "paseto.public.refresh.private-key" "${PASETO_PUBLIC_REFRESH_PRIVATE_KEY}"
+add_pair "paseto.public.refresh.public-key" "${PASETO_PUBLIC_REFRESH_PUBLIC_KEY}"
+add_pair "paseto.public.refresh.kid" "${PASETO_PUBLIC_REFRESH_KID}"
+# Add paseto.public.refresh.expiration if needed
 
-# --- Slack variables ---
-vault_put_curl "slack" \
-    "bot-token=${SLACK_BOT_TOKEN}" \
-    "channel=${SLACK_CHANNEL}" \
-    "channel-name=${SLACK_CHANNEL_NAME}" \
-    "api-token=${SLACK_API_TOKEN}" \
-    "webhook-url=${SLACK_WEBHOOK_URL}"
+# reCAPTCHA properties (match RecaptchaProperties bean or @Value keys)
+add_pair "recaptcha.secret" "${RECAPTCHA_SECRET_KEY}" # Check exact property name used by Spring
+add_pair "recaptcha.site-key" "${RECAPTCHA_SITE_KEY}" # Check exact property name used by Spring
 
-# --- Valkey Secrets ---
-vault_put_curl "valkey" \
-    "password=${VALKEY_PASSWORD}" \
-    "host=${VALKEY_HOST}" \
-    "port=${VALKEY_PORT}"
+# Slack properties (match SlackProperties bean or @Value keys)
+add_pair "slack.bot-token" "${SLACK_BOT_TOKEN}"
+add_pair "slack.channel" "${SLACK_CHANNEL}"
+add_pair "slack.channel-name" "${SLACK_CHANNEL_NAME}"
+add_pair "slack.api-token" "${SLACK_API_TOKEN}"
+add_pair "slack.webhook-url" "${SLACK_WEBHOOK_URL}"
+# Add other slack.* properties if needed
 
-# --- Whois Secrets ---
-vault_put_curl "whois" \
-    "server=${WHOIS_SERVER}" \
-    "port=${WHOIS_PORT}" \
-    "timeout=${WHOIS_TIMEOUT}"
+# Valkey properties (match ValkeyConfigProperties bean)
+add_pair "valkey.password" "${VALKEY_PASSWORD}"
+add_pair "valkey.host" "${VALKEY_HOST}"
+add_pair "valkey.port" "${VALKEY_PORT}"
+# Add valkey.pool.* properties if needed
+
+# Whois properties (match WhoisProperties bean or @Value keys)
+add_pair "web.whois.server" "${WHOIS_SERVER}" # Check exact property name used by Spring
+add_pair "web.whois.port" "${WHOIS_PORT}"     # Check exact property name used by Spring
+add_pair "web.whois.timeout" "${WHOIS_TIMEOUT}" # Check exact property name used by Spring
+
+# --- Final JSON Payload ---
+JSON_PAYLOAD="{\"data\":{$JSON_DATA_PAIRS}}"
+# echo "DEBUG: Payload: $JSON_PAYLOAD" # Uncomment for debugging
+
+# --- Write the SINGLE Payload to Vault ---
+echo "Seeder: Writing all secrets to Vault path $BASE_VAULT_PATH_PREFIX..."
+
+# Construct the correct KVv2 API path: <mount>/data/<logical_path>
+VAULT_MOUNT=$(echo "$BASE_VAULT_PATH_PREFIX" | cut -d'/' -f1)
+VAULT_LOGICAL_PATH=$(echo "$BASE_VAULT_PATH_PREFIX" | cut -d'/' -f2-)
+API_PATH="${VAULT_MOUNT}/data/${VAULT_LOGICAL_PATH}" # Path to write the single secret object
+API_URL="${VAULT_ADDR}/v1/${API_PATH}"
+
+echo "Seeder: Writing via curl to API URL: $API_URL"
+
+# Execute curl (using the same robust error handling as before)
+http_status_output=$(curl -f -w "%{http_code}" \
+     --request POST \
+     --header "X-Vault-Token: ${VAULT_TOKEN}" \
+     --header "Content-Type: application/json" \
+     --data "$JSON_PAYLOAD" \
+     "$API_URL" \
+     --output /tmp/curl_response.txt \
+     --stderr /tmp/curl_stderr.txt)
+curl_exit_code=$? # Capture exit code IMMEDIATELY
+
+# Check curl's exit code first
+if [ $curl_exit_code -ne 0 ]; then
+    echo "Seeder: Error writing secrets via curl to API path: $API_PATH (curl exit code: $curl_exit_code)" >&2
+    if printf '%s' "$http_status_output" | grep -qE '^[1-5][0-9]{2}$'; then
+         echo "Seeder: HTTP Status Code: $http_status_output" >&2
+    else
+         echo "Seeder: HTTP Status Code: Unknown (curl exit code $curl_exit_code indicated failure. Output was '$http_status_output')" >&2
+    fi
+    echo "--- Seeder: Response Body Start ---" >&2
+    cat /tmp/curl_response.txt >&2 || echo "(No response body captured)" >&2
+    echo "--- Seeder: Response Body End ---" >&2
+    echo "--- Seeder: Stderr Start ---" >&2
+    cat /tmp/curl_stderr.txt >&2 || echo "(No stderr captured)" >&2
+    echo "--- Seeder: Stderr End ---" >&2
+    rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
+    exit 1 # Explicitly exit on error
+else
+    echo "Seeder: Successfully wrote secrets via curl to API path: $API_PATH (HTTP Status: $http_status_output)"
+    rm -f /tmp/curl_response.txt /tmp/curl_stderr.txt
+fi
 
 echo "Seeder: Vault population script finished successfully."
 exit 0
