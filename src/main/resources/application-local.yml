@@ -8,6 +8,16 @@
 # Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
 #
 
+
+app:
+  ssl:
+    trust-store:
+      # Use 'file:' for filesystem or 'classpath:' if packaged in JAR
+      path: file:./config/central-truststore.jks
+      # LOAD SECURELY! Use environment variable for the password.
+      password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
+      # type: JKS # Optional: Specify type if not JKS
+
 # --- Logging ---
 logging:
   level:
@@ -91,6 +101,12 @@ spring:
         default-context: "local" # Looks for secrets under secret/amlume-shop/local
         # profile-separator: '/' # Optional: Specify separator if needed
       # --- Optional: TLS Configuration (if using HTTPS for local Vault) ---
+      ssl:
+        # Reference the central truststore properties
+        trust-store: ${app.ssl.trust-store.path}
+        trust-store-password: ${app.ssl.trust-store.password}
+        # trust-store-type: ${app.ssl.trust-store.type} # If type is specified centrally
+
       # ssl:
       #   trust-store: classpath:vault-truststore.jks
       #   trust-store-password: your_truststore_password # LOAD SECURELY
@@ -102,11 +118,15 @@ spring:
     import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"] # Import Vault and optional local secrets override
 
   # --- Datasource (Connect to Docker MySQL) ---
+    # --- Datasource (URL needs modification, preferably programmatically) ---
+    # The direct property reference in the URL might be tricky.
+    # We'll configure this programmatically below.
+    # Remove ssl params from the URL here if they were hardcoded.
   datasource:
-    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
+    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
     # url: jdbc:mysql://mysql-db:3306/amlume_db # Use Docker service name if running inside Docker
     username: amlume_user
-    password: ${DB_PASSWORD:C0961F7D8F83574BEA49E9B412BBA60704CD720C} # LOAD SECURELY (Env Var preferred)
+    password: ${DB_PASSWORD} # LOAD SECURELY (Env Var preferred)
     driverClassName: com.mysql.cj.jdbc.Driver
 
   # --- Jackson ---
@@ -634,6 +654,10 @@ valkey:
   host: localhost # Connect to host machine's port mapped from Docker
   port: 6379
   password: ${VALKEY_PASSWORD:your-valkey-password} # LOAD SECURELY (Env Var preferred)
+  ssl:
+    enabled: true # Set to true if using SSL/TLS
+    # We will configure the truststore programmatically using app.ssl.trust-store.*
+    # Remove the specific valkey.ssl.truststore properties if you added them previously
 
 # --- Web Settings ---
 web:
