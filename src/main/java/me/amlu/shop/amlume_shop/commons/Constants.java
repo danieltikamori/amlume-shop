@@ -10,8 +10,6 @@
 
 package me.amlu.shop.amlume_shop.commons;
 
-import org.springframework.beans.factory.annotation.Value;
-
 import java.time.Duration;
 
 public final class Constants {
