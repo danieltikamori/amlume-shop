@@ -67,9 +67,11 @@ services:
     # Note: Dev mode uses in-memory storage by default. Data is lost on restart.
 
   # --- MySQL Database Service ---
-    # XtraBackup enabled MySql database
+    # XtraBackup enabled MySql database, see:
+    # https://docs.percona.com/percona-xtrabackup/8.4/docker.html#3-create-a-docker-container-from-percona-xtrabackup-image
   mysql:
     image: percona/percona-server:8.4
+#    image: docker.io/bitnami/percona-mysql:8.4 # Getting errors /opt/bitnami/scripts/mysql/entrypoint.sh: line 28: exec: --: invalid option
 #    image: mysql:lts # Use Long Term Support version
     container_name: mysql-db
     restart: unless-stopped
@@ -91,13 +93,17 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
 #      MYSQL_PASSWORD: "/run/secrets/mysql_user_password"
 #      MYSQL_ROOT_PASSWORD: "/run/secrets/mysql_root_password"
+#    healthcheck:
+#      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+#      interval: 15s
+#      timeout: 5s
+#      retries: 6
     volumes:
-      - ./data:/var/lib/mysql # Check if this should be mysql_data volume instead
       - ./certificates/database:/etc/mysql/certs
       # Persist database data
-      - mysql_data:/var/lib/mysql
-      - mysql_logs:/var/log/mysql # MySQL logs
-      - mysql_backups:/backups # XtraBackup output (optional, for future use)
+      - mysql-data:/var/lib/mysql              # Database data
+      - mysql-logs:/var/log/mysql              # MySQL logs
+      - mysql-backups:/backups                 # XtraBackup output (optional, for future use)
     networks:
 
 
@@ -161,6 +167,15 @@ services:
     networks:
       - amlume-shop-network
 
+    # --- Keycloak Service ---
+#  keycloak:
+#    build:
+#      context: . # Directory containing vault-seeder.Dockerfile and entrypoint.sh
+#      dockerfile: keycloak.Dockerfile
+#    container_name: keycloak
+#    environment:
+
+
     # --- Promtail Service ---
     # --- Promtail Log Agent ---
   promtail:
@@ -214,9 +229,9 @@ services:
 # Define named volumes for data persistence
 volumes:
   vault_logs: {}
-  mysql_data: {}
-  mysql_logs: {}
-  mysql_backups: {}
+  mysql-data: {}
+  mysql-logs: {}
+  mysql-backups: {}
   valkey_data: {} # Define volume for Valkey persistence
 
 # --- Network Definition ---
