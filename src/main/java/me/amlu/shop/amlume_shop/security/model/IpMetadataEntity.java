@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.security.model;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +27,9 @@ import java.util.Objects;
 })
 @Cacheable
 public class IpMetadataEntity extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -150,66 +154,6 @@ public class IpMetadataEntity extends BaseEntity {
 
     public String toString() {
         return "IpMetadataEntity(id=" + this.getId() + ", ipAddress=" + this.getIpAddress() + ", suspiciousCount=" + this.getSuspiciousCount() + ", lastGeolocation=" + this.getLastGeolocation() + ", firstSeenAt=" + this.getFirstSeenAt() + ", lastSeenAt=" + this.getLastSeenAt() + ", previousGeolocations=" + this.getPreviousGeolocations() + ", lastTtl=" + this.getLastTtl() + ", geoHistory=" + this.getGeoHistory() + ", ttlHistory=" + this.getTtlHistory() + ")";
-    }
-
-    @Embeddable
-    public static class GeoLocationEntry {
-        private String location;
-        private Instant timestamp;
-
-        public GeoLocationEntry(String location, Instant timestamp) {
-            this.location = location;
-            this.timestamp = timestamp;
-        }
-
-        public GeoLocationEntry() {
-        }
-
-        public String getLocation() {
-            return this.location;
-        }
-
-        public Instant getTimestamp() {
-            return this.timestamp;
-        }
-
-        public void setLocation(String location) {
-            this.location = location;
-        }
-
-        public void setTimestamp(Instant timestamp) {
-            this.timestamp = timestamp;
-        }
-
-        public boolean equals(final Object o) {
-            if (o == this) return true;
-            if (!(o instanceof GeoLocationEntry other)) return false;
-            if (!other.canEqual((Object) this)) return false;
-            final Object this$location = this.getLocation();
-            final Object other$location = other.getLocation();
-            if (!Objects.equals(this$location, other$location)) return false;
-            final Object this$timestamp = this.getTimestamp();
-            final Object other$timestamp = other.getTimestamp();
-            return Objects.equals(this$timestamp, other$timestamp);
-        }
-
-        protected boolean canEqual(final Object other) {
-            return other instanceof GeoLocationEntry;
-        }
-
-        public int hashCode() {
-            final int PRIME = 59;
-            int result = 1;
-            final Object $location = this.getLocation();
-            result = result * PRIME + ($location == null ? 43 : $location.hashCode());
-            final Object $timestamp = this.getTimestamp();
-            result = result * PRIME + ($timestamp == null ? 43 : $timestamp.hashCode());
-            return result;
-        }
-
-        public String toString() {
-            return "IpMetadataEntity.GeoLocationEntry(location=" + this.getLocation() + ", timestamp=" + this.getTimestamp() + ")";
-        }
     }
 
     public IpMetadataEntity(String ipAddress) {

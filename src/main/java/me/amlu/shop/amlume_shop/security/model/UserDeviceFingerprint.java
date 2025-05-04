@@ -16,11 +16,15 @@ import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.Objects;
 
 @Entity
 public class UserDeviceFingerprint extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_device_fingerprint_id")

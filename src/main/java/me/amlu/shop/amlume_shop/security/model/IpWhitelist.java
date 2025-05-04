@@ -14,6 +14,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
+import java.io.Serial;
 import java.util.Objects;
 
 @Entity
@@ -21,6 +22,9 @@ import java.util.Objects;
         @Index(name = "idx_ip_address", columnList = "ip_address", unique = true)
 })
 public class IpWhitelist extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

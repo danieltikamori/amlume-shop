@@ -14,6 +14,7 @@ import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.user_management.User;
 
+import java.io.Serial;
 import java.util.Objects;
 
 @Table(name = "mfa_tokens", uniqueConstraints = {
@@ -21,6 +22,9 @@ import java.util.Objects;
 }, indexes = @Index(name = "idx_user_id", columnList = "user_id"))
 @Entity
 public class MfaToken extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long mfaTokenId;

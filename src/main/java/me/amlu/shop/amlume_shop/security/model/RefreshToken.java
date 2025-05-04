@@ -15,6 +15,7 @@ import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -23,6 +24,10 @@ import java.util.Objects;
 // Added SuperBuilder if you use builders
 // Added NoArgsConstructor for JPA
 public class RefreshToken extends BaseEntity { // BaseEntity already implements Serializable
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
