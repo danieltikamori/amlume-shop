@@ -21,8 +21,6 @@ public record AuthResponse(
         Collection<? extends GrantedAuthority> authorities,
         String refreshToken,
         String accessToken,
-        boolean mfaEnabled,
-        boolean mfaRequired,
         String message,
         boolean success,
         Map<String, Object> details,
@@ -30,27 +28,23 @@ public record AuthResponse(
 ) {
 
     public AuthResponse(String message, String token, boolean success) {
-        this(token, null, null, null, null, false, false, message, success, null, null);
+        this(token, null, null, null, null, message, success, null, null);
     }
 
     public AuthResponse(String token, String name, Collection<? extends GrantedAuthority> authorities, boolean success, String loginSuccessful) {
-        this(token, name, authorities, null, null, false, false, loginSuccessful, success, null, null);
+        this(token, name, authorities, null, null, loginSuccessful, success, null, null);
     }
 
     public AuthResponse(String token, String refreshToken, String accessToken) {
-        this(token, null, null, refreshToken, accessToken, false, false, null, true, null, null);
+        this(token, null, null, refreshToken, accessToken, null, true, null, null);
     }
 
     public AuthResponse() {
-        this(null, null, null, null, null, false, false, null, false, null, null);
+        this(null, null, null, null, null, null, false, null, null);
     }
 
     public static AuthResponseBuilder builder() {
         return new AuthResponseBuilder();
-    }
-
-    public boolean isMfaRequired() {
-        return details != null && details.containsKey("mfaRequired") && (boolean) details.get("mfaRequired");
     }
 
     public static class AuthResponseBuilder {
@@ -59,8 +53,6 @@ public record AuthResponse(
         private Collection<? extends GrantedAuthority> authorities;
         private String refreshToken;
         private String accessToken;
-        private boolean mfaEnabled;
-        private boolean mfaRequired;
         private String message;
         private boolean success;
         private Map<String, Object> details;
@@ -94,16 +86,6 @@ public record AuthResponse(
             return this;
         }
 
-        public AuthResponseBuilder mfaEnabled(boolean mfaEnabled) {
-            this.mfaEnabled = mfaEnabled;
-            return this;
-        }
-
-        public AuthResponseBuilder mfaRequired(boolean mfaRequired) {
-            this.mfaRequired = mfaRequired;
-            return this;
-        }
-
         public AuthResponseBuilder message(String message) {
             this.message = message;
             return this;
@@ -125,12 +107,12 @@ public record AuthResponse(
         }
 
         public AuthResponse build() {
-            return new AuthResponse(token, username, authorities, refreshToken, accessToken, mfaEnabled, mfaRequired, message, success, details, secretImageUrl);
+            return new AuthResponse(token, username, authorities, refreshToken, accessToken, message, success, details, secretImageUrl);
         }
 
         @Override
         public String toString() {
-            return "AuthResponse.AuthResponseBuilder(token=" + this.token + ", username=" + this.username + ", authorities=" + this.authorities + ", refreshToken=" + this.refreshToken + ", accessToken=" + this.accessToken + ", mfaEnabled=" + this.mfaEnabled + ", mfaRequired=" + this.mfaRequired + ", message=" + this.message + ", success=" + this.success + ", details=" + this.details + ", secretImageUrl=" + this.secretImageUrl + ")";
+            return "AuthResponse.AuthResponseBuilder(token=" + this.token + ", username=" + this.username + ", authorities=" + this.authorities + ", refreshToken=" + this.refreshToken + ", accessToken=" + this.accessToken + ", message=" + this.message + ", success=" + this.success + ", details=" + this.details + ", secretImageUrl=" + this.secretImageUrl + ")";
         }
     }
 

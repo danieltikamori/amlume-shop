@@ -10,15 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.config;
 
-import me.amlu.shop.amlume_shop.security.config.properties.MfaProperties;
-import org.slf4j.Logger;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.Environment;
-import org.springframework.security.crypto.encrypt.Encryptors;
-import org.springframework.security.crypto.encrypt.TextEncryptor;
-import org.springframework.util.StringUtils;
 
 /**
  * Configuration for encryption, specifically for the TextEncryptor used for MFA secrets.
@@ -43,63 +35,4 @@ import org.springframework.util.StringUtils;
 @Configuration
 public class EncryptionConfig {
 
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(EncryptionConfig.class);
-    // Set in MfaProperties class to allow for easier testing and management. @Value usage is discouraged, deprecated.
-    // if it successfully fetches them. Defaults to null if not found anywhere.
-//    @Value("${mfa.encryption.password:#{null}}")
-//    private String mfaEncryptionPassword;
-
-//    @Value("${mfa.encryption.salt:#{null}}")
-//    private String mfaSalt;
-
-    private final MfaProperties mfaProperties;
-    private final Environment environment;
-
-    // Inject Environment to check if Vault properties are active
-    public EncryptionConfig(MfaProperties mfaProperties, Environment environment) {
-        this.mfaProperties = mfaProperties;
-        this.environment = environment;
-    }
-
-    @Bean
-    public TextEncryptor textEncryptor() {
-        // Check if the properties were successfully injected from any source
-        if (!StringUtils.hasText(mfaProperties.getMfaEncryptionPassword()) || !StringUtils.hasText(mfaProperties.getMfaEncryptionSalt())) {
-            log.error("CRITICAL: MFA encryption password or salt is missing! " +
-                    "Ensure secrets are set in Vault ('mfa.encryption.password', 'mfa.encryption.salt') " +
-                    "or as fallback environment variables ('MFA_ENCRYPTION_PASSWORD', 'MFA_ENCRYPTION_SALT').");
-            // Throwing an exception prevents the application from starting with insecure defaults.
-            throw new IllegalStateException("MFA encryption password or salt could not be resolved.");
-        }
-
-        // Log which source is likely being used (heuristic based on Vault property source presence)
-        // Note: This check confirms Vault integration is active, not necessarily that *these specific*
-        // properties came from Vault (they could still be from the fallback env vars if missing in Vault).
-        boolean isVaultConfigured = false; // Default to false
-        // Cast Environment to ConfigurableEnvironment to access getPropertySources()
-        if (environment instanceof ConfigurableEnvironment configurableEnvironment) {
-            isVaultConfigured = configurableEnvironment.getPropertySources().stream()
-                    .anyMatch(source -> source.getName().startsWith("vault"));
-        } else {
-            log.warn("Environment is not an instance of ConfigurableEnvironment. Cannot check for Vault property sources.");
-            // Decide how to handle this - maybe assume Vault isn't configured?
-        }
-
-
-        if (isVaultConfigured) {
-            log.info("Vault property source detected. Attempting to use MFA encryption secrets potentially sourced from Vault.");
-            // You could add more specific checks here if needed, e.g., checking the PropertySource of the resolved value,
-            // but that adds complexity.
-        } else {
-            log.warn("Vault property source not detected. Falling back to environment variables for MFA encryption secrets. " +
-                    "Ensure MFA_ENCRYPTION_PASSWORD and MFA_ENCRYPTION_SALT are securely set.");
-        }
-
-        // Log confirmation without exposing secrets
-        log.info("Configuring TextEncryptor for MFA secrets. Password and Salt have been provided (lengths: {}, {}).",
-                mfaProperties.getMfaEncryptionPassword().length(), mfaProperties.getMfaEncryptionSalt().length());
-
-        // Create the TextEncryptor using the resolved password and salt
-        return Encryptors.text(mfaProperties.getMfaEncryptionPassword(), mfaProperties.getMfaEncryptionSalt());
-    }
 }

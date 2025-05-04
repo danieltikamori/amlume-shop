@@ -11,15 +11,14 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.annotation.PostConstruct;
-import me.amlu.shop.amlume_shop.security.config.properties.MfaProperties;
-import me.amlu.shop.amlume_shop.security.config.properties.PasetoProperties;
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
+import me.amlu.shop.amlume_shop.security.config.properties.PasetoProperties;
 import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.Objects; // Import Objects for null checks
+import java.util.Objects;
 
 @Service
 public class KeyManagementFacade {
@@ -28,8 +27,6 @@ public class KeyManagementFacade {
 
     // --- Injected Paseto Properties Bean ---
     private final PasetoProperties pasetoProperties;
-
-    private final MfaProperties mfaProperties;
 
     // --- Other secrets if needed by this facade or passed through ---
     // Keep @Value for secrets NOT managed within PasetoProperties
@@ -40,9 +37,8 @@ public class KeyManagementFacade {
 //    private String mfaEncryptionPassword;
 
     // Constructor updated to inject PasetoProperties
-    public KeyManagementFacade(PasetoProperties pasetoProperties, MfaProperties mfaProperties) {
+    public KeyManagementFacade(PasetoProperties pasetoProperties) {
         this.pasetoProperties = pasetoProperties;
-        this.mfaProperties = mfaProperties;
         log.info("KeyManagementFacade initialized. PASETO secrets will be retrieved via PasetoProperties bean.");
     }
 
@@ -50,7 +46,6 @@ public class KeyManagementFacade {
     @PostConstruct
     public void checkInjectedProperties() {
         log.info("--- KeyManagementFacade PostConstruct ---");
-        log.info("MFA Encryption Password (@Value): '{}'", mfaProperties.getMfaEncryptionPassword() != null ? "[REDACTED]" : "null");
 
         if (pasetoProperties == null) {
             log.error("PasetoProperties bean is NULL in KeyManagementFacade!");
@@ -78,9 +73,9 @@ public class KeyManagementFacade {
      * Retrieves the asymmetric key pair strings for the given purpose.
      * Now retrieves values from the injected PasetoProperties bean using nested access.
      *
-     * @param purpose Typically "ACCESS" or potentially "REFRESH" if asymmetric refresh keys are used.
+     * @param purpose Typically Public "ACCESS" or potentially "REFRESH" if asymmetric refresh keys are used.
      * @return KeyPair record containing the private and public key strings.
-     * @throws KeyManagementException if required keys for the purpose are not configured.
+     * @throws KeyManagementException if the required keys for the purpose are not configured.
      */
     public KeyPair getAsymmetricKeys(String purpose) {
         log.debug("Retrieving asymmetric keys for purpose: {}", purpose);
@@ -94,13 +89,13 @@ public class KeyManagementFacade {
             privateKey = pasetoProperties.getPub().getAccess().getPrivateKey();
             publicKey = pasetoProperties.getPub().getAccess().getPublicKey();
             privateKeyPropertyPath = "paseto.public.access.private-key";
-            publicKeyPropertyPath = "paseto.public.access.public-key";  
+            publicKeyPropertyPath = "paseto.public.access.public-key";
         } else if ("REFRESH".equalsIgnoreCase(purpose)) {
             // Assuming REFRESH might also use asymmetric keys
             privateKey = pasetoProperties.getPub().getRefresh().getPrivateKey();
             publicKey = pasetoProperties.getPub().getRefresh().getPublicKey();
             privateKeyPropertyPath = "paseto.public.refresh.private-key";
-            publicKeyPropertyPath = "paseto.public.refresh.public-key";  
+            publicKeyPropertyPath = "paseto.public.refresh.public-key";
         } else {
             log.warn("Asymmetric keys requested for unsupported purpose: {}", purpose);
             throw new KeyManagementException("Unsupported purpose for asymmetric keys: " + purpose);
@@ -117,7 +112,7 @@ public class KeyManagementFacade {
      * Retrieves the symmetric secret key string for the given purpose.
      * Now retrieves values from the injected PasetoProperties bean using nested access.
      *
-     * @param purpose Typically "ACCESS" or "REFRESH".
+     * @param purpose Typically Local "ACCESS" or any "REFRESH".
      * @return The secret key string.
      * @throws KeyManagementException if the required key for the purpose is not configured.
      */
@@ -146,11 +141,6 @@ public class KeyManagementFacade {
 
 
     // --- Optional: Getter for other injected secrets if needed elsewhere ---
-    public String getMfaEncryptionPassword() {
-        // Use Objects.requireNonNull
-        Objects.requireNonNull(mfaProperties.getMfaEncryptionPassword(), "MFA encryption password is not available (check Vault/environment variable/YAML path: mfa.encryption.password)");
-        return mfaProperties.getMfaEncryptionPassword();
-    }
 
-    // Removed getCachedKey(), updateKeys(), refreshKeys()
+
 }

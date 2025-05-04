@@ -124,8 +124,6 @@ public class HCPSecretsService {
     public static final String PASETO_ACCESS_PUBLIC_KEY = "PASETO_ACCESS_PUBLIC_KEY";
     public static final String PASETO_ACCESS_SECRET_KEY = "PASETO_ACCESS_SECRET_KEY";
     public static final String PASETO_REFRESH_SECRET_KEY = "PASETO_REFRESH_SECRET_KEY";
-    public static final String MFA_ENCRYPTION_PASSWORD = "MFA_ENCRYPTION_PASSWORD";
-    public static final String MFA_ENCRYPTION_SALT = "MFA_ENCRYPTION_SALT";
 
     /**
      * Retrieves a specific secret value by its key using Spring Cache.
@@ -368,12 +366,6 @@ public class HCPSecretsService {
     }
     public String getPasetoRefreshSecretKey() {
         return getSecret(PASETO_REFRESH_SECRET_KEY);
-    }
-    public String getMfaEncryptionPassword() {
-        return getSecret(MFA_ENCRYPTION_PASSWORD);
-    }
-    public String getMfaEncryptionSalt() {
-        return getSecret(MFA_ENCRYPTION_SALT);
     }
 
     // --- Error Handling ---

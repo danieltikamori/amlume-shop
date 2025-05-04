@@ -10,8 +10,6 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.exceptions.MfaException;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,7 +34,7 @@ public class SecureIdGenerator {
     }
 
     // For time-based challenge IDs
-    public static String generateTimeBasedId(String username) {
+    public static String generateTimeBasedId(String username) throws NoSuchAlgorithmException {
         String timestamp = String.valueOf(System.currentTimeMillis());
         String randomPart = generateSecureId().substring(0, 16);
         String data = username + timestamp + randomPart;
@@ -48,7 +46,7 @@ public class SecureIdGenerator {
                     .withoutPadding()
                     .encodeToString(hash);
         } catch (NoSuchAlgorithmException e) {
-            throw new MfaException(MfaException.MfaErrorType.SETUP_FAILED, "Error generating secure ID", e);
+            throw new NoSuchAlgorithmException("SHA-256 algorithm not available", e);
         }
     }
 }

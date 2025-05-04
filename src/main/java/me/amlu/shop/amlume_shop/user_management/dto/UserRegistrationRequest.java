@@ -17,7 +17,7 @@ import me.amlu.shop.amlume_shop.user_management.Username;
 
 @Builder
 public record UserRegistrationRequest(Username username, UserPassword password, String userEmail, UserRole roles,
-                                      boolean mfaEnabled, String captchaResponse) {
+                                      String captchaResponse) {
 
     public String getUsername() {
         return username.getUsername();

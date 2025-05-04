@@ -10,22 +10,6 @@
 
 package me.amlu.shop.amlume_shop.auth.dto;
 
-import lombok.*;
+public record AuthenticationRequest(String username, String password, String captchaResponse) {
 
-@Data
-@AllArgsConstructor
-@NoArgsConstructor
-public class AuthenticationRequest {
-    private String username;
-    private String password;
-    private String mfaCode;
-    private String captchaResponse;
-
-    // Additional fields for device fingerprinting
-    private String userAgent;
-    private String screenWidth;
-    private String screenHeight;
-
-    public AuthenticationRequest(String username, String password, String captchaResponse) {
-    }
 }

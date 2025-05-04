@@ -130,31 +130,31 @@ public class SecurityAuditService {
         log.info("Password changed for user: {}", username);
     }
 
-    public void logMfaChallengeInitiated(String userId, String username, String ipAddress) {
-        SecurityEvent event = SecurityEvent.builder()
-                .eventType(SecurityEventType.MFA_CHALLENGE_INITIATED)
-                .userId(userId)
-                .username(username)
-                .ipAddress(ipAddress)
-                .timestamp(Instant.now())
-                .build();
-
-        securityEventRepository.save(event);
-        log.info("MFA challenge initiated for user: {}", username);
-    }
-
-    public void logMfaChallengeFailed(String userId, String username, String ipAddress) {
-        SecurityEvent event = SecurityEvent.builder()
-                .eventType(SecurityEventType.MFA_CHALLENGE_FAILED)
-                .userId(userId)
-                .username(username)
-                .ipAddress(ipAddress)
-                .timestamp(Instant.now())
-                .build();
-
-        securityEventRepository.save(event);
-        log.warn("MFA challenge failed for user: {}", username);
-    }
+//    public void logMfaChallengeInitiated(String userId, String username, String ipAddress) {
+//        SecurityEvent event = SecurityEvent.builder()
+//                .eventType(SecurityEventType.MFA_CHALLENGE_INITIATED)
+//                .userId(userId)
+//                .username(username)
+//                .ipAddress(ipAddress)
+//                .timestamp(Instant.now())
+//                .build();
+//
+//        securityEventRepository.save(event);
+//        log.info("MFA challenge initiated for user: {}", username);
+//    }
+//
+//    public void logMfaChallengeFailed(String userId, String username, String ipAddress) {
+//        SecurityEvent event = SecurityEvent.builder()
+//                .eventType(SecurityEventType.MFA_CHALLENGE_FAILED)
+//                .userId(userId)
+//                .username(username)
+//                .ipAddress(ipAddress)
+//                .timestamp(Instant.now())
+//                .build();
+//
+//        securityEventRepository.save(event);
+//        log.warn("MFA challenge failed for user: {}", username);
+//    }
 
     public void logAccountUnlocked(String userId, String username, String ipAddress) {
         SecurityEvent event = SecurityEvent.builder()
@@ -182,18 +182,18 @@ public class SecurityAuditService {
         log.warn("Access denied for locked account for user: {}", username);
     }
 
-    public void logMfaVerificationFailed(String userId, String username, String ipAddress) {
-        SecurityEvent event = SecurityEvent.builder()
-                .eventType(SecurityEventType.MFA_VERIFICATION_FAILED)
-                .userId(userId)
-                .username(username)
-                .ipAddress(ipAddress)
-                .timestamp(Instant.now())
-                .build();
-
-        securityEventRepository.save(event);
-        log.warn("MFA verification failed for user: {}", username);
-    }
+//    public void logMfaVerificationFailed(String userId, String username, String ipAddress) {
+//        SecurityEvent event = SecurityEvent.builder()
+//                .eventType(SecurityEventType.MFA_VERIFICATION_FAILED)
+//                .userId(userId)
+//                .username(username)
+//                .ipAddress(ipAddress)
+//                .timestamp(Instant.now())
+//                .build();
+//
+//        securityEventRepository.save(event);
+//        log.warn("MFA verification failed for user: {}", username);
+//    }
 
     public void logRoleAssignment(String username, Set<UserRole> roles, Object resource) {
         SecurityEvent event = SecurityEvent.builder()

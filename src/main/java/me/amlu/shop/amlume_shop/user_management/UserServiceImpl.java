@@ -101,9 +101,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                         .userEmail(new UserEmail(request.userEmail()))
                         // Add other contact fields if available in request (e.g., first/last name if added to DTO)
                         .build())
-                .mfaInfo(MfaInfo.builder()
-                        .mfaEnabled(request.mfaEnabled()) // Use value from request
-                        .build())
                 .accountStatus(AccountStatus.builder()
                         .creationTime(Instant.now())
                         .accountNonExpired(true)
@@ -173,10 +170,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                 .contactInfo(ContactInfo.builder()
                         .userEmail(new UserEmail(request.userEmail()))
                         // Add other contact fields if available in request
-                        .build())
-                .mfaInfo(MfaInfo.builder()
-                        .mfaEnabled(request.mfaEnabled())
-                        // Initialize other MFA fields if necessary
                         .build())
                 .accountStatus(AccountStatus.builder()
                         .creationTime(Instant.now()) // Set creation timestamp

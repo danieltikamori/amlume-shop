@@ -94,8 +94,6 @@ public class SecurityProdConfig {
                                 "/api/auth/v1/register",
                                 "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
 //                                "/api/auth/login", // Fallback?
-                                "/api/auth/v1/mfa/validate", // Endpoint handled by MfaAuthenticationFilter? Or controller? Needs clarity.
-//                                "/api/auth/v1/mfa/enable", // Needs authentication - Logic handled by provider during login
                                 "/api/auth/v1/qrcode", // Needs authentication
                                 "/api/auth/logout", // Needs authentication (to revoke token)
 

@@ -178,17 +178,13 @@ public class UserAuthenticator implements AuthenticationInterface {
             }
 
             // 4. MFA Block REMOVED - Proceed directly to successful login
-            log.info("Password validation successful for user [{}]. MFA step skipped (Passkey flow expected).", user.getUsername());
+            log.info("Password validation successful for user [{}]. Passkey flow expected.", user.getUsername());
             String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
             return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
 
-        } catch (TooManyAttemptsException | LockedException | UsernameNotFoundException | MfaException |
-                 MfaVerificationFailedException e) {
+        } catch (TooManyAttemptsException | LockedException | UsernameNotFoundException e) {
             // Re-throw specific exceptions
             throw e;
-        } catch (Exception e) {
-            log.error("MFA Verification error for user [{}]: {}", request.username(), e.getMessage(), e);
-            throw new AuthenticationFailException("MFA verification failed due to an internal error.");
         }
     }
 
@@ -310,7 +306,6 @@ public class UserAuthenticator implements AuthenticationInterface {
                 .authorities(user.getAuthorities()) // Assuming getAuthorities returns Collection<? extends GrantedAuthority>
                 .success(true)
                 .message("Login successful")
-                .mfaEnabled(user.isMfaEnabled()) // Include MFA status
                 .build();
     }
 

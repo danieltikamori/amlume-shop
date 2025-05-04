@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 public class DatabaseSecretsLoader {
 
     //    @Value("${vault.secret.database-path:secret/data/amlume-shop/database}")
-    @Value("${spring.cloud.vault.path:secret/amlume-shop/mfa}")
+    @Value("${spring.cloud.vault.path:secret/amlume-shop/local}")
     String vaultPath;
 
     private final VaultService vaultService;

@@ -93,7 +93,6 @@ public final class Constants {
     public static final String ACCOUNT_LOCKED_MESSAGE = "Account is locked";
     public static final String USER_NOT_FOUND_MESSAGE = "User not found";
     public static final String INVALID_CREDENTIALS_MESSAGE = "Invalid username or password"; // More generic
-    public static final String INVALID_MFA_CODE_MESSAGE = "Invalid MFA code";
 
     // --- Http header constants ---
     public static final String USER_AGENT = "User-Agent";

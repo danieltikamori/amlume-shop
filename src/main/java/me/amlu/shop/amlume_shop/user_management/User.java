@@ -46,9 +46,6 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "user_id")
     private Long userId;
 
-    @Column(name = "keycloak_id", unique = true, nullable = false)
-    private String keycloakId;
-
     @Embedded
     // Override the column name for the 'username' field within AuthenticationInfo
     @AttributeOverrides({
@@ -81,16 +78,6 @@ public class User extends BaseEntity implements UserDetails {
     })
     @Embedded
     private AccountStatus accountStatus; // Set via constructor/builder
-
-    @AttributeOverrides({
-            @AttributeOverride(name = "mfaEnabled", column = @Column(name = "mfa_enabled", nullable = false)),
-            @AttributeOverride(name = "mfaMethod", column = @Column(name = "mfa_method")),
-            @AttributeOverride(name = "mfaEnforced", column = @Column(name = "mfa_enforced")),
-            @AttributeOverride(name = "mfaQrCodeUrl.mfaQrCodeUrl", column = @Column(name = "mfa_qr_code_url")),
-            @AttributeOverride(name = "mfaSecret.mfaSecret", column = @Column(name = "mfa_secret"))
-    })
-    @Embedded
-    private MfaInfo mfaInfo; // Set via constructor/builder
 
     @AttributeOverrides({
             @AttributeOverride(name = "deviceFingerprintingEnabled", column = @Column(name = "device_fingerprinting_enabled", nullable = false)),
@@ -153,7 +140,6 @@ public class User extends BaseEntity implements UserDetails {
         this.authenticationInfo = b.authenticationInfo;
         this.contactInfo = b.contactInfo;
         this.accountStatus = b.accountStatus;
-        this.mfaInfo = b.mfaInfo;
         this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
         this.locationInfo = b.locationInfo;
         // For collections, initialize even if builder provides null, though builder should ideally provide empty collections
@@ -248,10 +234,6 @@ public class User extends BaseEntity implements UserDetails {
         return this.accountStatus;
     }
 
-    public MfaInfo getMfaInfo() {
-        return this.mfaInfo;
-    }
-
     public DeviceFingerprintingInfo getDeviceFingerprintingInfo() {
         return this.deviceFingerprintingInfo;
     }
@@ -328,7 +310,6 @@ public class User extends BaseEntity implements UserDetails {
                 ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
                 ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
                 ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
-                ", mfaInfo=" + (this.mfaInfo != null ? "present" : "null") +
                 ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
                 ", locationInfo=" + (this.locationInfo != null ? "present" : "null") +
                 ", rolesSize=" + (this.roles != null ? this.roles.size() : 0) + // Indicate size
@@ -339,10 +320,6 @@ public class User extends BaseEntity implements UserDetails {
                 ')';
     }
 
-    //    @Override
-//    public String toString() {
-//        return "User(userId=" + this.getUserId() + ", authenticationInfo=" + this.getAuthenticationInfo() + ", contactInfo=" + this.getContactInfo() + ", accountStatus=" + this.getAccountStatus() + ", mfaInfo=" + this.getMfaInfo() + ", deviceFingerprintingInfo=" + this.getDeviceFingerprintingInfo() + ", locationInfo=" + this.getLocationInfo() + ", roles=" + this.getRoles() + ")";
-//    }
     // --- End toString() ---
 
     // --- Methods to Modify Collections (New/Modified) ---
@@ -473,9 +450,6 @@ public class User extends BaseEntity implements UserDetails {
         this.accountStatus = newAccountStatus;
     }
 
-    public void updateMfaInfo(MfaInfo newMfaInfo) {
-        this.mfaInfo = newMfaInfo;
-    }
 
     public void updateDeviceFingerprintingInfo(DeviceFingerprintingInfo newDeviceFingerprintingInfo) {
         this.deviceFingerprintingInfo = newDeviceFingerprintingInfo;
@@ -575,11 +549,6 @@ public class User extends BaseEntity implements UserDetails {
         return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
     }
 
-    // Check MFA status
-    public boolean isMfaEnabled() {
-        return mfaInfo != null && mfaInfo.isMfaEnabled();
-    }
-
     // Account status getters
     public int getFailedLoginAttempts() {
         return accountStatus.getFailedLoginAttempts();
@@ -598,7 +567,6 @@ public class User extends BaseEntity implements UserDetails {
         private AuthenticationInfo authenticationInfo;
         private ContactInfo contactInfo;
         private AccountStatus accountStatus;
-        private MfaInfo mfaInfo;
         private DeviceFingerprintingInfo deviceFingerprintingInfo;
         private LocationInfo locationInfo;
         private Set<UserRole> roles; // Builder can take the initial set/list
@@ -626,11 +594,6 @@ public class User extends BaseEntity implements UserDetails {
 
         public B accountStatus(AccountStatus accountStatus) {
             this.accountStatus = accountStatus;
-            return self();
-        }
-
-        public B mfaInfo(MfaInfo mfaInfo) {
-            this.mfaInfo = mfaInfo;
             return self();
         }
 
@@ -682,7 +645,7 @@ public class User extends BaseEntity implements UserDetails {
         @Override
         public String toString() {
             // toString for builder is okay to show contained values
-            return "User.UserBuilder(super=" + super.toString() + ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo + ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus + ", mfaInfo=" + this.mfaInfo + ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo + ", locationInfo=" + this.locationInfo + ", roles=" + this.roles + ", addresses=" + this.addresses + ", categories=" + this.categories + ", products=" + this.products + ", refreshTokens=" + this.refreshTokens + ")";
+            return "User.UserBuilder(super=" + super.toString() + ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo + ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus + ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo + ", locationInfo=" + this.locationInfo + ", roles=" + this.roles + ", addresses=" + this.addresses + ", categories=" + this.categories + ", products=" + this.products + ", refreshTokens=" + this.refreshTokens + ")";
         }
     }
 

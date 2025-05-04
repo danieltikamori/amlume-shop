@@ -15,7 +15,6 @@ import jakarta.validation.constraints.NotBlank;
 public record LoginRequest(
         @NotBlank String username,
         @NotBlank String password,
-        String mfaCode,
         @NotBlank String captchaResponse,
         String userAgent,
         String screenWidth,
@@ -24,7 +23,7 @@ public record LoginRequest(
 ) {
 
     public LoginRequest() {
-        this(null, null, null, null, null, null, null, false);
+        this(null, null, null, null, null, null, false);
     }
 
     public static LoginRequestBuilder builder() {
@@ -34,7 +33,6 @@ public record LoginRequest(
     public static class LoginRequestBuilder {
         private String username;
         private String password;
-        private String mfaCode;
         private String captchaResponse;
         private String userAgent;
         private String screenWidth;
@@ -48,11 +46,6 @@ public record LoginRequest(
 
         public LoginRequestBuilder password(String password) {
             this.password = password;
-            return this;
-        }
-
-        public LoginRequestBuilder mfaCode(String mfaCode) {
-            this.mfaCode = mfaCode;
             return this;
         }
 
@@ -82,7 +75,7 @@ public record LoginRequest(
         }
 
         public LoginRequest build() {
-            return new LoginRequest(username, password, mfaCode, captchaResponse, userAgent, screenWidth, screenHeight, rememberMe);
+            return new LoginRequest(username, password, captchaResponse, userAgent, screenWidth, screenHeight, rememberMe);
         }
     }
 }
