@@ -28,7 +28,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Entity
-@Table(name = "_users", uniqueConstraints = {
+@Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "username"),
         @UniqueConstraint(columnNames = "user_email")
 }, indexes = {
@@ -345,25 +345,6 @@ public class User extends BaseEntity implements UserDetails {
         this.roles = roles;
     }
 
-//    public void addRole(UserRole.roleName roleName) {
-//        if (this.roles == null) {
-//            this.roles = new HashSet<>();
-//        }
-//        if (roleName != null) {
-//            this.roles.add(roleName);
-//        }
-//    }
-//
-//    public void removeRole(UserRole.roleName roleName) {
-//        if (this.roles != null && roleName != null) {
-//            this.roles.remove(roleName);
-//        }
-//    }
-//
-//    public void createRoleSet(Set<UserRole.roleName> roles) {
-//        this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
-//    }
-
     public void addAddress(Address address) {
         if (this.addresses == null) { // Paranoid check
             this.addresses = new ArrayList<>();
@@ -487,29 +468,6 @@ public class User extends BaseEntity implements UserDetails {
             this.contactInfo.updatePhoneNumber(newPhoneNumber);
         }
     }
-
-//    public void updatePassword(String encodedPassword) {
-//        if (this.authenticationInfo != null) {
-//            // Assuming AuthenticationInfo has a way to update password,
-//            // potentially by creating a new UserPassword object
-//            this.authenticationInfo = new AuthenticationInfo(
-//                    this.authenticationInfo.getUsername(), // Keep existing username
-//                    new UserPassword(encodedPassword)     // Create new password object
-//            );
-//        }
-//    }
-//
-//    public void updateEmailAddress(String newEmailAddress) {
-//        if (this.contactInfo != null) {
-//            // Assuming ContactInfo has a way to update email,
-//            // potentially by creating a new UserEmail object
-//            this.contactInfo = new ContactInfo(
-//                    new UserEmail(newEmailAddress), // Create new email object
-//                    this.contactInfo.getPhoneNumber() // Keep existing phone number
-//            );
-//        }
-//    }
-
 
     public void updateLastLoginTime(Instant now) {
         if (this.accountStatus != null) {
