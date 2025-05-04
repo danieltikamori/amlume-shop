@@ -12,10 +12,10 @@ package me.amlu.shop.amlume_shop;
 
 import io.github.cdimascio.dotenv.Dotenv;
 import jakarta.annotation.PostConstruct;
-import me.amlu.shop.amlume_shop.config.SecurityAuditorAware;
-import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
-import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
-import me.amlu.shop.amlume_shop.config.security.TokenValidationConfig;
+import me.amlu.shop.amlume_shop.audit.SecurityAuditorAware;
+import me.amlu.shop.amlume_shop.security.config.TokenValidationConfig;
+import me.amlu.shop.amlume_shop.security.config.properties.AsnProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.TokenCacheProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.domain.EntityScan;
@@ -23,7 +23,6 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
@@ -37,7 +36,6 @@ import java.util.TimeZone;
 @EntityScan(basePackages = "me.amlu.shop.amlume_shop")
 // Explicitly enable JPA repositories and specify the base package(s)
 @EnableJpaRepositories(basePackages = "me.amlu.shop.amlume_shop") // Scan the root and subpackages
-@ComponentScan(basePackages = {"me.amlu.shop.amlume_shop"})
 @EnableScheduling
 @EnableTransactionManagement
 @EnableJpaAuditing(auditorAwareRef = "auditorAware") // Ensure you have an AuditorAware bean named "auditorAware"
