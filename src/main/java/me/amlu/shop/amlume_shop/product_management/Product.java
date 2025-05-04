@@ -95,9 +95,9 @@ public class Product extends BaseEntity {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-     @ManyToOne(fetch = FetchType.LAZY)
-     @JoinColumn(name = "order_id")
-     private Order order;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    private Order order;
 
     // --- JPA Required No-Arg Constructor ---
     public Product() {

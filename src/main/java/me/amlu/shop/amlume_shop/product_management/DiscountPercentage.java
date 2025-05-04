@@ -15,12 +15,17 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 
+import java.io.Serial; // Import Serial
+import java.io.Serializable; // Import Serializable
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
 
 @Embeddable
-public class DiscountPercentage {
+public class DiscountPercentage implements Serializable { // Add implements Serializable
+
+    @Serial // Add serialVersionUID
+    private static final long serialVersionUID = 1L;
 
     @Digits(integer = 3, fraction = 2, message = "Discount percentage must be a valid number with up to 3 digits and 2 decimal places")
     @DecimalMin(value = "0.0", inclusive = true, message = "Discount percentage must be greater than or equal to 0")
@@ -41,7 +46,7 @@ public class DiscountPercentage {
      * Enforces validation rules.
      *
      * @param percentage The percentage value (must be between 0 and 100).
-     * @throws NullPointerException if percentage is null.
+     * @throws NullPointerException     if percentage is null.
      * @throws IllegalArgumentException if percentage is outside the valid range.
      */
     public DiscountPercentage(BigDecimal percentage) {
@@ -72,6 +77,7 @@ public class DiscountPercentage {
         // Calculate the amount to subtract
         BigDecimal discountAmount = price.getAmount().multiply(discountFactor);
         // Calculate final price and return as a new Money object
+        // Ensure the result is still positive (Money constructor handles this)
         return new Money(price.getAmount().subtract(discountAmount));
     }
 

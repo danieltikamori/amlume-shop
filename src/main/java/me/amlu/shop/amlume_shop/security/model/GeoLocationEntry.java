@@ -12,11 +12,17 @@ package me.amlu.shop.amlume_shop.security.model;
 
 import jakarta.persistence.Embeddable;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 
 @Embeddable
-public class GeoLocationEntry {
+public class GeoLocationEntry implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     private String location;
     private Instant timestamp;
 

@@ -44,13 +44,13 @@ public class Category extends BaseEntity {
     })
     @Embedded
     @Column(name = "category_name") // Explicit column name for index clarity
-    private CategoryName categoryName;
+    private CategoryName categoryName; // Line 69 - Type CategoryName IS Serializable
 
     @AttributeOverrides({
             @AttributeOverride(name = "description.descriptionData", column = @Column(name = "description"))
     })
     @Embedded
-    private Description description;
+    private Description description; // Line 77 - Type Description IS Serializable
 
     @AttributeOverrides({
             @AttributeOverride(name = "hierarchyLevel.level", column = @Column(name = "hierarchy_level")),
@@ -118,7 +118,8 @@ public class Category extends BaseEntity {
         this.categoryName = Objects.requireNonNull(name, "Category name cannot be null");
         this.status = CategoryStatus.ACTIVE; // Default status example
         // setParentCategory handles hierarchy level and bidirectional link
-        this.setParentCategory(Objects.requireNonNull(parent, "Parent category cannot be null for subcategory constructor"));
+        // Call the (now final) method to set parent and hierarchy
+        this.setParentCategory(Objects.requireNonNull(parent, "Parent category cannot be null for subcategory constructor")); // Line 121
     }
 
 
@@ -146,7 +147,8 @@ public class Category extends BaseEntity {
 
     // Return an unmodifiable set to prevent direct modification bypassing add/remove methods
     public Set<Category> getSubCategories() {
-        return Collections.unmodifiableSet(subCategories);
+        // Ensure subCategories is initialized before returning unmodifiable view
+        return Collections.unmodifiableSet(Objects.requireNonNullElseGet(subCategories, HashSet::new));
     }
 
     public User getCategoryManager() {
@@ -155,7 +157,8 @@ public class Category extends BaseEntity {
 
     // Return an unmodifiable set
     public Set<Product> getProducts() {
-        return Collections.unmodifiableSet(products);
+        // Ensure products is initialized before returning unmodifiable view
+        return Collections.unmodifiableSet(Objects.requireNonNullElseGet(products, HashSet::new));
     }
 
     public CategoryStatus getStatus() {
@@ -166,7 +169,7 @@ public class Category extends BaseEntity {
 
     // No setter for categoryId (generated, final)
     // No setter for hierarchyLevel (managed internally by setParentCategory)
-    // No setter for subCategories (managed by setParentCategory/addSubCategory)
+    // No setter for subCategories (managed by setParentCategory/internalAddSubCategory)
     // No setter for products (managed by addProduct/removeProduct)
 
     /**
@@ -191,10 +194,11 @@ public class Category extends BaseEntity {
      * Sets the parent category and updates the hierarchy level and bidirectional links.
      * Should be called *after* the child category has been persisted and has an ID
      * if the hierarchy path relies on the ID.
+     * Made final to prevent overriding from constructors ("this" escape).
      *
      * @param parent The parent category. If null, this category becomes a root category.
      */
-    public void setParentCategory(Category parent) {
+    public final void setParentCategory(Category parent) { // Added final modifier
         // Remove from old parent's subcategories if exists
         if (this.parentCategory != null) {
             this.parentCategory.internalRemoveSubCategory(this);
@@ -208,10 +212,14 @@ public class Category extends BaseEntity {
             this.hierarchyLevel = new HierarchyLevel(0, path);
         } else {
             // Became a subcategory
-            String parentPath = parent.getHierarchyLevel() != null ? parent.getHierarchyLevel().getPath() : "?";
+            // Ensure parent hierarchy is loaded/available
+            HierarchyLevel parentHierarchy = parent.getHierarchyLevel();
+            String parentPath = (parentHierarchy != null) ? parentHierarchy.getPath() : "?";
+            int parentLevel = (parentHierarchy != null) ? parentHierarchy.getLevel() : -1; // Use -1 to indicate issue if parent level is unknown
+
             String childIdPart = (this.categoryId != null) ? this.categoryId.toString() : "?"; // Use ID if available
             String newPath = parentPath + "." + childIdPart;
-            int newLevel = (parent.getHierarchyLevel() != null ? parent.getHierarchyLevel().getLevel() : -1) + 1;
+            int newLevel = parentLevel + 1;
 
             this.hierarchyLevel = new HierarchyLevel(newLevel, newPath);
             // Add to new parent's subcategories
