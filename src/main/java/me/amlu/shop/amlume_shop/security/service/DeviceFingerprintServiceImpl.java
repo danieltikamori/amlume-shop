@@ -12,11 +12,11 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.SecurityProperties;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
-import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
 import me.amlu.shop.amlume_shop.user_management.DeviceFingerprintingInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;

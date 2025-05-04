@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.config.properties.AsnProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.AsnProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;

@@ -16,14 +16,14 @@ import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
 import me.amlu.shop.amlume_shop.exceptions.UserLockedException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
-import me.amlu.shop.amlume_shop.model.MfaSettings;
-import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.model.MfaSettings;
+import me.amlu.shop.amlume_shop.security.model.MfaToken;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import me.amlu.shop.amlume_shop.security.aspect.RequiresAuthentication;
 import me.amlu.shop.amlume_shop.security.aspect.RequiresRole;
 import me.amlu.shop.amlume_shop.user_management.*;
-import me.amlu.shop.amlume_shop.repositories.MfaSettingsRepository;
-import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
+import me.amlu.shop.amlume_shop.security.repository.MfaSettingsRepository;
+import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -98,7 +98,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication // Assuming only authenticated admins can change this
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true) // Restrict to ADMIN role
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false) // Restrict to ADMIN role
     public void updateMfaEnforced(boolean enforced) {
         MfaSettings settings = mfaSettingsRepository.findById(1L)
                 .orElse(new MfaSettings());
@@ -358,7 +358,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication // Requires authentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true) // Requires ADMIN role
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false) // Requires ADMIN role
     public void resetMfaForUser(User user) {
         // Changed log level from warn to info as this is an intended administrative action
         log.info("Resetting MFA for user: {}. Delegating to disableMfaForUser.", user != null ? user.getUsername() : "null");
@@ -373,7 +373,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void updateSecretForUser(User user, String encryptedSecret) {
         if (user == null || encryptedSecret == null) {
             throw new IllegalArgumentException("User and secret cannot be null");
@@ -418,7 +418,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteMfaTokenForUser(User user) {
 
         log.info("Method deleteMfaTokenForUser called. Delegating to disableMfaForUser.");
@@ -432,7 +432,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteSecretForUser(User user) {
         if (user == null) {
             throw new IllegalArgumentException("User cannot be null");
@@ -464,7 +464,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaTokens() {
         log.warn("ADMIN ACTION: Deleting ALL MFA tokens from the repository!");
         long count = mfaTokenRepository.count();
@@ -476,7 +476,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllSecrets() {
         log.warn("ADMIN ACTION: Deleting ALL MFA secrets (by deleting all tokens)!");
         deleteAllMfaTokens(); // Deleting tokens effectively deletes secrets stored there
@@ -486,7 +486,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaSettings() {
         log.warn("ADMIN ACTION: Deleting ALL MFA settings from the repository!");
         mfaSettingsRepository.deleteAll();
@@ -496,7 +496,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaData() {
         log.warn("ADMIN ACTION: Deleting ALL MFA data (Tokens and Settings)!");
         deleteAllMfaTokens(); // Deletes tokens
@@ -507,7 +507,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaDataForUser(User user) {
         // Changed log level from warn to info
         log.info("ADMIN ACTION: Deleting all MFA data for user: {}", user != null ? user.getUsername() : "null");
@@ -522,7 +522,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaDataForAllUsers() {
         log.warn("ADMIN ACTION: Deleting all MFA data for ALL users (Tokens)!");
         deleteAllMfaTokens();
@@ -532,7 +532,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaDataForAllUsersAndSecrets() {
         log.warn("ADMIN ACTION: Deleting all MFA data for ALL users (Tokens/Secrets)!");
         deleteAllSecrets(); // Handles token deletion and warns about User entity state
@@ -541,7 +541,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true)
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false)
     public void deleteAllMfaDataForAllUsersAndSecretsAndTokens() {
         log.warn("ADMIN ACTION: Deleting all MFA data for ALL users (Tokens/Secrets)!");
         deleteAllSecrets(); // Handles token deletion and warns about User entity state
@@ -550,7 +550,7 @@ public class MfaServiceImpl implements MfaService {
     @Override
     @Transactional
     @RequiresAuthentication
-    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, allowMultiple = true) // Kept ROLE_ADMIN, adjust if needed
+    @RequiresRole(value = {ROLE_ADMIN, ROLE_SUPER_ADMIN, ROLE_ROOT}, requireAll = false) // Kept ROLE_ADMIN, adjust if needed
     public void deleteAllMfaDataForAllUsersAndSecretsAndTokensAndSettings() {
         log.warn("ADMIN ACTION: Deleting all MFA data (Tokens/Secrets/Settings)!");
         deleteAllSecrets(); // Handles tokens/secrets

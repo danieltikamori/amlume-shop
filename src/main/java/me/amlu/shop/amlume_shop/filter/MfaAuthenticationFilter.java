@@ -15,10 +15,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import me.amlu.shop.amlume_shop.exceptions.AuthenticationExceptionHandler;
+import me.amlu.shop.amlume_shop.security.handler.AuthenticationExceptionHandler;
 import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
+import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.MfaService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.jetbrains.annotations.NotNull;
@@ -27,14 +27,15 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Component
+// Commented Component as it was filtering beyond the required scope
+// Re-enable if the requirements change to a more restricted scope
+//@Component
 public class MfaAuthenticationFilter extends OncePerRequestFilter {
     private final MfaService mfaService;
     private final MfaTokenRepository mfaTokenRepository;

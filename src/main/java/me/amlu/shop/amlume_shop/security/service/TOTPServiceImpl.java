@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import com.eatthepath.otp.TimeBasedOneTimePasswordGenerator;
-import me.amlu.shop.amlume_shop.config.properties.MfaProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.MfaProperties;
 import me.amlu.shop.amlume_shop.exceptions.TotpVerificationException;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.bouncycastle.util.encoders.Base32;

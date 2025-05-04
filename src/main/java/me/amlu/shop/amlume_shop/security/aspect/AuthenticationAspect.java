@@ -17,19 +17,17 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.lettuce.core.RedisConnectionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
-// Removed unused import: import me.amlu.shop.amlume_shop.config.ResilienceConfig;
-import me.amlu.shop.amlume_shop.config.properties.AuthenticationAspectProperties; // Import the correct properties class
+// Removed unused import: import me.amlu.shop.amlume_shop.resilience.config.ResilienceConfig;
+import me.amlu.shop.amlume_shop.security.config.properties.AuthenticationAspectProperties; // Import the correct properties class
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 // Removed unused import: import me.amlu.shop.amlume_shop.resilience.properties.Resilience4jRetryProperties;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService; // Assuming this validates your Bearer token
 import me.amlu.shop.amlume_shop.user_management.UserService; // Use interface
-import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
@@ -64,7 +62,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.io.IOException;
 import java.security.SignatureException;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -317,42 +314,6 @@ public class AuthenticationAspect {
         }
         log.trace("No Bearer token found in Authorization header.");
         return null;
-    }
-
-    // --- Role Check Logic (Remains the same) ---
-
-    @Before("@annotation(requiresRole)")
-    public void checkRole(JoinPoint joinPoint, RequiresRole requiresRole) throws UnauthorizedException {
-        MethodSignature signature = (MethodSignature) joinPoint.getSignature();
-        String methodName = signature.getMethod().getName();
-        String className = signature.getDeclaringType().getSimpleName();
-
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // Ensure authentication happened *before* checking roles
-        if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof UserDetails userDetails)) {
-            log.error("Role check attempted for method {}.{} without prior successful authentication.", className, methodName);
-            // This shouldn't happen if @Order(1) is effective and authentication runs first
-            throw new UnauthorizedException("Authentication required before checking roles.");
-        }
-
-        // Type safe cast
-        String roleNames = Arrays.toString(requiresRole.value());
-
-        // Check if the user has the required role
-        boolean hasRole = userDetails.getAuthorities().stream()
-                .anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals(roleNames));
-
-        if (!hasRole) {
-            log.warn("Role check failed: User '{}' does not have required role '{}' for method {}.{}",
-                    userDetails.getUsername(), requiresRole.value(), className, methodName);
-            meterRegistry.counter("authorization.failure", "type", "role", "role", roleNames, "class", className, "method", methodName).increment();
-            throw new UnauthorizedException("Insufficient permissions. Required role: " + roleNames);
-        }
-
-        log.debug("Role check successful: User '{}' has required role '{}' for method {}.{}",
-                userDetails.getUsername(), requiresRole.value(), className, methodName);
-        meterRegistry.counter("authorization.success", "type", "role", "role", roleNames, "class", className, "method", methodName).increment();
     }
 
     // --- Metrics Recording Helpers (Remains the same) ---

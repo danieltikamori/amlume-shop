@@ -2,7 +2,7 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-# Add GeoIP database
+# Add GeoIP2 database
 COPY GeoLite2-ASN.mmdb /app/GeoLite2-ASN.mmdb
 
 # Add application jar

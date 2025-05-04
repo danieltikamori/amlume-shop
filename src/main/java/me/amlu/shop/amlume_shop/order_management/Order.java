@@ -16,6 +16,7 @@ import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -29,6 +30,8 @@ import java.util.Objects;
         @Index(name = "idx_order_date", columnList = "order_date")
 })
 public class Order extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

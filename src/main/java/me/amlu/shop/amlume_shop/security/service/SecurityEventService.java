@@ -11,9 +11,9 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.persistence.criteria.Predicate;
-import me.amlu.shop.amlume_shop.model.SecurityEvent;
-import me.amlu.shop.amlume_shop.model.SecurityEventType;
-import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
+import me.amlu.shop.amlume_shop.security.model.SecurityEvent;
+import me.amlu.shop.amlume_shop.security.model.SecurityEventType;
+import me.amlu.shop.amlume_shop.security.repository.SecurityEventRepository;
 import org.slf4j.Logger;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;

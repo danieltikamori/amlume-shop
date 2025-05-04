@@ -27,7 +27,7 @@ public class Username implements Serializable {
 
     @NotBlank
     @Size(min = 3, max = 20)
-    @Column(nullable = false, unique = true, name = "user_name")
+    @Column(nullable = false, unique = true, name = "username")
     String username;
 
     protected Username() {

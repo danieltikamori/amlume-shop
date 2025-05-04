@@ -15,7 +15,7 @@ import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintMismatchException;
 import me.amlu.shop.amlume_shop.exceptions.DeviceFingerprintRegistrationException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 
 public interface DeviceFingerprintService {
 

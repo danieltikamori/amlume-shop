@@ -14,11 +14,16 @@ import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.io.Serial; // Import Serial
+import java.io.Serializable; // Import Serializable
 import java.util.Objects;
 import java.util.StringJoiner;
 
 @Embeddable
-public class ProductDescription {
+public class ProductDescription implements Serializable { // Add implements Serializable
+
+    @Serial // Add serialVersionUID
+    private static final long serialVersionUID = 1L;
 
     @NotBlank(message = "Product description is required")
     @Size(min = 2, max = 2000, message = "Product description must be between 2 and 2000 characters")
@@ -41,7 +46,7 @@ public class ProductDescription {
      * ensuring the stored value is always trimmed and meets the length criteria.
      *
      * @param description The product description string.
-     * @throws NullPointerException if description is null.
+     * @throws NullPointerException     if description is null.
      * @throws IllegalArgumentException if description length is invalid after trimming.
      */
     public ProductDescription(String description) {

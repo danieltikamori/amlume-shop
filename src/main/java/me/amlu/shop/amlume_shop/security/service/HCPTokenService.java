@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.exceptions.TokenRefreshException;
-import me.amlu.shop.amlume_shop.payload.TokenResponse;
+import me.amlu.shop.amlume_shop.security.dto.TokenResponse;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;

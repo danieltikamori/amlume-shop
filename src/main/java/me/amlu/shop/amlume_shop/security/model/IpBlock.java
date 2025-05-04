@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.security.model;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -23,6 +24,9 @@ import java.util.Objects;
 })
 @Cacheable
 public class IpBlock extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

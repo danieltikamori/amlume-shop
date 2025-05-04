@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.TokenCacheProperties;
 import org.slf4j.Logger;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;

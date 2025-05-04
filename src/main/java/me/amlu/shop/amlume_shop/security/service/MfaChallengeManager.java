@@ -12,12 +12,11 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.user_management.User;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import static me.amlu.shop.amlume_shop.security.service.SecureIdGenerator.generateSecureId;
@@ -54,10 +53,74 @@ public class MfaChallengeManager {
     }
 }
 
-@Data
-@AllArgsConstructor
 class MfaChallenge {
     private String username;
     private LocalDateTime creationTime;
     private String challengeId;
+
+    public MfaChallenge(String username, LocalDateTime creationTime, String challengeId) {
+        this.username = username;
+        this.creationTime = creationTime;
+        this.challengeId = challengeId;
+    }
+
+    public String getUsername() {
+        return this.username;
+    }
+
+    public LocalDateTime getCreationTime() {
+        return this.creationTime;
+    }
+
+    public String getChallengeId() {
+        return this.challengeId;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setCreationTime(LocalDateTime creationTime) {
+        this.creationTime = creationTime;
+    }
+
+    public void setChallengeId(String challengeId) {
+        this.challengeId = challengeId;
+    }
+
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof MfaChallenge other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$username = this.getUsername();
+        final Object other$username = other.getUsername();
+        if (!Objects.equals(this$username, other$username)) return false;
+        final Object this$creationTime = this.getCreationTime();
+        final Object other$creationTime = other.getCreationTime();
+        if (!Objects.equals(this$creationTime, other$creationTime))
+            return false;
+        final Object this$challengeId = this.getChallengeId();
+        final Object other$challengeId = other.getChallengeId();
+        return Objects.equals(this$challengeId, other$challengeId);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof MfaChallenge;
+    }
+
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $username = this.getUsername();
+        result = result * PRIME + ($username == null ? 43 : $username.hashCode());
+        final Object $creationTime = this.getCreationTime();
+        result = result * PRIME + ($creationTime == null ? 43 : $creationTime.hashCode());
+        final Object $challengeId = this.getChallengeId();
+        result = result * PRIME + ($challengeId == null ? 43 : $challengeId.hashCode());
+        return result;
+    }
+
+    public String toString() {
+        return "MfaChallenge(username=" + this.getUsername() + ", creationTime=" + this.getCreationTime() + ", challengeId=" + this.getChallengeId() + ")";
+    }
 }

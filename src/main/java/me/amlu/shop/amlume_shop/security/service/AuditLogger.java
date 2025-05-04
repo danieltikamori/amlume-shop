@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;

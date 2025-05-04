@@ -21,7 +21,7 @@ import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import me.amlu.shop.amlume_shop.security.enums.TokenType;
 import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;

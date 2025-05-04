@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.controller;
 
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.service.FileService;
+import me.amlu.shop.amlume_shop.file.service.FileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

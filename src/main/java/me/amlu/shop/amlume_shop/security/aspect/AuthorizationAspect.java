@@ -13,7 +13,7 @@ package me.amlu.shop.amlume_shop.security.aspect;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRole; // Assuming UserRole links User and AppRole
+import me.amlu.shop.amlume_shop.user_management.UserRole;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
@@ -43,7 +43,8 @@ public class AuthorizationAspect {
 
     // Pointcut definition: targets any method annotated with @RequiresRole
     @Pointcut("@annotation(me.amlu.shop.amlume_shop.security.aspect.RequiresRole)")
-    public void requiresRoleAnnotation() {}
+    public void requiresRoleAnnotation() {
+    }
 
     // Advice definition: runs *before* the method execution
     @Before("requiresRoleAnnotation()")
@@ -56,32 +57,43 @@ public class AuthorizationAspect {
         if (requiredRoles == null || requiredRoles.length == 0) {
             // Should not happen if annotation is used correctly, but good practice
             log.warn("Method {} annotated with @RequiresRole but no roles specified.", method.getName());
-            return; // Or throw an exception indicating misconfiguration
+//            return; // Or throw an exception indicating misconfiguration
+            throw new IllegalStateException("Method annotated with @RequiresRole but no roles specified.");
         }
 
-        User currentUser = userService.getCurrentUser(); // Assumes this throws if not authenticated
-        if (currentUser == null) {
-             log.error("Authorization check failed: No authenticated user found for method {}", method.getName());
-             throw new UnauthorizedException("Authentication required.");
-        }
+        User currentUser = userService.getCurrentUser(); // This throws if not authenticated
 
         // --- Check if the user has *any* of the required roles ---
         // This assumes User has a method like getRoles() returning Set<UserRole>
         // and UserRole has getRoleName() returning AppRole. Adjust if your structure differs.
         Set<AppRole> userRoles = currentUser.getRoles().stream()
-                                           .map(UserRole::getRoleName) // Extract the AppRole enum
-                                           .collect(Collectors.toSet());
+                .map(UserRole::getRoleName) // Extract the AppRole enum
+                .collect(Collectors.toSet());
 
-        boolean authorized = Arrays.stream(requiredRoles)
-                                   .anyMatch(userRoles::contains);
+        boolean authorized;
+        if (requiresRole.requireAll()) {
+            // Check if user has ALL required roles
+            authorized = Arrays.stream(requiredRoles)
+                    .allMatch(userRoles::contains);
+            if (!authorized) {
+                log.warn("Authorization failed: User '{}' does not have ALL required roles {} for method {}",
+                        currentUser.getUsername(), Arrays.toString(requiredRoles), method.getName());
+                throw new UnauthorizedException("User does not have ALL the required permissions: " + Arrays.toString(requiredRoles));
+            }
 
-        if (!authorized) {
-            log.warn("Authorization failed: User '{}' does not have required roles {} for method {}",
-                     currentUser.getUsername(), Arrays.toString(requiredRoles), method.getName());
-            throw new UnauthorizedException("User does not have the required permissions: " + Arrays.toString(requiredRoles));
+        } else {
+            // Check if user has ANY of the required roles
+            authorized = Arrays.stream(requiredRoles)
+                    .anyMatch(userRoles::contains);
+            if (!authorized) {
+                log.warn("Authorization failed: User '{}' does not have required roles {} for method {}",
+                        currentUser.getUsername(), Arrays.toString(requiredRoles), method.getName());
+                throw new UnauthorizedException("User does not have the required permissions: " + Arrays.toString(requiredRoles));
+            }
         }
 
         log.debug("Authorization successful: User '{}' has required roles for method {}",
-                 currentUser.getUsername(), method.getName());
+                currentUser.getUsername(), method.getName());
+
     }
 }

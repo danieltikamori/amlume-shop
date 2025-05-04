@@ -20,6 +20,7 @@ import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.StringJoiner;
@@ -31,6 +32,8 @@ import java.util.StringJoiner;
 //    @UniqueConstraint(name = "uk_product_name", columnNames = {"productName_name"}) // Adjust column name if needed
 // })
 public class Product extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -92,9 +95,9 @@ public class Product extends BaseEntity {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-     @ManyToOne(fetch = FetchType.LAZY)
-     @JoinColumn(name = "order_id")
-     private Order order;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    private Order order;
 
     // --- JPA Required No-Arg Constructor ---
     public Product() {

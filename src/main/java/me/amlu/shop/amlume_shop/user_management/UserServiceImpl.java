@@ -15,9 +15,9 @@ import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException; // Custom exception
-import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest;
-import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.service.CacheService; // Keep if custom cache logic is essential
+import me.amlu.shop.amlume_shop.user_management.dto.UserProfileUpdateRequest;
+import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
+import me.amlu.shop.amlume_shop.cache_management.service.CacheService; // Keep if custom cache logic is essential
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -70,6 +70,71 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     // --- Registration ---
+
+
+    @Override
+    @Transactional // Ensure atomicity
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, allEntries = true) // Evict user caches on new admin registration
+    public User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException {
+        Assert.notNull(request, "Registration request cannot be null");
+
+        String usernameString = request.getUsername(); // Gets the String value
+
+        // Check if user already exists by username string or email
+        if (userRepository.existsByAuthenticationInfoUsername_Username(usernameString)) {
+            throw new UserAlreadyExistsException("Username '" + usernameString + "' already taken");
+        }
+        if (userRepository.existsByContactInfoUserEmailEmail(request.userEmail())) {
+            throw new UserAlreadyExistsException("Email '" + request.userEmail() + "' already registered");
+        }
+
+        // Hash password
+        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
+
+        // Create a new user entity
+        User user = User.builder()
+                .authenticationInfo(AuthenticationInfo.builder()
+                        .username(request.username()) // Pass the Username VO
+                        .password(encodedPassword)
+                        .build())
+                .contactInfo(ContactInfo.builder()
+                        .userEmail(new UserEmail(request.userEmail()))
+                        // Add other contact fields if available in request (e.g., first/last name if added to DTO)
+                        .build())
+                .mfaInfo(MfaInfo.builder()
+                        .mfaEnabled(request.mfaEnabled()) // Use value from request
+                        .build())
+                .accountStatus(AccountStatus.builder()
+                        .creationTime(Instant.now())
+                        .accountNonExpired(true)
+                        .accountNonLocked(true)
+                        .credentialsNonExpired(true)
+                        .enabled(true) // Admins are typically enabled immediately
+                        .failedLoginAttempts(0)
+                        .build())
+                .deviceFingerprintingInfo(DeviceFingerprintingInfo.builder()
+                        .deviceFingerprintingEnabled(false) // Default for admin? Or configurable?
+                        .build())
+                .build();
+
+        // --- Assign ADMIN Roles ---
+        Set<UserRole> roles = new HashSet<>();
+        // Assign core admin role
+        roles.add(new UserRole(AppRole.ROLE_ADMIN));
+        // Optionally assign base user role as well (hierarchy might cover this, but explicit is clearer)
+        roles.add(new UserRole(AppRole.ROLE_USER));
+        // Add other roles like ROLE_MANAGER if admins should inherit those permissions directly
+        // roles.add(new UserRole(AppRole.ROLE_MANAGER));
+        user.createRoleSet(roles);
+        // --- End Role Assignment ---
+
+
+        // TODO: Implement email verification logic if required for admins? Usually not.
+
+        User savedUser = userRepository.save(user);
+        log.info("Registered new ADMIN user: {} (ID: {})", savedUser.getUsername(), savedUser.getUserId());
+        return savedUser;
+    }
 
     /**
      * Registers a new user based on the provided request details.
@@ -266,11 +331,24 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             throw new UnauthorizedException("No authenticated user found or user is anonymous");
         }
 
-        String currentUsername = authentication.getName();
-        // Fetch user by username from the authentication context
-        // This reuses the cached findUserByUsername method
-        return findUserByUsername(currentUsername);
+        if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+            String keycloakUserId = jwt.getSubject(); // 'sub' claim is the Keycloak User ID
+            // String username = jwt.getClaimAsString("preferred_username"); // Or get username
+
+            // Option 1: If you only need the ID/username from token
+            // return createTransientUserFromJwt(jwt); // A helper to build a temporary User object
+
+            // Option 2: If you need the full local User entity linked to Keycloak
+            return userRepository.findBykeycloakId(keycloakUserId) // Need this method in repo
+                    .orElseThrow(() -> new UserNotFoundException("Local user not found for Keycloak ID: " + keycloakUserId));
+
+        } else {
+            // Should not happen with JWT config, but handle defensively
+            log.error("Unexpected principal type: {}", authentication.getPrincipal().getClass());
+            throw new UnauthorizedException("Unexpected authentication principal type");
+        }
     }
+
 
     /**
      * Retrieves the ID of the currently authenticated user.

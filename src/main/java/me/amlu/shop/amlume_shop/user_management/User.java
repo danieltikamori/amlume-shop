@@ -14,7 +14,7 @@ import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.RefreshToken;
+import me.amlu.shop.amlume_shop.security.model.RefreshToken;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.user_management.address.Address;
 import org.hibernate.proxy.HibernateProxy;
@@ -29,10 +29,10 @@ import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "_users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "user_name"),
+        @UniqueConstraint(columnNames = "username"),
         @UniqueConstraint(columnNames = "user_email")
 }, indexes = {
-        @Index(name = "idx_user_name", columnList = "user_name"),
+        @Index(name = "idx_username", columnList = "username"),
         @Index(name = "idx_user_email", columnList = "user_email"),
 //        @Index(name = "idx_user_orders", columnList = "user_orders")
 })
@@ -46,12 +46,15 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "keycloak_id", unique = true, nullable = false)
+    private String keycloakId;
+
     @Embedded
     // Override the column name for the 'username' field within AuthenticationInfo
     @AttributeOverrides({
-            @AttributeOverride(name = "username.username", column = @Column(name = "user_name", nullable = false, unique = true)), // Assuming Username VO has 'username' field
+            @AttributeOverride(name = "username.username", column = @Column(name = "username", nullable = false, unique = true)), // Assuming Username VO has 'username' field
             // Add override for password if you need a specific column name, e.g.:
-            @AttributeOverride(name = "password.password", column = @Column(name = "user_password", nullable = false, length = 128)) // Assuming UserPassword VO has 'password' field
+            @AttributeOverride(name = "password.password", column = @Column(name = "userpassword", nullable = false, length = 128)) // Assuming UserPassword VO has 'password' field
     })
     private AuthenticationInfo authenticationInfo; // Set via constructor/builder
 

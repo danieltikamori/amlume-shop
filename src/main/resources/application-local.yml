@@ -45,6 +45,15 @@ logging:
     me.amlu.shop.amlume_shop.util: DEBUG
     me.amlu.shop.amlume_shop.exception: DEBUG
     me.amlu.shop.amlume_shop.model: DEBUG
+  pattern:
+    console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+
+# --- Server ---
+server:
+  tomcat:
+    threads:
+      max: 200 # Maximum number of threads in the thread pool (default is 200)
+    max-connections: 8192 # Maximum number of connections that the server accepts (default is 10000, but Tomcat's default is 8192)
 
 # --- Spring Boot Core ---
 spring:
@@ -129,7 +138,9 @@ spring:
     # We'll configure this programmatically below.
     # Remove ssl params from the URL here if they were hardcoded.
   datasource:
-    url: jdbc:mysql://localhost:3306/amlume_db?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStorePassword=${app.ssl.trust-store.password}
+    # sslMode=VERIFY_IDENTITY verifies also hostname, requires correctly configured certificate.
+    url: jdbc:mysql://localhost:3306/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS
+#    url: jdbc:mysql://localhost:3306/amlume_db?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStorePassword=${app.ssl.trust-store.password}
 #    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
     # url: jdbc:mysql://mysql-db:3306/amlume_db # Use Docker service name if running inside Docker
     username: amlume_user
@@ -156,7 +167,7 @@ spring:
     database-platform: org.hibernate.dialect.MySQLDialect
     show-sql: true
     hibernate:
-      ddl-auto: update # Use "update" for dev, "validate" or "none" for prod
+      ddl-auto: update # Use "update" for dev, create-drop if schema changes, "validate" or "none" for prod
       show-sql: true
     properties:
       hibernate:
@@ -191,14 +202,30 @@ spring:
       resourceserver:
         jwt:
           # IMPORTANT: Adjust realm name as needed
-          issuer-uri: http://localhost:8080/realms/amlume-shop-realm # Keycloak issuer URI
+          jwk-set-uri: ${JWT_SET_URI:http://localhost:8180/realms/amlume-shop/protocol/openid-connect/certs}
           # jwk-set-uri: # Often inferred from issuer-uri
+#          issuer-uri: http://localhost:8080/realms/amlume-shop-realm # Keycloak issuer URI
+#        opaque:
+#          introspection-uri: ${INTROSPECTION_URI:http://localhost:8180/realms/master/protocol/openid-connect/token/introspect}
+#          introspection-client-id: ${INTROSPECTION_ID:introId}
+#          introspection-client-secret: ${INTROSPECTION_SECRET:secretGeneratedAtUI}
 
   # --- Spring Security Filters ---
   # security: # Merged under spring.security above
   #   filter-dispatcher-types: async, error, request # Default is usually fine
   #   filter-order: 1000 # Default order for Spring Security filters
   #   filter-chain-order: 1000 # Default order for Spring Security filter chains
+
+  task:
+    execution:
+      pool:
+        core-size: 8 # Core pool size (default 8)
+        max-size: 200 # Maximum allowed number of threads. If tasks are filling up the queue, the pool can expand up to that size to accommodate the load. Ignored if the queue is unbounded. Doesn't have an effect if virtual threads are enabled.
+        queue-capacity: 200 # Queue capacity (default unbounded)
+        keep-alive: 200s # Time in seconds that threads can remain idle before being reclaimed (default 60s)
+    scheduling:
+      pool:
+        size: 2 # Size of the scheduled task pool (default 1). Maximum allowed number of threads. It Doesn't have an effect if virtual threads are enabled.
 
   # --- Virtual Threads ---
   threads:
@@ -219,7 +246,7 @@ management:
     show-details: when_authorized
   metrics:
     cache:
-      instrument: true # Enable cache metrics collection
+      instrument: true # Enable the cache metrics collection
     enabled: true
     enable:
       all: true # Enable all metrics sources by default
@@ -319,7 +346,7 @@ mfa:
 #  encryption:
 #    password: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
 #    salt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
-  excluded-uris: "/api/auth/,/public/,/health,/favicon.ico,/error,/actuator/**" # Added common exclusions
+  excluded-uris: "/,/index.html,/api/auth/,/public/,/health,/favicon.ico,/error,/actuator/**" # Added common exclusions
   rate-limit:
     max-attempts: 5
     window-seconds: 300
@@ -578,8 +605,10 @@ security: # Used by various security services/configs
     known-vpn-asns: # Used by EnhancedVpnDetectorServiceImpl
       - "AS15169" # Example
       # Add others
-    high-risk-countries: # Used?
+    vpn-reputation-threshold: 0.25 # Override the default 0.3
+    high-risk-countries:
       - "IR"
+      - "KP"
     known-vpn-ip-ranges: ${KNOWN_VPN_IP_RANGES:} # Load from Env Var, empty default
     known-datacenter-ranges: ${KNOWN_DATACENTER_RANGES:} # Load from Env Var, empty default
   ip: # Used?
