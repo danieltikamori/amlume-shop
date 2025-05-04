@@ -14,7 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.security.enums.TokenType;
 import me.amlu.shop.amlume_shop.security.paseto.util.PasetoPropertyResolver;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenUtilService;
-import me.amlu.shop.amlume_shop.security.auth.service.AuthenticationInterface;
+import me.amlu.shop.amlume_shop.auth.service.AuthenticationInterface;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

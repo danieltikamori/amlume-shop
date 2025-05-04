@@ -26,7 +26,7 @@ public class AuthenticationLoggingAspect {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(AuthenticationLoggingAspect.class);
 
     //    @Around("execution(* com.yourapp.security.*.*(..)) && @annotation(Audited)")
-    @Around("execution(* me.amlu.shop.amlume_shop.security.auth.service.UserAuthenticator.*(..))") // More specific pointcut
+    @Around("execution(* me.amlu.shop.amlume_shop.auth.service.UserAuthenticator.*(..))") // More specific pointcut
     public Object logAuthenticationActivity(ProceedingJoinPoint joinPoint) throws Throwable {
         String methodName = joinPoint.getSignature().getName();
         String className = joinPoint.getTarget().getClass().getSimpleName();
