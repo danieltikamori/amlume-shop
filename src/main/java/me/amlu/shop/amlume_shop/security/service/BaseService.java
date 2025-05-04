@@ -10,16 +10,13 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 
-@NoArgsConstructor
 @Component
 public abstract class BaseService {
 
@@ -28,12 +25,15 @@ public abstract class BaseService {
     protected BaseService(UserService userService) {
         this.userService = userService;
     }
-    
+
+    public BaseService() {
+    }
+
     protected Optional<User> getCurrentUser() throws UnauthorizedException {
         return Optional.ofNullable(userService.getCurrentUser());
     }
 
-    @Cacheable("currentUserId")
+    //    @Cacheable("currentUserId")
     protected Long getCurrentUserId() throws UnauthorizedException {
         return userService.getCurrentUserId();
     }
