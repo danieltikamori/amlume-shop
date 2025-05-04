@@ -11,29 +11,22 @@
 package me.amlu.shop.amlume_shop.auth.controller;
 
 import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.dto.ErrorResponse;
 import me.amlu.shop.amlume_shop.exceptions.GlobalExceptionHandler;
-import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
-import me.amlu.shop.amlume_shop.security.model.MfaToken;
-import me.amlu.shop.amlume_shop.dto.ErrorResponse;
+import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
+import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService;
+import me.amlu.shop.amlume_shop.user_management.User;
+import me.amlu.shop.amlume_shop.user_management.UserService;
 import me.amlu.shop.amlume_shop.user_management.dto.GetRegisterResponse;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.user_management.dto.UserResponse;
-import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
-import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
-import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService;
-import me.amlu.shop.amlume_shop.security.service.MfaService;
-import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserService;
 import org.slf4j.Logger;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
@@ -49,17 +42,13 @@ public class AuthController {
 
     // --- Constructors ---
     private final UserService userService;
-    private final MfaService mfaService;
-    private final MfaTokenRepository mfaTokenRepository;
     private final TokenValidationService tokenValidationService;
     private final TokenRevocationService tokenRevocationService;
 
     private final GlobalExceptionHandler globalExceptionHandler;
 
-    public AuthController(UserService userService, MfaService mfaService, MfaTokenRepository mfaTokenRepository, TokenValidationService tokenValidationService, TokenRevocationService tokenRevocationService, GlobalExceptionHandler globalExceptionHandler) {
+    public AuthController(UserService userService, TokenValidationService tokenValidationService, TokenRevocationService tokenRevocationService, GlobalExceptionHandler globalExceptionHandler) {
         this.userService = userService;
-        this.mfaService = mfaService;
-        this.mfaTokenRepository = mfaTokenRepository;
         this.tokenValidationService = tokenValidationService;
         this.tokenRevocationService = tokenRevocationService;
         this.globalExceptionHandler = globalExceptionHandler;
@@ -168,108 +157,6 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
-
-    @PostMapping("/v1/mfa/enable")
-    public ResponseEntity<Map<String, Object>> enableMfa(@AuthenticationPrincipal UserDetails userDetails) {
-        try {
-            User user = userService.findUserByUsername(userDetails.getUsername());
-            if (user == null) {
-                return ResponseEntity.notFound().build();
-            }
-            String secret = mfaService.generateSecretKey();
-            String qrCodeUrl = mfaService.generateQrCodeImageUrl(user, secret);
-
-            // Save the MFA token (important!)
-            MfaToken mfaToken = mfaTokenRepository.findByUser(user).orElse(MfaToken.builder().user(user).secret(secret).enabled(true).build()); // Use User, set enabled to false initially
-
-            mfaToken.setSecret(secret);
-            mfaTokenRepository.save(mfaToken);
-
-            return ResponseEntity.ok(Map.of( // Return necessary information
-                    "secret", secret,
-                    "qrCodeUrl", qrCodeUrl
-            ));
-
-        } catch (MfaException e) {
-            log.error("Error enabling MFA", e);
-            return globalExceptionHandler.sendErrorResponseAsMap(HttpStatus.INTERNAL_SERVER_ERROR, "MFA_ENABLE_ERROR", "An error occurred while enabling MFA.");
-//            return globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "MFA_ENABLE_ERROR", "An error occurred while enabling MFA.");
-
-        }
-    }
-
-//    /**
-//     * @deprecated Using @MfaAuthenticationProvider instead.
-//    // MfaAuthenticationFilter handles this endpoint
-//     * @param body request body containing the MFA code
-//     * @return ResponseEntity<LoginResponse>
-//     */
-//    @PostMapping("/v1/mfa/validate")
-//    public ResponseEntity<LoginResponse> validateMfa(@RequestBody Map<String, String> body) {
-//
-//        try {
-//            String mfaCode = body.get("code");
-//
-//            if (mfaCode == null || mfaCode.isBlank()) {
-//                throw new MfaException(MfaException.MfaErrorType.INVALID_CODE, "Mfa code is empty or null");
-//            }
-//
-//            AuthResponse response = authService.validateMfa(mfaCode);
-//            LoginResponse validationResponse =LoginResponse.builder()
-//                    .authResponse(response)
-//                    .build();
-//
-//            return ResponseEntity.ok(validationResponse);  // Assuming validateMfa returns a Paseto token if successful
-//        } catch (MfaValidationException e) {
-//            LoginResponse errorResponse = LoginResponse.builder()
-//                    .errorResponse(new ErrorResponse("INVALID_MFA_CODE", e.getMessage()))
-//                    .build();
-//
-//            return ResponseEntity.badRequest().body(errorResponse);
-////            return globalExceptionHandler.sendErrorResponse(HttpStatus.BAD_REQUEST, "INVALID_MFA_CODE", e.getMessage());
-//        } catch (TooManyAttemptsException e) {
-//            ErrorResponse errorResponse = new ErrorResponse("TOO_MANY_ATTEMPTS", e.getMessage());
-//            LoginResponse tooManyAttemptsResponse = LoginResponse.builder()
-//                    .errorResponse(errorResponse)
-//                    .build();
-//            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(tooManyAttemptsResponse);
-////            return globalExceptionHandler.sendErrorResponse(HttpStatus.TOO_MANY_REQUESTS, "TOO_MANY_ATTEMPTS", e.getMessage());
-//        } catch (LockedException e) {
-//            ErrorResponse errorResponse = new ErrorResponse("ACCOUNT_LOCKED", e.getMessage());
-//            LoginResponse lockedResponse = LoginResponse.builder()
-//                    .errorResponse(errorResponse)
-//                    .build();
-//            return ResponseEntity.status(HttpStatus.LOCKED).body(lockedResponse);
-////            return globalExceptionHandler.sendErrorResponse(HttpStatus.LOCKED, "ACCOUNT_LOCKED", e.getMessage());
-//        } catch (MfaNotSetupException e) {
-//            ErrorResponse errorResponse = new ErrorResponse("MFA_NOT_SETUP", e.getMessage());
-//            LoginResponse notSetupResponse = LoginResponse.builder()
-//                    .errorResponse(errorResponse)
-//                    .build();
-//            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(notSetupResponse);
-
-    /// /            return globalExceptionHandler.sendErrorResponse(HttpStatus.BAD_REQUEST, "MFA_NOT_SETUP", e.getMessage());
-//        }
-//    }
-    @GetMapping("/v1/mfa/qrcode")
-    public ResponseEntity<Map<String, Object>> getMfaQrCode(@AuthenticationPrincipal UserDetails userDetails) {
-        User user = userService.findUserByUsername(userDetails.getUsername());
-        if (user == null) {
-            return ResponseEntity.notFound().build();
-        }
-        String secret = mfaTokenRepository.findByUser(user)
-                .map(MfaToken::getSecret)
-                .orElseThrow(() -> new BadCredentialsException("MFA not enabled or secret not found for user"));
-
-        String qrCode = mfaService.generateQrCodeImageUrl(user, secret);
-
-        return ResponseEntity.ok(Map.of("qrCodeUrl", qrCode));
-    }
-
-
-// Inject Keycloak properties if needed for logout URL construction
-// Or construct dynamically based on issuer-uri
-
 
 
     @PostMapping("/logout")

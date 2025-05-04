@@ -10,32 +10,12 @@
 
 package me.amlu.shop.amlume_shop.security.controller;
 
-import me.amlu.shop.amlume_shop.security.service.MfaService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/")
 public class AdminController {
-   private final MfaService mfaService;
 
-    public AdminController(MfaService mfaService) {
-        this.mfaService = mfaService;
-    }
 
-   @PostMapping("v1/admin/mfa/enforce")
-   public ResponseEntity<String> enforceMfa(@RequestBody Map<String, Boolean> body) {
-       Boolean enforced = body.get("enforced");
-       if (enforced != null) {
-           mfaService.updateMfaEnforced(enforced);
-           return ResponseEntity.ok().build();
-       } else {
-           return ResponseEntity.badRequest().body("The 'enforced' parameter is required."); // Return a more descriptive error.
-       }
-   }
 }

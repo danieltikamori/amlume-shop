@@ -15,19 +15,18 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.exceptions.MfaRequiredException;
-import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
-import me.amlu.shop.amlume_shop.dto.ErrorResponse;
 import me.amlu.shop.amlume_shop.auth.dto.AuthResponse;
 import me.amlu.shop.amlume_shop.auth.dto.LoginRequest;
-import me.amlu.shop.amlume_shop.security.auth.MfaAuthenticationToken;
+import me.amlu.shop.amlume_shop.commons.Constants;
+import me.amlu.shop.amlume_shop.dto.ErrorResponse;
+import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenServiceImpl;
 import org.jetbrains.annotations.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -71,11 +70,11 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
                     LoginRequest.class
             );
 
-            // Create MFA authentication token
-            MfaAuthenticationToken authRequest = new MfaAuthenticationToken(
+            // Create authentication token
+            UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken(
                     loginRequest.username(),
-                    loginRequest.password(),
-                    loginRequest.mfaCode()
+                    loginRequest.password()
+
             );
 
             // Attempt authentication
@@ -104,9 +103,6 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
             response.setStatus(HttpStatus.OK.value());
             objectMapper.writeValue(response.getOutputStream(), authResponse);
 
-        } catch (MfaRequiredException e) {
-            sendErrorResponse(response, HttpStatus.UNAUTHORIZED,
-                    "MFA_REQUIRED", "MFA verification required");
         } catch (AuthenticationException e) {
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED,
                     "AUTH_FAILED", e.getMessage());
@@ -138,7 +134,7 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
                     .message("Login Successful").build();
         } catch (TokenGenerationFailureException e) {
             sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "TOKEN_GENERATION_ERROR", e.getMessage());
-            throw e ; // Rethrow the exception to stop the filter chain
+            throw e; // Rethrow the exception to stop the filter chain
         }
     }
 }
