@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import com.google.common.annotations.VisibleForTesting;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.IpSecurityException;
 import me.amlu.shop.amlume_shop.security.model.IpBlock;
@@ -35,8 +35,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.IP_BLOCK_CACHE;
-import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.IP_METADATA_CACHE;
+import static me.amlu.shop.amlume_shop.cache_management.config.ValkeyCacheConfig.IP_BLOCK_CACHE;
+import static me.amlu.shop.amlume_shop.cache_management.config.ValkeyCacheConfig.IP_METADATA_CACHE;
 
 @Service
 public class IpSecurityServiceImpl implements IpSecurityService {

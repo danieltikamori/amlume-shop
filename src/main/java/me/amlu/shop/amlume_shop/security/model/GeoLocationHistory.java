@@ -10,14 +10,11 @@
 
 package me.amlu.shop.amlume_shop.security.model;
 
-import lombok.Data;
-import me.amlu.shop.amlume_shop.model.LocationEntry;
-
 import java.time.Instant;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.Queue;
 
-@Data
 public class GeoLocationHistory {
     private final Queue<LocationEntry> locations;
     private static final int MAX_ENTRIES = 10;
@@ -41,11 +38,40 @@ public class GeoLocationHistory {
 
     public GeoLocation getLastLocation() {
         LocationEntry lastEntry = locations.peek();
-        return lastEntry != null ? lastEntry.getLocation() : null;
+        return lastEntry != null ? lastEntry.location() : null;
     }
 
     public Instant getLastTimestamp() {
         LocationEntry lastEntry = locations.peek();
-        return lastEntry != null ? lastEntry.getTimestamp() : null;
+        return lastEntry != null ? lastEntry.timestamp() : null;
+    }
+
+    public Queue<LocationEntry> getLocations() {
+        return this.locations;
+    }
+
+    public boolean equals(final Object o) {
+        if (o == this) return true;
+        if (!(o instanceof GeoLocationHistory other)) return false;
+        if (!other.canEqual((Object) this)) return false;
+        final Object this$locations = this.getLocations();
+        final Object other$locations = other.getLocations();
+        return Objects.equals(this$locations, other$locations);
+    }
+
+    protected boolean canEqual(final Object other) {
+        return other instanceof GeoLocationHistory;
+    }
+
+    public int hashCode() {
+        final int PRIME = 59;
+        int result = 1;
+        final Object $locations = this.getLocations();
+        result = result * PRIME + ($locations == null ? 43 : $locations.hashCode());
+        return result;
+    }
+
+    public String toString() {
+        return "GeoLocationHistory(locations=" + this.getLocations() + ")";
     }
 }

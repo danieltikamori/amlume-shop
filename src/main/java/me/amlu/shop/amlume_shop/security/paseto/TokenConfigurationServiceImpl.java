@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import me.amlu.shop.amlume_shop.config.properties.TokenProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.TokenProperties;
 import org.springframework.stereotype.Service;
 
 /**

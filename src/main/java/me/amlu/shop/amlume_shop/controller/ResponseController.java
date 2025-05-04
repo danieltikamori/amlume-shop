@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
-import me.amlu.shop.amlume_shop.payload.GetErrorMessageResponse;
+import me.amlu.shop.amlume_shop.dto.GetErrorMessageResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 

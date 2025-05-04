@@ -14,7 +14,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.config.ValidPostalCode;
+import me.amlu.shop.amlume_shop.security.config.ValidPostalCode;
 
 import java.io.Serial;
 import java.io.Serializable;

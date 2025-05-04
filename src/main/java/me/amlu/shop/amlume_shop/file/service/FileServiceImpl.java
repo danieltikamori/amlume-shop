@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.service;
+package me.amlu.shop.amlume_shop.file.service;
 
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
 import me.amlu.shop.amlume_shop.file.dto.GetFileUploadResultResponse;

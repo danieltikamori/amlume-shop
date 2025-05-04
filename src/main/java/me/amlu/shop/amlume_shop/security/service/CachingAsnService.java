@@ -11,8 +11,8 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.config.properties.AsnProperties; // Import properties
-import me.amlu.shop.amlume_shop.repositories.AsnRepository;
+import me.amlu.shop.amlume_shop.security.config.properties.AsnProperties; // Import properties
+import me.amlu.shop.amlume_shop.security.repository.AsnRepository;
 import me.amlu.shop.amlume_shop.security.model.AsnEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Objects;
 
-import static me.amlu.shop.amlume_shop.config.ValkeyCacheConfig.GEO_LOCATION_CACHE;
+import static me.amlu.shop.amlume_shop.cache_management.config.ValkeyCacheConfig.GEO_LOCATION_CACHE;
 
 @Service
 public class GeoLocationServiceImpl implements GeoLocationService {

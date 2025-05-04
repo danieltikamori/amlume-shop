@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.config;
 
-import me.amlu.shop.amlume_shop.exceptions.CustomAccessDeniedHandler;
+import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
 // REMOVE: Custom filter imports if they are no longer needed (most likely)
 // import me.amlu.shop.amlume_shop.filter.*;
 import org.springframework.beans.factory.annotation.Value;

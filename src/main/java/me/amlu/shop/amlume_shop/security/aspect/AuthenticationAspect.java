@@ -17,7 +17,7 @@ import io.github.resilience4j.retry.RetryRegistry;
 import io.lettuce.core.RedisConnectionException;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
-// Removed unused import: import me.amlu.shop.amlume_shop.config.ResilienceConfig;
+// Removed unused import: import me.amlu.shop.amlume_shop.resilience.config.ResilienceConfig;
 import me.amlu.shop.amlume_shop.security.config.properties.AuthenticationAspectProperties; // Import the correct properties class
 import me.amlu.shop.amlume_shop.exceptions.CircuitBreakerOpenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;

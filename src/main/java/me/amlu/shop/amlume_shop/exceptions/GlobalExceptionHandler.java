@@ -10,8 +10,8 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import me.amlu.shop.amlume_shop.payload.ApiResponse;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse;
+import me.amlu.shop.amlume_shop.dto.ApiResponse;
+import me.amlu.shop.amlume_shop.dto.ErrorResponse;
 import org.apache.coyote.BadRequestException;
 import org.slf4j.Logger;
 import org.springframework.http.HttpHeaders;

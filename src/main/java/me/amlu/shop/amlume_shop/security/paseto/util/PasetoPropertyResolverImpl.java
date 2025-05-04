@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
-import me.amlu.shop.amlume_shop.config.properties.PasetoProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.PasetoProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;

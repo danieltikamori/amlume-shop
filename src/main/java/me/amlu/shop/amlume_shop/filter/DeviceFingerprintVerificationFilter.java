@@ -16,7 +16,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse; // Use the provided ErrorResponse
+import me.amlu.shop.amlume_shop.dto.ErrorResponse; // Use the provided ErrorResponse
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims; // Import claim constants
 import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
 // Removed User import as we primarily use userId string

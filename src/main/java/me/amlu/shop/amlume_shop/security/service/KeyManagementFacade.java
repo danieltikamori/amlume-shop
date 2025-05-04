@@ -11,13 +11,12 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.annotation.PostConstruct;
-import me.amlu.shop.amlume_shop.config.properties.MfaProperties;
-import me.amlu.shop.amlume_shop.config.properties.PasetoProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.MfaProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.PasetoProperties;
 import me.amlu.shop.amlume_shop.exceptions.KeyManagementException;
 import me.amlu.shop.amlume_shop.security.model.KeyPair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value; // Keep for mfaEncryptionPassword if needed
 import org.springframework.stereotype.Service;
 
 import java.util.Objects; // Import Objects for null checks

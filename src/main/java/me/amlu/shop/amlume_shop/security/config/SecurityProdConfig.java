@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.auth_management.service.KeycloakRoleConverter;
-import me.amlu.shop.amlume_shop.exceptions.CustomAccessDeniedHandler;
+import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
 import me.amlu.shop.amlume_shop.filter.CsrfCookieFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

@@ -15,7 +15,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.OneToMany;
 import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 
 import java.io.Serial;
 import java.io.Serializable;

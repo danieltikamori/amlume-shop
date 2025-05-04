@@ -11,11 +11,11 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import me.amlu.shop.amlume_shop.category_management.Category;
-import me.amlu.shop.amlume_shop.model.SecurityEvent;
-import me.amlu.shop.amlume_shop.model.SecurityEventType;
+import me.amlu.shop.amlume_shop.security.model.SecurityEvent;
+import me.amlu.shop.amlume_shop.security.model.SecurityEventType;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
-import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
+import me.amlu.shop.amlume_shop.security.repository.SecurityEventRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

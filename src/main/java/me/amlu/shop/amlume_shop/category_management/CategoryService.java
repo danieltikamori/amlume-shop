@@ -10,8 +10,8 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
-import me.amlu.shop.amlume_shop.payload.CreateCategoryRequest;
-import me.amlu.shop.amlume_shop.payload.GetCategoryResponse;
+import me.amlu.shop.amlume_shop.category_management.dto.CreateCategoryRequest;
+import me.amlu.shop.amlume_shop.category_management.dto.GetCategoryResponse;
 
 import java.util.List;
 

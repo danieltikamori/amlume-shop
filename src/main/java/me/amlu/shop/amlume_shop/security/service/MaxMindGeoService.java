@@ -18,7 +18,7 @@ import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.model.CountryResponse;
 import jakarta.annotation.PreDestroy;
-import me.amlu.shop.amlume_shop.config.properties.GeoIp2Properties;
+import me.amlu.shop.amlume_shop.security.config.properties.GeoIp2Properties;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

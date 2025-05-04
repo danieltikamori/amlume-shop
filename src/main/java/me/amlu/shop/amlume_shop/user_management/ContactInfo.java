@@ -18,7 +18,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.Embedded;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.config.Phone;
+import me.amlu.shop.amlume_shop.security.config.Phone;
 import me.amlu.shop.amlume_shop.service.PhoneNumberConverter;
 
 import java.io.Serializable;
