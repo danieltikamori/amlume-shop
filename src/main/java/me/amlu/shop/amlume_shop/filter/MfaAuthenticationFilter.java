@@ -34,7 +34,9 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Component
+// Commented Component as it was filtering beyond the required scope
+// Re-enable if the requirements change to a more restricted scope
+//@Component
 public class MfaAuthenticationFilter extends OncePerRequestFilter {
     private final MfaService mfaService;
     private final MfaTokenRepository mfaTokenRepository;
