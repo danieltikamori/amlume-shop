@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.security.config.properties;
 
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotEmpty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -18,23 +20,61 @@ import org.springframework.validation.annotation.Validated;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Configuration properties related to geographic security checks, prefixed with "security.geo".
+ * This includes settings for impossible travel detection, VPN/proxy detection based on ASN reputation,
+ * high-risk countries, and known IP ranges for VPNs and datacenters.
+ */
 @Component
 @ConfigurationProperties(prefix = "security.geo")
 @Validated
 public class GeoSecurityProperties {
 
-    private double suspiciousDistanceKm = 200.0;
-    private int timeWindowHours = 24;
+    /**
+     * The maximum distance (in kilometers) considered plausible for travel between two consecutive login locations
+     * within the defined time window. Used for impossible travel detection.
+     */
+    private double suspiciousDistanceKm = 200.0; // Default value
 
-    // Spring Boot will automatically bind the YAML list to this Set
-    @NotEmpty(message = "Known VPN ASNs list cannot be empty in configuration")
+    /**
+     * The time window (in hours) used for comparing consecutive login locations for impossible travel detection.
+     */
+    private int timeWindowHours = 24; // Default value
+
+    /**
+     * A set of Autonomous System Numbers (ASNs) known to be commonly used by VPN providers.
+     * Connections originating from these ASNs might be flagged as higher risk.
+     */
+    @NotEmpty(message = "Known VPN ASNs list cannot be empty in configuration (security.geo.known-vpn-asns)")
     private Set<String> knownVpnAsns = new HashSet<>();
 
+    /**
+     * A set of ISO 3166-1 alpha-2 country codes considered high-risk.
+     * Connections originating from these countries might be flagged or blocked.
+     */
     private Set<String> highRiskCountries = new HashSet<>();
 
-    // These will be populated correctly from the environment variable placeholders
+    /**
+     * A set of IP address ranges (in CIDR notation, e.g., "192.168.1.0/24") known to be used by VPN providers.
+     * Populated from the environment variable specified in the configuration (e.g., KNOWN_VPN_IP_RANGES).
+     */
     private Set<String> knownVpnIpRanges = new HashSet<>();
+
+    /**
+     * A set of IP address ranges (in CIDR notation) known to belong to datacenters.
+     * Connections from datacenters might indicate proxy or VPN usage.
+     * Populated from the environment variable specified in the configuration (e.g., KNOWN_DATACENTER_RANGES).
+     */
     private Set<String> knownDatacenterRanges = new HashSet<>();
+
+    /**
+     * The reputation score threshold (between 0.0 and 1.0) below which an ASN is considered suspicious
+     * enough to potentially flag a connection as VPN/Proxy, even if other factors don't meet the threshold.
+     * A lower score indicates a worse reputation.
+     */
+    @DecimalMin(value = "0.0", message = "VPN reputation threshold must be greater than or equal to 0.0")
+    @DecimalMax(value = "1.0", message = "VPN reputation threshold must be less than or equal to 1.0")
+    private double vpnReputationThreshold = 0.3; // Default value (matches GeoProperties default for consistency)
 
     // --- Getters and Setters ---
 
@@ -75,7 +115,7 @@ public class GeoSecurityProperties {
     }
 
     public void setKnownVpnIpRanges(Set<String> knownVpnIpRanges) {
-        // Spring handles splitting the comma-separated env var value
+        // Spring handles splitting the comma-separated env var value automatically
         this.knownVpnIpRanges = knownVpnIpRanges;
     }
 
@@ -84,8 +124,21 @@ public class GeoSecurityProperties {
     }
 
     public void setKnownDatacenterRanges(Set<String> knownDatacenterRanges) {
-        // Spring handles splitting the comma-separated env var value
+        // Spring handles splitting the comma-separated env var value automatically
         this.knownDatacenterRanges = knownDatacenterRanges;
+    }
+
+    public double getVpnReputationThreshold() {
+        return vpnReputationThreshold;
+    }
+
+    public void setVpnReputationThreshold(double vpnReputationThreshold) {
+        // Validation is handled by @DecimalMin/@DecimalMax annotations via @Validated
+        // Manual validation kept for robustness, though redundant with annotations.
+        if (vpnReputationThreshold < 0.0 || vpnReputationThreshold > 1.0) {
+            throw new IllegalArgumentException("VPN reputation threshold must be between 0.0 and 1.0");
+        }
+        this.vpnReputationThreshold = vpnReputationThreshold;
     }
 
     @Override
@@ -97,7 +150,7 @@ public class GeoSecurityProperties {
                 ", highRiskCountries=" + highRiskCountries +
                 ", knownVpnIpRanges=" + knownVpnIpRanges +
                 ", knownDatacenterRanges=" + knownDatacenterRanges +
+                ", vpnReputationThreshold=" + vpnReputationThreshold + // Added
                 '}';
     }
 }
-    
