@@ -8,15 +8,15 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.config; // Or a suitable package like 'audit'
+package me.amlu.shop.amlume_shop.audit;
 
 import me.amlu.shop.amlume_shop.user_management.User; // Import your User entity
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component; // Make it a component OR define as @Bean later
 
 import java.util.Optional;
 
@@ -27,6 +27,7 @@ public class SecurityAuditorAware implements AuditorAware<Long> {
 
     private final Logger log = LoggerFactory.getLogger(SecurityAuditorAware.class);
 
+    @NotNull
     @Override
     public Optional<Long> getCurrentAuditor() {
         // Get the current Authentication object from Spring Security's context
