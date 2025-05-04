@@ -198,60 +198,8 @@ public class UserAuthenticator implements AuthenticationInterface {
                 throw new BadCredentialsException(Constants.INVALID_CREDENTIALS_MESSAGE);
             }
 
-            // 4. Handle MFA or proceed to successful login
-            if (mfaService.isMfaEnabled(user) || mfaService.isMfaEnforced(user)) {
-                // MFA is required
-                log.info("MFA required for user [{}]. Initiating challenge.", user.getUsername());
-                return initiateMfaChallenge(user);
-            } else {
-                // No MFA required, proceed to successful login
-                log.info("Password validation successful for user [{}]. No MFA required.", user.getUsername());
-                String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
-                return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
-            }
-
-        } catch (TooManyAttemptsException | InvalidCaptchaException | BadCredentialsException | LockedException |
-                 UsernameNotFoundException e) {
-            // Re-throw specific authentication-related exceptions
-            throw e;
-        } catch (Exception e) {
-            // Catch unexpected errors
-            log.error("Authentication error for user [{}]: {}", request.username(), e.getMessage(), e);
-            throw new AuthenticationFailException("Authentication failed due to an internal error.");
-        }
-    }
-
-    // --- MFA Verification ---
-    @Override
-    public AuthResponse verifyMfaAndLogin(MfaVerificationRequest request, String ipAddress) throws TooManyAttemptsException, AuthenticationFailException {
-        try {
-            // 0. Pre-flight checks (optional for MFA verification itself, but good practice)
-            performPreFlightChecks(request.username(), ipAddress, "MFA Verification", request.captchaResponse()); // Captcha likely isn't needed here
-
-            // 1. Fetch user
-            User user = userRepository.findByAuthenticationInfoUsername_Username(request.username())
-                    .orElseThrow(() -> {
-                        auditService.logFailedLogin(request.username(), ipAddress, Constants.USER_NOT_FOUND_MESSAGE);
-                        return new UsernameNotFoundException(Constants.INVALID_CREDENTIALS_MESSAGE); // Generic message
-                    });
-
-            // 2. Check account lock status (important!)
-            checkAccountLockStatus(user, ipAddress);
-
-            // 3. Verify MFA Code
-            MfaToken mfaToken = mfaTokenRepository.findByUser(user)
-                    .orElseThrow(() -> new MfaException(MfaException.MfaErrorType.SETUP_FAILED, "MFA not set up for user"));
-
-            if (!mfaService.verifyCode(mfaToken.getSecret(), request.mfaCode())) {
-                auditService.logMfaVerificationFailed(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
-                // TODO: POLICY DECISION: Should failed MFA attempts lock the account?
-                // If yes, uncomment the line below. Be cautious about denial-of-service.
-                // handleFailedLogin(user, ipAddress); // Optionally lock after too many MFA failures
-                throw new MfaVerificationFailedException(Constants.INVALID_MFA_CODE_MESSAGE);
-            }
-
-            // 4. MFA successful, proceed to login completion
-            log.info("MFA verification successful for user [{}]", user.getUsername());
+            // 4. MFA Block REMOVED - Proceed directly to successful login
+            log.info("Password validation successful for user [{}]. MFA step skipped (Passkey flow expected).", user.getUsername());
             String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
             return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
 
@@ -348,53 +296,53 @@ public class UserAuthenticator implements AuthenticationInterface {
         }
     }
 
-    @Override
-    public MfaToken initializeMfaToken(User user) {
-        String secret = mfaService.generateSecretKey();
-        MfaToken newToken = new MfaToken(user, secret, mfaService.isMfaEnforced(user));
-        return mfaTokenRepository.save(newToken);
-    }
-
-    @Override
-    public AuthResponse initiateMfaChallenge(User user) {
-        try {
-            MfaToken mfaToken = mfaTokenRepository.findByUser(user)
-                    .orElseGet(() -> initializeMfaToken(user)); // Ensure token exists
-
-            Map<String, Object> details = new HashMap<>();
-            details.put("mfaRequired", true);
-            String message = "MFA verification required.";
-
-            // Check if the token is enabled (meaning setup is complete)
-            if (!mfaToken.isEnabled()) {
-                // If MFA needs setup, provide QR code details
-                String qrCodeUrl = mfaService.generateQrCodeImageUrl(user, mfaToken.getSecret());
-                details.put("secret", mfaToken.getSecret()); // Send secret only during setup
-                details.put("qrCodeUrl", qrCodeUrl);
-                details.put("setupRequired", true);
-                message = "MFA setup required.";
-                log.info("Initiating MFA setup challenge for user: {}", user.getUsername());
-                auditService.logMfaChallengeInitiated(String.valueOf(user.getUserId()), user.getUsername(), httpServletRequest.getRemoteAddr());
-            } else {
-                log.info("Initiating MFA verification challenge for user: {}", user.getUsername());
-                details.put("setupRequired", false); // Explicitly state setup is not required
-                auditService.logMfaChallengeInitiated(String.valueOf(user.getUserId()), user.getUsername(), httpServletRequest.getRemoteAddr());
-            }
-
-            // Return an AuthResponse indicating MFA is needed, optionally with setup details
-            return AuthResponse.builder()
-                    .success(false) // Not fully logged in yet
-                    .mfaRequired(true)
-                    .mfaEnabled(mfaToken.isEnabled()) // Reflects if setup is done
-                    .secretImageUrl((String) details.get("qrCodeUrl")) // Null if setup not required
-                    .message(message)
-                    .details(details) // Include details map
-                    .build();
-        } catch (Exception e) {
-            log.error("Error initiating MFA challenge for user: {}", user.getUsername(), e);
-            throw new MfaException(MfaException.MfaErrorType.CHALLENGE_FAILED, "Failed to initiate MFA challenge");
-        }
-    }
+//    @Override
+//    public MfaToken initializeMfaToken(User user) {
+//        String secret = mfaService.generateSecretKey();
+//        MfaToken newToken = new MfaToken(user, secret, mfaService.isMfaEnforced(user));
+//        return mfaTokenRepository.save(newToken);
+//    }
+//
+//    @Override
+//    public AuthResponse initiateMfaChallenge(User user) {
+//        try {
+//            MfaToken mfaToken = mfaTokenRepository.findByUser(user)
+//                    .orElseGet(() -> initializeMfaToken(user)); // Ensure token exists
+//
+//            Map<String, Object> details = new HashMap<>();
+//            details.put("mfaRequired", true);
+//            String message = "MFA verification required.";
+//
+//            // Check if the token is enabled (meaning setup is complete)
+//            if (!mfaToken.isEnabled()) {
+//                // If MFA needs setup, provide QR code details
+//                String qrCodeUrl = mfaService.generateQrCodeImageUrl(user, mfaToken.getSecret());
+//                details.put("secret", mfaToken.getSecret()); // Send secret only during setup
+//                details.put("qrCodeUrl", qrCodeUrl);
+//                details.put("setupRequired", true);
+//                message = "MFA setup required.";
+//                log.info("Initiating MFA setup challenge for user: {}", user.getUsername());
+//                auditService.logMfaChallengeInitiated(String.valueOf(user.getUserId()), user.getUsername(), httpServletRequest.getRemoteAddr());
+//            } else {
+//                log.info("Initiating MFA verification challenge for user: {}", user.getUsername());
+//                details.put("setupRequired", false); // Explicitly state setup is not required
+//                auditService.logMfaChallengeInitiated(String.valueOf(user.getUserId()), user.getUsername(), httpServletRequest.getRemoteAddr());
+//            }
+//
+//            // Return an AuthResponse indicating MFA is needed, optionally with setup details
+//            return AuthResponse.builder()
+//                    .success(false) // Not fully logged in yet
+//                    .mfaRequired(true)
+//                    .mfaEnabled(mfaToken.isEnabled()) // Reflects if setup is done
+//                    .secretImageUrl((String) details.get("qrCodeUrl")) // Null if setup not required
+//                    .message(message)
+//                    .details(details) // Include details map
+//                    .build();
+//        } catch (Exception e) {
+//            log.error("Error initiating MFA challenge for user: {}", user.getUsername(), e);
+//            throw new MfaException(MfaException.MfaErrorType.CHALLENGE_FAILED, "Failed to initiate MFA challenge");
+//        }
+//    }
 
     @Override
     @Transactional // Ensure all operations succeed or fail together
