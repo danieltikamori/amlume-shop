@@ -1,3 +1,4 @@
+// C:/Users/itiro/OneDrive/code/src/github.com/danieltikamori/amlume-shop/src/main/java/me/amlu/shop/amlume_shop/notification/service/SlackClient.java
 /*
  * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
  *
@@ -12,10 +13,6 @@ package me.amlu.shop.amlume_shop.notification.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +21,6 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -126,34 +122,3 @@ public class SlackClient {
 // Slack webhooks documentation:
 //https://api.slack.com/messaging/webhooks
 
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-class SlackMessage {
-    private String text;
-    @Builder.Default
-    private List<SlackBlock> blocks = new ArrayList<>();
-
-    public SlackMessage(String text) {
-        this.text = text;
-    }
-}
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-class SlackBlock {
-    private String type;
-    private SlackText text;
-}
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-class SlackText {
-    private String type;
-    private String text;
-}
