@@ -37,7 +37,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Duration;
 
-@Component
+
+// Disabled as authentication is being handled by Keycloak
+//@Component
 public class CustomAuthenticationFilter extends OncePerRequestFilter {
     private final AuthenticationManager authenticationManager;
     private final ObjectMapper objectMapper;
