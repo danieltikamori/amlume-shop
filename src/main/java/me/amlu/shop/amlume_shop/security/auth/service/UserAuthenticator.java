@@ -8,31 +8,31 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.security.auth.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.security.model.MfaToken;
-import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.auth_management.dto.AuthResponse;
 import me.amlu.shop.amlume_shop.auth_management.dto.LoginRequest;
-import me.amlu.shop.amlume_shop.security.dto.MfaVerificationRequest;
-import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
-import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
+import me.amlu.shop.amlume_shop.commons.Constants;
+import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
+import me.amlu.shop.amlume_shop.security.model.MfaToken;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
-import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
+import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
+import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.security.service.*;
 import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserService;
+import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;

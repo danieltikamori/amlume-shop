@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.service;
+package me.amlu.shop.amlume_shop.security.auth.service;
 
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.commons.Constants;
@@ -79,7 +79,7 @@ public interface AuthenticationInterface {
      * @param user The user to initialize MFA for.
      * @return The newly created MfaToken entity.
      */
-    MfaToken initializeMfaToken(User user);
+//    MfaToken initializeMfaToken(User user);
 
     /**
      * Initiates the MFA challenge phase for a user.
@@ -88,7 +88,7 @@ public interface AuthenticationInterface {
      * @param user The user undergoing MFA.
      * @return AuthResponse indicating MFA requirement and potentially setup details.
      */
-    AuthResponse initiateMfaChallenge(User user);
+//    AuthResponse initiateMfaChallenge(User user);
 
     /**
      * Verifies the provided MFA code and completes the login process if valid.
@@ -99,7 +99,7 @@ public interface AuthenticationInterface {
      * @throws TooManyAttemptsException If MFA verification attempts does exceed limits.
      * @throws AuthenticationFailException If verification fails due to invalid code, locking, or internal errors.
      */
-    AuthResponse verifyMfaAndLogin(MfaVerificationRequest request, String ipAddress) throws TooManyAttemptsException, AuthenticationFailException;
+//    AuthResponse verifyMfaAndLogin(MfaVerificationRequest request, String ipAddress) throws TooManyAttemptsException, AuthenticationFailException;
 
     // --- Login Flow Helpers ---
 
