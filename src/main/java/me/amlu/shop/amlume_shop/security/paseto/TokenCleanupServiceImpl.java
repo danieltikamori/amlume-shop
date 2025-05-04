@@ -10,8 +10,9 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.security.repository.RevokedTokenRepository;
+import org.slf4j.Logger;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -20,16 +21,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
-@Slf4j
 @Service
 public class TokenCleanupServiceImpl implements TokenCleanupService {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TokenCleanupServiceImpl.class);
     private final RevokedTokenRepository revokedTokenRepository;
     private final TokenCleanupService self; // Keep for self-injection for @Async/@Transactional
 
-    // Updated constructor - Removed Cache parameters
     public TokenCleanupServiceImpl(RevokedTokenRepository revokedTokenRepository,
-                                   TokenCleanupService self) {
+                                   @Lazy TokenCleanupService self) {
         this.revokedTokenRepository = revokedTokenRepository;
         this.self = self;
     }
@@ -60,7 +60,7 @@ public class TokenCleanupServiceImpl implements TokenCleanupService {
             log.debug("Deleting revoked token records from database where revokedAt is before {}", cutoff);
 
             // Delete old revocation records from the database based on when they were revoked
-            long deletedCount = revokedTokenRepository.deleteByRevokedAtBefore(cutoff);
+            int deletedCount = revokedTokenRepository.deleteByRevokedAtBefore(cutoff);
 
             // NOTE: The Redis/Valkey entries for revoked tokens expire automatically
             // based on the TTL set in TokenRevocationServiceImpl.

@@ -10,94 +10,201 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import com.maxmind.db.InvalidDatabaseException;
 import com.maxmind.geoip2.DatabaseReader;
+import com.maxmind.geoip2.exception.AddressNotFoundException;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
+import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.model.CountryResponse;
-import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import me.amlu.shop.amlume_shop.security.config.properties.GeoIp2Properties;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.DependsOn;
+// Removed @Value and Resource imports as path comes from properties now
 import org.springframework.stereotype.Service;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
+/**
+ * MaxMind GeoIP2 service for IP geolocation and ASN lookups.
+ * <p>
+ * This service uses the MaxMind GeoIP2 database to provide geolocation information based on IP addresses.
+ * It supports city, country, and ASN lookups.
+ * <p>
+ * The database files are expected to be downloaded and available at the specified paths in the configuration.
+ * Failures to load the database files will be logged, and the service will handle these cases gracefully.
+ */
+@DependsOn("geoIpDatabaseDownloader") // Ensures downloader runs first
 @Service
 public class MaxMindGeoService {
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(MaxMindGeoService.class);
 
-    @Value("${geoip.database.path}")
-    private Resource geoipDatabase;
+    private static final Logger log = LoggerFactory.getLogger(MaxMindGeoService.class);
 
-    private DatabaseReader reader;
+    // Make readers final but initialize conditionally
+    private final DatabaseReader cityReader;
+    // Add other readers if used (ASN, Country)
+     private final DatabaseReader asnReader;
+     private final DatabaseReader countryReader;
 
-    @PostConstruct
-    public void init() throws IOException {
-        File database = geoipDatabase.getFile();
-        reader = new DatabaseReader.Builder(database).build();
+    // Constructor now handles potential missing files gracefully
+    public MaxMindGeoService(GeoIp2Properties properties) {
+        log.info("Initializing MaxMindGeoService...");
+
+        // --- Initialize City Reader ---
+        this.cityReader = initializeReader(properties.getCityDatabase().getPath(), "City");
+
+        // --- Initialize other readers similarly ---
+         this.asnReader = initializeReader(properties.getAsnDatabase().getPath(), "ASN");
+         this.countryReader = initializeReader(properties.getCountryDatabase().getPath(), "Country");
+
+        log.info("MaxMindGeoService initialization complete.");
     }
 
-    @PreDestroy
-    public void cleanup() throws IOException {
-        if (reader != null) {
-            reader.close();
+    /**
+     * Helper method to initialize a DatabaseReader safely.
+     *
+     * @param pathStr Path to the database file from properties.
+     * @param dbType  Type of database for logging (e.g., "City", "ASN").
+     * @return Initialized DatabaseReader or null if initialization fails.
+     */
+    private DatabaseReader initializeReader(String pathStr, String dbType) {
+        Path dbPath = null;
+        try {
+            dbPath = Paths.get(pathStr);
+            if (Files.exists(dbPath) && Files.isReadable(dbPath)) {
+                DatabaseReader reader = new DatabaseReader.Builder(dbPath.toFile()).build();
+                log.info("Successfully loaded GeoIP2 {} database from: {}", dbType, dbPath);
+                return reader;
+            } else {
+                // File doesn't exist or isn't readable
+                log.error("GeoIP2 {} database file not found or not readable at: {}. {} lookups will be unavailable.", dbType, dbPath, dbType);
+                return null; // Indicate failure to load
+            }
+        } catch (IOException e) {
+            log.error("IOException initializing GeoIP2 {} database reader from {}: {}", dbType, dbPath, e.getMessage());
+            return null; // Indicate failure to load
+        } catch (Exception e) {
+            // Catch InvalidPathException or other errors during Paths.get or Builder
+            log.error("Unexpected error initializing GeoIP2 {} database reader for path '{}': {}", dbType, pathStr, e.getMessage());
+            return null; // Indicate failure to load
         }
     }
 
+    // Removed @PostConstruct init() method as initialization is in constructor
+
+    @PreDestroy
+    public void cleanup() {
+        closeReader(cityReader, "City");
+        // closeReader(asnReader, "ASN");
+        // closeReader(countryReader, "Country");
+    }
+
+    private void closeReader(DatabaseReader reader, String dbType) {
+        if (reader != null) {
+            try {
+                reader.close();
+                log.info("Closed GeoIP2 {} database reader.", dbType);
+            } catch (IOException e) {
+                log.warn("Error closing GeoIP2 {} database reader: {}", dbType, e.getMessage());
+            }
+        }
+    }
+
+    // --- Service Methods Now Check for Null Readers ---
+
     public String getCountryCode(String ip) {
+        // Assuming Country lookups use the City reader or a dedicated countryReader
+        DatabaseReader readerToCheck = cityReader; // Or countryReader if you have one
+        if (readerToCheck == null) {
+            log.warn("GeoIP database unavailable for Country lookup for IP {}", ip);
+            return "XX"; // Unknown country code
+        }
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
-            CountryResponse response = reader.country(ipAddress);
+            // Use the appropriate reader method (country() or city())
+            CountryResponse response = readerToCheck.country(ipAddress);
             return response.getCountry().getIsoCode();
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting country code for IP: {}", ip, e);
-            return "XX"; // Unknown country code
+            return "XX"; // Unknown country code on error
         }
     }
 
-
     public GeoLocation getGeoLocation(String ip) {
+        if (this.cityReader == null) {
+            log.warn("GeoIP City database unavailable, returning unknown location for IP {}", ip);
+            return GeoLocation.unknown();
+        }
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
-            CityResponse response = reader.city(ipAddress);
+            CityResponse response = cityReader.city(ipAddress); // Use the initialized reader
+
+            // Check for null response components before accessing them
+            String countryCode = (response.getCountry() != null) ? response.getCountry().getIsoCode() : null;
+            String countryName = (response.getCountry() != null) ? response.getCountry().getName() : null;
+            String cityName = (response.getCity() != null) ? response.getCity().getName() : null;
+            String postalCode = (response.getPostal() != null) ? response.getPostal().getCode() : null;
+            Double latitude = (response.getLocation() != null) ? response.getLocation().getLatitude() : null;
+            Double longitude = (response.getLocation() != null) ? response.getLocation().getLongitude() : null;
+            String timeZone = (response.getLocation() != null) ? response.getLocation().getTimeZone() : null;
+            String subdivisionName = (response.getMostSpecificSubdivision() != null) ? response.getMostSpecificSubdivision().getName() : null;
+            String subdivisionCode = (response.getMostSpecificSubdivision() != null) ? response.getMostSpecificSubdivision().getIsoCode() : null;
 
             return GeoLocation.builder()
-                    .countryCode(response.getCountry().getIsoCode())
-                    .countryName(response.getCountry().getName())
-                    .city(response.getCity().getName())
-                    .postalCode(response.getPostal().getCode())
-                    .latitude(response.getLocation().getLatitude())
-                    .longitude(response.getLocation().getLongitude())
-                    .timeZone(response.getLocation().getTimeZone())
-                    .subdivisionName(response.getMostSpecificSubdivision().getName())
-                    .subdivisionCode(response.getMostSpecificSubdivision().getIsoCode())
+                    .countryCode(countryCode)
+                    .countryName(countryName)
+                    .city(cityName)
+                    .postalCode(postalCode)
+                    .latitude(latitude)
+                    .longitude(longitude)
+                    .timeZone(timeZone)
+                    .subdivisionName(subdivisionName)
+                    .subdivisionCode(subdivisionCode)
                     .build();
 
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting geolocation for IP: {}", ip, e);
-            return GeoLocation.unknown();
+            return GeoLocation.unknown(); // Return unknown on error
         }
     }
 
     public boolean isIpInCountry(String ip, String countryCode) {
+        // Assuming Country lookups use the City reader or a dedicated countryReader
+        DatabaseReader readerToCheck = cityReader; // Or countryReader
+        if (readerToCheck == null) {
+            log.warn("GeoIP database unavailable for isIpInCountry check for IP {}", ip);
+            return false; // Cannot confirm if unavailable
+        }
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
-            CityResponse response = reader.city(ipAddress);
-            return countryCode.equals(response.getCountry().getIsoCode());
+            // Use the appropriate reader method
+            CountryResponse response = readerToCheck.country(ipAddress);
+            return countryCode != null && response.getCountry() != null && countryCode.equals(response.getCountry().getIsoCode());
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error checking country for IP: {}", ip, e);
-            return false;
+            return false; // Assume false on error
         }
     }
 
+    // getDistance methods remain the same as they rely on getGeoLocation which now handles null readers
     public double getDistance(String ip1, String ip2) {
         try {
-            GeoLocation loc1 = getGeoLocation(ip1);
-            GeoLocation loc2 = getGeoLocation(ip2);
+            GeoLocation loc1 = getGeoLocation(ip1); // Already handles null reader
+            GeoLocation loc2 = getGeoLocation(ip2); // Already handles null reader
+
+            // Check if locations could be determined
+            if (loc1 == null || loc1.getLatitude() == null || loc1.getLongitude() == null ||
+                    loc2 == null || loc2.getLatitude() == null || loc2.getLongitude() == null) {
+                log.warn("Cannot calculate distance between IPs {} and {}: Geolocation data unavailable.", ip1, ip2);
+                return -1; // Indicate failure
+            }
 
             return calculateDistance(
                     loc1.getLatitude(), loc1.getLongitude(),
@@ -124,7 +231,7 @@ public class MaxMindGeoService {
     }
 
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        // Haversine formula
+        // Haversine formula (implementation remains the same)
         final int R = 6371; // Earth's radius in kilometers
 
         double latDistance = Math.toRadians(lat2 - lat1);
@@ -139,20 +246,42 @@ public class MaxMindGeoService {
         return R * c;
     }
 
-//    public GeoLocation getCountryAndContinentGeoLocation(String ip) {
-//        try {
-//            InetAddress ipAddress = InetAddress.getByName(ip);
-//            CountryResponse response = reader.country(ipAddress);
-//
-//            return GeoLocation.builder()
-//                    .countryCode(response.getCountry().getIsoCode())
-//                    .countryName(response.getCountry().getName())
-//                    .continent(response.getContinent().getName())
-//                    .build();
-//        } catch (IOException | GeoIp2Exception e) {
-//            log.error("Error getting geolocation for IP: {}", ip, e);
-//            return GeoLocation.unknown();
-//        }
-//    }
-}
+    public AsnResponse getAsn(InetAddress ipAddress) {
+        if (this.asnReader == null) {
+            log.warn("GeoIP ASN database unavailable, returning null for IP {}", ipAddress);
+            return null; // Return null if ASN reader is not available
+        }
+        try {
+            return this.asnReader.asn(ipAddress);
+        }
+        catch (AddressNotFoundException e) {
+            log.debug("ASN not found in database for IP: {}", ipAddress);
+            return null; // Expected case: IP valid but not in DB
+        } catch (InvalidDatabaseException e) {
+            log.error("Invalid GeoIP2 ASN database configured.", e);
+            return null; // Return null on invalid database
+        } catch (IOException | GeoIp2Exception e) {
+            log.error("Error getting ASN for IP: {}", ipAddress, e);
+            return null; // Return null on error
+        }
+    }
 
+    public CityResponse getCity(InetAddress ipAddress) {
+        if (this.cityReader == null) {
+            log.warn("GeoIP City database unavailable, returning null for IP {}", ipAddress);
+            return null; // Return null if city reader is not available
+        }
+        try {
+            return this.cityReader.city(ipAddress);
+        } catch (AddressNotFoundException e) {
+            log.debug("City not found in database for IP: {}", ipAddress);
+            return null; // Expected case: IP valid but not in DB
+        } catch (InvalidDatabaseException e) {
+            log.error("Invalid GeoIP2 City database configured.", e);
+            return null; // Return null on invalid database
+        } catch (IOException | GeoIp2Exception e) {
+            log.error("Error getting city for IP: {}", ipAddress, e);
+            return null; // Return null on error
+        }
+    }
+}

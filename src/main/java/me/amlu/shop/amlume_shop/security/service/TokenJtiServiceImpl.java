@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
 import org.springframework.data.redis.core.RedisTemplate;
 
 import java.time.Duration;
@@ -18,11 +18,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 
-@Slf4j
 public class TokenJtiServiceImpl implements TokenJtiService {
 
     // Define a prefix for JTI keys in Redis
     private static final String JTI_KEY_PREFIX = "jti:";
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TokenJtiServiceImpl.class);
 
     private final RedisTemplate<String, String> redisTemplate; // Using <String, String> as value is not important
     private final ExecutorService virtualThreadExecutor;

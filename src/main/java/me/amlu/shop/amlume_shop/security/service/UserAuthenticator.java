@@ -16,19 +16,19 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
-import me.amlu.shop.amlume_shop.payload.user.AuthResponse;
-import me.amlu.shop.amlume_shop.payload.user.LoginRequest;
-import me.amlu.shop.amlume_shop.payload.user.MfaVerificationRequest;
-import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
-import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.security.model.MfaToken;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.auth_management.dto.AuthResponse;
+import me.amlu.shop.amlume_shop.auth_management.dto.LoginRequest;
+import me.amlu.shop.amlume_shop.security.dto.MfaVerificationRequest;
+import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
+import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
+import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
-import me.amlu.shop.amlume_shop.service.CacheService;
+import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
@@ -38,6 +38,7 @@ import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
@@ -99,8 +100,8 @@ public class UserAuthenticator implements AuthenticationInterface {
                              PasswordEncoder passwordEncoder,
                              MfaService mfaService,
                              MfaTokenRepository mfaTokenRepository,
-                             PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
-                             TokenRevocationService tokenRevocationService) {
+                             @Lazy PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
+                             @Lazy TokenRevocationService tokenRevocationService) {
         this.cacheService = cacheService;
         this.captchaService = captchaService;
         this.meterRegistry = meterRegistry;

@@ -16,7 +16,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse; // Use the provided ErrorResponse
+import me.amlu.shop.amlume_shop.dto.ErrorResponse; // Use the provided ErrorResponse
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims; // Import claim constants
 import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
 // Removed User import as we primarily use userId string
@@ -26,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -68,13 +69,15 @@ public class DeviceFingerprintVerificationFilter extends OncePerRequestFilter {
         }
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        // Should already be authenticated by a previous filter (e.g., PasetoAuthenticationFilter)
-        if (authentication == null || !authentication.isAuthenticated()) {
-            log.warn("DeviceFingerprintVerificationFilter executed but no authenticated user found for URI: {}", request.getRequestURI());
-            // This shouldn't happen if filter order is correct, but handle defensively
-            sendErrorResponse(response, HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Authentication required.");
+
+        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
+            // User is anonymous or not authenticated, skip fingerprint check
+            filterChain.doFilter(request, response);
             return;
         }
+
+        // Proceed with fingerprint logic only for authenticated users
+        Object details = authentication.getDetails();
 
         String userId = null; // Initialize to null
         String tokenFingerprint; // Initialize to null
@@ -83,17 +86,26 @@ public class DeviceFingerprintVerificationFilter extends OncePerRequestFilter {
             // --- Extract userId and fingerprint from Authentication details (assuming a claims map) ---
             // CRITICAL ASSUMPTION: Assumes PasetoAuthenticationFilter (or equivalent)
             // stores the parsed token claims map in authentication.setDetails(claimsMap).
-            if (authentication.getDetails() instanceof Map claimsMap) {
+
+            // Verifying type
+            if (details instanceof Map) {
+                Map<String, Object> detailsMap = (Map<String, Object>) details;
                 // Use PasetoClaims constants for claim names
-                userId = (String) claimsMap.get(PasetoClaims.SUBJECT);
-                tokenFingerprint = (String) claimsMap.get(PasetoClaims.DEVICE_FINGERPRINT);
+                userId = (String) detailsMap.get(PasetoClaims.SUBJECT);
+                tokenFingerprint = (String) detailsMap.get(PasetoClaims.DEVICE_FINGERPRINT);
                 log.trace("Extracted userId '{}' and fingerprint '{}' from Authentication details map.",
                         userId, tokenFingerprint != null ? "present" : "missing");
             } else {
-                // If details are not a map, we cannot extract the necessary info this way.
-                log.error("Authentication details are not a Map. Cannot extract device fingerprint. Details type: {}",
-                        authentication.getDetails() != null ? authentication.getDetails().getClass().getName() : "null");
-                sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "CONFIG_ERROR", "Internal authentication configuration error (details).");
+                // If details are not a map, we cannot extract the necessary info this way. Skip the filter.
+                log.warn("Authentication details are not a Map. Skipping device fingerprint verification. Details type: {}", (details != null ? details.getClass().getName() : "null"));
+
+                // Depending on your security policy, you might:
+                // 1. Allow the request (if fingerprint is optional)
+                // 2. Deny the request (if fingerprint is mandatory for authenticated users)
+                // If denying:
+                // response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid authentication details for fingerprint verification.");
+                // return;
+//                sendErrorResponse(response, HttpStatus.INTERNAL_SERVER_ERROR, "CONFIG_ERROR", "Internal authentication configuration error (details).");
                 return;
             }
 

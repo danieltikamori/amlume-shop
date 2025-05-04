@@ -10,10 +10,11 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.exceptions.TokenRefreshException;
-import me.amlu.shop.amlume_shop.payload.TokenResponse;
+import me.amlu.shop.amlume_shop.security.dto.TokenResponse;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
@@ -26,18 +27,36 @@ import org.springframework.web.client.RestTemplate;
 import java.time.Duration;
 import java.time.Instant;
 
-@Service
-@Slf4j
-public class HCPTokenService {
-    private static final String TOKEN_ENDPOINT = "https://auth.idp.hashicorp.com/oauth2/token";
-    private String accessToken;
-    private Instant tokenExpiration;
+/**
+ * IMPORTANT: This class is working correctly, but dependant the HCPSecretsService is not fully functional.
+ * <p>
+ * Service to handle HCP token management.
+ * This service is responsible for obtaining and refreshing the HCP access token.
+ * It uses the client credentials grant type to authenticate with the HCP OAuth2 server.
+ */
 
+@Profile({"!local", "!prod", "!docker", "!kubernetes"}) // Only active in profiles other than "local" and others listed
+//@Profile({"!local","!test"}) // Only active in profiles other than "local" and "test"
+@Service
+public class HCPTokenService {
+
+    // TODO: SECURITY - Move HCP credentials to Vault (e.g., secret/amlume-shop/hcp)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., HcpProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
     @Value("${HCP_CLIENT_ID}")
     private String clientId;
 
+    // TODO: SECURITY - Move HCP credentials to Vault (e.g., secret/amlume-shop/hcp)
+    //       and inject via a dedicated @ConfigurationProperties bean (e.g., HcpProperties)
+    //       populated by Spring Cloud Vault instead of using @Value.
     @Value("${HCP_CLIENT_SECRET}")
     private String clientSecret;
+
+    private static final String TOKEN_ENDPOINT = "https://auth.idp.hashicorp.com/oauth2/token";
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(HCPTokenService.class);
+
+    private String accessToken;
+    private Instant tokenExpiration;
 
     private final RestTemplate restTemplate;
 
@@ -60,6 +79,12 @@ public class HCPTokenService {
             requestBody.add("grant_type", "client_credentials");
             requestBody.add("audience", "https://api.hashicorp.cloud");
 
+//            // --- TEMPORARY_DEBUGGING - REMOVE ---
+//                    log.info("Attempting to refresh HCP token. Client ID loaded: {}, Client Secret loaded: {}",
+//                            (clientId != null && !clientId.isBlank()),
+//                            (clientSecret != null && !clientSecret.isBlank()));
+//            // --- END_DEBUGGING ---
+
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
 
@@ -72,10 +97,15 @@ public class HCPTokenService {
             if (response.getBody() != null) {
                 this.accessToken = response.getBody().accessToken();
                 this.tokenExpiration = Instant.now().plusSeconds(response.getBody().expiresIn());
+
+//                // --- TEMPORARY_DEBUGGING - REMOVE ---
+//                        log.info("Successfully refreshed HCP access token. Expires at: {}", this.tokenExpiration); // Log success
+//                        // --- END_DEBUGGING ---
             } else {
                 log.error("Empty response body when refreshing token");
                 throw new TokenRefreshException("Empty response body when refreshing token");
             }
+
 
         } catch (HttpClientErrorException e) {
             log.error("Failed to refresh HCP token due to client error: {}", e.getStatusCode(), e);

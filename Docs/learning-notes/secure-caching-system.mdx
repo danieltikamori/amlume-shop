@@ -1,0 +1,179 @@
+## Secure Caching System Implementation with Valkey
+
+This document outlines the steps and considerations for implementing a secure caching system using Valkey, aligning with the decision to use Vault/Keycloak and prioritizing the security of sensitive data, especially concerning payment gateway integration.
+
+**Core Security Principle: Minimize Attack Surface**
+
+The most secure approach for highly sensitive secrets (payment gateway API keys, private signing keys, database credentials) is generally to **avoid caching them in an external system like Valkey/Redis**, particularly if that system lacks rigorous security measures.
+
+### Recommendation 1: Do NOT Cache Highly Sensitive Secrets in Valkey
+
+1.  **Rationale:**
+    * **Reduces Exposure:** Secrets fetched from Vault/HCP reside in the application's memory only for the necessary duration, preventing persistent storage in another system (Valkey's memory/disk).
+    * **Leverages Vault Security:** Relies on Vault's established security features (TLS, Authentication, ACLs, Auditing) as the primary safeguard for sensitive data.
+    * **Simplifies Cache Security:** Eliminates the need to apply the highest levels of security (encryption at rest/transit) to the Valkey cache if it doesn't hold critical secrets.
+
+2.  **Implementation:**
+    * **Remove Caching from `HCPSecretsService`:** Delete the `@Cacheable` and `@CacheEvict` annotations from the `getSecret` method in `HCPSecretsService`. This method should always fetch secrets directly from HCP, utilizing its existing retry and circuit breaker logic. The `refreshSecrets` method is likely redundant in its current form.
+    * **Rely on Spring Cloud Vault:** For secrets managed in our Docker Vault instance, ensure correct configuration of `spring-cloud-starter-vault-config` in `bootstrap.yml`. Spring Cloud Vault handles fetching secrets and making them available as properties. It often employs its own internal caching/refresh mechanisms that are generally more secure than external caching. Verify that `PasetoProperties` (if retained for non-PASETO secrets) and other `@Value` annotations are populated via Spring Cloud Vault, **not** through environment variables with default values (`${VAR:}`).
+    * **On-Demand Fetch with Resilience:** When direct retrieval via `VaultService` or `HCPSecretsService` is necessary, depend on the existing Resilience4j patterns (`@Retry`, `@CircuitBreaker`) within those services to manage temporary unavailability of the secret source.
+
+### Recommendation 2: Secure Valkey for Caching Less Sensitive Data
+
+Our application caches less sensitive data such as ASN lookups (`CachingAsnService`) and potentially token claims (`TokenCacheServiceImpl`). Caching this data in Valkey can improve performance, provided the Valkey instance itself is adequately secured.
+
+Here's how to secure the Valkey instance:
+
+1.  **Enable Authentication:**
+    * **Valkey Configuration (`docker-compose.yaml`):** Add a `command` to set a strong password for Valkey.
+        ```yaml
+        services:
+          valkey-cache:
+            image: valkey/valkey:latest
+            ports:
+              # Remove this unless external access is absolutely necessary for debugging
+              # - "6379:6379"
+            networks:
+              - amlume-shop-network
+            volumes:
+              # Consider removing or encrypting this volume if persistence is not needed
+              # - valkey_data:/data
+            command: valkey-server --requirepass your_strong_password
+        ```
+    * **Spring Boot Configuration (`application.yml` or `bootstrap.yml`):** Provide the Valkey password in the Spring Boot configuration.
+        ```yaml
+        spring:
+          data:
+            redis:
+              host: valkey-cache
+              port: 6379
+              password: your_strong_password
+        ```
+    * **`ValkeyCacheConfig.java`:** Ensure the `RedisStandaloneConfiguration` bean uses the configured password.
+        ```java
+        @Configuration
+        public class ValkeyCacheConfig {
+
+            @Bean
+            public RedisStandaloneConfiguration redisStandaloneConfiguration(@Value("<span class="math-inline">\{spring\.<1\>data\.redis\.host\}"\) String host,
+@Value\("</span>{spring.data.redis.port}") int port,
+                                                                           @Value("${spring.data.redis.password}") String password) {
+                RedisStandaloneConfiguration config = new RedisStandaloneConfiguration();
+                config.setHostName(host);
+                config.setPort(port);
+                config.setPassword(password);
+                return config;
+            }
+
+            // ... other configurations ...
+        }
+        ```
+
+2.  **Enable Encryption in Transit (TLS):** This requires more involved configuration but is crucial for high security.
+    * **Generate Certificates:** Create TLS certificates (e.g., using `openssl` or a proper Certificate Authority). For local development, self-signed certificates might suffice but necessitate client trust configuration.
+    * **Valkey Configuration (`docker-compose.yaml` / `valkey.conf`):** Configure Valkey to use the generated TLS certificates. This typically involves specifying the paths to the certificate and private key files. Refer to the Valkey documentation for TLS configuration.
+    * **`ValkeyCacheConfig.java`:** Configure the `LettuceConnectionFactory` to use TLS. This often involves creating `RedisSslConfiguration` with the necessary certificate details.
+        ```java
+        @Configuration
+        public class ValkeyCacheConfig {
+
+            // ... redisStandaloneConfiguration bean ...
+
+            @Bean
+            public LettuceConnectionFactory redisConnectionFactory(RedisStandaloneConfiguration redisStandaloneConfiguration,
+                                                                   @Value("<span class="math-inline">\{spring\.redis\.ssl\.enabled\:false\}"\) boolean sslEnabled,
+@Value\("</span>{spring.redis.ssl.key-store}") Optional<String> keyStorePath,
+                                                                   @Value("<span class="math-inline">\{spring\.redis\.ssl\.key\-store\-password\}"\) Optional<String\> keyStorePassword,
+@Value\("</span>{spring.redis.ssl.trust-store}") Optional<String> trustStorePath,
+                                                                   @Value("${spring.redis.ssl.trust-store-password}") Optional<String> trustStorePassword) {
+                LettuceClientConfiguration.LettuceClientConfigurationBuilder clientConfigBuilder = LettuceClientConfiguration.builder();
+                if (sslEnabled) {
+                    RedisSslConfiguration sslConfig = new RedisSslConfiguration();
+                    keyStorePath.ifPresent(sslConfig::setKeyStore);
+                    keyStorePassword.ifPresent(sslConfig::setKeyStorePass);
+                    trustStorePath.ifPresent(sslConfig::setTrustStore);
+                    trustStorePassword.ifPresent(sslConfig::setTrustStorePass);
+                    clientConfigBuilder.useSsl(sslConfig);
+                }
+                return new LettuceConnectionFactory(redisStandaloneConfiguration, clientConfigBuilder.build());
+            }
+
+            // ... RedisTemplate and other configurations ...
+        }
+        ```
+    * **Spring Boot Configuration (`application.yml`):** Configure the SSL-related properties.
+        ```yaml
+        spring:
+          redis:
+            ssl:
+              enabled: true
+              key-store: classpath:your_client.jks # Path to your client keystore
+              key-store-password: your_keystore_password
+              trust-store: classpath:your_truststore.jks # Path to your truststore
+              trust-store-password: your_truststore_password
+        ```
+
+3.  **Enable Encryption at Rest (Disk):**
+    * **Option A (Recommended if purely cache): Disable Persistence.** Modify the `command` in `docker-compose.yaml` to include `--appendonly no` and remove any `save` directives (or configure this in `valkey.conf`).
+        ```yaml
+        services:
+          valkey-cache:
+            # ... other configurations ...
+            command: valkey-server --requirepass your_strong_password --appendonly no
+            volumes:
+              # Consider removing this volume entirely
+              # - valkey_data:/data
+        ```
+    * **Option B (If persistence needed): Encrypt Host Volume.** Utilize OS-level disk encryption (LUKS on Linux, BitLocker on Windows, FileVault on macOS) for the Docker volume mount point associated with `valkey_data` on the host machine. This will encrypt the AOF/RDB files on the underlying storage.
+
+4.  **Secure Network:**
+    * **`docker-compose.yaml`:** Remove the `ports` mapping for `valkey-cache` unless absolutely necessary for external access (e.g., during debugging). Rely on the internal Docker network (`amlume-shop-network`) for communication between your application containers and the Valkey container.
+    * **Firewall:** If the host running Docker is publicly accessible, ensure host-level firewall rules restrict access to the Valkey port (even the TLS port, if enabled) only from trusted sources, such as your application servers.
+
+5.  **Review Serialization (`ValkeyCacheConfig.java`):**
+    * **Disable Default Typing:** Remove or comment out the `activateDefaultTyping` call on the `ObjectMapper` used within `GenericJackson2JsonRedisSerializer`. This is a critical security hardening measure that prevents potential deserialization vulnerabilities. Caching simple strings (like ASN) or specific, known object types generally does not require polymorphic typing.
+        ```java
+        @Configuration
+        public class ValkeyCacheConfig {
+
+            @Bean
+            public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+                RedisTemplate<String, Object> template = new RedisTemplate<>();
+                template.setConnectionFactory(redisConnectionFactory);
+                StringRedisSerializer stringSerializer = new StringRedisSerializer();
+                template.setKeySerializer(stringSerializer);
+                Jackson2JsonRedisSerializer<Object> jackson2JsonRedisSerializer = new Jackson2JsonRedisSerializer<>(objectMapper());
+                template.setValueSerializer(jackson2JsonRedisSerializer);
+                template.setHashKeySerializer(stringSerializer);
+                template.setHashValueSerializer(jackson2JsonRedisSerializer);
+                return template;
+            }
+
+            @Bean
+            public ObjectMapper objectMapper() {
+                ObjectMapper mapper = new ObjectMapper();
+                mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+                mapper.registerModule(new Jdk8Module());
+                mapper.registerModule(new JavaTimeModule());
+                // IMPORTANT: Disable default typing for security
+                // mapper.activateDefaultTyping(mapper.getPolymorphicTypeValidator(), ObjectMapper.DefaultTyping.NON_FINAL);
+                return mapper;
+            }
+
+            // ... other configurations ...
+        }
+        ```
+
+### Impact on Existing Services:
+
+* **`HCPSecretsService`:** Caching annotations (`@Cacheable`, `@CacheEvict`) should be removed as per Recommendation 1.
+* **`TokenCacheServiceImpl`:** This service uses `RedisTemplate` directly. It will automatically utilize the secured connection factory configured in `ValkeyCacheConfig` (Authentication, TLS). No direct code changes are needed within this service, but ensure the underlying connection is properly secured.
+* **`CachingAsnService`:** This service uses `@Cacheable(Constants.ASN_CACHE)`. It will automatically use the secured cache manager configured in `ValkeyCacheConfig`. No direct code changes are needed within this service, but ensure the underlying connection is properly secured.
+
+### Summary:
+
+1.  **Prioritize:** Avoid caching highly sensitive secrets (API keys, private keys) in Valkey. Fetch them from Vault/HCP on demand using resilient methods.
+2.  **Secure Valkey:** For caching less sensitive data (ASN, token claims), implement strong Authentication and enable TLS for the Valkey connection.
+3.  **Encrypt at Rest:** Either disable Valkey persistence entirely or encrypt the host volume where Valkey's data resides.
+4.  **Harden:** Remove default typing from the Jackson serialization used for caching and restrict network access to the Valkey instance.
+5.  **Update Configuration:** Modify `ValkeyCacheConfig.java`, `docker-compose.yaml`, and relevant `application.yml` or `bootstrap.yml` files to reflect these security measures.

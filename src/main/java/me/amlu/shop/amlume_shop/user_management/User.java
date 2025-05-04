@@ -10,12 +10,13 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.model.RefreshToken;
-import me.amlu.shop.amlume_shop.model.address.Address;
+import me.amlu.shop.amlume_shop.security.model.RefreshToken;
 import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.user_management.address.Address;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -28,10 +29,10 @@ import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "_users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "user_name"),
+        @UniqueConstraint(columnNames = "username"),
         @UniqueConstraint(columnNames = "user_email")
 }, indexes = {
-        @Index(name = "idx_user_name", columnList = "user_name"),
+        @Index(name = "idx_username", columnList = "username"),
         @Index(name = "idx_user_email", columnList = "user_email"),
 //        @Index(name = "idx_user_orders", columnList = "user_orders")
 })
@@ -45,28 +46,74 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "user_id")
     private Long userId;
 
+    @Column(name = "keycloak_id", unique = true, nullable = false)
+    private String keycloakId;
+
     @Embedded
+    // Override the column name for the 'username' field within AuthenticationInfo
+    @AttributeOverrides({
+            @AttributeOverride(name = "username.username", column = @Column(name = "username", nullable = false, unique = true)), // Assuming Username VO has 'username' field
+            // Add override for password if you need a specific column name, e.g.:
+            @AttributeOverride(name = "password.password", column = @Column(name = "userpassword", nullable = false, length = 128)) // Assuming UserPassword VO has 'password' field
+    })
     private AuthenticationInfo authenticationInfo; // Set via constructor/builder
 
+    // Override the column name for the 'userEmail' field within ContactInfo
+    @AttributeOverrides({
+            @AttributeOverride(name = "userEmail.email", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
+            @AttributeOverride(name = "firstName", column = @Column(name = "first_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "lastName", column = @Column(name = "last_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
+            // Phone number is handled by ContactInfo and stored as a string in E.164 format
+            // Add overrides for other ContactInfo fields if needed
+    })
     @Embedded
     private ContactInfo contactInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "accountNonExpired", column = @Column(name = "account_non_expired", nullable = false)),
+            @AttributeOverride(name = "accountNonLocked", column = @Column(name = "account_non_locked", nullable = false)),
+            @AttributeOverride(name = "credentialsNonExpired", column = @Column(name = "credentials_non_expired", nullable = false)),
+            @AttributeOverride(name = "enabled", column = @Column(name = "enabled", nullable = false)),
+            @AttributeOverride(name = "lastLoginTime", column = @Column(name = "last_login_time")),
+            @AttributeOverride(name = "failedLoginAttempts", column = @Column(name = "failed_login_attempts")),
+            @AttributeOverride(name = "lockedAt", column = @Column(name = "locked_at"))
+    })
     @Embedded
     private AccountStatus accountStatus; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "mfaEnabled", column = @Column(name = "mfa_enabled", nullable = false)),
+            @AttributeOverride(name = "mfaMethod", column = @Column(name = "mfa_method")),
+            @AttributeOverride(name = "mfaEnforced", column = @Column(name = "mfa_enforced")),
+            @AttributeOverride(name = "mfaQrCodeUrl.mfaQrCodeUrl", column = @Column(name = "mfa_qr_code_url")),
+            @AttributeOverride(name = "mfaSecret.mfaSecret", column = @Column(name = "mfa_secret"))
+    })
     @Embedded
     private MfaInfo mfaInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "deviceFingerprintingEnabled", column = @Column(name = "device_fingerprinting_enabled", nullable = false)),
+            @AttributeOverride(name = "deviceFingerprintingMethod", column = @Column(name = "device_fingerprinting_method")),
+//            @AttributeOverride(name = "deviceFingerprintingData.deviceFingerprintingData", column = @Column(name = "device_fingerprinting_data"))
+    })
     @Embedded
     private DeviceFingerprintingInfo deviceFingerprintingInfo; // Set via constructor/builder
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "department", column = @Column(name = "department")),
+            @AttributeOverride(name = "region", column = @Column(name = "region")),
+    })
     @Embedded
     private LocationInfo locationInfo; // Set via constructor/builder
 
     // Initialized collection - JPA will replace this instance upon load
     @ElementCollection(fetch = FetchType.EAGER) // EAGER fetch for roles is often acceptable
     @CollectionTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"))
+    @Enumerated(EnumType.STRING) // Store enum as string
+    @Column(name = "role_name", nullable = false) // Name of the column in the user_roles table holding the role
     private Set<UserRole> roles = new HashSet<>();
+//    private Set<UserRole.roleName> roles = new HashSet<>(); // Store roleName enum directly
 
     // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
@@ -122,7 +169,6 @@ public class User extends BaseEntity implements UserDetails {
         return new UserBuilderImpl();
     }
 
-
     // --- UserDetails Implementation ---
 
     @Override
@@ -136,7 +182,6 @@ public class User extends BaseEntity implements UserDetails {
                 .collect(Collectors.toSet()) // Collect into a Set
                 : Collections.emptySet(); // Return an empty set if roles are null
     }
-
 
     @Override
     public String getPassword() {
@@ -174,7 +219,6 @@ public class User extends BaseEntity implements UserDetails {
         return (accountStatus != null) && accountStatus.isEnabled();
     }
     // --- End UserDetails ---
-
 
     // --- Auditable Implementation ---
     // Method required by BaseEntity's isNew() logic
@@ -324,6 +368,25 @@ public class User extends BaseEntity implements UserDetails {
         this.roles = roles;
     }
 
+//    public void addRole(UserRole.roleName roleName) {
+//        if (this.roles == null) {
+//            this.roles = new HashSet<>();
+//        }
+//        if (roleName != null) {
+//            this.roles.add(roleName);
+//        }
+//    }
+//
+//    public void removeRole(UserRole.roleName roleName) {
+//        if (this.roles != null && roleName != null) {
+//            this.roles.remove(roleName);
+//        }
+//    }
+//
+//    public void createRoleSet(Set<UserRole.roleName> roles) {
+//        this.roles = roles != null ? new HashSet<>(roles) : new HashSet<>();
+//    }
+
     public void addAddress(Address address) {
         if (this.addresses == null) { // Paranoid check
             this.addresses = new ArrayList<>();
@@ -436,6 +499,43 @@ public class User extends BaseEntity implements UserDetails {
             this.contactInfo.updateEmailAddress(newEmailAddress);
         }
     }
+
+    // Using string for phone number to avoid dependency on external library
+    public void updatePhoneNumber(String newPhoneNumber) {
+        if (this.contactInfo != null) {
+            this.contactInfo.updatePhoneNumber(newPhoneNumber);
+        }
+    }
+
+    // Using Phonenumber.PhoneNumber object for phone number
+    public void updatePhoneNumber(Phonenumber.PhoneNumber newPhoneNumber) {
+        if (this.contactInfo != null) {
+            this.contactInfo.updatePhoneNumber(newPhoneNumber);
+        }
+    }
+
+//    public void updatePassword(String encodedPassword) {
+//        if (this.authenticationInfo != null) {
+//            // Assuming AuthenticationInfo has a way to update password,
+//            // potentially by creating a new UserPassword object
+//            this.authenticationInfo = new AuthenticationInfo(
+//                    this.authenticationInfo.getUsername(), // Keep existing username
+//                    new UserPassword(encodedPassword)     // Create new password object
+//            );
+//        }
+//    }
+//
+//    public void updateEmailAddress(String newEmailAddress) {
+//        if (this.contactInfo != null) {
+//            // Assuming ContactInfo has a way to update email,
+//            // potentially by creating a new UserEmail object
+//            this.contactInfo = new ContactInfo(
+//                    new UserEmail(newEmailAddress), // Create new email object
+//                    this.contactInfo.getPhoneNumber() // Keep existing phone number
+//            );
+//        }
+//    }
+
 
     public void updateLastLoginTime(Instant now) {
         if (this.accountStatus != null) {

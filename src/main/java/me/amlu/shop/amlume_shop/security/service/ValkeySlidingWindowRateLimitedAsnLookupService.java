@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;

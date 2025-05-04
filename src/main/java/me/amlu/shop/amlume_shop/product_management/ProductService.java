@@ -15,8 +15,8 @@ import me.amlu.shop.amlume_shop.exceptions.NotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.ProductDataValidationException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.CreateProductRequest;
-import me.amlu.shop.amlume_shop.payload.GetProductResponse;
+import me.amlu.shop.amlume_shop.product_management.dto.CreateProductRequest;
+import me.amlu.shop.amlume_shop.product_management.dto.GetProductResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;

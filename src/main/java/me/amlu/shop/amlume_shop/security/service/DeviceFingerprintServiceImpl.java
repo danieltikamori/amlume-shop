@@ -12,11 +12,11 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
-import me.amlu.shop.amlume_shop.config.properties.SecurityProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.SecurityProperties;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
-import me.amlu.shop.amlume_shop.repositories.UserDeviceFingerprintRepository;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
 import me.amlu.shop.amlume_shop.user_management.DeviceFingerprintingInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
@@ -52,11 +52,14 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private final IpSecurityService ipSecurityService;
     private final RateLimiter rateLimiter;
 
+    @Value("${security.device-fingerprint.fingerprint-salt}")
     private final String fingerprintSalt;
+
+    @Value("${security.max-devices-per-user}")
     private final int maxDevicesPerUser;
 
     // --- Constructor Updated ---
-    public DeviceFingerprintServiceImpl(@Value("${security.fingerprint-salt}") String fingerprintSalt,
+    public DeviceFingerprintServiceImpl(@Value("${security.device-fingerprint.fingerprint-salt}") String fingerprintSalt,
                                         @Value("${security.max-devices-per-user}") int maxDevicesPerUser,
                                         UserRepository userRepository,
                                         UserDeviceFingerprintRepository userDeviceFingerprintRepository,
@@ -528,7 +531,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     private String generateFallbackFingerprint() {
-        return "fallbackFingerprint_" + UUID.randomUUID().toString();
+        return "fallbackFingerprint_" + UUID.randomUUID();
     }
 
     private void handleValidationError(String userId, String fingerprintId, String clientIp, Exception e) {

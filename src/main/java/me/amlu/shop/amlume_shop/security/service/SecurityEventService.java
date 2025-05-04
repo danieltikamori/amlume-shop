@@ -11,10 +11,10 @@
 package me.amlu.shop.amlume_shop.security.service;
 
 import jakarta.persistence.criteria.Predicate;
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.model.SecurityEvent;
-import me.amlu.shop.amlume_shop.model.SecurityEventType;
-import me.amlu.shop.amlume_shop.repositories.SecurityEventRepository;
+import me.amlu.shop.amlume_shop.security.model.SecurityEvent;
+import me.amlu.shop.amlume_shop.security.model.SecurityEventType;
+import me.amlu.shop.amlume_shop.security.repository.SecurityEventRepository;
+import org.slf4j.Logger;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,9 +30,9 @@ import java.util.List;
 
 @Service
 @Transactional
-@Slf4j
 public class SecurityEventService {
 
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(SecurityEventService.class);
     private final SecurityEventRepository securityEventRepository;
     Instant retentionDate = Instant.now().minus(Duration.ofDays(90));
 

@@ -13,15 +13,17 @@ package me.amlu.shop.amlume_shop.security.service;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.payload.user.*;
+import me.amlu.shop.amlume_shop.security.model.MfaToken;
+import me.amlu.shop.amlume_shop.auth_management.dto.AuthResponse;
+import me.amlu.shop.amlume_shop.auth_management.dto.LoginRequest;
+import me.amlu.shop.amlume_shop.security.dto.MfaVerificationRequest;
+import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
-import java.util.concurrent.ExecutionException;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.AUTH_CACHE;
 

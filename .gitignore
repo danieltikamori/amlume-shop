@@ -123,3 +123,6 @@ secrets/
 application-local.properties
 application-local.yml
 /bin/
+/src/main/resources/application-local-secrets.yml
+#!/src/main/resources/application-local-secrets.yml
+!/target/classes/application-local-secrets.yml

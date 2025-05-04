@@ -15,12 +15,13 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.dto.ErrorResponse;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -38,11 +39,19 @@ import static me.amlu.shop.amlume_shop.commons.Constants.IP_HEADERS;
  *
  * <p>It uses a {@link RateLimiter} implementation (e.g., Redis-based) to enforce rate limits
  * and sends appropriate error responses when limits are exceeded.</p>
+ * <p>
+ * Considerations:
+ * •Trusting IP Headers: The accuracy of getClientIp depends on the infrastructure setup. If headers like X-Forwarded-For can be spoofed before reaching your application, the rate limiting might be inaccurate or bypassed. Ensure your load balancer/proxy setup correctly sets/overwrites these headers.
+ * •"global" Limiter Configuration: This filter uses the key "global:" + clientIp. Ensure you have a corresponding configuration in application.yml under rate-limiter.limiters.global or that the rate-limiter.defaults provide the desired behavior for this global limit.
+ * •Granularity: This filter provides global IP-based limiting. For more granular limits (e.g., per user per endpoint), you would typically use different keys and potentially apply rate limiting via AOP on specific service methods or controller endpoints, possibly in addition to this global filter.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
 // Run very early, but potentially after CORS/logging filters if they have HIGHEST_PRECEDENCE
 public class GlobalRateLimitingFilter extends OncePerRequestFilter {
+
+    @Value("${rate-limiter.global-filter-limiter-name:global}")
+    private final String globalLimiterName;
 
     private static final Logger log = LoggerFactory.getLogger(GlobalRateLimitingFilter.class);
 
@@ -56,11 +65,13 @@ public class GlobalRateLimitingFilter extends OncePerRequestFilter {
      * @param objectMapper the {@link ObjectMapper} for serializing error responses
      */
     // Inject the specific RateLimiter bean you configured (likely the Redis one)
-    public GlobalRateLimitingFilter(@Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
+    public GlobalRateLimitingFilter(@Value("${rate-limiter.global-filter-limiter-name:global}") String globalLimiterName,
+                                    @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter,
                                     ObjectMapper objectMapper) {
+        this.globalLimiterName = globalLimiterName;
         this.rateLimiter = rateLimiter;
         this.objectMapper = objectMapper;
-        log.info("GlobalRateLimitingFilter initialized.");
+        log.info("GlobalRateLimitingFilter initialized, using limiter name: '{}'.", globalLimiterName);
     }
 
     /**
@@ -79,8 +90,8 @@ public class GlobalRateLimitingFilter extends OncePerRequestFilter {
                                     @NotNull FilterChain filterChain) throws ServletException, IOException {
 
         String clientIp = getClientIp(request);
-        // Use a generic key prefix for global limiting, or make it configurable
-        String rateLimitKey = "global:" + clientIp;
+        // Use a generic key prefix for global limiting from injected property
+        String rateLimitKey = globalLimiterName + ":" + clientIp;
 
         try {
             if (!rateLimiter.tryAcquire(rateLimitKey)) {

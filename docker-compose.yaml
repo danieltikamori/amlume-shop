@@ -1,37 +1,44 @@
-#*Note: Spring Boot automatically maps environment variables like `VAULT_URI` to `vault.uri`.*
-#  *   **Command-Line Arguments:**
-#         java -jar your-app.jar --vault.uri=http://localhost:8200 --vault.token=s.YourToken
+# Local development setup for the AmLume Shop application.
+
+# Defines external services (Vault, MySQL, Valkey) for local development.
+# Run the Spring Boot application outside of this Docker Compose setup.
+
+#How it Works:
 #
-#  Your VaultConfig.java is ready. You just need to:
-#         1.Start your Vault container (e.g., docker run -p 8200:8200 --cap-add=IPC_LOCK -e 'VAULT_DEV_ROOT_TOKEN_ID=myroot' vault).
-#         2.Note the Vault address (usually http://localhost:8200 if accessing from the host) and the root token (e.g., myroot in the example command, or the one Vault prints).
-#         3.Provide these values to your Spring Boot application using one of the methods above (properties file, environment variables, etc.) for the vault.uri and vault.token properties.
+#  You run docker-compose up.
+#  Docker Compose starts vault, mysql, valkey-cache, promtail.
+#The vault-seeder service waits because of depends_on: vault: condition: service_healthy.
+#  Once Vault's healthcheck passes, vault-seeder starts.
+#  Its entrypoint.sh script runs, waits for Vault to be fully ready (unsealed), reads your .env file (mounted into /app/.env), and uses the Vault CLI inside the container to write the secrets to secret/amlume-shop/mfa (or the path set via VAULT_PATH).
+#The entrypoint.sh script exits, and the vault-seeder container stops (restart: 'no').
+#  Your main Spring Boot application (running outside or started later) can now connect to Vault and find the secrets already populated.
+
+# Best practices:
+#  Use named volumes to simplify backup and migration.
+#
+#  Mount logs separately for easier troubleshooting and rotation.
+#
+#  Use docker volume inspect to view volume metadata and mount points.
 
 services:
-  your-spring-app:
-    image: spring-app-image
-    environment:
-      VAULT_URI: http://vault:8200 # Assumes vault service name is 'vault'
-      VAULT_TOKEN: s.YourVaultToken
-    depends_on:
-      - vault
+  # --- HashiCorp Vault Service ---
   vault:
-    image: hashicorp/vault:latest # Or pin to a specific version like 1.16.1
+    image: hashicorp/vault:1.19.2 # Recommended to use a specific version (in this case, must match the vault-seeder version)
     container_name: vault-dev
     ports:
-      - "8200:8200" # Map host port 8200 to container port 8200
+      # Expose Vault API on host port 8200
+      - "8200:8200"
     environment:
-      # --- Vault Dev Mode Configuration ---
-      # Sets the root token ID. Use this value for 'vault.token' in your Spring app.
-      # WARNING: This is for development ONLY. Keep it secure.
-      VAULT_DEV_ROOT_TOKEN_ID: "my-dev-root-token"
-
-      # Makes Vault listen on all interfaces inside the container
-      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
-
+      # Vault Dev Mode Configuration (Insecure - For Development ONLY)
+      VAULT_DEV_ROOT_TOKEN_ID: "token" # Use this token in your Spring app config
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200" # Listen on all interfaces inside container
       # --- Optional: Set VAULT_ADDR for CLI inside the container ---
-      # VAULT_ADDR: "http://127.0.0.1:8200" # Usually needed if you exec into the container
-
+#      VAULT_ADDR: "http://vault:8200" # Usually needed if you exec into the container
+        # Tell Vault Dev mode to use TLS and where the certs are (paths inside container)
+#      VAULT_DEV_TLS_CERT_FILE: "/vault/certs/vault_certificate.pem"
+#      VAULT_DEV_TLS_KEY_FILE: "/vault/certs/vault_private_key.pem"
+      VAULT_API_ADDR: "http://vault:8200" # For CLI inside the container
+      VAULT_ADDR: "http://vault:8200"
     cap_add:
       # Required for Vault to lock memory pages (prevents swapping sensitive data)
       - IPC_LOCK
@@ -42,18 +49,199 @@ services:
       # And mount a config file + data directory.
       # For a more production-like setup, use a proper backend (like file, consul, postgres etc.) and don't run in dev mode.
       # - ./vault-data:/vault/file # Example for file backend persistence
-      - vault_logs:/vault/logs # Optional: Persist logs
-    # command: vault server -dev # This is the default for the image, usually not needed explicitly
+#      - ./certificates/vault/vault_certificate.pem:/vault/certs/vault_certificate.pem:ro
+#      - ./certificates/vault/vault_private_key.pem:/vault/certs/vault_private_key.pem:ro
+      # Optional: Persist Vault logs
+      - vault_logs:/vault/logs
+      # command: vault server -dev # This is the default for the image, usually not needed explicitly
+    networks:
+      - amlume-shop-network
+    healthcheck: # Added basic healthcheck for dependency
+      # Use --tls-skip-verify for self-signed certs in healthcheck
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+#      test: ["CMD", "vault", "status", "-address=https://127.0.0.1:8200", "-tls-skip-verify"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    # No explicit command needed, dev mode with TLS is handled by env vars
+    # Note: Dev mode uses in-memory storage by default. Data is lost on restart.
 
+  # --- MySQL Database Service ---
+    # XtraBackup enabled MySql database, see:
+    # https://docs.percona.com/percona-xtrabackup/8.4/docker.html#3-create-a-docker-container-from-percona-xtrabackup-image
+  mysql:
+    image: percona/percona-server:8.4
+#    image: docker.io/bitnami/percona-mysql:8.4 # Getting errors /opt/bitnami/scripts/mysql/entrypoint.sh: line 28: exec: --: invalid option
+#    image: mysql:lts # Use Long Term Support version
+    container_name: mysql-db
+    restart: unless-stopped
+    command:
+      - --ssl-ca=/etc/mysql/certs/mysql_ca.pem
+      - --ssl-cert=/etc/mysql/certs/mysql_certificate.pem
+      - --ssl-key=/etc/mysql/certs/mysql_private_key.pem
+      - --bind-address=0.0.0.0
+      - --require_secure_transport=ON # Explicitly require TLS connections
+#      - --pid-file /var/lib/mysql/mysqld.pid
+    ports:
+      # Expose MySQL on host port 3306
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      # The non-root user created to deal specifically with this specific database. Have all necessary permissions.
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+#      MYSQL_PASSWORD: "/run/secrets/mysql_user_password"
+#      MYSQL_ROOT_PASSWORD: "/run/secrets/mysql_root_password"
+#    healthcheck:
+#      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+#      interval: 15s
+#      timeout: 5s
+#      retries: 6
+    volumes:
+      - ./certificates/database:/etc/mysql/certs
+      # Persist database data
+      - mysql-data:/var/lib/mysql              # Database data
+      - mysql-logs:/var/log/mysql              # MySQL logs
+      - mysql-backups:/backups                 # XtraBackup output (optional, for future use)
+    networks:
+
+
+      - amlume-shop-network
+  #  cert-gen:
+#    image: alpine
+#    volumes:
+#      - ./certs:/certs
+#    entrypoint:
+#      - /bin/sh
+#      - -c
+#      - |
+#        apk add --no-cache openssl &&
+#        openssl genpkey -algorithm RSA -out /certs/mysql.key -pkeyopt rsa_keygen_bits:2048 &&
+#        openssl req -new -key /certs/mysql.key -out /certs/mysql.csr -subj "/CN=mysql/O=myorg/C=US" &&
+#        openssl x509 -req -in /certs/mysql.csr -signkey /certs/mysql.key -out /certs/mysql.crt -days 365 &&
+#        openssl genpkey -algorithm RSA -out /certs/ca.key -pkeyopt rsa_keygen_bits:2048 &&
+#        openssl req -new -x509 -key /certs/ca.key -out /certs/ca.crt -days 1095 -subj "/CN=Certificate Authority/O=myorg/C=US" &&
+#        chmod 600 /certs/* && chown 999:999 /certs/*
+#    restart: "no"
+
+  # --- Valkey Cache Service ---
+  valkey-cache:
+    image: valkey/valkey:latest
+    container_name: valkey-cache
+    # Add command to set password and potentially disable persistence if not needed
+    # MUST MATCH .env VALKEY_PASSWORD
+    command: ["valkey-server", "/etc/valkey/valkey.conf"] # Start Valkey with the config file
+#    command: >
+#      valkey-server
+#      --requirepass "your-valkey-password"
+#      --appendonly no
+#      --port 0
+#      --tls-port 6379
+#      --tls-cert-file /certs/valkey_certificate.pem
+#      --tls-key-file /certs/valkey_private_key.pem
+#      --tls-auth-clients no
+
+    # IMPORTANT: TLS - as we will use certificates, we must have persistent volumes to store them.
+    volumes:
+    # Optional: Enable persistence (AOF)
+      # Assuming the certificates are generated and stored in ./certificates of the project directory
+      # Mount the certificates directory (read-only)
+      - ./docker/valkey/config/valkey.conf:/etc/valkey/valkey.conf:ro # Mount config file
+      - ./certificates/valkey:/certs:ro
+      # Optional: Keep data volume if needed for other reasons, but persistence is off
+      - ./docker/valkey/ssl:/etc/valkey/ssl:ro # Mount SSL certs directory
+      - valkey_data:/data
+    # --- REMOVE ports mapping for production/security ---
+    # Exposing the TLS port directly might be okay for local dev, but unnecessary if only app connects
+    # ports:
+    #  - "6379:6379" # Exposes the TLS port 6379 on the host
+    healthcheck:
+      # Modify healthcheck to use TLS if redis-cli supports it, or use a simpler check
+      # This basic ping might work even without explicit TLS flags in older redis-cli
+      # For more robust check, might need a custom script or newer redis-cli with TLS support
+      test: ["CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "--insecure", "-a", "your-valkey-password", "ping"] # <-- Add password and TLS flags
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - amlume-shop-network
+
+    # --- Keycloak Service ---
+#  keycloak:
+#    build:
+#      context: . # Directory containing vault-seeder.Dockerfile and entrypoint.sh
+#      dockerfile: keycloak.Dockerfile
+#    container_name: keycloak
+#    environment:
+
+
+    # --- Promtail Service ---
+    # --- Promtail Log Agent ---
+  promtail:
+    image: grafana/promtail:2.9.5
+    container_name: promtail-agent
+    volumes:
+      - ./logs:/var/log/app:ro
+      - ./promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    environment:
+      # This correctly reads the full URL from the .env file
+#      LOKI_URL: ${LOKI_URL}
+      LOKI_URL: ${LOKI_URL}
+      # LOKI_USERNAME and LOKI_PASSWORD are no longer needed here
+    networks:
+      - amlume-shop-network
+
+  # --- Vault Seeder Service ---
+    # This service is responsible for seeding Vault with initial secrets
+  vault-seeder:
+    build:
+      context: . # Directory containing vault-seeder.Dockerfile and entrypoint.sh
+      dockerfile: vault-seeder.Dockerfile
+    container_name: vault-seeder-job
+    environment:
+      # Pass the token and target path to the script
+      VAULT_TOKEN: "token"
+      VAULT_PATH: "secret/amlume-shop/local" # Or override if needed. It overrides the path in the entrypoint.sh script.
+      ENV_FILE_PATH: "/app/.env" # Path inside the container where .env is mounted
+      # Optional: Adjust Vault address if not using 'vault' hostname
+      VAULT_ADDR: http://vault:8200
+      # --- Add flag to skip TLS verify for curl inside seeder ---
+      # This is needed because the curl inside the seeder doesn't trust the self-signed cert by default
+      CURL_INSECURE: "true" # We'll use this in entrypoint.sh
+    volumes:
+      # Mount your project's .env file into the container
+      - ./.env:/app/.env:ro # Mount as read-only
+      # Mount the entrypoint script (alternative to COPY in Dockerfile if preferred)
+      # - ./entrypoint.sh:/app/entrypoint.sh:ro
+      # --- Mount Vault CA cert for curl (Alternative to insecure) ---
+      # - ./certificates/vault/vault_certificate.pem:/etc/ssl/certs/vault_certificate.pem:ro # Mount CA/Cert
+    networks:
+      - amlume-shop-network
+    depends_on:
+      vault:
+        condition: service_healthy # Waits for Vault's healthcheck to pass
+    restart: 'no' # 'no' -> Crucial: Run this container only once
+ #For debugging, you can change restart: 'no' to restart: 'on-failure' or add sleep infinity to the end of entrypoint.sh for debugging, then restart
+
+# --- Volumes Definition ---
+# Define named volumes for data persistence
 volumes:
-  # Define the named volume for logs (if used)
   vault_logs: {}
-  # vault_data: {} # Define if using file persistence volume mount
+  mysql-data: {}
+  mysql-logs: {}
+  mysql-backups: {}
+  valkey_data: {} # Define volume for Valkey persistence
 
+# --- Network Definition ---
+# Define a common network for the services
 networks:
-  default:
-    name: amlume-shop-network # Optional: Define a custom network
+  amlume-shop-network:
+    name: amlume-shop-network # Explicitly name the network
 
-
-    # ... other vault config ...
-        
+#secrets:
+#  mysql-root-password:
+#    file: ./config/mysql_root_password.txt
+#  mysql-password:
+#    file: ./config/mysql_user_password.txt

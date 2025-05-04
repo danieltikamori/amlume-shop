@@ -11,41 +11,50 @@ This project is the Spring Boot backend application for Amlume Shop. It provides
 ## Features
 
 *   **Robust Security:**
+    *   Keycloak OATH2 and MFA for user authentication and authorization.
+    *   Secrets management using Spring Vault, HashiCorp Vault with fallback retrieval.
     *   PASETO v4 token-based authentication (Stateless).
     *   Support for both Public (signed) and Local (encrypted) Access Tokens.
     *   Secure Refresh Token mechanism with database persistence and hashing.
     *   JTI (JWT ID) validation using Redis/Valkey to prevent token replay attacks.
     *   Token Revocation mechanism with Redis/Valkey caching.
     *   Detailed token claim validation (expiration, issuer, audience, subject, etc.).
+    *   Support for multiple token types (Access, Refresh, etc.) with different expiration policies.
 *   **Resilience:**
-    *   Redis/Valkey-based Rate Limiting using an efficient Lua script (Sliding Window algorithm).
+    *   Redis/Valkey-based Rate Limiting using an efficient Lua script (Sliding Window counter algorithm).
 *   **Performance:**
-    *   Redis/Valkey caching for token claims and revocation status.
+    *   Redis/Valkey caching for user, category, products, token claims, revocation status, etc.
 *   **Observability:**
     *   Integrated Micrometer metrics for monitoring token generation, validation, and potentially other application aspects.
-*   **User Management:** (Implied) Basic user data persistence and retrieval.
+    *   Logging with SLF4J and Logback. Data sent to Loki via Promtail container.
+    *   Integration with Spring Boot Actuator for health checks and metrics.
+    *   Health checks and readiness/liveness probes for Kubernetes (probably in the parallel project geared towards Kubernetes).
+*   **User Management:** (Implied) Role based authentication/authorization using Keycloak OATH2 and MFA.
 *   **Configuration:** Flexible configuration via Spring Boot profiles (`application.yml`/`properties`).
 
 ## Technologies Used
 
-*   **Language:** Java 17+
+*   **Language:** Java 21+
 *   **Framework:** Spring Boot 3.x
     *   Spring Web (MVC)
     *   Spring Security
     *   Spring Data JPA
     *   Spring Data Redis (Lettuce Client)
+    *   Spring Boot Actuator
+    *   Spring Boot Starter for Valkey/Redis
+    *   Spring Vault
     *   Spring Cache Abstraction
     *   Spring Scheduling (`@Scheduled`)
 *   **Database:** Relational Database (e.g., PostgreSQL, MySQL - Requires configuration)
 *   **Cache/In-Memory Data Grid:** Valkey / Redis
 *   **Security Tokens:** PASETO v4 (via `paseto4j` library)
-*   **Metrics:** Micrometer
-*   **Build Tool:** Maven / Gradle
-*   **Utilities:** Lombok
+*   **Metrics:** Micrometer, Loki, Prometheus, Promtail, Grafana
+*   **Build Tool:** Maven
+*   **Utilities:** MapStruct, JUnit 5, Mockito, AssertJ, Testcontainers (for testing)
 
 ## Prerequisites
 
-*   **JDK:** Version 17 or higher
+*   **JDK:** Version 21 or higher
 *   **Build Tool:** Maven 3.8+ or Gradle 7.x+
 *   **Valkey / Redis:** A running instance accessible by the application.
 *   **Database:** A running instance of a supported relational database (e.g., PostgreSQL 13+).
@@ -72,12 +81,6 @@ This project is the Spring Boot backend application for Amlume Shop. It provides
 mvn clean install
 ```
 
-*   **Gradle:**
-
-```Bash
-./gradlew clean build
-```
-
 ## Running the Application
 
 *   **Using Maven:**
@@ -86,13 +89,7 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-*   **Using Gradle:**
-
-```Bash
-./gradlew bootRun
-```
-
-*   **Running the JAR:**
+Running the JAR:**
 
 ```Bash
 java -jar target/amlume-shop-[version].jar
@@ -137,12 +134,6 @@ Run the test suite using your build tool:
 
 ```Bash
 mvn test
-```
-
-*   **Gradle:**
-
-```Bash
-./gradlew test
 ```
 
 Integration tests might require running instances of Valkey/Redis and the database. Consider using Testcontainers for managing dependencies during testing.

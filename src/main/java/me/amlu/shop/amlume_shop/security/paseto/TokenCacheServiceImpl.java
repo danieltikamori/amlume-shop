@@ -10,8 +10,8 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.config.properties.TokenCacheProperties;
+import me.amlu.shop.amlume_shop.security.config.properties.TokenCacheProperties;
+import org.slf4j.Logger;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -19,12 +19,12 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.Set;
 
-@Slf4j
 @Service
 public class TokenCacheServiceImpl implements TokenCacheService {
 
     private static final String TOKEN_CACHE_PREFIX = "token_cache:"; // Prefix for individual token keys
     private static final String TOKEN_CACHE_KEYS_SET = "token_cache_keys"; // Key for the Set tracking all cache keys
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TokenCacheServiceImpl.class);
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final TokenCacheProperties tokenCacheProperties;

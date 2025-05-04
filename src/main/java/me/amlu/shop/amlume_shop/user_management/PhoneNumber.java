@@ -23,15 +23,15 @@ public class PhoneNumber implements Serializable {
   @Serial
   private static final long serialVersionUID = 1L;
 
-  private String value;
+  private String phoneNumber;
 
   private String locale;
 
   protected PhoneNumber() { // Required by JPA
   }
 
-  PhoneNumber(@NotEmpty String value, @NotEmpty String locale) {
-    this.value = value;
+  PhoneNumber(@NotEmpty String phoneNumber, @NotEmpty String locale) {
+    this.phoneNumber = phoneNumber;
     this.locale = locale;
   }
 
@@ -39,8 +39,8 @@ public class PhoneNumber implements Serializable {
     return new PhoneNumberBuilder();
   }
 
-  public @NotEmpty String getValue() {
-    return this.value;
+  public @NotEmpty String getPhoneNumber() {
+    return this.phoneNumber;
   }
 
   public @NotEmpty String getLocale() {
@@ -52,8 +52,8 @@ public class PhoneNumber implements Serializable {
     if (o == this) return true;
     if (!(o instanceof PhoneNumber other)) return false;
     if (!other.canEqual((Object) this)) return false;
-    final Object this$value = this.getValue();
-    final Object other$value = other.getValue();
+    final Object this$value = this.getPhoneNumber();
+    final Object other$value = other.getPhoneNumber();
     if (!Objects.equals(this$value, other$value)) return false;
     final Object this$locale = this.getLocale();
     final Object other$locale = other.getLocale();
@@ -68,7 +68,7 @@ public class PhoneNumber implements Serializable {
   public int hashCode() {
     final int PRIME = 59;
     int result = 1;
-    final Object $value = this.getValue();
+    final Object $value = this.getPhoneNumber();
     result = result * PRIME + ($value == null ? 43 : $value.hashCode());
     final Object $locale = this.getLocale();
     result = result * PRIME + ($locale == null ? 43 : $locale.hashCode());
@@ -77,18 +77,18 @@ public class PhoneNumber implements Serializable {
 
   @Override
   public String toString() {
-    return "PhoneNumber(value=" + this.getValue() + ", locale=" + this.getLocale() + ")";
+    return "PhoneNumber(phoneNumber=" + this.getPhoneNumber() + ", locale=" + this.getLocale() + ")";
   }
 
   public static class PhoneNumberBuilder {
-    private @NotEmpty String value;
+    private @NotEmpty String phoneNumber;
     private @NotEmpty String locale;
 
     PhoneNumberBuilder() {
     }
 
     public PhoneNumberBuilder value(@NotEmpty String value) {
-      this.value = value;
+      this.phoneNumber = value;
       return this;
     }
 
@@ -98,12 +98,12 @@ public class PhoneNumber implements Serializable {
     }
 
     public PhoneNumber build() {
-      return new PhoneNumber(this.value, this.locale);
+      return new PhoneNumber(this.phoneNumber, this.locale);
     }
 
     @Override
     public String toString() {
-      return "PhoneNumber.PhoneNumberBuilder(value=" + this.value + ", locale=" + this.locale + ")";
+      return "PhoneNumber.PhoneNumberBuilder(phoneNumber=" + this.phoneNumber + ", locale=" + this.locale + ")";
     }
   }
 }

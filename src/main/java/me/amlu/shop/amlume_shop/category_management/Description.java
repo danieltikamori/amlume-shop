@@ -27,26 +27,26 @@ public class Description implements Serializable {
 
     @NotBlank(message = "Description is required")
     @Size(min = 2, max = 2000, message = "Description must be between 2 and 2000 characters")
-    private final String value; // Keep final
+    private final String descriptionData;
 
     // Constructor
-    public Description(String value) {
-        Objects.requireNonNull(value, "Description cannot be null");
-        String trimmedValue = value.trim();
+    public Description(String descriptionData) {
+        Objects.requireNonNull(descriptionData, "Description cannot be null");
+        String trimmedValue = descriptionData.trim();
         if (trimmedValue.length() < 2 || trimmedValue.length() > 2000) {
             throw new IllegalArgumentException("Description must be between 2 and 2000 characters after trimming");
         }
-        this.value = trimmedValue;
+        this.descriptionData = trimmedValue;
     }
 
     // JPA constructor
     protected Description() {
-        this.value = null;
+        this.descriptionData = null;
     }
 
     // --- Getter ---
-    public String getValue() {
-        return value;
+    public String getDescriptionData() {
+        return descriptionData;
     }
 
     // equals/hashCode
@@ -55,19 +55,19 @@ public class Description implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Description that = (Description) o;
-        return Objects.equals(value, that.value);
+        return Objects.equals(descriptionData, that.descriptionData);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(value);
+        return Objects.hash(descriptionData);
     }
 
     // --- toString ---
     @Override
     public String toString() {
         return new StringJoiner(", ", Description.class.getSimpleName() + "[", "]")
-                .add("value='" + value + "'")
+                .add("descriptionData='" + descriptionData + "'")
                 .toString();
     }
 }

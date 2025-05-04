@@ -10,79 +10,116 @@
 
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
-import org.springframework.core.env.Environment;
+import me.amlu.shop.amlume_shop.security.config.properties.PasetoProperties;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 
 /**
  * This class is responsible for resolving properties related to Paseto tokens.
- * It implements the PasetoPropertyResolver interface and uses the Environment object
+ * It implements the PasetoPropertyResolver interface and uses the injected PasetoProperties bean
  * to retrieve the required properties.
  * <p>
  * Benefits of Property Resolver:
- * Provides a more flexible way to access the token configuration properties, as it allows you to resolve the properties at runtime using the PasetoPropertyResolver instance.
- * By using a property resolver, you decouple your components from the PasetoProperties instance and provide a more flexible way to access the paseto configuration properties.
+ * Provides a flexible way to access token configuration properties.
+ * Decouples components from the specific PasetoProperties class structure.
+ * Improves testability by allowing mocking of the resolver.
  * <p>
- * Advantages:
- * <p>
- * Improved testability: You can easily mock the PasetoPropertyResolver instance and test the components that depend on it without relying on the actual PasetoProperties instance.
- * Decoupling: Your components are no longer tightly coupled to the PasetoProperties instance.
- * Flexibility: You can easily switch to a different configuration source or implementation without affecting your components.
- * Reusability: You can reuse the PasetoPropertyResolver instance across multiple components.
- * <p>
- * Note:
- * You can also use a caching mechanism to cache the resolved properties and improve performance.
+ * *** NOTE ***
+ * This implementation now relies solely on the PasetoProperties bean, which is the recommended approach
+ * for consistency with Spring Boot's property binding mechanisms.
  */
 @Component
 public class PasetoPropertyResolverImpl implements PasetoPropertyResolver {
 
-    private Environment environment;
+    private final PasetoProperties pasetoProperties; // Inject the properties bean
+
+    public PasetoPropertyResolverImpl(PasetoProperties pasetoProperties) {
+        this.pasetoProperties = pasetoProperties;
+    }
 
     @Override
     public int resolveTokenNoFooterParts() {
-        return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-no-footer.parts")));
+        return pasetoProperties.getTokenNoFooterParts();
     }
 
     @Override
     public int resolveTokenWithFooterParts() {
-        return Integer.parseInt(Objects.requireNonNull(environment.getProperty("paseto.token-with-footer.parts")));
+        return pasetoProperties.getTokenWithFooterParts();
     }
 
-
+    // --- Key Material Resolvers (Updated previously) ---
     @Override
     public String resolveAccessPublicKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_ACCESS_PUBLIC_KEY"));
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getPublicKey()
+                : null;
+        return Objects.requireNonNull(key, "Access Public Key not configured (paseto.public.access.public-key)"); // Updated path
+    }
+
+    @Override
+    public String resolveAccessPrivateKey() {
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getPrivateKey()
+                : null;
+        return Objects.requireNonNull(key, "Access Private Key not configured (paseto.public.access.private-key)"); // Updated path
     }
 
     @Override
     public String resolveAccessSecretKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_ACCESS_SECRET_KEY"));
+        String key = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getAccess() != null
+                ? pasetoProperties.getLocal().getAccess().getSecretKey()
+                : null;
+        return Objects.requireNonNull(key, "Access Secret Key not configured (paseto.local.access.secret-key)"); // Updated path
     }
 
     @Override
     public String resolveRefreshSecretKey() {
-        return Objects.requireNonNull(System.getenv("PASETO_REFRESH_SECRET_KEY"));
+        String key = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getRefresh() != null
+                ? pasetoProperties.getLocal().getRefresh().getSecretKey()
+                : null;
+        return Objects.requireNonNull(key, "Refresh Secret Key not configured (paseto.local.refresh.secret-key)"); // Updated path
     }
 
     @Override
+    public String resolveRefreshPrivateKey() {
+        // Assuming public refresh keys if this method exists
+        String key = pasetoProperties.getPub() != null && pasetoProperties.getPub().getRefresh() != null
+                ? pasetoProperties.getPub().getRefresh().getPrivateKey()
+                : null;
+        return Objects.requireNonNull(key, "Refresh Private Key not configured (paseto.public.refresh.private-key)"); // Updated path
+    }
+
+    // --- KID Resolvers (Updated NOW) ---
+    @Override
     public String resolvePublicAccessKid() {
-        return System.getenv("PASETO_ACCESS_KID");
+        String kid = pasetoProperties.getPub() != null && pasetoProperties.getPub().getAccess() != null
+                ? pasetoProperties.getPub().getAccess().getKid()
+                : null;
+        return Objects.requireNonNull(kid, "Public Access KID not configured (paseto.public.access.kid)"); // Updated path
     }
 
     @Override
     public String resolvePublicRefreshKid() {
-        return System.getenv("PASETO_REFRESH_KID");
+        String kid = pasetoProperties.getPub() != null && pasetoProperties.getPub().getRefresh() != null
+                ? pasetoProperties.getPub().getRefresh().getKid()
+                : null;
+        return Objects.requireNonNull(kid, "Public Refresh KID not configured (paseto.public.refresh.kid)"); // Updated path
     }
 
     @Override
     public String resolveLocalAccessKid() {
-        return System.getenv("PASETO_ACCESS_LOCAL_KID");
+        String kid = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getAccess() != null
+                ? pasetoProperties.getLocal().getAccess().getKid()
+                : null;
+        return Objects.requireNonNull(kid, "Local Access KID not configured (paseto.local.access.kid)"); // Updated path
     }
 
     @Override
     public String resolveLocalRefreshKid() {
-        return System.getenv("PASETO_REFRESH_LOCAL_KID");
+        String kid = pasetoProperties.getLocal() != null && pasetoProperties.getLocal().getRefresh() != null
+                ? pasetoProperties.getLocal().getRefresh().getKid()
+                : null;
+        return Objects.requireNonNull(kid, "Local Refresh KID not configured (paseto.local.refresh.kid)"); // Updated path
     }
-
 }

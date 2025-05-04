@@ -13,11 +13,13 @@ package me.amlu.shop.amlume_shop.user_management;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Embedded;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.config.Phone;
+import me.amlu.shop.amlume_shop.security.config.Phone;
+import me.amlu.shop.amlume_shop.service.PhoneNumberConverter;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -42,18 +44,24 @@ public class ContactInfo implements Serializable {
 
     @Phone
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @Convert(converter = PhoneNumberConverter.class)
     @Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters")
-    @Column(name = "phone_number")
-    private Phonenumber.PhoneNumber phoneNumber;
+    @Column(name = "phone_number", length = 50)
+    private String phoneNumber;
 
     protected ContactInfo() {
     } // Required by JPA
 
-    public ContactInfo(String firstName, String lastName, UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
+    public ContactInfo(String firstName, String lastName, UserEmail userEmail, boolean emailVerified, String phoneNumber) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.userEmail = userEmail;
         this.emailVerified = emailVerified;
+        this.phoneNumber = phoneNumber;
+    }
+
+    public ContactInfo(UserEmail userEmail, String phoneNumber) {
+        this.userEmail = userEmail;
         this.phoneNumber = phoneNumber;
     }
 
@@ -94,8 +102,14 @@ public class ContactInfo implements Serializable {
         return this.emailVerified;
     }
 
-    public Phonenumber.@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") PhoneNumber getPhoneNumber() {
+    public String getPhoneNumber() {
         return this.phoneNumber;
+    }
+
+    // Method to get the PhoneNumber object (optional, uses converter)
+    public Phonenumber.PhoneNumber getPhoneNumberObject() {
+        PhoneNumberConverter converter = new PhoneNumberConverter();
+        return converter.convertToEntityAttribute(this.phoneNumber);
     }
 
     // --- Modifying Methods ---
@@ -105,6 +119,26 @@ public class ContactInfo implements Serializable {
     public void updateEmailAddress(String newEmailAddress) {
         if (newEmailAddress != null) {
             this.userEmail = new UserEmail(newEmailAddress);
+        }
+    }
+
+    public void updatePhoneNumber(String newPhoneNumber) {
+        if (newPhoneNumber != null) {
+            this.phoneNumber = newPhoneNumber;
+        }
+    }
+
+    // Method to update using PhoneNumber object (optional, uses converter implicitly via setter)
+    public void updatePhoneNumber(Phonenumber.PhoneNumber newPhoneNumber) {
+        if (newPhoneNumber != null) {
+            // Convert to String before setting, or let the @Convert handle it if setter is used by JPA
+            // For direct calls, you might need manual conversion here or rely on the converter logic
+            // Simplest is to modify the setter or have the converter handle it.
+            // Assuming the converter handles the conversion when JPA persists:
+            PhoneNumberConverter converter = new PhoneNumberConverter();
+            this.phoneNumber = converter.convertToDatabaseColumn(newPhoneNumber);
+        } else {
+            this.phoneNumber = null;
         }
     }
 
@@ -161,7 +195,7 @@ public class ContactInfo implements Serializable {
         private UserEmail userEmail;
         private boolean emailVerified$value;
         private boolean emailVerified$set;
-        private Phonenumber.@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") PhoneNumber phoneNumber;
+        private String phoneNumber;
 
         ContactInfoBuilder() {
         }
@@ -188,8 +222,16 @@ public class ContactInfo implements Serializable {
         }
 
         @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-        public ContactInfoBuilder phoneNumber(@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") Phonenumber.PhoneNumber phoneNumber) {
+        public ContactInfoBuilder phoneNumber(@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") String phoneNumber) {
             this.phoneNumber = phoneNumber;
+            return this;
+        }
+
+        // Optional: Add a builder method accepting PhoneNumber object
+        @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+        public ContactInfoBuilder phoneNumberObject(Phonenumber.PhoneNumber phoneNumber) {
+            PhoneNumberConverter converter = new PhoneNumberConverter();
+            this.phoneNumber = converter.convertToDatabaseColumn(phoneNumber);
             return this;
         }
 

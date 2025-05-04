@@ -19,25 +19,21 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import org.springframework.beans.factory.config.CustomEditorConfigurer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
-import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
-import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import java.beans.PropertyEditor;
-import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
+import java.util.TimeZone;
+
 
 @Configuration
 @EnableConfigurationProperties
@@ -50,15 +46,16 @@ public class ObjectMapperConfig {
                 // Register modules
                 .addModule(new JavaTimeModule())
                 .addModule(new Jdk8Module())
-//                .registerModule(new JavaTimeModule());
                 // Configure serialization features
                 .serializationInclusion(JsonInclude.Include.NON_NULL)
-                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS) // Correct with JavaTimeModule
                 .disable(SerializationFeature.FAIL_ON_EMPTY_BEANS)
                 // Configure deserialization features
                 .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                // Consider if this is truly needed application-wide:
                 .enable(DeserializationFeature.ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
-                .enable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
+                // REMOVED: Likely unnecessary/confusing with JavaTimeModule. Rely on the module.
+                // .enable(DeserializationFeature.READ_DATE_TIMESTAMPS_AS_NANOSECONDS)
                 // Configure timezone to UTC
                 .defaultTimeZone(TimeZone.getTimeZone(ZoneOffset.UTC))
                 .build();
@@ -98,59 +95,27 @@ public class ObjectMapperConfig {
         return new WebMvcConfigurer() {
             @Override
             public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+                // Clear defaults and add only our configured converter
                 converters.clear();
                 converters.add(new MappingJackson2HttpMessageConverter(objectMapper));
             }
         };
     }
 
-    // Moved to ValkeyCacheConfig
-//    /**
-//     * Configure Jackson's ObjectMapper for Redis
-//     */
-//    @Bean
-//    public RedisTemplate<String, Object> redisTemplate(
-//            RedisConnectionFactory connectionFactory,
-//            ObjectMapper objectMapper) {
-//        RedisTemplate<String, Object> template = new RedisTemplate<>();
-//        template.setConnectionFactory(connectionFactory);
-//
-//        // Create Jackson2JsonRedisSerializer with type resolving
-//        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
-//
-//        // Configure serializers
-//        template.setDefaultSerializer(serializer);
-//        template.setKeySerializer(new StringRedisSerializer());
-//        template.setValueSerializer(serializer);
-//        template.setHashKeySerializer(new StringRedisSerializer());
-//        template.setHashValueSerializer(serializer);
-//
-//        template.afterPropertiesSet();
-//        return template;
-//    }
-
-//    /**
-//     * Configure custom property editor for dates
-//     */
-//    @Bean
-//    public CustomEditorConfigurer customEditorConfigurer() {
-//        CustomEditorConfigurer configurer = new CustomEditorConfigurer();
-//        Map<Class<?>, Class<? extends PropertyEditor>> editors = new HashMap<>();
-//        editors.put(LocalDateTime.class, CustomLocalDateTimeEditor.class);
-//        configurer.setCustomEditors(editors);
-//        return configurer;
-//    }
-
-    /**
-     * Configure custom property editor for Instant
-     */
+    // --- CustomEditorConfigurer Bean ---
+    // MOVED: This bean configures Spring data binding (e.g., for request params),
+    // not Jackson. It should be moved to a WebConfig or DataBindingConfig class.
+    /*
     @Bean
     public CustomEditorConfigurer customEditorConfigurer() {
         CustomEditorConfigurer configurer = new CustomEditorConfigurer();
         Map<Class<?>, Class<? extends PropertyEditor>> editors = new HashMap<>();
         editors.put(Instant.class, CustomInstantEditor.class);
+        // If you need LocalDateTime editor too, add it here:
+        // editors.put(LocalDateTime.class, CustomLocalDateTimeEditor.class);
         configurer.setCustomEditors(editors);
         return configurer;
     }
+    */
 
 }

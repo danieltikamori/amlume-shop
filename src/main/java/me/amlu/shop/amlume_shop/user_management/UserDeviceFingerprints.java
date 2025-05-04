@@ -15,7 +15,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.OneToMany;
 import me.amlu.shop.amlume_shop.commons.Constants;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -31,7 +31,7 @@ public class UserDeviceFingerprints implements Serializable {
     private static final long serialVersionUID = 1L;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
+    private final List<UserDeviceFingerprint> deviceFingerprints = new ArrayList<>();
 
     protected UserDeviceFingerprints() { // Required by JPA
     }

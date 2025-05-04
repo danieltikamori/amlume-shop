@@ -11,23 +11,40 @@
 package me.amlu.shop.amlume_shop.security.auth;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
 
-@Component
+@Component("authenticationHealth") // Give it a specific name if needed
 public class AuthenticationHealthIndicator implements HealthIndicator {
+
     private final CircuitBreaker circuitBreaker;
 
-    public AuthenticationHealthIndicator(CircuitBreaker circuitBreaker) {
-        this.circuitBreaker = circuitBreaker;
+    public AuthenticationHealthIndicator(CircuitBreakerRegistry circuitBreakerRegistry) {
+        // Retrieve the specific circuit breaker by name from the registry
+        // *** IMPORTANT: Replace "vaultService" with the actual name of the
+        //     circuit breaker this indicator should monitor if it's different! ***
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("vaultService");
     }
 
     @Override
     public Health health() {
         CircuitBreaker.State state = circuitBreaker.getState();
-        return state == CircuitBreaker.State.CLOSED ?
-                Health.up().withDetail("circuitBreaker", state).build() :
-                Health.down().withDetail("circuitBreaker", state).build();
+        if (state == CircuitBreaker.State.CLOSED || state == CircuitBreaker.State.HALF_OPEN) {
+            // Consider HALF_OPEN as UP or DEGRADED depending on the policy
+            return Health.up()
+                    .withDetail("circuitBreakerName", circuitBreaker.getName())
+                    .withDetail("state", state)
+                    .build();
+        } else {
+            return Health.down()
+                    .withDetail("circuitBreakerName", circuitBreaker.getName())
+                    .withDetail("state", state)
+                    .withDetail("failureRate", circuitBreaker.getMetrics().getFailureRate())
+                    .withDetail("slowCallRate", circuitBreaker.getMetrics().getSlowCallRate())
+                    .build();
+        }
     }
 }
+

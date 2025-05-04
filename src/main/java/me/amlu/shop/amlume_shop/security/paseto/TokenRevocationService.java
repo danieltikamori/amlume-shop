@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.paseto;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -22,6 +23,10 @@ public interface TokenRevocationService {
 //    @Async("tokenBackgroundTasksExecutor")
 //    @Transactional
 //    CompletableFuture<Void> revokeAllUserTokens(String username, String reason);
+
+    @Async // Ensure @EnableAsync is present on a @Configuration class
+    @Transactional // Separate transaction for the async operation
+    void revokeTokenAsync(String tokenId, String reason);
 
     void validateNotRevoked(Map<String, Object> claims);
 

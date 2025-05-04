@@ -10,19 +10,20 @@
 
 package me.amlu.shop.amlume_shop.security.aspect;
 
-import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.slf4j.Logger;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
-@Slf4j
 @Aspect
 @Component
 public class AuthenticationLoggingAspect {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AuthenticationLoggingAspect.class);
 
     //    @Around("execution(* com.yourapp.security.*.*(..)) && @annotation(Audited)")
     @Around("execution(* me.amlu.shop.amlume_shop.security.service.UserAuthenticator.*(..))") // More specific pointcut

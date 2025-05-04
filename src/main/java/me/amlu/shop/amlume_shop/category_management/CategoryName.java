@@ -10,9 +10,11 @@
 
 package me.amlu.shop.amlume_shop.category_management;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import org.checkerframework.checker.units.qual.min;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -27,6 +29,7 @@ public class CategoryName implements Serializable {
 
     @NotBlank(message = "Category name is required")
     @Size(min = 2, max = 200, message = "Category name must be between 2 and 200 characters")
+    @Column(name = "category_name", nullable = false)
     private final String name;
 
     // --- Constructor ---

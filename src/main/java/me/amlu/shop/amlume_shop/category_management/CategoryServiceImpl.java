@@ -13,8 +13,8 @@ package me.amlu.shop.amlume_shop.category_management;
 import me.amlu.shop.amlume_shop.exceptions.APIException;
 import me.amlu.shop.amlume_shop.exceptions.CategoryDataValidationException;
 import me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException;
-import me.amlu.shop.amlume_shop.payload.CreateCategoryRequest;
-import me.amlu.shop.amlume_shop.payload.GetCategoryResponse;
+import me.amlu.shop.amlume_shop.category_management.dto.CreateCategoryRequest;
+import me.amlu.shop.amlume_shop.category_management.dto.GetCategoryResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -309,7 +309,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         Long categoryId = category.getCategoryId();
         String categoryName = (category.getCategoryName() != null) ? category.getCategoryName().getName() : null;
-        String description = (category.getDescription() != null) ? category.getDescription().getValue() : null;
+        String description = (category.getDescription() != null) ? category.getDescription().getDescriptionData() : null;
         Long parentId = (category.getParentCategory() != null) ? category.getParentCategory().getCategoryId() : null;
         Integer level = (category.getHierarchyLevel() != null) ? category.getHierarchyLevel().getLevel() : null;
         String path = (category.getHierarchyLevel() != null) ? category.getHierarchyLevel().getPath() : null;

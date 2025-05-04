@@ -16,7 +16,12 @@ asn:
     window-seconds: 60
     max-requests: 100
     capacity: 100
-
+  stale-threshold: 30d # days for DB cleanup
+  cleanup-schedule: "0 0 3 * * *" # Cron expression for daily cleanup
+  reputation:
+    # ttl: 31d # Optional: Explicit TTL for Redis reputation entries
+    decay:
+      schedule: "0 1 4 * * *" # Schedule for the (currently no-op) decay task
   update:
     schedule: 0 0 0 * * *
 
@@ -50,13 +55,17 @@ geoip:
 
 geoip2:
   database:
-    path: /project/geoip/GeoLite2-ASN.mmdb
+    # Path used by GeoIp2Service / AsnConfig
+    # Use 'file:' prefix to load from the filesystem absolute path
+    #    classpath: instruct Spring  to search the file within the compiled resources of the application
+    path: classpath:/project/geoip/GeoLite2-ASN.mmdb
   #    path: classpath:geolite2/GeoLite2-ASN.mmdb
   #    Or if using City database
   #    path: classpath:geolite2/GeoLite2-City.mmdb
   account-id: ${GEOIP2_ACCOUNT_ID}
   license-key: ${GEOIP2_LICENSE_KEY}
 
+# For HCP Cloud API (Cloud offering)
 hcp:
   client-id: ${HCP_CLIENT_ID}
   client-secret: ${HCP_CLIENT_SECRET}
@@ -73,10 +82,21 @@ jti:
 
 logging:
   level:
+    org.springframework:
+      web: ERROR
+      web.client: ERROR
+      web.reactive: ERROR
+      web.reactive.function.client: ERROR
+      web.reactive.function.client.ExchangeFunctions: ERROR
+      web.reactive.function.client.ExchangeStrategies: ERROR
+      web.reactive.function.client.WebClient: ERROR
+      web.reactive.function.client.WebClient.Builder: ERROR
+      web.reactive.function.client.WebClient.RequestHeadersSpec: ERROR
+      web.reactive.function.client.WebClient.RequestHeadersUriSpec: ERROR
     org.springframework.cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
     #    root: DEBUG
     me.amlu.shop.amlume_shop: DEBUG
-    me.amlu.shop.amlume_shop.config: DEBUG
+    me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
     me.amlu.shop.amlume_shop.service: DEBUG
     me.amlu.shop.amlume_shop.controller: DEBUG
     me.amlu.shop.amlume_shop.repository: DEBUG
@@ -101,7 +121,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics, caches
   health:
     livenessState:
       enabled: true
@@ -110,34 +130,44 @@ management:
     show-details: when_authorized # always
   metrics:
     cache:
-      instrument: true
+      instrument: true # Enable cache metrics collection
     enabled: true
     enable:
       all: true
       cache: true
-      redis: true
+      redis: true # Ensure Redis metrics are enabled
     tags:
       application: ${spring.application.name}
     distribution:
+      # Enable percentiles for specific metrics
       percentiles-histogram:
         http.server.requests: true
         valkey.operation.duration: true
         paseto.token.validation: true
-        percentiles:
-          paseto.token.validation: 0.5,0.95,0.99
+      # Define the specific percentiles to compute for enabled histograms
+      percentiles:
+        paseto.token.validation: [0.5, 0.95, 0.99]
   prometheus:
     metrics:
       export:
         enabled: true
         step: 10s
-#          valkey.operation.duration: 0.5,0.95,0.99
-#          http.server.requests: 0.5,0.95,0.99
+#          valkey.operation.duration: [0.5, 0.95, 0.99]
+#          http.server.requests: [0.5, 0.95, 0.99]
 
 mfa:
-  encryption:
-    password: ${MFA_ENCRYPTION_PASSWORD}
-    salt: ${MFA_ENCRYPTION_SALT}
-
+  mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+  mfaEncryptionSalt: ${MFA_ENCRYPTION_SALT} # LOAD SECURELY (From Vault/Env)
+#  totp:
+#    mfaEncryptionPassword: ${MFA_ENCRYPTION_PASSWORD} # LOAD SECURELY (From Vault/Env)
+#  encryption:
+#    password: ${MFA_ENCRYPTION_PASSWORD}
+#    salt: ${MFA_ENCRYPTION_SALT}
+  excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
+  rate-limit:
+    max-attempts: 5
+    window-seconds: 300  # 5 minutes
+    time-window-minutes: 30
 
 notification:
   email:
@@ -147,36 +177,70 @@ notification:
     webhook-url: ${SLACK_WEBHOOK_URL}
     channel: ${SLACK_CHANNEL_NAME}
     channel-id: ${SLACK_CHANNEL_ID}
+    token: ${SLACK_API_TOKEN}
+
+#paseto:
+#  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
+#  expiration: 3600                  # Non-sensitive config is fine here
+#  access:
+#    expiration: 3600
+#    local:
+#      expiration: 3600
+#      secret-key: ${PASETO_ACCESS_SECRET_KEY}
+#      kid: ${PASETO_ACCESS_LOCAL_KID}
+#    public:
+#      expiration: 3600
+#      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
+#      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
+#      kid: ${PASETO_ACCESS_PUBLIC_KID}
+#  refresh:
+#    expiration: 86400
+#    local:
+#      expiration: 86400
+#      secret-key: ${PASETO_REFRESH_SECRET_KEY}
+#      kid: ${PASETO_REFRESH_LOCAL_KID}
+#    public:
+#      expiration: 86400
+#      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
+#      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
+#      kid: ${PASETO_REFRESH_PUBLIC_KID}
+#  token-no-footer:
+#    parts: 3
+#  token-with-footer:
+#    parts: 4
+
+# application.yml
 
 paseto:
-  secret-key: ${PASETO_SECRET_KEY}  # Gets value from environment variable
-  expiration: 3600                  # Non-sensitive config is fine here
+  token-no-footer-parts: 3 #Maps to PasetoProperties.tokenNoFooterParts
+  token-with-footer-parts: 4 #Maps to PasetoProperties.tokenWithFooterParts
   access:
-    expiration: 3600
+    expiration: 3600 # Default expiration for access tokens
     local:
-      expiration: 3600
-      secret-key: ${PASETO_ACCESS_SECRET_KEY}
-      kid: ${PASETO_ACCESS_LOCAL_KID}
+      # Define the properties expected by PasetoProperties.Access.Local
+      # Use ${ENV_VAR_NAME:default_value} to read from environment or provide a default
+      secret-key:
+      kid:
+      # expiration: 3600 # Optional: Override default if needed for local access tokens specifically
     public:
-      expiration: 3600
-      private-key: ${PASETO_ACCESS_PRIVATE_KEY}
-      public-key: ${PASETO_ACCESS_PUBLIC_KEY}
-      kid: ${PASETO_ACCESS_PUBLIC_KID}
+      # Define the properties expected by PasetoProperties.Access.Public
+      private-key:
+      public-key:
+      kid:
+      expiration: 3600 # Can override default access expiration if needed for public access tokens
   refresh:
-    expiration: 86400
+    expiration: 86400 # Default expiration for refresh tokens
     local:
-      expiration: 86400
-      secret-key: ${PASETO_REFRESH_SECRET_KEY}
-      kid: ${PASETO_REFRESH_LOCAL_KID}
+      # Define the properties expected by PasetoProperties.Refresh.Local
+      secret-key:
+      kid:
+      # expiration: 86400 # Optional: Override default if needed for local refresh tokens
     public:
-      expiration: 86400
-      private-key: ${PASETO_REFRESH_PRIVATE_KEY}
-      public-key: ${PASETO_REFRESH_PUBLIC_KEY}
-      kid: ${PASETO_REFRESH_PUBLIC_KID}
-  token-no-footer:
-    parts: 3
-  token-with-footer:
-    parts: 4
+      # Define the properties expected by PasetoProperties.Refresh.Public
+      private-key:
+      public-key:
+      kid:
+      expiration: 86400 # Can override default refresh expiration if needed for public refresh tokens
 
 recaptcha:
   secret: ${RECAPTCHA_SECRET_KEY}
@@ -192,12 +256,16 @@ project:
 
 rate-limiter:
   redis-key-prefix: "ratelimit:sw:"
+  global-filter-limiter-name: global
   fail-open: false # Default: deny requests if Redis fails
   defaults:
     limit: 100 # Default limit per window
     window-duration: 1m # Default window duration (1 minute)
   limiters:
     captcha: # Specific config for captcha
+      limit: 50
+      window-duration: 1h
+    global:
       limit: 50
       window-duration: 1h
     login: # Specific config for login
@@ -213,6 +281,9 @@ rate-limiter:
     deviceFingerprintRegister: # Specific config for device registration
       limit: 5
       window-duration: 1h
+    ipSuspicionCheck: # Specific config for suspicious IPs inside IpSecurityServiceImpl
+      limit: 20
+      window-duration: 1m
     # Add other specific limiters as needed
 
   token:
@@ -246,22 +317,6 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
 
-      captchaValidation:
-        failureRateThreshold: 50 # Percentage of failures to open
-        slowCallRateThreshold: 100 # Percentage of slow calls to open
-        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowSize: 20 # Number of calls to monitor when closed
-        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
-        waitDurationInOpenState: 30000
-
-      valkeyService:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 20s
-        permittedNumberOfCallsInHalfOpenState: 5
-        slidingWindowType: COUNT_BASED
-
       asnDnsLookup:
         failureRateThreshold: 50 # Percentage of failures to open
         slowCallRateThreshold: 100 # Percentage of slow calls to open
@@ -288,6 +343,35 @@ resilience4j:
         #   - java.util.concurrent.TimeoutException
         # ignoreExceptions: # Exceptions that *don't* count as failures
         #   - me.amlu.shop.amlume_shop.exceptions.ResourceNotFoundException
+
+      captchaValidation:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 30000
+
+      rateLimiterRedis:
+        failureRateThreshold: 50 # Percentage of failures to open
+        slowCallRateThreshold: 100 # Percentage of slow calls to open
+        slowCallDurationThreshold: 2000 # ms - calls slower than this are 'slow'
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20 # Number of calls to monitor when closed
+        minimumNumberOfCalls: 10 # Minimum calls before calculating thresholds
+        waitDurationInOpenState: 20 #
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+      valkeyService:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowType: COUNT_BASED
+
       vaultService:
         failureRateThreshold: 50 # Percentage of failures to open
         registerHealthIndicator: true
@@ -318,8 +402,8 @@ resilience4j:
   exponential-backoff:
     instances:
       default:
-        initial-interval-millis: 200L
-        max-interval-millis: 86400000L // 24h
+        initial-interval-millis: 200
+        max-interval-millis: 86400000 # 24h
         eb-multiplier: 1.5
         randomization-factor: 0.36
 
@@ -349,9 +433,24 @@ resilience4j:
           - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
 
       default:
-        max-requests-per-minute: 100L
-        retry-interval: 1000L
+        max-attempts: 3
+        max-requests-per-minute: 100
+        retry-interval: 1000
         retry-wait-duration: 200
+
+      rateLimiterRedis:
+        maxAttempts: 3
+        waitDuration: 200ms
+#        enableExponentialBackoff: true
+#        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.dao.DataAccessException # Retry on Redis connection issues exceptions
+          - me.amlu.shop.amlume_shop.exceptions.RateLimitException # Retry if our wrapper is thrown due to backend/Redis error
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions: # Exceptions that should NOT trigger a retry
+            - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException # Don't retry if rate-limited
+            - jakarta.validation.ValidationException
 
       vaultService:
         maxAttempts: 3
@@ -383,13 +482,20 @@ resilience4j:
     connect-timeout: 5000
     read-timeout: 10000
 
+    # NOTE on /bin directory contents:
+    # - src/main/java/me/amlu/shop/amlume_shop/security/paseto/TokenGenerationServiceImpl.class
+    # - src/main/java/me/amlu/shop/amlume_shop/security/paseto/KeyManagementService.class
+    # These appear to be decompiled class files. Their security cannot be fully verified
+    # without reviewing the original source code. Ensure the original source for these
+    # critical security components is available and reviewed.
+    # --- Security Configuration ---
 security:
   max-devices-per-user: 5
   max-concurrent-sessions: 2
   device-fingerprint:
     hash-algorithm: ${HASH_ALGORITHM}
     hash-encoding: ${HASH_ENCODING}
-    fingerprint-salt: ${FINGERPRINT_SALT}
+    fingerprint-salt: ${DEVICE_FINGERPRINT_SALT}
     block-unknown: true
     excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
 
@@ -398,6 +504,87 @@ security:
       type: database  # or redis/hazelcast
     trusted-device:
       expiration-days: 30
+
+  geo:
+    suspicious-distance-km: 500.0 # Default distance in KM for impossible travel check
+    time-window-hours: 24       # Default time window in hours for location history cache TTL
+    known-vpn-asns: # List of ASNs considered likely VPNs/Proxies
+      - "AS174"
+      - "AS1299"
+      - "AS2914"
+      - "AS3257"
+      - "AS3320"
+      - "AS3356"
+      - "AS3491"
+      - "AS4134"
+      - "AS4515"
+      - "AS4538"
+      - "AS4657"
+      - "AS4760"
+      - "AS4766"
+      - "AS4808"
+      - "AS4812"
+      - "AS4837"
+      - "AS6453"
+      - "AS6461"
+      - "AS6939"
+      - "AS7018"
+      - "AS7473"
+      - "AS7552"
+      - "AS7713"
+      - "AS8075"
+      - "AS9009"
+      - "AS9269"
+      - "AS9299"
+      - "AS9304"
+      - "AS9394"
+      - "AS9443"
+      - "AS9583"
+      - "AS9808"
+      - "AS9892"
+      - "AS9929"
+      - "AS12876"
+      - "AS13335"
+      - "AS14061"
+      - "AS14618"
+      - "AS15169"
+      - "AS16276"
+      - "AS16509"
+      - "AS17621"
+      - "AS20473"
+      - "AS23724"
+      - "AS24203"
+      - "AS24378"
+      - "AS24940"
+      - "AS37963"
+      - "AS38001"
+      - "AS38283"
+      - "AS45090"
+      - "AS45102"
+      - "AS45543"
+      - "AS45899"
+      - "AS51167"
+      - "AS55410"
+      - "AS55967"
+      - "AS56308"
+      - "AS58593"
+      - "AS131429"
+      - "AS131584"
+      - "AS132203"
+      - "AS132787"
+      - "AS132816"
+      - "AS133480"
+      - "AS133752"
+      - "AS134105"
+      - "AS135905"
+      - "AS137971"
+      - "AS396982"
+      # ... Add others as necessary ...
+    high-risk-countries: # List of ISO country codes considered high-risk
+      - "IR" # Iran
+      # Add other relevant countries based on risk assessment
+    known-vpn-ip-ranges: "" # List of known VPN IP ranges (CIDR format)
+    known-datacenter-ranges: "" # List of known datacenter IP ranges (CIDR format)
   ip:
     suspicious-requests-threshold: 5
     block-threshold: 10
@@ -433,7 +620,7 @@ service:
 
 spring:
   application:
-    name: ${SERVICE_NAME}
+    name: ${SERVICE_NAME:amlume-shop}
     version: ${SERVICE_VERSION}
     environment: ${SERVICE_ENVIRONMENT}
     description: ${SERVICE_DESCRIPTION}
@@ -455,28 +642,31 @@ spring:
   cache:
     type: redis  # redis/valkey
     cache-names: mfaTokens
-    valkey:
-      host: ${VALKEY_HOST:localhost}
-      port: ${VALKEY_PORT:6379}
-    caffeine:
-      spec: maximumSize=1000,expireAfterWrite=1h
+    redis:
+      # These properties provide defaults that can be overridden by ValkeyCacheConfig
+      time-to-live: 30m # Default TTL if not specified in Java config (matches ValkeyCacheConfig default)
+      cache-null-values: false # Consistent with ValkeyCacheConfig
+      key-prefix: "${spring.application.name}:cache:" # Optional: Add a prefix to all cache keys
+      use-key-prefix: true # Optional: Enable the prefix
 
   cloud:
     vault:
+      path: "secret/${spring.application.name}/mfa" # Path where secrets are stored
       enabled: true
       fail-fast: false  # <<< IMPORTANT: Allow fallback if Vault fails
-      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
-      token: ${VAULT_TOKEN:} # Allow empty token for fallback testing if needed
+      uri: http://localhost:8200 # Example fallback URI
+      authentication: TOKEN # Authentication method (e.g., TOKEN, APPROLE, KUBERNETES)
+#      uri: ${VAULT_URI:http://localhost:8200} # Example fallback URI
+      token: ${VAULT_TOKEN:token} # Allow empty token for fallback testing if needed
       kv:
         enabled: true
         backend: secret  # Path where KV v2 engine is mounted
-        # application-name: amlume-shop # Uses spring.application.name by default
-        default-context: mfa # Looks for secrets under secret/amlume-shop/mfa
+        application-name: ${spring.application.name} # Uses spring.application.name by default
+        default-context: "" # Looks for secrets under secret/amlume-shop/mfa
         # profile-separator: '/' # Usually default is fine
   config:
-    import: "optional:vault://" # <<< IMPORTANT: Makes Vault optional at startup
-
-
+        # Explicitly import vault (optional) AND the secrets file from the classpath (optional)
+    import: ["optional:vault://", "optional:classpath:application-local-secrets.yml"]
     gateway:
       routes:
         - id: asn_lookup_route
@@ -494,15 +684,22 @@ spring:
   #    password: ${DB_PASSWORD}
   #    driverClassName: org.postgresql.Driver
 
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-    datasource:
-      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
-      username: sa
-      password:
-      driverClassName: org.h2.Driver
+  # --- Datasource (Connect to Docker MySQL) ---
+  datasource:
+    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
+    username: amlume_user
+    password: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Match docker-compose env
+    driverClassName: com.mysql.cj.jdbc.Driver # Usually inferred
+
+#  h2:
+#    console:
+#      enabled: false
+#      path: /h2-console
+#    datasource:
+#      url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+#      username: sa
+#      password:
+#      driverClassName: org.h2.Driver
 
   jackson:
     default-property-inclusion: non_null
@@ -517,26 +714,16 @@ spring:
     property-naming-strategy: SNAKE_CASE
     time-zone: UTC
 
-  main:
-    #    allow-circular-references: true
-    keep-alive: true
-    web-application-type: reactive
-  profiles:
-    active: local
-  threads:
-    virtual:
-      enabled: true
-      enabled.manually: false
-      name-prefix: ${SERVICE_NAME}
-
   jpa: # To store events in a database
+    database-platform: org.hibernate.dialect.MySQLDialect
     #    database-platform: org.hibernate.dialect.PostgreSQLDialect
     show-sql: true # Show SQL generated by JPA queries in the console
     hibernate:
-      ddl-auto: create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production.
-      properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+      ddl-auto: update #create-drop # Create database schema on startup and drop it on shutdown. Use "update" instead of "create-drop" in production.
+#      properties:
+#      hibernate:
+#        dialect: org.hibernate.dialect.MySQLDialect
+#        dialect: org.hibernate.dialect.PostgreSQLDialect
       show-sql: true
     properties:
       hibernate:
@@ -546,12 +733,45 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
-  mfa:
-    excluded-uris: "/api/auth/,/public/,/health,/favicon.ico"
-    rate-limit:
-      max-attempts: 5
-      window-seconds: 300  # 5 minutes
-      time-window-minutes: 30
+  mail:
+    host: ${MAIL_HOST}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    port: ${MAIL_PORT}
+    properties:
+      mail:
+        smtp:
+          starttls:
+            enable: ${MAIL_STARTTLS_ENABLE}
+          auth: ${MAIL_AUTH_ENABLE}
+
+  main:
+    #    allow-circular-references: true
+    keep-alive: true
+    web-application-type: servlet
+
+  threads:
+    virtual:
+      enabled: true
+      enabled.manually: false
+      name-prefix: ${SERVICE_NAME}
+
+  # --- Valkey Connection Details ---
+  # These are correctly picked up by @Value in ValkeyCacheConfig
+  valkey:
+    host: ${VALKEY_HOST:localhost}
+    port: ${VALKEY_PORT:6379}
+    password: ${VALKEY_PASSWORD:} # Use empty default if no password
+    # database: ${VALKEY_DATABASE:0} # Optional: Specify database index if not 0
+    # timeout: 5000 # Optional: Connection timeout (consider Lettuce properties below)
+    # --- Lettuce specific properties (optional but recommended) ---
+    lettuce:
+      pool:
+        max-active: 8 # Max connections in pool
+        max-idle: 8   # Max idle connections
+        min-idle: 0   # Min idle connections
+        max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
+      shutdown-timeout: 100ms # Timeout for shutting down the pool
 
 # Thread Pool Configuration
 threadpool:
@@ -608,6 +828,13 @@ token:
     validity: 86400 # 24 hours
     auto-refresh: true
   validation:
+    # Use a duration format (e.g., 10s for 10 seconds)
+    # This value comes from Constants.CLOCK_SKEW_TOLERANCE, let's use 10s as example
+    clock-skew-tolerance: 10s
+    # These likely come from other properties or defaults
+    issuer: ${service.name:amlume-shop} # Use service name or default
+    audience: ${service.audience:amlume-audience} # Use audience property or default
+
     rate-limit:
       permits-per-second: 10
       max-attempts: 5
@@ -622,7 +849,7 @@ valkey:
   nodes: ${VALKEY_HOST}:${VALKEY_PORT}
   host: ${VALKEY_HOST}
   port: ${VALKEY_PORT}
-  password: ${VALKEY_PASSWORD}
+  password: ${VALKEY_PASSWORD:}
   database: ${VALKEY_DATABASE}
   timeout: 5000
   cluster:
@@ -657,16 +884,21 @@ valkey:
     jmx-name-base: connection-pool
     jmx-name-prefix: "valkey.pool"
 
+# Rely primarily on spring.cloud.vault. * properties
 vault:
-  uri: ${VAULT_URI}
-  token: ${VAULT_TOKEN}
-  secret:
-    base-path: secret/data/amlume-shop
-    database-path: secret/data/amlume-shop/database
+#  uri: ${VAULT_URI}
+#  token: ${VAULT_TOKEN}
+#  secret:
+#    base-path: secret/data/amlume-shop
+#    database-path: secret/data/amlume-shop/database
+  docker:
+    uri: http://localhost:8200
+    token: ${VAULT_TOKEN}
+    approle: reader
   kubernetes:
     uri: http://vault.default.svc.cluster.local:8200
     role: "vault_role" # Placeholder for now
-  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
+#  #    path: # (Optional): Only needed if your Kubernetes auth method in Vault is mounted at a path other than kubernetes.
   hcp:
     uri: ${VAULT_HCP_URI}
     token: ${VAULT_HCP_TOKEN}
@@ -674,7 +906,6 @@ vault:
       path: ${VAULT_HCP_APP_ROLE_PATH}
       role-id: ${VAULT_HCP_APP_ROLE_ID}
       secret-id: ${VAULT_HCP_APP_ROLE_SECRET_ID}
-
 
 web:
   cors:

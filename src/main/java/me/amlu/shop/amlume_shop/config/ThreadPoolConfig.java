@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -71,15 +70,13 @@ import java.util.concurrent.ThreadPoolExecutor;
  *
  * @author Daniel Itiro Tikamori
  * @version 1.0
- * @since 2025-02-28
  * @description ThreadPoolConfig
- *
+ * @since 2025-02-28
  */
-@Slf4j
 @Configuration
 public class ThreadPoolConfig {
 
-    private static final Logger logger = LoggerFactory.getLogger(ThreadPoolConfig.class);
+    private static final Logger log = LoggerFactory.getLogger(ThreadPoolConfig.class);
 
     @Value("${threadpool.io.core-pool-size:10}")
     private int ioCorePoolSize;
@@ -156,7 +153,7 @@ public class ThreadPoolConfig {
         executor.setAwaitTerminationSeconds(60); // Wait for up to 60 seconds
         executor.setThreadFactory(runnable -> {
             Thread thread = new Thread(runnable);
-            thread.setUncaughtExceptionHandler((t, e) -> logger.error("Uncaught exception in thread: {}", t.getName(), e));
+            thread.setUncaughtExceptionHandler((t, e) -> log.error("Uncaught exception in thread: {}", t.getName(), e));
             return thread;
         });
         executor.initialize();

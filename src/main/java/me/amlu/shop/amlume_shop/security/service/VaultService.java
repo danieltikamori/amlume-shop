@@ -388,3 +388,40 @@ public class VaultService {
         }
     }
 }
+
+// Note: Ensure to adjust the regex patterns in validatePath and validatePathAndKey methods as per your Vault path/key naming conventions.
+
+// Also, consider adding more specific exception handling based on your application's needs.
+// This code is designed to be resilient and handle various scenarios, including transient errors, circuit breaking, and fallback mechanisms.
+// The resilience patterns (Retry and Circuit Breaker) are applied to the methods where appropriate.
+// The fallback methods are designed to handle failures gracefully, returning empty Optionals or throwing exceptions as needed.
+
+// The logging statements are designed to provide detailed information about the operations and any errors encountered.
+// Adjust the logging levels (DEBUG, INFO, WARN, ERROR) based on your application's logging strategy and requirements.
+// Ensure to test the resilience patterns and fallback mechanisms thoroughly to ensure they behave as expected under various conditions.
+// The VaultService class is designed to be a reusable component for interacting with HashiCorp Vault, providing methods for retrieving and storing secrets with resilience patterns applied.
+
+// Usage example:
+
+//@Service
+//public class SomeOtherService {
+//
+//    private final VaultService vaultService;
+//    private final String dbConfigPath = "secret/data/amlume-shop/database"; // KV v2 path
+//
+//    public SomeOtherService(VaultService vaultService) {
+//        this.vaultService = vaultService;
+//    }
+//
+//    public String getDatabasePassword() {
+//        // Get the latest version
+//        return vaultService.getSecret(dbConfigPath, "password");
+//        // Or get a specific version
+//        // return vaultService.getSpecificSecret(dbConfigPath, "password", 3);
+//    }
+//
+//    public void updateApiKey(String newKey) {
+//        String apiPath = "secret/data/amlume-shop/api-keys"; // KV v2 path
+//        vaultService.setSecret(apiPath, "external-service-key", newKey);
+//    }
+//}

@@ -10,10 +10,10 @@
 
 package me.amlu.shop.amlume_shop.exceptions;
 
-import lombok.extern.slf4j.Slf4j;
-import me.amlu.shop.amlume_shop.payload.ApiResponse;
-import me.amlu.shop.amlume_shop.payload.ErrorResponse;
+import me.amlu.shop.amlume_shop.dto.ApiResponse;
+import me.amlu.shop.amlume_shop.dto.ErrorResponse;
 import org.apache.coyote.BadRequestException;
+import org.slf4j.Logger;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,9 +28,10 @@ import org.springframework.web.context.request.WebRequest;
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 //    @org.springframework.web.bind.annotation.ExceptionHandler(ResponseStatusException.class)
 //    public String handleResponseStatusException(ResponseStatusException e) {
@@ -556,16 +557,6 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiResponse, HttpStatus.BAD_REQUEST);
     }
 
-    @ExceptionHandler(TooManyDevicesException.class)
-    public ResponseEntity<ErrorResponse> handleTooManyDevices(TooManyDevicesException ex) {
-        ErrorResponse error = new ErrorResponse(
-                "TOO_MANY_DEVICES",
-                ex.getMessage(),
-                HttpStatus.BAD_REQUEST.value()
-        );
-        return new ResponseEntity<>(error, HttpStatus.BAD_REQUEST);
-    }
-
     @ExceptionHandler
     public ResponseEntity<ApiResponse> maxDevicesExceededException(MaxDevicesExceededException e) {
         String message = e.getMessage();
@@ -723,14 +714,7 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(apiResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-//    @ExceptionHandler(UsernameAlreadyExistsException.class)
-//    public ResponseEntity<String> handleException(UsernameAlreadyExistsException ex) {
-//        String message = ex.getMessage();
-//        APIResponse apiResponse = new APIResponse(message, false);
-//        return new ResponseEntity<>(ex.getMessage(), HttpStatus.CONFLICT);
-//    }
-
-    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    @ExceptionHandler
     public ResponseEntity<ApiResponse> emailSendingFailedException(EmailSendingFailedException ex) {
         String message = ex.getMessage();
         ApiResponse apiResponse = new ApiResponse(message, false);

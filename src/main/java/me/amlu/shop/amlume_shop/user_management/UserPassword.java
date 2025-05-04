@@ -15,7 +15,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import me.amlu.shop.amlume_shop.config.ValidPassword;
+import me.amlu.shop.amlume_shop.security.config.ValidPassword;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -31,7 +31,7 @@ public class UserPassword implements Serializable {
     @NotBlank
     @Size(min = 12, max = 255, message = "Password must be between 12 and 255 characters")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-    @Column(nullable = false, name = "password")
+    @Column(nullable = false, name = "userpassword")
     private String password;  // This will store the Argon2id or other hash
 
     protected UserPassword() { // Required by JPA

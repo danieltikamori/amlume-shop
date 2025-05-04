@@ -10,28 +10,30 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.model.UserDeviceFingerprint;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 
-@Slf4j
 @Service
 public class AuditLogger {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(AuditLogger.class);
+
     public void logDeviceAccess(String userId, String deviceFingerprint, String action) {
-        log.info("Security event: {} - User: {} - Device: {} - Timestamp: {}", 
+        log.info("Security event: {} - User: {} - Device: {} - Timestamp: {}",
                 action, userId, deviceFingerprint, Instant.now());
         // You might want to save this to a database or send to a security monitoring system
     }
 
-    public void logSecurityEvent(String action,String userId, String fingerprint) {
+    public void logSecurityEvent(String action, String userId, String fingerprint) {
         log.info("Important Security event: {} - User: {} - Device: {} - Timestamp: {}",
                 action, userId, fingerprint, Instant.now());
     }
 
-    public void logSecurityEvent(String action,String userId, String fingerprint, String clientIp) {
+    public void logSecurityEvent(String action, String userId, String fingerprint, String clientIp) {
         log.info("Important Security event: {} - User: {} - Device: {} - Timestamp: {} - Client IP: {}",
                 action, userId, fingerprint, Instant.now(), clientIp);
     }

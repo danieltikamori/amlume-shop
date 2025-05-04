@@ -10,7 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
-import me.amlu.shop.amlume_shop.payload.CreateEmailRequest;
+import me.amlu.shop.amlume_shop.notification.dto.CreateEmailRequest;
 
 public interface EmailService {
     Object sendMail(CreateEmailRequest createEmailRequest);

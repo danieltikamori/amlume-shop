@@ -31,34 +31,28 @@ import java.lang.annotation.Inherited;
  * <pre>
  * {@code
  * @RequiresAuthentication
- * @RequiresRole(value = "ROLE_ADMIN", allowMultiple = true)
- * public void adminMethod() {
+ * @RequiresRole({AppRole.ROLE_ADMIN, AppRole.ROLE_MANAGER}) // Use enum array
+ * public void adminOrManagerMethod() {
  * // Method implementation
  * }
  * }
  * </pre>
- *
- * @see me.amlu.shop.amlume_shop.security.aspect.AuthenticationAspect
- * @see me.amlu.shop.amlume_shop.security.aspect.RequiresAuthentication
  */
+
 @Documented
 @Inherited
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface RequiresRole {
-//    /**
-//     * @return the required role name for method access
-//     */
-//    String value();
-
-    /**
-     * @return whether to allow multiple roles (default: false)
-     */
-    boolean allowMultiple() default false;
-
     /**
      * The roles required to execute the annotated method.
-     * If multiple roles are specified, the user must have at least one of them.
      */
-    AppRole[] value(); // Takes an array of AppRole enums
+    AppRole[] value();
+
+    /**
+     * If true, the user must possess *all* roles specified in value().
+     * If false (default), the user must possess *at least one* of the roles.
+     */
+    boolean requireAll() default false;
 }
+

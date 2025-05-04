@@ -28,7 +28,7 @@ public class Username implements Serializable {
     @NotBlank
     @Size(min = 3, max = 20)
     @Column(nullable = false, unique = true, name = "username")
-    String valueOfUsername;
+    String username;
 
     protected Username() {
     } // for JPA
@@ -37,7 +37,7 @@ public class Username implements Serializable {
         if (value == null || value.trim().length() < 3 || value.trim().length() > 20) {
             throw new IllegalArgumentException("Username must be between 3 and 20 characters");
         }
-        this.valueOfUsername = value;
+        this.username = value;
     }
 
     public static UsernameBuilder builder() {
@@ -45,7 +45,7 @@ public class Username implements Serializable {
     }
 
     public String getUsername() {
-        return valueOfUsername;
+        return username;
     }
 
     @Override
@@ -53,18 +53,18 @@ public class Username implements Serializable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Username username = (Username) o;
-        return Objects.equals(valueOfUsername, username.valueOfUsername);
+        return Objects.equals(this.username, username.username);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(valueOfUsername);
+        return Objects.hash(username);
     }
 
 
     @Override
     public String toString() {
-        return valueOfUsername;
+        return username;
     }
 
     public static class UsernameBuilder {
@@ -85,7 +85,7 @@ public class Username implements Serializable {
 
         @Override
         public String toString() {
-            return "Username.UsernameBuilder(valueOfUsername=" + this.valueOfUsername + ")";
+            return "Username.UsernameBuilder(username=" + this.valueOfUsername + ")";
         }
     }
 }

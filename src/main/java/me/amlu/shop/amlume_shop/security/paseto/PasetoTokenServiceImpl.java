@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.security.paseto;
 
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
+import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants; // Import TokenConstants
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,7 @@ import org.springframework.stereotype.Service;
 import java.security.SignatureException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects; // Import Objects for null checks
 
 
 /**
@@ -44,94 +46,118 @@ public class PasetoTokenServiceImpl implements PasetoTokenService {
     }
 
     /**
-     * Generates a public access token
-     * Uses asymmetric encryption
+     * Generates a public access token.
+     * Uses asymmetric signing (v4.public).
      *
-     * @param userId User userId
-     * @param accessTokenDuration duration
-     * @return public access token
-     * @throws TokenGenerationFailureException if token generation fails
+     * @param userId User ID for the token's subject claim.
+     * @param accessTokenDuration Duration for which the token should be valid.
+     * @return The generated PASETO public access token string.
+     * @throws TokenGenerationFailureException if token generation fails.
      */
     @Override
     public String generatePublicAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException {
-        return tokenGenerationService.generatePublicAccessToken(tokenClaimsService.createPublicAccessPasetoClaims(userId, accessTokenDuration));
+        log.debug("Generating public access token for user ID: {}", userId);
+        // 1. Create claims (including footer)
+        PasetoClaims claims = tokenClaimsService.createPublicAccessPasetoClaims(userId, accessTokenDuration);
+        PasetoClaims footer = tokenClaimsService.createPasetoFooterClaims("public_access"); // Create footer
+        claims.getFooter().putAll(footer.getFooter()); // Merge footer into claims object
+
+        // 2. Generate token
+        return tokenGenerationService.generatePublicAccessToken(claims);
     }
 
     /**
-     * Generates a local access token
-     * For internal use (between microservices, e.g. between gateway and auth service)
-     * Uses symmetric encryption
+     * Generates a local access token.
+     * For internal use (between microservices). Uses symmetric encryption (v4.local).
      *
-     * @param userId User userId
-     * @param accessTokenDuration duration
-     * @return Local access token - between microservices or internal use
-     * @throws TokenGenerationFailureException if token generation fails
+     * @param userId User ID for the token's subject claim.
+     * @param accessTokenDuration Duration for which the token should be valid.
+     * @return The generated PASETO local access token string.
+     * @throws TokenGenerationFailureException if token generation fails.
      */
     @Override
     public String generateLocalAccessToken(String userId, Duration accessTokenDuration) throws TokenGenerationFailureException {
-        return tokenGenerationService.generateLocalAccessToken(tokenClaimsService.createPublicAccessPasetoClaims(userId, accessTokenDuration));
+        log.debug("Generating local access token for user ID: {}", userId);
+        // 1. Create claims (including footer)
+        // NOTE: Using createPublicAccessPasetoClaims here might be incorrect if local tokens
+        // need different claims (e.g., different audience, no session ID).
+        // Assuming for now it's okay, but consider creating createLocalAccessPasetoClaims if needed.
+        PasetoClaims claims = tokenClaimsService.createPublicAccessPasetoClaims(userId, accessTokenDuration);
+        PasetoClaims footer = tokenClaimsService.createPasetoFooterClaims("local_access"); // Create footer
+        claims.getFooter().putAll(footer.getFooter()); // Merge footer into claims object
+
+        // 2. Generate token
+        return tokenGenerationService.generateLocalAccessToken(claims);
     }
 
     /**
-     * Generates a local refresh token
-     * Used in conjunction with the public access token
-     * Uses symmetric encryption
+     * Generates a local refresh token.
+     * Used in conjunction with the access token. Uses symmetric encryption (v4.local).
      *
-     * @param user User id
-     * @return Refresh token - the secondary token for the user, used in parallel with the main access token
-     * @throws TokenGenerationFailureException if token generation fails
+     * @param user The User object for whom to generate the refresh token. Must not be null and must have an ID.
+     * @return The generated PASETO local refresh token string.
+     * @throws TokenGenerationFailureException if token generation fails.
+     * @throws NullPointerException if user or user.getId() is null.
      */
     @Override
     public String generateRefreshToken(User user) throws TokenGenerationFailureException {
-        return tokenGenerationService.generateLocalRefreshToken(user);
+        Objects.requireNonNull(user, "User cannot be null for refresh token generation");
+        Objects.requireNonNull(user.getId(), "User ID cannot be null for refresh token generation");
+        log.debug("Generating refresh token for user ID: {}", user.getId());
+
+        // 1. Create claims (including footer) using TokenClaimsService
+        PasetoClaims claims = tokenClaimsService.createLocalRefreshPasetoClaims(
+                user.getId().toString(),
+                TokenConstants.REFRESH_TOKEN_DURATION // Use constant for duration
+        );
+        PasetoClaims footer = tokenClaimsService.createPasetoFooterClaims("local_refresh"); // Create footer
+        claims.getFooter().putAll(footer.getFooter()); // Merge footer into claims object
+
+
+        // 2. Generate token using the claims by calling the correct method signature
+        return tokenGenerationService.generateLocalRefreshToken(claims); // Pass PasetoClaims
     }
 
     /**
-     * Validates a public access token.
-     * <p>
-     * This method verifies the authenticity and integrity of a public access token
-     * using asymmetric cryptography. It checks the token's signature and validates
-     * its claims to ensure it is not expired, tampered with, or invalid.
+     * Validates a public access token (v4.public).
+     * Verifies signature and claims.
      *
-     * @param token the public access token to be validated
-     * @return a map of claims extracted from the token if validation is successful
-     * @throws TokenValidationFailureException if the token validation fails
-     * @throws SignatureException              if the token's signature is invalid
+     * @param token the public access token string to be validated.
+     * @return a map of claims extracted from the token if validation is successful.
+     * @throws TokenValidationFailureException if the token validation fails (e.g., expired, revoked, invalid claims).
+     * @throws SignatureException              if the token's signature is invalid.
      */
     @Override
     public Map<String, Object> validatePublicAccessToken(String token) throws TokenValidationFailureException, SignatureException {
+        log.trace("Validating public access token...");
         return tokenValidationService.validatePublicAccessToken(token);
     }
 
     /**
-     * Validates a local access token.
-     * <p>
-     * This method verifies the authenticity and integrity of a local access token
-     * using symmetric encryption. It checks the token's signature and validates
-     * its claims to ensure it is not expired, tampered with, or invalid.
+     * Validates a local access token (v4.local).
+     * Decrypts and verifies claims.
      *
-     * @param token the local access token to be validated
-     * @return a map of claims extracted from the token if validation is successful
-     * @throws TokenValidationFailureException if the token validation fails
+     * @param token the local access token string to be validated.
+     * @return a map of claims extracted from the token if validation is successful.
+     * @throws TokenValidationFailureException if the token validation fails (e.g., decryption error, expired, revoked, invalid claims).
      */
     @Override
     public Map<String, Object> validateLocalAccessToken(String token) throws TokenValidationFailureException {
+        log.trace("Validating local access token...");
         return tokenValidationService.validateLocalAccessToken(token);
     }
 
     /**
-     * Validates a local refresh token.
-     * <p>
-     * This method verifies the authenticity and integrity of a local refresh token
-     * using symmetric encryption. It checks the token's signature and validates
-     * its claims to ensure it is not expired, tampered with, or invalid.
+     * Validates a local refresh token (v4.local).
+     * Decrypts and verifies claims.
      *
-     * @param token the local refresh token to be validated
-     * @return a map of claims extracted from the token if validation is successful
-     * @throws TokenValidationFailureException if the token validation fails
+     * @param token the local refresh token string to be validated.
+     * @return a map of claims extracted from the token if validation is successful.
+     * @throws TokenValidationFailureException if the token validation fails (e.g., decryption error, expired, revoked, invalid claims).
      */
     @Override
     public Map<String, Object> validateLocalRefreshToken(String token) throws TokenValidationFailureException {
+        log.trace("Validating local refresh token...");
         return tokenValidationService.validateLocalRefreshToken(token);
     }
 }

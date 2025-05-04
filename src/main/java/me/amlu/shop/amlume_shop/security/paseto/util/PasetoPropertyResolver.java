@@ -17,9 +17,15 @@ public interface PasetoPropertyResolver {
 
     String resolveAccessPublicKey();
 
+    // Added missing method
+    String resolveAccessPrivateKey();
+
     String resolveAccessSecretKey();
 
     String resolveRefreshSecretKey();
+
+    // Added missing method
+    String resolveRefreshPrivateKey();
 
     String resolvePublicAccessKid();
 

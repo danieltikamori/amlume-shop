@@ -12,8 +12,9 @@ package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
-import me.amlu.shop.amlume_shop.payload.user.UserProfileUpdateRequest;
-import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
+import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
+import me.amlu.shop.amlume_shop.user_management.dto.UserProfileUpdateRequest;
+import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -23,6 +24,16 @@ import static me.amlu.shop.amlume_shop.commons.Constants.CURRENT_USER_CACHE;
 import static me.amlu.shop.amlume_shop.commons.Constants.USERS_CACHE;
 
 public interface UserService {
+
+    /**
+     * Registers a new user with administrative privileges.
+     *
+     * @param request The user registration request DTO.
+     * @return The newly created and saved User entity with admin roles.
+     * @throws UserAlreadyExistsException If the username or email is already taken.
+     * @throws RoleNotFoundException (Potentially, if role logic changes)
+     */
+    User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException;
 
     // Consider if this should return UserDetails or a specific UserProfileDTO
     // Caching strategy depends on return type and frequency of access

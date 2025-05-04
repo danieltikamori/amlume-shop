@@ -21,8 +21,8 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.payload.GetRecaptchaResponse;
-import me.amlu.shop.amlume_shop.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.dto.GetRecaptchaResponse;
+import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +52,8 @@ public class CaptchaService {
     private static final String RECAPTCHA_RETRY = "recaptchaRetry";
     private static final String RECAPTCHA_TIME_LIMITER = "recaptchaTimeLimiter";
 
-    @Value("${recaptcha.secret}")
+//    @Value("${recaptcha.secret}")
+    @Value("${RECAPTCHA_SECRET_KEY}")
     private String recaptchaSecret;
 
     private final RestTemplate restTemplate;

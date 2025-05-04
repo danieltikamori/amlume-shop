@@ -14,11 +14,16 @@ import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
+import java.io.Serial; // Import Serial
+import java.io.Serializable; // Import Serializable
 import java.util.Objects;
 import java.util.StringJoiner;
 
 @Embeddable
-public class ProductName {
+public class ProductName implements Serializable { // Add implements Serializable
+
+    @Serial // Add serialVersionUID
+    private static final long serialVersionUID = 1L;
 
     @NotBlank(message = "Product name is required")
     @Size(min = 2, max = 200, message = "Product name must be between 2 and 200 characters")
@@ -41,7 +46,7 @@ public class ProductName {
      * ensuring the stored value is always trimmed and meets the length criteria.
      *
      * @param name The product name string.
-     * @throws NullPointerException if name is null.
+     * @throws NullPointerException     if name is null.
      * @throws IllegalArgumentException if name length is invalid after trimming.
      */
     public ProductName(String name) {

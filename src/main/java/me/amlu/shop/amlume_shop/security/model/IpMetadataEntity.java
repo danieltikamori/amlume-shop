@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.security.model;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 
+import java.io.Serial;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +26,11 @@ import java.util.Objects;
         @Index(name = "idx_last_seen_at", columnList = "last_seen_at")
 })
 @Cacheable
+// BaseEntity likely implements Serializable, so this class is Serializable.
 public class IpMetadataEntity extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -45,19 +50,32 @@ public class IpMetadataEntity extends BaseEntity {
     @Column(name = "last_seen_at", nullable = false)
     private Instant lastSeenAt = Instant.now();
 
+    // --- ADD THIS FIELD DECLARATION ---
+    @Column(name = "last_ttl") // Map to a database column
+    private int lastTtl;
+    // --- END ADDED FIELD ---
+
+    // FIX: Ensure the List implementation used (ArrayList) is Serializable.
+    // String is Serializable, so List<String> should be fine if ArrayList is used.
     @ElementCollection
     @CollectionTable(name = "ip_previous_geolocations")
+    // Ensure the List implementation is Serializable (ArrayList is)
     private List<String> previousGeolocations = new ArrayList<>();
 
-    @Column(name = "last_ttl", nullable = false)
-    private int lastTtl;
-
+    // FIX: Ensure GeoLocationEntry implements Serializable.
+    // Assuming GeoLocationEntry is an @Embeddable or another @Entity.
+    // If it's an @Embeddable, it needs to implement Serializable.
     @ElementCollection
     @CollectionTable(name = "ip_geo_history")
+    // Ensure the List implementation is Serializable (ArrayList is)
+    // AND GeoLocationEntry itself must implement Serializable
     private List<GeoLocationEntry> geoHistory = new ArrayList<>();
 
+    // FIX: Ensure the List implementation used (ArrayList) is Serializable.
+    // Integer is Serializable, so List<Integer> should be fine if ArrayList is used.
     @ElementCollection
     @CollectionTable(name = "ip_ttl_history")
+    // Ensure the List implementation is Serializable (ArrayList is)
     private List<Integer> ttlHistory = new ArrayList<>();
 
     public IpMetadataEntity() {
@@ -67,6 +85,8 @@ public class IpMetadataEntity extends BaseEntity {
     public Long getAuditableId() {
         return id;
     }
+
+    // --- Getters and Setters remain the same ---
 
     public Long getId() {
         return this.id;
@@ -133,7 +153,8 @@ public class IpMetadataEntity extends BaseEntity {
     }
 
     public void setPreviousGeolocations(List<String> previousGeolocations) {
-        this.previousGeolocations = previousGeolocations;
+        // Ensure a serializable list type is used if replacing the list
+        this.previousGeolocations = (previousGeolocations != null) ? new ArrayList<>(previousGeolocations) : new ArrayList<>();
     }
 
     public void setLastTtl(int lastTtl) {
@@ -141,75 +162,19 @@ public class IpMetadataEntity extends BaseEntity {
     }
 
     public void setGeoHistory(List<GeoLocationEntry> geoHistory) {
-        this.geoHistory = geoHistory;
+        // Ensure a serializable list type is used if replacing the list
+        this.geoHistory = (geoHistory != null) ? new ArrayList<>(geoHistory) : new ArrayList<>();
     }
 
     public void setTtlHistory(List<Integer> ttlHistory) {
-        this.ttlHistory = ttlHistory;
+        // Ensure a serializable list type is used if replacing the list
+        this.ttlHistory = (ttlHistory != null) ? new ArrayList<>(ttlHistory) : new ArrayList<>();
     }
+
+    // --- toString, constructor, equals, hashCode remain the same ---
 
     public String toString() {
         return "IpMetadataEntity(id=" + this.getId() + ", ipAddress=" + this.getIpAddress() + ", suspiciousCount=" + this.getSuspiciousCount() + ", lastGeolocation=" + this.getLastGeolocation() + ", firstSeenAt=" + this.getFirstSeenAt() + ", lastSeenAt=" + this.getLastSeenAt() + ", previousGeolocations=" + this.getPreviousGeolocations() + ", lastTtl=" + this.getLastTtl() + ", geoHistory=" + this.getGeoHistory() + ", ttlHistory=" + this.getTtlHistory() + ")";
-    }
-
-    @Embeddable
-    public static class GeoLocationEntry {
-        private String location;
-        private Instant timestamp;
-
-        public GeoLocationEntry(String location, Instant timestamp) {
-            this.location = location;
-            this.timestamp = timestamp;
-        }
-
-        public GeoLocationEntry() {
-        }
-
-        public String getLocation() {
-            return this.location;
-        }
-
-        public Instant getTimestamp() {
-            return this.timestamp;
-        }
-
-        public void setLocation(String location) {
-            this.location = location;
-        }
-
-        public void setTimestamp(Instant timestamp) {
-            this.timestamp = timestamp;
-        }
-
-        public boolean equals(final Object o) {
-            if (o == this) return true;
-            if (!(o instanceof GeoLocationEntry other)) return false;
-            if (!other.canEqual((Object) this)) return false;
-            final Object this$location = this.getLocation();
-            final Object other$location = other.getLocation();
-            if (!Objects.equals(this$location, other$location)) return false;
-            final Object this$timestamp = this.getTimestamp();
-            final Object other$timestamp = other.getTimestamp();
-            return Objects.equals(this$timestamp, other$timestamp);
-        }
-
-        protected boolean canEqual(final Object other) {
-            return other instanceof GeoLocationEntry;
-        }
-
-        public int hashCode() {
-            final int PRIME = 59;
-            int result = 1;
-            final Object $location = this.getLocation();
-            result = result * PRIME + ($location == null ? 43 : $location.hashCode());
-            final Object $timestamp = this.getTimestamp();
-            result = result * PRIME + ($timestamp == null ? 43 : $timestamp.hashCode());
-            return result;
-        }
-
-        public String toString() {
-            return "IpMetadataEntity.GeoLocationEntry(location=" + this.getLocation() + ", timestamp=" + this.getTimestamp() + ")";
-        }
     }
 
     public IpMetadataEntity(String ipAddress) {
@@ -217,17 +182,20 @@ public class IpMetadataEntity extends BaseEntity {
         this.firstSeenAt = Instant.now();
         this.lastSeenAt = Instant.now();
         this.suspiciousCount = 0;
+        // Initialize lastTtl if needed, e.g., this.lastTtl = 0;
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof IpMetadataEntity that)) return false;
+        // Consider if BaseEntity's equals/hashCode should be included if it defines fields
         return suspiciousCount == that.suspiciousCount && lastTtl == that.lastTtl && Objects.equals(id, that.id) && Objects.equals(ipAddress, that.ipAddress) && Objects.equals(lastGeolocation, that.lastGeolocation) && Objects.equals(firstSeenAt, that.firstSeenAt) && Objects.equals(lastSeenAt, that.lastSeenAt) && Objects.equals(previousGeolocations, that.previousGeolocations) && Objects.equals(geoHistory, that.geoHistory) && Objects.equals(ttlHistory, that.ttlHistory);
     }
 
     @Override
     public int hashCode() {
+        // Consider if BaseEntity's equals/hashCode should be included
         return Objects.hash(id, ipAddress, suspiciousCount, lastGeolocation, firstSeenAt, lastSeenAt, previousGeolocations, lastTtl, geoHistory, ttlHistory);
     }
 }

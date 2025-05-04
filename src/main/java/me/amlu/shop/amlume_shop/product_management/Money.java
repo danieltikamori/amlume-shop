@@ -13,17 +13,23 @@ package me.amlu.shop.amlume_shop.product_management;
 import jakarta.persistence.Embeddable;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
+// Removed unused Lombok imports
+// import lombok.EqualsAndHashCode;
+// import lombok.Getter;
+// import lombok.ToString;
 
+import java.io.Serial; // Import Serial
+import java.io.Serializable; // Import Serializable
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.StringJoiner;
 
 @Embeddable
-public class Money {
+public class Money implements Serializable { // Add implements Serializable
+
+    @Serial // Add serialVersionUID
+    private static final long serialVersionUID = 1L;
 
     @Digits(integer = 10, fraction = 2, message = "Price must be a valid number with up to 10 digits and 2 decimal places")
     @DecimalMin(value = "0.0", inclusive = false, message = "Price must be greater than 0")
@@ -43,7 +49,7 @@ public class Money {
      * Enforces validation rules (must be > 0) and sets scale.
      *
      * @param amount The monetary value (must be greater than 0).
-     * @throws NullPointerException if amount is null.
+     * @throws NullPointerException     if amount is null.
      * @throws IllegalArgumentException if amount is not greater than 0.
      */
     public Money(BigDecimal amount) {
@@ -63,6 +69,7 @@ public class Money {
 
     /**
      * Adds another Money value to this one.
+     *
      * @param other The Money value to add.
      * @return A new Money instance representing the sum.
      */
@@ -73,6 +80,7 @@ public class Money {
 
     /**
      * Subtracts another Money value from this one.
+     *
      * @param other The Money value to subtract.
      * @return A new Money instance representing the difference.
      * @throws IllegalArgumentException if the result would be zero or negative.
@@ -85,6 +93,7 @@ public class Money {
 
     /**
      * Multiplies this Money value by a BigDecimal multiplier.
+     *
      * @param multiplier The value to multiply by.
      * @return A new Money instance representing the product.
      * @throws IllegalArgumentException if the result would be zero or negative.

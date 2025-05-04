@@ -20,6 +20,7 @@ import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.ColumnDefault;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.StringJoiner;
@@ -31,12 +32,18 @@ import java.util.StringJoiner;
 //    @UniqueConstraint(name = "uk_product_name", columnNames = {"productName_name"}) // Adjust column name if needed
 // })
 public class Product extends BaseEntity {
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "product_id", nullable = false, updatable = false, unique = true)
     private Long productId;
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "productName.name", column = @Column(name = "product_name", nullable = false, unique = true)),
+    })
+    @Column(name = "product_name", nullable = false)
     @Embedded
     @Valid
     // Optional: Override column name if Hibernate doesn't generate 'productName_name' as desired
@@ -49,6 +56,10 @@ public class Product extends BaseEntity {
     @Column(name = "original_image_filename") // For reference
     private String originalImageFilename;     // Stores the original uploaded filename
 
+    @AttributeOverrides({
+            @AttributeOverride(name = "productDescription.description", column = @Column(name = "product_description", length = 2000)),
+    })
+    @Column(name = "product_description", length = 2000)
     @Embedded
     @Valid
     // Optional: Override column name if needed
@@ -67,7 +78,7 @@ public class Product extends BaseEntity {
 
     @Embedded
     @Valid
-    @AttributeOverride(name = "percentage", column = @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2))
+    @AttributeOverride(name = "discountPercentage.percentage", column = @Column(name = "product_discount_percentage", nullable = false, precision = 5, scale = 2))
     private DiscountPercentage productDiscountPercentage;
 
     @Embedded
@@ -84,9 +95,9 @@ public class Product extends BaseEntity {
     @JoinColumn(name = "seller_id", nullable = false)
     private User seller;
 
-     @ManyToOne(fetch = FetchType.LAZY)
-     @JoinColumn(name = "order_id")
-     private Order order;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "order_id")
+    private Order order;
 
     // --- JPA Required No-Arg Constructor ---
     public Product() {

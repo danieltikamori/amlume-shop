@@ -11,8 +11,6 @@
 package me.amlu.shop.amlume_shop.security.paseto.util;
 
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.InvalidTokenException;
 import me.amlu.shop.amlume_shop.exceptions.TokenRevokedException;
@@ -20,6 +18,7 @@ import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -30,12 +29,18 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-@Slf4j
-@RequiredArgsConstructor
 public class TokenClaimValidator {
+
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(TokenClaimValidator.class);
     private final HttpServletRequest httpServletRequest;
     private final TokenRevocationService tokenRevocationService; // Keep this
     private final UserRepository userRepository;
+
+    public TokenClaimValidator(HttpServletRequest httpServletRequest, TokenRevocationService tokenRevocationService, UserRepository userRepository) {
+        this.httpServletRequest = httpServletRequest;
+        this.tokenRevocationService = tokenRevocationService;
+        this.userRepository = userRepository;
+    }
 
     // This method now delegates entirely to the service layer
     public void validateNotRevoked(Map<String, Object> claims) throws TokenRevokedException {

@@ -20,6 +20,7 @@ public interface TokenClaimsService {
 
     PasetoClaims createLocalRefreshPasetoClaims(String userId, Duration validity);
 
-    PasetoClaims createPasetoFooterClaims(String keyId);
+    // MODIFIED: Takes purpose string instead of keyId
+    PasetoClaims createPasetoFooterClaims(String purpose);
 
 }

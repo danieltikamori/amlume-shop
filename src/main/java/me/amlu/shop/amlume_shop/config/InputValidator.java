@@ -10,17 +10,17 @@
 
 package me.amlu.shop.amlume_shop.config;
 
-import lombok.extern.slf4j.Slf4j;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
+import org.slf4j.Logger;
 import org.springframework.stereotype.Component;
 
 @Component
-@Slf4j
 public class InputValidator {
-    
+
     private static final int MAX_DEPTH = 10;
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(InputValidator.class);
 
     public <T> boolean validateResource(T resource) {
         if (resource == null) {
@@ -36,7 +36,7 @@ public class InputValidator {
 
         // Type validation
         if (!isSupportedType(resource)) {
-            log.warn("Resource validation failed: unsupported type {}", 
+            log.warn("Resource validation failed: unsupported type {}",
                     resource.getClass().getSimpleName());
             return false;
         }
@@ -65,7 +65,7 @@ public class InputValidator {
 
     private boolean isSupportedType(Object resource) {
         return resource instanceof Product ||
-               resource instanceof Order || 
-               resource instanceof Category;
+                resource instanceof Order ||
+                resource instanceof Category;
     }
 }

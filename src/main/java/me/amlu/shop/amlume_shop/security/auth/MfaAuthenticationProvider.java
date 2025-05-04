@@ -13,9 +13,9 @@ package me.amlu.shop.amlume_shop.security.auth;
 import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.MfaRequiredException;
 import me.amlu.shop.amlume_shop.exceptions.TooManyAttemptsException;
-import me.amlu.shop.amlume_shop.model.MfaToken;
-import me.amlu.shop.amlume_shop.repositories.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
+import me.amlu.shop.amlume_shop.security.model.MfaToken;
+import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.service.MfaService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.slf4j.Logger;
@@ -32,7 +32,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ExecutionException;
 
-@Component
+//@Component
 public class MfaAuthenticationProvider implements AuthenticationProvider {
 
     private static final Logger log = LoggerFactory.getLogger(MfaAuthenticationProvider.class);
