@@ -102,6 +102,14 @@ public class User extends BaseEntity implements UserDetails {
     private Set<UserRole> roles = new HashSet<>();
 //    private Set<UserRole.roleName> roles = new HashSet<>(); // Store roleName enum directly
 
+    @OneToMany(
+            mappedBy = "user", // Matches the 'user' field in PasskeyCredential
+            cascade = CascadeType.ALL, // Persist/merge/remove Passkeys with User
+            fetch = FetchType.LAZY,    // Load Passkeys only when needed
+            orphanRemoval = true       // Delete Passkeys if removed from this list
+    )
+    private List<PasskeyCredential> passkeyCredentials = new ArrayList<>();
+
     // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
     // NOTE: @JoinTable is typically for @ManyToMany or unidirectional @OneToMany to a non-entity.
@@ -148,6 +156,7 @@ public class User extends BaseEntity implements UserDetails {
         this.categories = Optional.ofNullable(b.categories).orElseGet(ArrayList::new);
         this.products = Optional.ofNullable(b.products).orElseGet(HashSet::new);
         this.refreshTokens = Optional.ofNullable(b.refreshTokens).orElseGet(ArrayList::new);
+        this.passkeyCredentials = Optional.ofNullable(b.passkeyCredentials).orElseGet(ArrayList::new);
     }
 
     // Static factory method for the builder
@@ -265,6 +274,10 @@ public class User extends BaseEntity implements UserDetails {
         return this.refreshTokens; // Return JPA-managed collection
     }
 
+    public List<PasskeyCredential> getPasskeyCredentials() {
+        return this.passkeyCredentials; // Return JPA-managed collection
+    }
+
     // --- End Getters ---
 
     // --- equals() and hashCode()
@@ -317,6 +330,7 @@ public class User extends BaseEntity implements UserDetails {
                 ", categoriesSize=" + (this.categories != null ? this.categories.size() : 0) +
                 ", productsSize=" + (this.products != null ? this.products.size() : 0) +
                 ", refreshTokensSize=" + (this.refreshTokens != null ? this.refreshTokens.size() : 0) +
+                ", passkeyCredentialsSize=" + (this.passkeyCredentials != null ? this.passkeyCredentials.size() : 0) +
                 ')';
     }
 
@@ -414,6 +428,24 @@ public class User extends BaseEntity implements UserDetails {
         if (this.refreshTokens != null && refreshToken != null && this.refreshTokens.remove(refreshToken)) {
             // Clear bidirectional relationship if RefreshToken has a 'user' field
             refreshToken.setUser(null);
+        }
+    }
+
+    public void addPasskeyCredential(PasskeyCredential credential) {
+        if (this.passkeyCredentials == null) { // Paranoid check
+            this.passkeyCredentials = new ArrayList<>();
+        }
+        if (credential != null && !this.passkeyCredentials.contains(credential)) {
+            this.passkeyCredentials.add(credential);
+            // Ensure bidirectional relationship is set
+            credential.setUser(this);
+        }
+    }
+
+    public void removePasskeyCredential(PasskeyCredential credential) {
+        if (this.passkeyCredentials != null && credential != null && this.passkeyCredentials.remove(credential)) {
+            // Clear bidirectional relationship
+            credential.setUser(null);
         }
     }
 
@@ -532,6 +564,7 @@ public class User extends BaseEntity implements UserDetails {
         private List<Category> categories;
         private Set<Product> products;
         private List<RefreshToken> refreshTokens;
+        private List<PasskeyCredential> passkeyCredentials;
 
 
         // Builder methods (Keep as is - these set values *on the builder*)
@@ -595,6 +628,10 @@ public class User extends BaseEntity implements UserDetails {
             return self();
         }
 
+        public B passkeyCredentials(List<PasskeyCredential> passkeyCredentials) {
+            this.passkeyCredentials = passkeyCredentials;
+            return self();
+        }
 
         protected abstract B self();
 
@@ -603,7 +640,14 @@ public class User extends BaseEntity implements UserDetails {
         @Override
         public String toString() {
             // toString for builder is okay to show contained values
-            return "User.UserBuilder(super=" + super.toString() + ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo + ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus + ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo + ", locationInfo=" + this.locationInfo + ", roles=" + this.roles + ", addresses=" + this.addresses + ", categories=" + this.categories + ", products=" + this.products + ", refreshTokens=" + this.refreshTokens + ")";
+            return "User.UserBuilder(super=" + super.toString() +
+                    ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo +
+                    ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus +
+                    ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
+                    ", locationInfo=" + this.locationInfo + ", roles=" + this.roles +
+                    ", addresses=" + this.addresses + ", categories=" + this.categories +
+                    ", products=" + this.products + ", refreshTokens=" + this.refreshTokens +
+                    ", passkeyCredentials=" + this.passkeyCredentials + ")";
         }
     }
 
