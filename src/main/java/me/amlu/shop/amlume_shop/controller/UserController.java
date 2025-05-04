@@ -10,23 +10,35 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.exceptions.ProductAlreadyExistsException;
+import me.amlu.shop.amlume_shop.payload.CreateProductRequest;
+import me.amlu.shop.amlume_shop.payload.user.RegisterRequest;
+import me.amlu.shop.amlume_shop.payload.user.UserRegistrationRequest;
+import me.amlu.shop.amlume_shop.payload.user.UserResponse;
+import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import me.amlu.shop.amlume_shop.user_management.Username;
+import org.springframework.security.core.Authentication;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.payload.GetUserResponse;
 import me.amlu.shop.amlume_shop.security.aspect.RequiresAuthentication;
 import me.amlu.shop.amlume_shop.user_management.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api")
 public class UserController {
 
 private final UserService userService;
+private final UserRepository userRepository;
 
-    public UserController(UserService userService) {
+    public UserController(UserService userService, UserRepository userRepository) {
         this.userService = userService;
+        this.userRepository = userRepository;
     }
 
     @GetMapping("/profile")
@@ -35,4 +47,20 @@ private final UserService userService;
         User currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(GetUserResponse.fromUser(currentUser));
     }
+
+
+    @RequestMapping("/user")
+    public User getUserDetailsAfterLogin(Authentication authentication) {
+        String username = authentication.getName();
+        Optional<User> optionalUser = userRepository.findByAuthenticationInfoUsername_Username(username);
+        return optionalUser.orElse(null);
+    }
+//    @PostMapping("v1/admin/user/")
+//    public ResponseEntity<UserRegistrationRequest> registerUser(@Valid @RequestBody UserRegistrationRequest userRegistrationRequest, @PathVariable String password) throws ProductAlreadyExistsException {
+//
+//        User registeredUser = userService.registerUser(userRegistrationRequest);
+//        return new ResponseEntity<>(userResponse, null, HttpStatus.CREATED);
+//
+//    }
+
 }
