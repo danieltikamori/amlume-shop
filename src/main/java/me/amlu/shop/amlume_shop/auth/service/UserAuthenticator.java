@@ -8,14 +8,14 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.auth.service;
+package me.amlu.shop.amlume_shop.auth.service;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.auth_management.dto.AuthResponse;
-import me.amlu.shop.amlume_shop.auth_management.dto.LoginRequest;
+import me.amlu.shop.amlume_shop.auth.dto.AuthResponse;
+import me.amlu.shop.amlume_shop.auth.dto.LoginRequest;
 import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
@@ -52,8 +52,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 

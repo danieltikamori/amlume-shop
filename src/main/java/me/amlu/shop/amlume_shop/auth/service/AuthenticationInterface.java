@@ -8,15 +8,13 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.security.auth.service;
+package me.amlu.shop.amlume_shop.auth.service;
 
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
-import me.amlu.shop.amlume_shop.security.model.MfaToken;
-import me.amlu.shop.amlume_shop.auth_management.dto.AuthResponse;
-import me.amlu.shop.amlume_shop.auth_management.dto.LoginRequest;
-import me.amlu.shop.amlume_shop.security.dto.MfaVerificationRequest;
+import me.amlu.shop.amlume_shop.auth.dto.AuthResponse;
+import me.amlu.shop.amlume_shop.auth.dto.LoginRequest;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
 import me.amlu.shop.amlume_shop.user_management.User;

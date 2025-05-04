@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.auth_management.util;
+package me.amlu.shop.amlume_shop.auth.util;
 
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.springframework.security.core.Authentication;
