@@ -7,8 +7,18 @@ server:
 positions:
   filename: /tmp/positions.yaml # Path inside the container to store file read positions
 
+# Generate the API key through Grafana Cloud
+# Generate using the link below the Sending Logs section. NOT the Using Grafana with ... section
+
 clients:
-  - url: ${LOKI_URL} # Use environment variable for Loki endpoint
+  # Use environment variable for Loki endpoint
+#  - url: REDACTED_SENSITIVE_DATA
+  - url: ${LOKI_URL}
+    basic_auth:
+      username: ${PROMTAIL_USER}
+      password: ${PROMTAIL_PASSWORD}
+    # Optional: Add tenant_id if required by your Loki setup (Grafana Cloud usually uses basic_auth username)
+    tenant_id: ${PROMTAIL_USER}
 #    basic_auth:
 #      username: ${LOKI_USERNAME} # Use environment variable for Loki username
 #      password: ${LOKI_PASSWORD} # Use environment variable for Loki API Key/Password
