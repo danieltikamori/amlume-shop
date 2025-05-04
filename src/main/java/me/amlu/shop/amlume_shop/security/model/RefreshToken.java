@@ -11,10 +11,6 @@
 package me.amlu.shop.amlume_shop.security.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import lombok.experimental.SuperBuilder;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
 import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.proxy.HibernateProxy;
@@ -22,12 +18,10 @@ import org.hibernate.proxy.HibernateProxy;
 import java.time.Instant;
 import java.util.Objects;
 
-@Getter
-@Setter
 @Entity
 @Table(name = "refresh_token")
-@SuperBuilder // Added SuperBuilder if you use builders
-@NoArgsConstructor // Added NoArgsConstructor for JPA
+// Added SuperBuilder if you use builders
+// Added NoArgsConstructor for JPA
 public class RefreshToken extends BaseEntity { // BaseEntity already implements Serializable
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,6 +45,22 @@ public class RefreshToken extends BaseEntity { // BaseEntity already implements 
 
     @Column(name = "expiry_date", nullable = false)
     private Instant expiryDate;
+
+    public RefreshToken() {
+    }
+
+    protected RefreshToken(RefreshTokenBuilder<?, ?> b) {
+        super(b);
+        this.id = b.id;
+        this.user = b.user;
+        this.token = b.token;
+        this.deviceFingerprint = b.deviceFingerprint;
+        this.expiryDate = b.expiryDate;
+    }
+
+    public static RefreshTokenBuilder<?, ?> builder() {
+        return new RefreshTokenBuilderImpl();
+    }
 
     // --- Implementation of abstract method from BaseEntity ---
     @Override
@@ -90,4 +100,97 @@ public class RefreshToken extends BaseEntity { // BaseEntity already implements 
         // return id == null ? 31 : id.hashCode();
     }
 
+    public Long getId() {
+        return this.id;
+    }
+
+    public User getUser() {
+        return this.user;
+    }
+
+    public String getToken() {
+        return this.token;
+    }
+
+    public String getDeviceFingerprint() {
+        return this.deviceFingerprint;
+    }
+
+    public Instant getExpiryDate() {
+        return this.expiryDate;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
+    }
+
+    public void setDeviceFingerprint(String deviceFingerprint) {
+        this.deviceFingerprint = deviceFingerprint;
+    }
+
+    public void setExpiryDate(Instant expiryDate) {
+        this.expiryDate = expiryDate;
+    }
+
+    public static abstract class RefreshTokenBuilder<C extends RefreshToken, B extends RefreshTokenBuilder<C, B>> extends BaseEntityBuilder<C, B> {
+        private Long id;
+        private User user;
+        private String token;
+        private String deviceFingerprint;
+        private Instant expiryDate;
+
+        public B id(Long id) {
+            this.id = id;
+            return self();
+        }
+
+        public B user(User user) {
+            this.user = user;
+            return self();
+        }
+
+        public B token(String token) {
+            this.token = token;
+            return self();
+        }
+
+        public B deviceFingerprint(String deviceFingerprint) {
+            this.deviceFingerprint = deviceFingerprint;
+            return self();
+        }
+
+        public B expiryDate(Instant expiryDate) {
+            this.expiryDate = expiryDate;
+            return self();
+        }
+
+        protected abstract B self();
+
+        public abstract C build();
+
+        public String toString() {
+            return "RefreshToken.RefreshTokenBuilder(super=" + super.toString() + ", id=" + this.id + ", user=" + this.user + ", token=" + this.token + ", deviceFingerprint=" + this.deviceFingerprint + ", expiryDate=" + this.expiryDate + ")";
+        }
+    }
+
+    private static final class RefreshTokenBuilderImpl extends RefreshTokenBuilder<RefreshToken, RefreshTokenBuilderImpl> {
+        private RefreshTokenBuilderImpl() {
+        }
+
+        protected RefreshTokenBuilderImpl self() {
+            return this;
+        }
+
+        public RefreshToken build() {
+            return new RefreshToken(this);
+        }
+    }
 }
