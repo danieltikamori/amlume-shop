@@ -1,0 +1,61 @@
+# 0005: Migrate from Keycloak to Spring Authorization Server (SAS)
+
+**Status:** Proposed
+
+**Date:** 2025-05-04
+
+## Context
+
+The amlume-shop application currently relies on a hybrid authentication and authorization approach. While it interacts with Keycloak for JWT-based authentication in some parts (`UserServiceImpl.getCurrentUser`), it also implements a full custom authentication stack using PASETO tokens (`UserAuthenticator`, `UserServiceImpl`, `PasetoTokenService`, etc.). This custom stack manages user details, MFA, account locking, and device fingerprinting.
+
+The goal is to consolidate and modernize our identity management by replacing Keycloak as the primary identity provider and token issuer with Spring Authorization Server (SAS). This move aims to align with industry standards (OAuth 2.1/OIDC), simplify our external dependencies, and potentially better integrate with the Spring ecosystem.
+
+## Decision
+
+We will migrate our authentication and authorization mechanism from Keycloak to Spring Authorization Server (SAS). This migration will involve the following key decisions:
+
+1.  **User Management:** Retain the existing custom `User` entity, `UserServiceImpl`, and `UserRepository`. SAS will integrate with this through Spring Security's `UserDetailsService` interface.
+2.  **Token Format:** Migrate from PASETO tokens to JWTs. SAS is built around JWT-based OAuth 2.1/OIDC. While custom token formats in SAS are possible, adopting JWTs will provide better standard compliance, tooling support, and ease of integration.
+3.  **Authentication Flow:** SAS will handle standard OAuth2/OIDC endpoints (e.g., `/oauth2/authorize`, `/oauth2/token`). The custom `/api/auth/v1/login` endpoint will likely be removed or adapted to initiate the SAS flow.
+4.  **MFA & Device Fingerprinting:** Integrate the existing custom MFA and device fingerprinting logic into the SAS authentication flow. This will likely involve custom authentication providers or filters within the Spring Security pipeline.
+5.  **Authorization:** Leverage Spring Security's standard authorization mechanisms (`@RequiresRole`, `@PreAuthorize`) in the amlume-shop resource server, based on roles/scopes included in the JWTs issued by SAS. We will use an `OAuth2TokenCustomizer` in SAS to populate the JWT with user authorities.
+
+## Consequences
+
+This migration will have the following consequences:
+
+**Positive:**
+
+* **Standardization:** Alignment with widely adopted OAuth 2.1/OIDC standards and JWTs.
+* **Simplified Dependencies:** Removal of direct dependency on Keycloak for core authentication and token issuance.
+* **Better Ecosystem Integration:** Seamless integration with the Spring Security ecosystem and its features.
+* **Centralized Authentication:** SAS will become the single source of truth for authentication and token issuance.
+* **Modernization:** Adoption of a modern and actively maintained authorization server.
+
+**Negative:**
+
+* **Significant Development Effort:** Migrating the entire authentication and authorization infrastructure will require substantial development time and resources.
+* **Complexity of Custom Integration:** Integrating custom features like MFA and device fingerprinting into SAS's authentication flow can be complex and require a deep understanding of Spring Security internals.
+* **Token Migration:** Existing PASETO tokens will become invalid, requiring users to re-authenticate after the migration. A strategy for a smooth transition or potential temporary dual-token support (if feasible and necessary) needs consideration.
+* **Testing Complexity:** Thoroughly testing the new authentication and authorization flow with all integrated features will be crucial and potentially complex.
+* **Learning Curve:** The team will need to acquire sufficient knowledge of Spring Authorization Server and its customization options.
+
+## Alternatives Considered
+
+1.  **Keeping Keycloak:** Maintaining the current setup would avoid the significant migration effort but would mean continuing with a potentially less integrated and more complex hybrid approach.
+2.  **Using a Different Identity Provider:** Exploring other identity providers was considered, but given the existing custom user management and the desire for tighter Spring ecosystem integration, SAS appears to be the most suitable choice.
+3.  **Building a Completely Custom OAuth2 Server:** This would offer maximum flexibility but would involve a much larger development and maintenance burden compared to leveraging SAS.
+
+## Implementation Plan (High-Level)
+
+1.  **Phase 1: Set Up Spring Authorization Server (SAS):** Basic configuration, user management integration (`UserDetailsService`), client registration, provider settings, initial testing.
+2.  **Phase 2: Integrate Custom Logic into SAS Authentication Flow:** Account locking/failure handling, MFA integration (custom provider/filter), device fingerprinting integration.
+3.  **Phase 3: Configure amlume-shop as an OAuth2 Resource Server:** Add resource server dependencies, configure JWT validation, adapt `getCurrentUser`, configure authorization based on JWT claims.
+4.  **Phase 4: Decommission Custom PASETO Infrastructure:** Remove PASETO-related dependencies, code, and configuration.
+5.  **Phase 5: Testing and Cleanup:** Comprehensive testing of all flows, refinement, database cleanup, dependency removal.
+
+## Future Considerations
+
+* Explore advanced SAS features like custom grant types or token introspection if needed in the future.
+* Implement robust logging and monitoring for the new authentication and authorization system.
+* Consider a phased rollout of the SAS integration to minimize disruption to users.
