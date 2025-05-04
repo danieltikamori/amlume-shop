@@ -14,6 +14,7 @@ import com.google.common.annotations.VisibleForTesting;
 import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.shop.amlume_shop.exceptions.IpSecurityException;
+import me.amlu.shop.amlume_shop.security.model.GeoLocationEntry;
 import me.amlu.shop.amlume_shop.security.model.IpBlock;
 import me.amlu.shop.amlume_shop.security.model.IpMetadata;
 import me.amlu.shop.amlume_shop.security.model.IpMetadataEntity;
@@ -360,12 +361,12 @@ public class IpSecurityServiceImpl implements IpSecurityService {
         entity.setPreviousGeolocations(metadata.getPreviousGeolocations() != null ? new ArrayList<>(metadata.getPreviousGeolocations()) : new ArrayList<>());
 
         // Update geohistory
-        List<IpMetadataEntity.GeoLocationEntry> geoEntries = new ArrayList<>();
+        List<GeoLocationEntry> geoEntries = new ArrayList<>();
         if (metadata.getGeoHistory() != null) {
             for (IpMetadata.GeoLocation loc : metadata.getGeoHistory()) {
                 // Ensure location and timestamp are not null if required by GeoLocationEntry constructor
                 if (loc != null && loc.location() != null && loc.timestamp() != null) {
-                    geoEntries.add(new IpMetadataEntity.GeoLocationEntry(
+                    geoEntries.add(new GeoLocationEntry(
                             loc.location(),
                             loc.timestamp()
                     ));
