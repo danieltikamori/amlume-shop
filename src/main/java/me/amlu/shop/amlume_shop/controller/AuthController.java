@@ -10,10 +10,12 @@
 
 package me.amlu.shop.amlume_shop.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.exceptions.GlobalExceptionHandler;
 import me.amlu.shop.amlume_shop.exceptions.MfaException;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
+import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.model.MfaToken;
 import me.amlu.shop.amlume_shop.payload.ErrorResponse;
 import me.amlu.shop.amlume_shop.payload.GetRegisterResponse;
@@ -29,6 +31,7 @@ import org.slf4j.Logger;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -36,6 +39,7 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -115,6 +119,57 @@ public class AuthController {
 //            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
 //        }
 //    }
+
+    /**
+     * Registers a new user with administrative privileges.
+     * IMPORTANT: This endpoint MUST be secured to prevent unauthorized admin creation.
+     * Only existing administrators (or perhaps during initial setup) should be able to call this.
+     *
+     * @param request       The registration request details.
+     * @param bindingResult Validation results.
+     * @return ResponseEntity containing the registered admin user details or errors.
+     */
+    @PostMapping("/v1/register/admin")
+    // --- SECURITY: PROTECT THIS ENDPOINT ---
+    // Only allow users with ROLE_ADMIN or ROLE_SUPER_ADMIN to call this
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    // -----------------------------------------
+    public ResponseEntity<GetRegisterResponse> registerAdminUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) {
+        log.info("Attempting to register new admin user: {}", request.getUsername()); // Log attempt
+
+        if (bindingResult.hasErrors()) {
+            log.warn("Admin registration validation failed for user {}: {}", request.getUsername(), bindingResult.getAllErrors());
+            // Use the same response structure as regular registration for consistency
+            return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
+        }
+
+        try {
+            User registeredAdmin = userService.registerAdminUser(request);
+            UserResponse userResponse = new UserResponse(registeredAdmin); // Map to response DTO
+            GetRegisterResponse successResponse = new GetRegisterResponse(userResponse, null);
+            log.info("Successfully registered admin user: {}", registeredAdmin.getUsername());
+            return ResponseEntity.status(HttpStatus.CREATED).body(successResponse); // 201 Created
+
+        } catch (UserAlreadyExistsException e) {
+            log.warn("Admin registration failed: {}", e.getMessage());
+            GetRegisterResponse conflictResponse = new GetRegisterResponse(null, List.of(new ObjectError("user.exists", e.getMessage())));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(conflictResponse); // 409 Conflict
+
+        } catch (DataIntegrityViolationException e) {
+            // This might happen if unique constraints (like email) are violated concurrently
+            log.error("Admin registration failed due to data integrity violation for user {}: {}", request.getUsername(), e.getMessage());
+            GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("database.error", "Username or email might already exist.")));
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+
+        } catch (Exception e) {
+            log.error("Unexpected error during admin registration for user {}: {}", request.getUsername(), e.getMessage(), e);
+            // Use GlobalExceptionHandler or return a generic error response
+            ErrorResponse errorDetails = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "REGISTRATION_FAILED", "An unexpected error occurred during admin registration.").getBody();
+            GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("internal.error", errorDetails != null ? errorDetails.message() : "Internal server error")));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
     @PostMapping("/v1/mfa/enable")
     public ResponseEntity<Map<String, Object>> enableMfa(@AuthenticationPrincipal UserDetails userDetails) {
         try {
@@ -213,6 +268,11 @@ public class AuthController {
     }
 
 
+// Inject Keycloak properties if needed for logout URL construction
+// Or construct dynamically based on issuer-uri
+
+
+
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
         try {
@@ -222,15 +282,17 @@ public class AuthController {
                 Map<String, Object> claims = tokenValidationService.extractClaimsFromPublicAccessToken(token);
                 String tokenId = (String) claims.get("jti");
                 if (tokenId == null) {
-                    throw new SecurityException("Token ID missing");
+                    log.error("Logout failed: Token ID (jti) missing in Authorization header token.");
+//                    return ResponseEntity.badRequest().build();
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
                 }
                 tokenRevocationService.revokeToken(tokenId, "User logged out");
-                log.info("Logging out user with token: {}", token);
+                log.info("User logged out with revoked token: {}", token);
                 return ResponseEntity.ok().build();
             }
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         } catch (Exception e) {
-            log.error("Error during logout", e);
+            log.error("Error during logout: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
         }
     }
