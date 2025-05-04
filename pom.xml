@@ -61,7 +61,6 @@
         <commons-codec.version>1.17.2</commons-codec.version>
         <google.zxing.core.version>3.5.3</google.zxing.core.version>
         <google.zxing.javase.version>3.5.3</google.zxing.javase.version>
-        <java-otp.version>0.4.0</java-otp.version>
         <java-jwt.version>4.4.0</java-jwt.version>
         <resilience4j-core.version>2.3.0</resilience4j-core.version>
         <resilience4j-spring-boot3.version>2.3.0</resilience4j-spring-boot3.version>
@@ -133,7 +132,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
-
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -250,12 +248,12 @@
             <version>3.1.0</version>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3 -->
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>${aws-java-sdk-s3.version}</version>
-        </dependency>
+<!--        &lt;!&ndash; https://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3 &ndash;&gt;-->
+<!--        <dependency>-->
+<!--            <groupId>com.amazonaws</groupId>-->
+<!--            <artifactId>aws-java-sdk-s3</artifactId>-->
+<!--            <version>${aws-java-sdk-s3.version}</version>-->
+<!--        </dependency>-->
 
         <dependency>
             <groupId>org.mockito</groupId>
@@ -363,12 +361,6 @@
             <groupId>com.google.zxing</groupId>
             <artifactId>javase</artifactId>
             <version>${google.zxing.javase.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.eatthepath</groupId>
-            <artifactId>java-otp</artifactId>
-            <version>${java-otp.version}</version>
         </dependency>
 
         <dependency>
