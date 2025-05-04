@@ -20,12 +20,10 @@ import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
-import me.amlu.shop.amlume_shop.security.model.MfaToken;
 import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
-import me.amlu.shop.amlume_shop.security.repository.MfaTokenRepository;
 import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
 import me.amlu.shop.amlume_shop.security.service.*;
 import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
@@ -70,8 +68,6 @@ public class UserAuthenticator implements AuthenticationInterface {
     private final UserService userService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final MfaService mfaService;
-    private final MfaTokenRepository mfaTokenRepository;
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
     private final DeviceFingerprintService deviceFingerprintService;
     private final HttpServletRequest httpServletRequest;
@@ -96,8 +92,6 @@ public class UserAuthenticator implements AuthenticationInterface {
                              SecurityNotificationService notificationService,
                              UserRepository userRepository,
                              PasswordEncoder passwordEncoder,
-                             MfaService mfaService,
-                             MfaTokenRepository mfaTokenRepository,
                              @Lazy PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
                              @Lazy TokenRevocationService tokenRevocationService) {
         this.cacheService = cacheService;
@@ -111,8 +105,6 @@ public class UserAuthenticator implements AuthenticationInterface {
         this.notificationService = notificationService;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        this.mfaService = mfaService;
-        this.mfaTokenRepository = mfaTokenRepository;
         this.pasetoTokenService = pasetoTokenService;
         this.failedLoginAttemptService = failedLoginAttemptService;
         this.tokenRevocationService = tokenRevocationService;
@@ -126,15 +118,6 @@ public class UserAuthenticator implements AuthenticationInterface {
             performPreFlightChecks(request.getUsername(), ipAddress, "Registration", request.captchaResponse());
 
             User user = userService.registerUser(request);
-
-            String qrCodeUrl = null;
-            if (request.mfaEnabled()) {
-                mfaService.enableMfaForUser(user);
-                // Fetch token only if needed for QR code URL immediately
-                MfaToken mfaToken = mfaTokenRepository.findByUser(user)
-                        .orElseThrow(() -> new MfaTokenNotFoundException("MFA Token setup failed during registration"));
-                qrCodeUrl = mfaService.generateQrCodeImageUrl(user, mfaToken.getSecret());
-            }
 
             // Generate tokens
             AuthTokenGenerator generateAuthTokens = generateAuthTokens(user);
@@ -156,10 +139,8 @@ public class UserAuthenticator implements AuthenticationInterface {
             // --- End Fingerprint Association ---
 
             return AuthResponse.builder()
-                    .secretImageUrl(qrCodeUrl) // Send QR URL if MFA setup occurred
                     .accessToken(generateAuthTokens.accessToken())
                     .refreshToken(generateAuthTokens.refreshToken())
-                    .mfaEnabled(user.isMfaEnabled())
                     .success(true) // Indicate success
                     .message("Registration successful")
                     .build();
