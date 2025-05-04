@@ -69,36 +69,6 @@ public interface AuthenticationInterface {
     @Transactional
     void logout(String accessToken, String refreshToken);
 
-    // --- MFA ---
-
-    /**
-     * Initializes an MFA token entity for a user (usually during first MFA setup).
-     *
-     * @param user The user to initialize MFA for.
-     * @return The newly created MfaToken entity.
-     */
-//    MfaToken initializeMfaToken(User user);
-
-    /**
-     * Initiates the MFA challenge phase for a user.
-     * Returns details for MFA setup (QR code) or just indicates MFA is required.
-     *
-     * @param user The user undergoing MFA.
-     * @return AuthResponse indicating MFA requirement and potentially setup details.
-     */
-//    AuthResponse initiateMfaChallenge(User user);
-
-    /**
-     * Verifies the provided MFA code and completes the login process if valid.
-     *
-     * @param request   The MFA verification request containing username and code.
-     * @param ipAddress The IP address of the verification request.
-     * @return AuthResponse containing tokens upon successful verification.
-     * @throws TooManyAttemptsException If MFA verification attempts does exceed limits.
-     * @throws AuthenticationFailException If verification fails due to invalid code, locking, or internal errors.
-     */
-//    AuthResponse verifyMfaAndLogin(MfaVerificationRequest request, String ipAddress) throws TooManyAttemptsException, AuthenticationFailException;
-
     // --- Login Flow Helpers ---
 
     /**
