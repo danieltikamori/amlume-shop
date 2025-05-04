@@ -14,11 +14,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.context.annotation.DependsOn;
-import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -57,10 +56,11 @@ public class AuthenticationLoggingFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
 
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            if (authentication != null && authentication.isAuthenticated()) {
-                log.info("Successful authentication for user: {}",
-                        authentication.getName());
+            // Add check to exclude anonymous user
+            if (authentication != null && authentication.isAuthenticated() && !(authentication instanceof AnonymousAuthenticationToken)) {
+                log.info("Successful authentication for user: {}", authentication.getName());
             }
+
         } catch (AuthenticationException e) {
             log.warn("Failed authentication attempt from IP: {}",
                     request.getRemoteAddr());
