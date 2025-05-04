@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.security.model;
 
+import java.util.Objects;
+
 public class GeoLocation {
     private static final String UNKNOWN = "Unknown";
     private static final String DEFAULT_LOCATION = "Null Island";
@@ -102,45 +104,43 @@ public class GeoLocation {
 
     public boolean equals(final Object o) {
         if (o == this) return true;
-        if (!(o instanceof GeoLocation)) return false;
-        final GeoLocation other = (GeoLocation) o;
+        if (!(o instanceof GeoLocation other)) return false;
         if (!other.canEqual((Object) this)) return false;
         final Object this$countryCode = this.getCountryCode();
         final Object other$countryCode = other.getCountryCode();
-        if (this$countryCode == null ? other$countryCode != null : !this$countryCode.equals(other$countryCode))
+        if (!Objects.equals(this$countryCode, other$countryCode))
             return false;
         final Object this$countryName = this.getCountryName();
         final Object other$countryName = other.getCountryName();
-        if (this$countryName == null ? other$countryName != null : !this$countryName.equals(other$countryName))
+        if (!Objects.equals(this$countryName, other$countryName))
             return false;
         final Object this$city = this.getCity();
         final Object other$city = other.getCity();
-        if (this$city == null ? other$city != null : !this$city.equals(other$city)) return false;
+        if (!Objects.equals(this$city, other$city)) return false;
         final Object this$postalCode = this.getPostalCode();
         final Object other$postalCode = other.getPostalCode();
-        if (this$postalCode == null ? other$postalCode != null : !this$postalCode.equals(other$postalCode))
+        if (!Objects.equals(this$postalCode, other$postalCode))
             return false;
         final Object this$latitude = this.getLatitude();
         final Object other$latitude = other.getLatitude();
-        if (this$latitude == null ? other$latitude != null : !this$latitude.equals(other$latitude)) return false;
+        if (!Objects.equals(this$latitude, other$latitude)) return false;
         final Object this$longitude = this.getLongitude();
         final Object other$longitude = other.getLongitude();
-        if (this$longitude == null ? other$longitude != null : !this$longitude.equals(other$longitude)) return false;
+        if (!Objects.equals(this$longitude, other$longitude)) return false;
         final Object this$timeZone = this.getTimeZone();
         final Object other$timeZone = other.getTimeZone();
-        if (this$timeZone == null ? other$timeZone != null : !this$timeZone.equals(other$timeZone)) return false;
+        if (!Objects.equals(this$timeZone, other$timeZone)) return false;
         final Object this$subdivisionName = this.getSubdivisionName();
         final Object other$subdivisionName = other.getSubdivisionName();
-        if (this$subdivisionName == null ? other$subdivisionName != null : !this$subdivisionName.equals(other$subdivisionName))
+        if (!Objects.equals(this$subdivisionName, other$subdivisionName))
             return false;
         final Object this$subdivisionCode = this.getSubdivisionCode();
         final Object other$subdivisionCode = other.getSubdivisionCode();
-        if (this$subdivisionCode == null ? other$subdivisionCode != null : !this$subdivisionCode.equals(other$subdivisionCode))
+        if (!Objects.equals(this$subdivisionCode, other$subdivisionCode))
             return false;
         final Object this$asn = this.getAsn();
         final Object other$asn = other.getAsn();
-        if (this$asn == null ? other$asn != null : !this$asn.equals(other$asn)) return false;
-        return true;
+        return Objects.equals(this$asn, other$asn);
     }
 
     protected boolean canEqual(final Object other) {
