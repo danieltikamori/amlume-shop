@@ -12,7 +12,7 @@ positions:
 
 clients:
   # Use environment variable for Loki endpoint
-#  - url: REDACTED_SENSITIVE_DATA
+
   - url: ${LOKI_URL}
     basic_auth:
       username: ${PROMTAIL_USER}
