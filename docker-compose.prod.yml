@@ -1,0 +1,131 @@
+# docker-compose.prod.yml (Production Configuration)
+# Overrides base config for production deployment. Assumes Spring Boot runs inside Docker.
+
+services:
+  # --- Vault Production Configuration ---
+  vault:
+    # Production settings: Use proper backend (e.g., raft, consul), auth (AppRole), TLS
+    # Remove dev environment variables
+    environment:
+      VAULT_ADDR: http://vault:8200 # Keep internal address
+      # Add production-specific Vault env vars (e.g., for clustering, backend config)
+      # DO NOT ADD TOKENS HERE - Use AppRole or other secure auth methods
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      # Configure volumes for chosen production backend (e.g., raft data)
+      - vault_data:/vault/data # Example for raft/file backend
+      - vault_config:/vault/config # Mount production config file
+      - vault_logs:/vault/logs
+    # command: ["vault", "server", "-config=/vault/config/production.hcl"] # Example command
+    restart: always
+    healthcheck: # Adjust for production Vault setup (might need different address/flags)
+      test: ["CMD", "vault", "status"] # Basic check, might need more depending on setup
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # --- Auth Database Production ---
+  mysql-auth:
+    image: bitnami/percona-mysql:8.4 # Use specific production version tag
+    environment:
+      # LOAD SECURELY (e.g., from orchestration secrets, not .env)
+      MYSQL_DATABASE: ${AUTH_DB_NAME}
+      MYSQL_USER: ${AUTH_DB_USER}
+      MYSQL_PASSWORD: ${AUTH_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${AUTH_DB_ROOT_PASSWORD}
+      # Configure TLS securely if needed
+    volumes:
+      - mysql-auth-data:/var/lib/mysql
+      - mysql-auth-logs:/var/log/mysql
+    restart: always
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Shop Database Production ---
+  mysql-shop:
+    image: bitnami/percona-mysql:8.4 # Use specific production version tag
+    environment:
+      # LOAD SECURELY
+      MYSQL_DATABASE: ${SHOP_DB_NAME}
+      MYSQL_USER: ${SHOP_DB_USER}
+      MYSQL_PASSWORD: ${SHOP_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${SHOP_DB_ROOT_PASSWORD}
+      # Configure TLS securely if needed
+    volumes:
+      - mysql-shop-data:/var/lib/mysql
+      - mysql-shop-logs:/var/log/mysql
+    restart: always
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Valkey Cache Production ---
+  valkey-cache:
+    image: valkey/valkey:7.2 # Use specific production version tag
+    command: ["valkey-server", "/etc/valkey/valkey.conf"] # Use production config
+    volumes:
+      # Mount production config and certs securely
+      - ./docker/valkey/config/valkey-prod.conf:/etc/valkey/valkey.conf:ro
+      - /path/to/secure/prod/certs/valkey:/certs:ro # Mount from secure location
+      - valkey_data:/data
+    restart: always
+    healthcheck:
+      # Adjust password and flags for production
+      test: ["CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "-a", "${VALKEY_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # --- Auth Server Application (Production) ---
+  auth-server:
+    # Assuming you build a dedicated image or use the main app image with a profile
+    image: your-docker-repo/auth-server:${APP_VERSION:-latest} # Use production image
+    environment:
+      SPRING_PROFILES_ACTIVE: prod # Activate production profile
+      # Securely inject production env vars (Vault details, DB connection to mysql-auth, etc.)
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-auth:3306/${AUTH_DB_NAME}?sslMode=REQUIRED # Example
+      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD}
+      # ... other production env vars ...
+    depends_on:
+      mysql-auth:
+        condition: service_healthy
+      vault:
+        condition: service_healthy # Or adjust based on Vault readiness needs
+      valkey-cache:
+        condition: service_healthy
+    restart: always
+    # Add healthcheck for the application itself
+
+  # --- Shop Application (Production) ---
+  shop-app:
+    image: your-docker-repo/amlume-shop:${APP_VERSION:-latest} # Use production image built by Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # Securely inject production env vars (Vault details, DB connection to mysql-shop, etc.)
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-shop:3306/${SHOP_DB_NAME}?sslMode=REQUIRED # Example
+      SPRING_DATASOURCE_USERNAME: ${SHOP_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SHOP_DB_PASSWORD}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth-server:9000/oauth2/jwks # Connect to internal auth server
+      # ... other production env vars ...
+    depends_on:
+      mysql-shop:
+        condition: service_healthy
+      auth-server: # Depends on auth server being ready
+        condition: service_healthy # Requires healthcheck on auth-server
+      vault:
+        condition: service_healthy
+      valkey-cache:
+        condition: service_healthy
+    restart: always
+    # Add healthcheck for the application itself
+
+  # --- Remove Dev Services ---
+  vault-seeder: # Ensure vault-seeder is not included
+    image: none

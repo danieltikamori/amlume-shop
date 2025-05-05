@@ -1,0 +1,97 @@
+# docker-compose.override.yml (Local Development Overrides)
+# Overrides base config for local development. Assumes Spring Boot runs outside Docker.
+
+services:
+  # --- Vault Dev Configuration ---
+  vault:
+    container_name: vault-dev # Specific dev name
+    ports:
+      - "8200:8200" # Expose for local app connection
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "token" # Dev token
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      # VAULT_ADDR already set in base
+      VAULT_API_ADDR: "http://vault:8200" # For CLI inside container
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - vault_logs:/vault/logs # Persist logs locally if desired
+      # - ./certificates/vault:/vault/certs:ro # If using TLS locally
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Shop Database (Single Instance for Local Dev) ---
+  # We override 'mysql-shop' from the base file for the single local instance
+  mysql-shop:
+    container_name: mysql-db # Keep original dev name
+    ports:
+      - "3406:3306" # Expose for local app connection
+    environment:
+      # --- Bitnami Vars from .env ---
+      MYSQL_DATABASE: ${MYSQL_DATABASE} # Used by both modules locally for now
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # --- Optional: Bitnami TLS Vars (if using local TLS for DB) ---
+      # MYSQL_TLS_ENABLE: 'yes'
+      # MYSQL_TLS_CERT_FILE: '/etc/mysql/certs/mysql_certificate.pem'
+      # MYSQL_TLS_KEY_FILE: '/etc/mysql/certs/mysql_private_key.pem'
+      # MYSQL_TLS_CA_FILE: '/etc/mysql/certs/mysql_ca.pem'
+    volumes:
+      # - ./certificates/database:/etc/mysql/certs:ro # If using local TLS for DB
+      - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro
+      - mysql-shop-data:/var/lib/mysql # Use specific volume name
+      - mysql-shop-logs:/var/log/mysql # Use specific volume name
+      - mysql-backups:/backups
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Valkey Cache Dev Configuration ---
+  valkey-cache:
+    command: ["valkey-server", "/etc/valkey/valkey.conf"] # Use config file
+    # ports: # Only expose if absolutely needed for direct external access
+    #   - "6379:6379" # Valkey default TLS port is often 6379
+    volumes:
+      - ./docker/valkey/config/valkey.conf:/etc/valkey/valkey.conf:ro
+      - ./certificates/valkey:/certs:ro # Mount certs for TLS
+      - valkey_data:/data # Persist data locally if needed
+    healthcheck:
+      # Adjust password and flags if needed, ensure redis-cli is available and supports TLS
+      test: ["CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "--insecure", "-a", "${VALKEY_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Vault Seeder (Dev Only) ---
+  vault-seeder:
+    build:
+      context: .
+      dockerfile: vault-seeder.Dockerfile
+    container_name: vault-seeder-job
+    environment:
+      VAULT_TOKEN: "token" # Use the dev token
+      VAULT_PATH: "secret/amlume-shop/local" # Target path in Vault
+      ENV_FILE_PATH: "/app/.env"
+      VAULT_ADDR: http://vault:8200
+      CURL_INSECURE: "true" # If Vault uses self-signed certs locally
+    volumes:
+      - ./.env:/app/.env:ro
+      # - ./certificates/vault/vault_certificate.pem:/etc/ssl/certs/vault_certificate.pem:ro # Alt to insecure curl
+    depends_on:
+      vault:
+        condition: service_healthy
+    restart: 'no' # Run once
+
+  # --- Remove unused placeholders for local dev ---
+  mysql-auth: # Remove the auth DB placeholder for local dev
+    image: none # Effectively disables this service
+  auth-server: # Remove app placeholders as app runs outside
+    image: none
+  shop-app:
+    image: none
