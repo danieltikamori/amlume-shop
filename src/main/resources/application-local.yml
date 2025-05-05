@@ -8,7 +8,7 @@
 # Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
 #
 
-
+# Essential for TLS/SSL connections
 app:
   ssl:
     trust-store:
@@ -22,6 +22,7 @@ app:
 logging:
   level:
     org.springframework:
+      security: TRACE
       cloud.vault: DEBUG
       vault.core: DEBUG
       web: DEBUG
@@ -47,13 +48,6 @@ logging:
     me.amlu.shop.amlume_shop.model: DEBUG
   pattern:
     console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
-
-# --- Server ---
-server:
-  tomcat:
-    threads:
-      max: 200 # Maximum number of threads in the thread pool (default is 200)
-    max-connections: 8192 # Maximum number of connections that the server accepts (default is 10000, but Tomcat's default is 8192)
 
 # --- Spring Boot Core ---
 spring:
@@ -196,19 +190,18 @@ spring:
     keep-alive: true
     web-application-type: servlet
 
-  # --- OAuth2 Resource Server (Keycloak) ---
+  # --- OAuth2 Resource Server (Spring Authorization Server) ---
   security:
     oauth2:
       resourceserver:
         jwt:
           # IMPORTANT: Adjust realm name as needed
-          jwk-set-uri: ${JWT_SET_URI:http://localhost:8180/realms/amlume-shop/protocol/openid-connect/certs}
-          # jwk-set-uri: # Often inferred from issuer-uri
-#          issuer-uri: http://localhost:8080/realms/amlume-shop-realm # Keycloak issuer URI
-#        opaque:
-#          introspection-uri: ${INTROSPECTION_URI:http://localhost:8180/realms/master/protocol/openid-connect/token/introspect}
-#          introspection-client-id: ${INTROSPECTION_ID:introId}
-#          introspection-client-secret: ${INTROSPECTION_SECRET:secretGeneratedAtUI}
+          jwk-set-uri: ${JWK_SET_URI:http://localhost:9000/oauth2/jwks}
+  #        opaque:
+  #          introspection-uri: ${INTROSPECT_URI:http://localhost:9000/oauth2/introspect}
+  #          introspection-client-id: ${INTROSPECT_ID:amlumeintrospect}
+  #          introspection-client-secret: ${INTROSPECT_SECRET:c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj}
+
 
   # --- Spring Security Filters ---
   # security: # Merged under spring.security above
@@ -634,6 +627,16 @@ security: # Used by various security services/configs
         min-special: 1
   vpn: # Used by EnhancedVpnDetectorServiceImpl
     min-suspicious-factors: 2
+
+# --- Server ---
+server:
+  tomcat:
+    threads:
+      max: 200 # Maximum number of threads in the thread pool (default is 200)
+    max-connections: 8192 # Maximum number of connections that the server accepts (default is 10000, but Tomcat's default is 8192)
+  servlet:
+    session:
+      timeout: ${SESSION_TIMEOUT:20m}
 
 # --- Service Metadata ---
 service: # Used? (Maybe for info endpoint)

@@ -11,6 +11,16 @@
 alert:
   max-batch-size: 100
 
+# Essential for TLS/SSL connections.
+app:
+  ssl:
+    trust-store:
+      # Use 'file:' for filesystem or 'classpath:' if packaged in JAR
+      path: file:./config/central-truststore.jks
+      # LOAD SECURELY! Use environment variable for the password.
+      password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
+      # type: JKS # Optional: Specify type if not JKS
+
 asn:
   ratelimit:
     window-seconds: 60
@@ -83,6 +93,7 @@ jti:
 logging:
   level:
     org.springframework:
+      security: ERROR
       web: ERROR
       web.client: ERROR
       web.reactive: ERROR
@@ -104,6 +115,8 @@ logging:
     me.amlu.shop.amlume_shop.util: DEBUG
     me.amlu.shop.amlume_shop.exception: DEBUG
     me.amlu.shop.amlume_shop.model: DEBUG
+  pattern:
+    console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
 
 mail:
   host: ${MAIL_HOST}
@@ -434,9 +447,9 @@ resilience4j:
 
       default:
         max-attempts: 3
-        max-requests-per-minute: 100
-        retry-interval: 1000
-        retry-wait-duration: 200
+#        max-requests-per-minute: 100
+#        retry-interval: 1000
+#        retry-wait-duration: 200
 
       rateLimiterRedis:
         maxAttempts: 3
@@ -750,6 +763,15 @@ spring:
     keep-alive: true
     web-application-type: servlet
 
+  # --- OAuth2 Resource Server (Spring Authorization Server) ---
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # IMPORTANT: Adjust realm name as needed
+          jwk-set-uri: ${JWK_SET_URI:http://localhost:8180/realms/amlume/protocol/openid-connect/certs}
+
+
   threads:
     virtual:
       enabled: true
@@ -772,6 +794,11 @@ spring:
         min-idle: 0   # Min idle connections
         max-wait: -1ms # Max time to wait for connection (-1 = block indefinitely)
       shutdown-timeout: 100ms # Timeout for shutting down the pool
+
+server:
+  servlet:
+    session:
+      timeout: ${SESSION_TIMEOUT:10m}
 
 # Thread Pool Configuration
 threadpool:
