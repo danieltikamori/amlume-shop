@@ -71,38 +71,56 @@ services:
     # https://docs.percona.com/percona-xtrabackup/8.4/docker.html#3-create-a-docker-container-from-percona-xtrabackup-image
   mysql:
 #    image: percona/percona-server:8.4
-#    image: bitnami/percona-mysql
-    image: mysql:8.4
+    image: bitnami/percona-mysql
+#    image: mysql:8.4
 #    image: docker.io/bitnami/percona-mysql:8.4 # Getting errors /opt/bitnami/scripts/mysql/entrypoint.sh: line 28: exec: --: invalid option
 #    image: mysql:lts # Use Long Term Support version
     container_name: mysql-db
     restart: unless-stopped
-    command:
-      - --ssl-ca=/etc/mysql/certs/mysql_ca.pem
-      - --ssl-cert=/etc/mysql/certs/mysql_certificate.pem
-      - --ssl-key=/etc/mysql/certs/mysql_private_key.pem
-      - --bind-address=0.0.0.0
-      - --require_secure_transport=ON # Explicitly require TLS connections
-      - --skip-mysqlx
-      - --pid-file /var/lib/mysql/mysqld.pid
+
+    # --- Do not use command when using bitnami image
+#    command:
+#      - --ssl-ca=/etc/mysql/certs/mysql_ca.pem
+#      - --ssl-cert=/etc/mysql/certs/mysql_certificate.pem
+#      - --ssl-key=/etc/mysql/certs/mysql_private_key.pem
+#      - --bind-address=0.0.0.0
+#      - --require_secure_transport=ON # Explicitly require TLS connections
+#      - --skip-mysqlx
+#      - --pid-file /var/lib/mysql/mysqld.pid
     ports:
       # Expose MySQL on host port 3306
-      - "3306:3306"
+      - "3406:3306"
+#      - "3306:3306"
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      # The non-root user created to deal specifically with this specific database. Have all necessary permissions.
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-#      MYSQL_PASSWORD: "/run/secrets/mysql_user_password"
-#      MYSQL_ROOT_PASSWORD: "/run/secrets/mysql_root_password"
-#    healthcheck:
-#      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
-#      interval: 15s
-#      timeout: 5s
-#      retries: 6
+      # --- For Oficial MYSQL image ---
+#      MYSQL_DATABASE: ${MYSQL_DATABASE}
+#      # The non-root user created to deal specifically with this specific database. Have all necessary permissions.
+#      MYSQL_USER: ${MYSQL_USER}
+#      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+#      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+##      MYSQL_PASSWORD: "/run/secrets/mysql_user_password"
+##      MYSQL_ROOT_PASSWORD: "/run/secrets/mysql_root_password"
+
+        # --- Existing Bitnami Vars ---
+        MYSQL_DATABASE: ${MYSQL_DATABASE}
+        MYSQL_USER: ${MYSQL_USER}
+        MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+        MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+        # --- ADD Bitnami TLS Vars ---
+#        MYSQL_TLS_ENABLE: 'yes' # Enable TLS
+#        MYSQL_TLS_CERT_FILE: '/etc/mysql/certs/mysql_certificate.pem' # Path inside container
+#        MYSQL_TLS_KEY_FILE: '/etc/mysql/certs/mysql_private_key.pem'   # Path inside container
+#        MYSQL_TLS_CA_FILE: '/etc/mysql/certs/mysql_ca.pem'     # Path inside container
+#        MYSQL_EXTRA_FLAGS: '--skip-mysqlx --bind-address=0.0.0.0 --require_secure_transport=ON' # Pass other flags here
+        # Note: Bitnami might handle require_secure_transport automatically when TLS is enabled,
+        # but adding it here ensures it's set. skip-mysqlx is still needed. bind-address might also be default.
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
     volumes:
-      - ./certificates/database:/etc/mysql/certs:ro # Mount certs read-only
+#      - ./certificates/database:/etc/mysql/certs:ro # Mount certs read-only
       - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro # Mount init scripts read-only
       # Persist database data
       - mysql-data:/var/lib/mysql              # Database data
@@ -110,6 +128,7 @@ services:
       - mysql-backups:/backups                 # XtraBackup output (optional, for future use)
     networks:
       - amlume-shop-network
+
   #  cert-gen:
 #    image: alpine
 #    volumes:
