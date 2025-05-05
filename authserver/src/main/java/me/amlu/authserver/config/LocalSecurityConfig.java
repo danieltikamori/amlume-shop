@@ -50,6 +50,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+// TODO: migrate to a separated database instance
+
 @Profile("!prod") // Or @Profile("local") if you prefer
 @Configuration
 @EnableWebSecurity
