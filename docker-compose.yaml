@@ -99,14 +99,13 @@ services:
 #      timeout: 5s
 #      retries: 6
     volumes:
-      - ./certificates/database:/etc/mysql/certs
+      - ./certificates/database:/etc/mysql/certs:ro # Mount certs read-only
+      - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro # Mount init scripts read-only
       # Persist database data
       - mysql-data:/var/lib/mysql              # Database data
       - mysql-logs:/var/log/mysql              # MySQL logs
       - mysql-backups:/backups                 # XtraBackup output (optional, for future use)
     networks:
-
-
       - amlume-shop-network
   #  cert-gen:
 #    image: alpine
@@ -178,20 +177,20 @@ services:
 
     # --- Promtail Service ---
     # --- Promtail Log Agent ---
-  promtail:
-    image: grafana/promtail:2.9.5
-    container_name: promtail-agent
-    volumes:
-      - ./logs:/var/log/app:ro
-      - ./promtail-config.yml:/etc/promtail/config.yml
-    command: -config.file=/etc/promtail/config.yml
-    environment:
-      # This correctly reads the full URL from the .env file
+#  promtail:
+#    image: grafana/promtail:2.9.5
+#    container_name: promtail-agent
+#    volumes:
+#      - ./logs:/var/log/app:ro
+#      - ./promtail-config.yml:/etc/promtail/config.yml
+#    command: -config.file=/etc/promtail/config.yml -config.expand-env=true # <-- Add this flag to expand env usage
+#    environment:
+#      # This correctly reads the full URL from the .env file
+##      LOKI_URL: ${LOKI_URL}
 #      LOKI_URL: ${LOKI_URL}
-      LOKI_URL: ${LOKI_URL}
-      # LOKI_USERNAME and LOKI_PASSWORD are no longer needed here
-    networks:
-      - amlume-shop-network
+#      # LOKI_USERNAME and LOKI_PASSWORD are no longer needed here
+#    networks:
+#      - amlume-shop-network
 
   # --- Vault Seeder Service ---
     # This service is responsible for seeding Vault with initial secrets
