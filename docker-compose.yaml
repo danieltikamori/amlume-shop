@@ -70,7 +70,9 @@ services:
     # XtraBackup enabled MySql database, see:
     # https://docs.percona.com/percona-xtrabackup/8.4/docker.html#3-create-a-docker-container-from-percona-xtrabackup-image
   mysql:
-    image: percona/percona-server:8.4
+#    image: percona/percona-server:8.4
+#    image: bitnami/percona-mysql
+    image: mysql:8.4
 #    image: docker.io/bitnami/percona-mysql:8.4 # Getting errors /opt/bitnami/scripts/mysql/entrypoint.sh: line 28: exec: --: invalid option
 #    image: mysql:lts # Use Long Term Support version
     container_name: mysql-db
@@ -81,7 +83,8 @@ services:
       - --ssl-key=/etc/mysql/certs/mysql_private_key.pem
       - --bind-address=0.0.0.0
       - --require_secure_transport=ON # Explicitly require TLS connections
-#      - --pid-file /var/lib/mysql/mysqld.pid
+      - --skip-mysqlx
+      - --pid-file /var/lib/mysql/mysqld.pid
     ports:
       # Expose MySQL on host port 3306
       - "3306:3306"
