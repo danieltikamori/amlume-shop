@@ -37,6 +37,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -49,30 +50,31 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-@Profile("!prod")
+@Profile("!prod") // Or @Profile("local") if you prefer
 @Configuration
 @EnableWebSecurity
 public class LocalSecurityConfig {
-
 
     @Bean
     @Order(1)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
-        // Use the recommended 'with' method for applying and customizing the configurer
-        http.with(new OAuth2AuthorizationServerConfigurer(), oauth2Configurer ->
-                        // Customize the OAuth2AuthorizationServerConfigurer within the lambda
-                        oauth2Configurer.oidc(Customizer.withDefaults()) // Enable OpenID Connect 1.0
-                // Add any other OAuth2AuthorizationServerConfigurer specific customizations here if needed
-        );
-//
-//        // Customize the configurer (e.g., enable OIDC)
-//        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-//                .oidc(Customizer.withDefaults());    // Enable OpenID Connect 1.0
+
+        // --- Use the recommended 'http.with()' approach ---
+        http.with(new OAuth2AuthorizationServerConfigurer(), Customizer.withDefaults());
+        // ----------------------------------------------------
+
+        // --- Get the matcher AFTER applying the configurer ---
+        RequestMatcher authorizationServerEndpointsMatcher =
+                http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).getEndpointsMatcher();
+        // ----------------------------------------------------
+
+        // --- OIDC config might be included in defaults, but explicit doesn't hurt ---
+        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+                .oidc(Customizer.withDefaults()); // Enable OIDC endpoints if needed (often included in applyDefaultSecurity)
 
         http
-                // Redirect to the login page when not authenticated from the
-                // authorization endpoint
+                // Redirect to the login page when not authenticated from the authorization endpoint
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login"),
@@ -81,7 +83,12 @@ public class LocalSecurityConfig {
                 )
                 // Accept access tokens for User Info and/or Client Registration
                 .oauth2ResourceServer((resourceServer) -> resourceServer
-                        .jwt(Customizer.withDefaults())); // Or .jwt(jwt -> jwt.decoder(jwtDecoder(jwkSource()))) if more customization needed later
+                        .jwt(Customizer.withDefaults()));
+
+        // --- THIS IS THE CRITICAL ADDITION ---
+        // Define the specific endpoints this filter handles
+        http.securityMatcher(authorizationServerEndpointsMatcher);
+        // -------------------------------------
 
         return http.build();
     }
@@ -94,10 +101,9 @@ public class LocalSecurityConfig {
                 .authorizeHttpRequests((authorize) -> authorize
                         .anyRequest().authenticated()
                 )
-                // Form login handles the redirect to the login page from the
-                // authorization server filter chain
                 .formLogin(Customizer.withDefaults());
 
+        // No explicit matcher needed here as it's the fallback chain
         return http.build();
     }
 
@@ -107,7 +113,7 @@ public class LocalSecurityConfig {
         // --- Client credentials type ---
         RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
                 .clientId("amlumeapi")
-                .clientSecret("{noop}VxubZgAXyyTq9lGjj3qGvWNsHtE4SqTq") // Do not use noop(plaintext value) in production, use BCryptPasswordEncoder and mention bcrypt encoding instead
+                .clientSecret("{noop}VxubZgAXyyTq9lGjj3qGvWNsHtE4SqTq") // Do not use noop(plaintext value) in production, use secret management or BCryptPasswordEncoder and mention bcrypt encoding instead
                 // How the client is going to send the credentials:
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC) // It is possible to use more than one method, set more as below
                 // Which grant type flow is being supported:
@@ -136,7 +142,7 @@ public class LocalSecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("https://oauth.pstmn.io/v1/callback")
+                .redirectUri("https://oauth.pstmn.io/v1/callback") // Example redirect URI
                 .scope(OidcScopes.OPENID).scope(OidcScopes.EMAIL)
                 .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                         .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
@@ -149,7 +155,7 @@ public class LocalSecurityConfig {
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("https://oauth.pstmn.io/v1/callback")
+                .redirectUri("https://oauth.pstmn.io/v1/callback") // Example redirect URI
                 .scope(OidcScopes.OPENID).scope(OidcScopes.EMAIL)
                 .clientSettings(ClientSettings.builder().requireProofKey(true).build())
                 .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
