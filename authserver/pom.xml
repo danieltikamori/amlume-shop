@@ -75,6 +75,12 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.github.cdimascio</groupId>
+            <artifactId>dotenv-java</artifactId>
+            <version>3.1.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -93,6 +99,35 @@
                             <artifactId>lombok</artifactId>
                         </path>
                     </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
+<!--            If you prefer to keep the config directory in the project root, you can tell Maven Surefire to run tests from the project root directory.-->
+<!--            Alternative to classpath usage. Enable it if not using classpath.-->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+<!--                &lt;!&ndash; Make sure version matches if already declared, e.g., 3.5.3 &ndash;&gt;-->
+<!--                <configuration>-->
+<!--                    &lt;!&ndash; Set working directory to the parent (project root) &ndash;&gt;-->
+<!--                    <workingDirectory>${project.basedir}/..</workingDirectory>-->
+
+                <!-- Use version from parent or specify explicitly e.g., <version>3.5.3</version> -->
+                <configuration>
+                    <!-- Set working directory to where resources are copied -->
+                    <workingDirectory>${project.build.outputDirectory}</workingDirectory>
+                    <!-- You might also need to pass the env var if not picked up automatically,
+                         though Spring Boot test usually handles .env -->
+
+                    <!-- For multiple modules, add this: Define a system property pointing to the project root -->
+                    <systemPropertyVariables>
+                        <project.root.basedir>${maven.multiModuleProjectDirectory}</project.root.basedir>
+                    </systemPropertyVariables>
+                    <!--
+                    <environmentVariables>
+                        <APP_CENTRAL_TRUSTSTORE_PASSWORD>${env.APP_CENTRAL_TRUSTSTORE_PASSWORD}</APP_CENTRAL_TRUSTSTORE_PASSWORD>
+                    </environmentVariables>
+                    -->
                 </configuration>
             </plugin>
             <plugin>
