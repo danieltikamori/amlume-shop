@@ -118,8 +118,11 @@ public class Category extends BaseEntity {
         this.categoryName = Objects.requireNonNull(name, "Category name cannot be null");
         this.status = CategoryStatus.ACTIVE; // Default status example
         // setParentCategory handles hierarchy level and bidirectional link
-        // Call the (now final) method to set parent and hierarchy
-        this.setParentCategory(Objects.requireNonNull(parent, "Parent category cannot be null for subcategory constructor")); // Line 121
+        // DEPRECATED: Call the (now final) method to set parent and hierarchy
+//        Hibernate cannot create proxies for lazy loading if setters are final.
+//        Remove the final keyword from the setParentCategory method
+//        (and potentially other setters) in your Category.java entity.
+        this.setParentCategory(Objects.requireNonNull(parent, "Parent category cannot be null for subcategory constructor"));
     }
 
 
@@ -194,11 +197,12 @@ public class Category extends BaseEntity {
      * Sets the parent category and updates the hierarchy level and bidirectional links.
      * Should be called *after* the child category has been persisted and has an ID
      * if the hierarchy path relies on the ID.
-     * Made final to prevent overriding from constructors ("this" escape).
+     * DEPRECATED: Made final to prevent overriding from constructors ("this" escape).
+     * Hibernate cannot create proxies for lazy loading if setters are final. Remove the final keyword from the setParentCategory method (and potentially other setters) in your Category.java entity.
      *
      * @param parent The parent category. If null, this category becomes a root category.
      */
-    public final void setParentCategory(Category parent) { // Added final modifier
+    public void setParentCategory(Category parent) { // Added final modifier
         // Remove from old parent's subcategories if exists
         if (this.parentCategory != null) {
             this.parentCategory.internalRemoveSubCategory(this);
