@@ -14,27 +14,12 @@ CREATE DATABASE IF NOT EXISTS amlume_db;
 -- Authorization server - specific user with minimal required privileges
 -- Password MUST match the AUTH_DB_PASSWORD environment variable used by the application
 -- Explicitly use caching_sha2_password authentication plugin
-CREATE USER IF NOT EXISTS 'auth_server_user'@'%' IDENTIFIED WITH caching_sha2_password BY 'C0961F7D8F83574BEA49E9B412BBA60704CD720C'; -- <-- Added "WITH caching_sha2_password"
+CREATE USER IF NOT EXISTS 'auth_server_user'@'%' IDENTIFIED WITH caching_sha2_password BY 'C0961F7D8F83574BEA49E9B412BBA60704CD720C';
 
--- Grant only the necessary privileges to the auth_server_user on the literal database name 'amlume_db'.
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_registered_client TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_authorization TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_authorization_consent TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_authorization_code TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_access_token TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_refresh_token TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_client_credentials TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_device_authorization TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_device_code TO 'auth_server_user'@'%';
-GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.oauth2_persistent_authorization_parameters TO 'auth_server_user'@'%';
-
--- If the Authorization Server also manages users directly:
--- GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.users TO 'auth_server_user'@'%';
--- GRANT SELECT, INSERT, UPDATE, DELETE ON amlume_db.authorities TO 'auth_server_user'@'%';
-
--- Example: Create a read-only user (Commented out)
-# CREATE USER IF NOT EXISTS 'readonly_user'@'%' IDENTIFIED WITH caching_sha2_password BY 'your_actual_readonly_password'; -- Also update here if used
-# GRANT SELECT ON amlume_db.* TO 'readonly_user'@'%';
+-- Grant ALL privileges ON THE SPECIFIC DATABASE 'amlume_db' to the user.
+-- This is simpler for local development where Hibernate manages the schema.
+-- For production, use more restrictive, specific table grants AFTER tables are created.
+GRANT ALL PRIVILEGES ON amlume_db.* TO 'auth_server_user'@'%';
 
 -- Add a dummy table to verify script completion (Optional)
 CREATE TABLE IF NOT EXISTS amlume_db.init_script_marker (id INT PRIMARY KEY, completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
