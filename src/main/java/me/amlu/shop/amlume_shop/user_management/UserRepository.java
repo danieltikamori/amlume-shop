@@ -30,14 +30,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // --- Finders based on Embedded Objects ---
 
     /**
-     * Implementation of Keycloak
-     *
-     * @param keycloakId id
-     * @return An Optional containing the User if found.
-     */
-     Optional<User> findBykeycloakId(String keycloakId);// Field to User entity for keycloakId
-
-    /**
      * Finds a user by their username string stored within the AuthenticationInfo.Username embedded object.
      * Uses property expression: authenticationInfo.username.username (assuming Username VO has a 'username' field)
      * Added @Query to resolve potential issues with derived query generation for nested embeddables.

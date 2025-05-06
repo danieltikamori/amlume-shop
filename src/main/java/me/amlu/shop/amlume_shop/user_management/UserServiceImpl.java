@@ -325,16 +325,20 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         }
 
         if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-            String keycloakUserId = jwt.getSubject(); // 'sub' claim is the Keycloak User ID
+            String userEmail = jwt.getSubject(); // 'sub' claim is the Keycloak User ID
             // String username = jwt.getClaimAsString("preferred_username"); // Or get username
 
             // Option 1: If you only need the ID/username from token
-            // return createTransientUserFromJwt(jwt); // A helper to build a temporary User object
+//             return createTransientUserFromJwt(jwt); // A helper to build a temporary User object
 
             // Option 2: If you need the full local User entity linked to Keycloak
-            return userRepository.findBykeycloakId(keycloakUserId) // Need this method in repo
-                    .orElseThrow(() -> new UserNotFoundException("Local user not found for Keycloak ID: " + keycloakUserId));
+//            return userRepository.findBykeycloakId(keycloakUserId) // Need this method in repo
+//                    .orElseThrow(() -> new UserNotFoundException("Local user not found for Keycloak ID: " + keycloakUserId));\
+            // Spring Authorization Server implementation
 
+            userRepository.findByContactInfoUserEmailEmail(userEmail);
+            return userRepository.findByContactInfoUserEmailEmail(userEmail)
+                    .orElseThrow(() -> new UserNotFoundException("User not found with email: " + userEmail));
         } else {
             // Should not happen with JWT config, but handle defensively
             log.error("Unexpected principal type: {}", authentication.getPrincipal().getClass());
