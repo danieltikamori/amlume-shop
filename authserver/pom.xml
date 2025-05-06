@@ -30,6 +30,10 @@
         <java.version>21</java.version>
         <spring-vault-core.version>3.1.2</spring-vault-core.version>
         <jackson-datatype-jsr310.version>2.18.2</jackson-datatype-jsr310.version>
+        <libphonenumber.version>8.13.54</libphonenumber.version>
+        <libphonenumber-prefixmapper.version>2.239</libphonenumber-prefixmapper.version>
+        <libphonenumber-geocoder.version>2.239</libphonenumber-geocoder.version>
+        <libphonenumber-carrier.version>1.229</libphonenumber-carrier.version>
     </properties>
     <dependencies>
         <dependency>
@@ -118,10 +122,39 @@
             <artifactId>jackson-module-parameter-names</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.googlecode.libphonenumber/libphonenumber -->
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>libphonenumber</artifactId>
+            <version>${libphonenumber.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.googlecode.libphonenumber/prefixmapper -->
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>prefixmapper</artifactId>
+            <version>${libphonenumber-prefixmapper.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.googlecode.libphonenumber/geocoder -->
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>geocoder</artifactId>
+            <version>${libphonenumber-geocoder.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.googlecode.libphonenumber/carrier -->
+        <dependency>
+            <groupId>com.googlecode.libphonenumber</groupId>
+            <artifactId>carrier</artifactId>
+            <version>${libphonenumber-carrier.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+
     </dependencies>
 
     <build>
