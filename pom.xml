@@ -87,6 +87,7 @@
         <prometheus-simpleclient.version>0.16.0</prometheus-simpleclient.version>
         <prometheus-simpleclient_hotspot.version>0.16.0</prometheus-simpleclient_hotspot.version>
         <bcprov-jdk18on.version>1.80</bcprov-jdk18on.version>
+        <commons-validator.version>1.9.0</commons-validator.version>
 
     </properties>
 
@@ -689,6 +690,12 @@
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
 
+
+        <dependency>
+            <groupId>commons-validator</groupId>
+            <artifactId>commons-validator</artifactId>
+            <version>${commons-validator.version}</version>
+        </dependency>
 
         <!-- https://central.sonatype.com/artifact/io.hypersistence/hypersistence-tsid -->
         <!--		<dependency>-->

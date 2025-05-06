@@ -34,6 +34,8 @@
         <libphonenumber-prefixmapper.version>2.239</libphonenumber-prefixmapper.version>
         <libphonenumber-geocoder.version>2.239</libphonenumber-geocoder.version>
         <libphonenumber-carrier.version>1.229</libphonenumber-carrier.version>
+        <commons-validator.version>1.9.0</commons-validator.version>
+
     </properties>
     <dependencies>
         <dependency>
@@ -153,6 +155,12 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>commons-validator</groupId>
+            <artifactId>commons-validator</artifactId>
+            <version>${commons-validator.version}</version>
         </dependency>
 
     </dependencies>
