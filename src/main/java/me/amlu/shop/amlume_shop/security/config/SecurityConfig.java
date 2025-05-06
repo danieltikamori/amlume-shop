@@ -140,7 +140,7 @@ public class SecurityConfig {
                         // --- Specific Role-Based Rules ---
                         // Ensure role names match what Keycloak provides (e.g., "admin", "user")
                         // The jwtAuthenticationConverter adds the "ROLE_" prefix.
-                        .requestMatchers("/admin/**").hasRole("ADMIN") // Use "ADMIN" if Keycloak role is "admin"
+                        .requestMatchers("/admin/**").hasRole("ADMIN") // Use "ADMIN" if role is "admin"
                         .requestMatchers("/api/auth/v1/register/admin").hasRole("ADMIN") // Secure admin registration
                         .requestMatchers("/myAccount").hasRole("USER")
                         .requestMatchers("/myOrders").hasAnyRole("USER", "ADMIN")

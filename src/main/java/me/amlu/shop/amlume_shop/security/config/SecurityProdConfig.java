@@ -11,9 +11,8 @@
 package me.amlu.shop.amlume_shop.security.config;
 
 import jakarta.servlet.http.HttpServletRequest;
-import me.amlu.shop.amlume_shop.auth.util.KeycloakRoleConverter;
-import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
 import me.amlu.shop.amlume_shop.filter.CsrfCookieFilter;
+import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -51,7 +50,6 @@ public class SecurityProdConfig {
     @Bean
     SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception {
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRoleConverter());
         CsrfTokenRequestAttributeHandler csrfTokenRequestAttributeHandler = new CsrfTokenRequestAttributeHandler();
         http.sessionManagement(sessionConfig -> sessionConfig
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
