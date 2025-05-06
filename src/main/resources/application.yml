@@ -699,7 +699,7 @@ spring:
 
   # --- Datasource (Connect to Docker MySQL) ---
   datasource:
-    url: jdbc:mysql://localhost:3306/amlume_db # Use localhost and mapped port
+    url: jdbc:mysql://localhost:3306/amlume_shop_db # Use localhost and mapped port
     username: amlume_user
     password: C0961F7D8F83574BEA49E9B412BBA60704CD720C # Match docker-compose env
     driverClassName: com.mysql.cj.jdbc.Driver # Usually inferred

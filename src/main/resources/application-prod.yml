@@ -131,23 +131,15 @@ spring:
     # The direct property reference in the URL might be tricky.
     # We'll configure this programmatically below.
     # Remove ssl params from the URL here if they were hardcoded.
-
   datasource:
     # sslMode=VERIFY_IDENTITY verifies also hostname, requires correctly configured certificate.
-    url: jdbc:mysql://localhost:3406/amlume_shop_db?sslMode=DISABLED&allowPublicKeyRetrieval=true
-#    url: jdbc:mysql://localhost:3406/amlume_shop_db
-#    url: jdbc:mysql://localhost:3306/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS
-#    url: jdbc:mysql://localhost:3406/amlume_shop_db?sslMode=DISABLED&allowPublicKeyRetrieval=true
-#    url: jdbc:mysql://localhost:3406/amlume_shop_db?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStorePassword=${app.ssl.trust-store.password}
-#    url: jdbc:mysql://localhost:3406/amlume_shop_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
-    # url: jdbc:mysql://mysql-db:3406/amlume_shop_db # Use Docker service name if running inside Docker
+    url: jdbc:mysql://${SHOP_DB_HOST}:${SHOP_DB_PORT:3306}/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS
+#    url: jdbc:mysql://localhost:3406/amlume_db?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStorePassword=${app.ssl.trust-store.password}
+#    url: jdbc:mysql://localhost:3406/amlume_db # Use localhost and mapped port # If using TLS, base url should be without ssl params
+    # url: jdbc:mysql://mysql-db:3406/amlume_db # Use Docker service name if running inside Docker
     username: ${SHOP_DB_USER}
     password: ${SHOP_DB_PASSWORD} # LOAD SECURELY (Env Var preferred)
     driverClassName: com.mysql.cj.jdbc.Driver
-
-  docker:
-    compose:
-      enabled: false # Set to true if running inside Docker
 
   # --- Jackson ---
   jackson:
