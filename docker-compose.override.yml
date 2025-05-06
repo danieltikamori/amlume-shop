@@ -1,6 +1,13 @@
 # docker-compose.override.yml (Local Development Overrides)
 # Overrides base config for local development. Assumes Spring Boot runs outside Docker.
 
+# Usage:
+# To run locally:
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder
+
+# To stop locally:
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml down --volumes --remove-orphans
+
 services:
   # --- Vault Dev Configuration ---
   vault:
@@ -23,26 +30,59 @@ services:
       timeout: 3s
       retries: 5
 
-  # --- Shop Database (Single Instance for Local Dev) ---
-  # We override 'mysql-shop' from the base file for the single local instance
-  mysql-shop:
-    container_name: mysql-db # Keep original dev name
+# --- Auth Database (Local Dev) ---
+# Define the mysql-auth service for local development
+  mysql-auth:
+    container_name: mysql-auth-dev # Specific dev name
+    # Inherits image from base docker-compose.yaml
     ports:
-      - "3406:3306" # Expose for local app connection
+      # Expose auth DB on its specific local port from .env
+      - "${AUTH_DB_PORT_LOCAL:-3407}:3306"
     environment:
-      # --- Bitnami Vars from .env ---
-      MYSQL_DATABASE: ${MYSQL_DATABASE} # Used by both modules locally for now
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      # --- Bitnami Vars using AUTH_DB_* from .env ---
+      MYSQL_DATABASE: ${AUTH_DB_NAME}
+      MYSQL_USER: ${AUTH_DB_USER}
+      MYSQL_PASSWORD: ${AUTH_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # --- Optional: Bitnami TLS Vars ---
+      # ... (add if using local TLS for auth DB) ...
+    volumes:
+      # - ./certificates/database-auth:/etc/mysql/certs:ro # If using local TLS
+      # Optional: Use a separate init script directory for the auth DB
+      - ./docker/mysql/initdb-auth:/docker-entrypoint-initdb.d:ro
+      - mysql-auth-data:/var/lib/mysql # Use specific volume name
+      - mysql-auth-logs:/var/log/mysql # Use specific volume name
+      # - mysql-backups:/backups # Decide if backups are shared or separate
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Shop Database (Local Dev) ---
+  # We override 'mysql-shop' from the base file for the single local instance
+  # Modify the existing mysql-shop definition
+  mysql-shop:
+    container_name: mysql-shop-dev # Specific dev name
+    ports:
+      # Expose shop DB on its specific local port from .env
+      - "${SHOP_DB_PORT_LOCAL:-3406}:3306"
+    environment:
+      # --- Bitnami Vars using SHOP_DB_* from .env ---
+      MYSQL_DATABASE: ${SHOP_DB_NAME}
+      MYSQL_USER: ${SHOP_DB_USER}
+      MYSQL_PASSWORD: ${SHOP_DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       # --- Optional: Bitnami TLS Vars (if using local TLS for DB) ---
-      # MYSQL_TLS_ENABLE: 'yes'
-      # MYSQL_TLS_CERT_FILE: '/etc/mysql/certs/mysql_certificate.pem'
-      # MYSQL_TLS_KEY_FILE: '/etc/mysql/certs/mysql_private_key.pem'
-      # MYSQL_TLS_CA_FILE: '/etc/mysql/certs/mysql_ca.pem'
+#      MYSQL_TLS_ENABLE: 'yes'
+#      MYSQL_TLS_CERT_FILE: '/etc/mysql/certs/mysql_certificate.pem'
+#      MYSQL_TLS_KEY_FILE: '/etc/mysql/certs/mysql_private_key.pem'
+#      MYSQL_TLS_CA_FILE: '/etc/mysql/certs/mysql_ca.pem'
     volumes:
-      # - ./certificates/database:/etc/mysql/certs:ro # If using local TLS for DB
-      - ./docker/mysql/initdb:/docker-entrypoint-initdb.d:ro
+      # Optional: Mount certs for TLS
+#      - ./certificates/database-shop:/etc/mysql/certs:ro # If using local TLS for DB
+      # Optional: Use a separate init script directory for the shop DB
+#      - ./docker/mysql/initdb-shop:/docker-entrypoint-initdb.d:ro
       - mysql-shop-data:/var/lib/mysql # Use specific volume name
       - mysql-shop-logs:/var/log/mysql # Use specific volume name
       - mysql-backups:/backups
@@ -88,10 +128,28 @@ services:
         condition: service_healthy
     restart: 'no' # Run once
 
-  # --- Remove unused placeholders for local dev ---
-  mysql-auth: # Remove the auth DB placeholder for local dev
-    image: none # Effectively disables this service
-  auth-server: # Remove app placeholders as app runs outside
-    image: none
+
+# Use this command to run locally:
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder
+
+  # --- Disable App Services for Local Development ---
+  # These services run outside Docker locally
+
+  auth-server:
+    image: none # Prevents Docker Compose from trying to build/pull/run it
+
   shop-app:
-    image: none
+    image: none # Prevents Docker Compose from trying to build/pull/run it
+
+# --- Volumes Definition (Ensure all used volumes are defined) ---
+volumes:
+  vault_logs: {}
+  mysql-auth-data: {}
+  mysql-auth-logs: {}
+  mysql-shop-data: {}
+  mysql-shop-logs: {}
+  mysql-backups: {}
+  valkey_data: {}
+  # Add vault_config and vault_data if needed by prod but not base
+  vault_config: {}
+  vault_data: {}
