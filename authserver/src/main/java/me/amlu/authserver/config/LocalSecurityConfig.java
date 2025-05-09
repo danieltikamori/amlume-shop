@@ -1,20 +1,28 @@
 package me.amlu.authserver.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import me.amlu.authserver.repository.UserRepository;
+import me.amlu.authserver.service.JpaUserDetailsService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.WebAuthnConfigurer;
 import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -23,6 +31,7 @@ import org.springframework.security.oauth2.core.oidc.OidcScopes;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
@@ -57,8 +66,26 @@ import java.util.stream.Collectors;
 @EnableWebSecurity
 public class LocalSecurityConfig {
 
+
+    // These will be used by the placeholder beans for now
+    private final UserRepository userRepository;
+    // private final PasskeyCredentialRepository passkeyCredentialRepository; // TODO: Create and autowire
+    private final PasswordEncoder passwordEncoder; // Already a bean
+
+    private ObjectMapper objectMapper; // For WebAuthn Jackson modules
+
+    public LocalSecurityConfig(UserRepository userRepository, PasswordEncoder passwordEncoder
+                               // PasskeyCredentialRepository passkeyCredentialRepository // TODO: Add when created
+                               ) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        // this.passkeyCredentialRepository = passkeyCredentialRepository; // TODO: Add when created
+    }
+
+
     @Bean
-    @Order(1)
+//    @Order(1)
+    @Order(Ordered.HIGHEST_PRECEDENCE)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
 
@@ -101,8 +128,13 @@ public class LocalSecurityConfig {
             throws Exception {
         http
                 .authorizeHttpRequests((authorize) -> authorize
+                        .requestMatchers("/login/**").permitAll()
                         .anyRequest().authenticated()
                 )
+                .with(new WebAuthnConfigurer<>() , passkeys -> passkeys
+                        .rpId("${CLIENT_URI:http://localhost:8080}") // Client
+                        .rpName("${APPLICATION_PASSKEYS_NAME:Amlume Passkeys}")
+                        .allowedOrigins("${CLIENT_URI:http://localhost:8080}"))
                 .formLogin(Customizer.withDefaults());
 
         // No explicit matcher needed here as it's the fallback chain
@@ -161,15 +193,34 @@ public class LocalSecurityConfig {
                 .scope(OidcScopes.OPENID).scope(OidcScopes.EMAIL)
                 .clientSettings(ClientSettings.builder().requireProofKey(true).build())
                 .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
-                        .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
+                        .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false) // Set false as it is a public client. If it is a confidential client, set true
                         .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
 //        Implement RegisteredClientRepository?
-//        return new JdbcRegisteredClientRepository();
+
 
         // If the application has few clients(like 10s), it is recommended to use the InMemory implementation, otherwise use JdbcRegisteredClientRepository()
         return new InMemoryRegisteredClientRepository(clientCredClient, introspectClient, authCodeClient, pkceClient);
     }
+
+    // @Bean (if not already implicitly configured by Spring Boot)
+    // public UserDetailsService userDetailsService(UserRepository userRepository) {
+    //     return new JpaUserDetailsService(userRepository);
+    // }
+    // Spring Boot typically auto-configures UserDetailsService if there's one PasswordEncoder and one UserDetailsService bean.
+    // If you have multiple, you might need to specify it in HttpSecurity:
+    // http.userDetailsService(myUserDetailsService)
+
+    /**
+     *
+     * @param userRepository {@link UserRepository}
+     * @return {@link UserDetailsService}
+     */
+    @Bean
+    public UserDetailsService userDetailsService(UserRepository userRepository) {
+        return new JpaUserDetailsService(userRepository);
+    }
+
 
     // TODO: change to ECPrivateKey
     @Bean
