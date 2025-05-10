@@ -27,6 +27,7 @@ import org.springframework.util.StringUtils;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -105,6 +106,7 @@ public class UserManager implements UserServiceInterface {
                 .nickname(nickname)
                 .email(emailVO)
                 .password(hashedPasswordVO) // Can be null
+                .externalId(UUID.randomUUID().toString()) // Must be generated as it needs to be populated.
                 .mobileNumber(phoneNumberVO)
                 .build();
         log.debug("Built new User entity for email: {}", email);
