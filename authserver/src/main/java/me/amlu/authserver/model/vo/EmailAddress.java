@@ -35,7 +35,7 @@ public class EmailAddress implements Serializable {
     // To allow local addresses, use EmailValidator.getInstance(true)
     private static final EmailValidator validator = EmailValidator.getInstance();
 
-    @Column(name = "email_value", nullable = false, unique = true, length = 254)
+    @Column(name = "email", nullable = false, unique = true, length = 254)
     // Renamed column for clarity if not overridden
     private String value;
     private transient String localPart; // Marked transient as it's derived and not persisted directly
