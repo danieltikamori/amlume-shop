@@ -11,16 +11,10 @@
 package me.amlu.authserver.model.oauth2;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
 import me.amlu.authserver.model.vo.OAuth2AuthorizationConsentId;
 
 @Entity
 @Table(name = "oauth2_authorization_consent") // Table name used by Spring Authorization Server JDBC schema
-@Getter
-@Setter
-@NoArgsConstructor
 public class OAuth2AuthorizationConsent {
 
     @EmbeddedId
@@ -32,6 +26,25 @@ public class OAuth2AuthorizationConsent {
 
     public OAuth2AuthorizationConsent(String registeredClientId, String principalName, String authorities) {
         this.id = new OAuth2AuthorizationConsentId(registeredClientId, principalName);
+        this.authorities = authorities;
+    }
+
+    public OAuth2AuthorizationConsent() {
+    }
+
+    public OAuth2AuthorizationConsentId getId() {
+        return this.id;
+    }
+
+    public String getAuthorities() {
+        return this.authorities;
+    }
+
+    public void setId(OAuth2AuthorizationConsentId id) {
+        this.id = id;
+    }
+
+    public void setAuthorities(String authorities) {
         this.authorities = authorities;
     }
 }
