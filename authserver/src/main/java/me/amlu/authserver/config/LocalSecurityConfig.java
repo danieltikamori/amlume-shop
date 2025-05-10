@@ -1,3 +1,13 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
 package me.amlu.authserver.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -6,16 +16,23 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
-import me.amlu.authserver.repository.UserRepository;
+import com.webauthn4j.converter.jackson.WebAuthnJSONModule;
+import com.webauthn4j.converter.util.ObjectConverter;
+import jakarta.annotation.PostConstruct;
+import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
+import me.amlu.authserver.repository.*;
+import me.amlu.authserver.service.CustomOAuth2UserService;
+import me.amlu.authserver.service.CustomOidcUserService;
 import me.amlu.authserver.service.JpaUserDetailsService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcOperations;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -25,15 +42,16 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
+import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.core.oidc.OidcScopes;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
-import org.springframework.security.oauth2.server.authorization.client.InMemoryRegisteredClientRepository;
-import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
@@ -47,53 +65,56 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
+import org.springframework.security.web.webauthn.management.UserCredentialRepository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
-// TODO: migrate to a separated database instance
-
-@Profile("!prod") // Or @Profile("local") if you prefer
+@Profile("!prod")
 @Configuration
+@EnableConfigurationProperties(LocalSecurityConfig.WebAuthNProperties.class) // Enable your properties class
 @EnableWebSecurity
 public class LocalSecurityConfig {
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(LocalSecurityConfig.class);
 
-
-    // These will be used by the placeholder beans for now
     private final UserRepository userRepository;
-    // private final PasskeyCredentialRepository passkeyCredentialRepository; // TODO: Create and autowire
-    private final PasswordEncoder passwordEncoder; // Already a bean
+    private final PasswordEncoder passwordEncoder;
+    private final AuthorityRepository authorityRepository;
+    private final ObjectMapper objectMapper;
+    private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
+    private final WebAuthNProperties webAuthNProperties;
 
-    private ObjectMapper objectMapper; // For WebAuthn Jackson modules
-
-    public LocalSecurityConfig(UserRepository userRepository, PasswordEncoder passwordEncoder
-                               // PasskeyCredentialRepository passkeyCredentialRepository // TODO: Add when created
-                               ) {
+    public LocalSecurityConfig(UserRepository userRepository,
+                               PasswordEncoder passwordEncoder,
+                               AuthorityRepository authorityRepository,
+                               ObjectMapper objectMapper,
+                               JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
+                               WebAuthNProperties webAuthNProperties) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
-        // this.passkeyCredentialRepository = passkeyCredentialRepository; // TODO: Add when created
+        this.authorityRepository = authorityRepository;
+        this.objectMapper = objectMapper;
+        this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
+        this.webAuthNProperties = webAuthNProperties;
     }
 
-
     @Bean
-//    @Order(1)
     @Order(Ordered.HIGHEST_PRECEDENCE)
     public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
             throws Exception {
 
         // --- Use the recommended 'http.with()' approach ---
         http.with(new OAuth2AuthorizationServerConfigurer(), Customizer.withDefaults());
-        // ----------------------------------------------------
 
-        // --- Get the matcher AFTER applying the configurer ---
+        // Get the RequestMatcher for the authorization server endpoints.
+        // This is used to ensure this SecurityFilterChain only applies to these specific endpoints.
         RequestMatcher authorizationServerEndpointsMatcher =
                 http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).getEndpointsMatcher();
         // ----------------------------------------------------
@@ -103,7 +124,7 @@ public class LocalSecurityConfig {
                 .oidc(Customizer.withDefaults()); // Enable OIDC endpoints if needed (often included in applyDefaultSecurity)
 
         http
-                // Redirect to the login page when not authenticated from the authorization endpoint
+                .securityMatcher(authorizationServerEndpointsMatcher) // CRITICAL: Restrict this chain to AS endpoints
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
                                 new LoginUrlAuthenticationEntryPoint("/login"),
@@ -114,93 +135,111 @@ public class LocalSecurityConfig {
                 .oauth2ResourceServer((resourceServer) -> resourceServer
                         .jwt(Customizer.withDefaults()));
 
-        // --- THIS IS THE CRITICAL ADDITION ---
-        // Define the specific endpoints this filter handles
-        http.securityMatcher(authorizationServerEndpointsMatcher);
-        // -------------------------------------
-
         return http.build();
     }
 
     @Bean
     @Order(2)
-    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http)
-            throws Exception {
+    public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
+                                                          WebAuthNProperties webAuthNProperties,
+                                                          UserCredentialRepository userCredentialRepository,
+                                                          PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository,
+                                                          OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> oidcUserService,
+                                                          OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService
+    ) throws Exception {
+        // One way to potentially mitigate the "unchecked" warning is to assign the configurer to a typed variable first.
+        WebAuthnConfigurer<HttpSecurity> webAuthnConfigurer = new WebAuthnConfigurer<>();
+
         http
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/login/**").permitAll()
+                        .requestMatchers("/login/**", "/error").permitAll() // Permit error page
                         .anyRequest().authenticated()
                 )
-                .with(new WebAuthnConfigurer<>() , passkeys -> passkeys
-                        .rpId("${CLIENT_URI:http://localhost:8080}") // Client
-                        .rpName("${APPLICATION_PASSKEYS_NAME:Amlume Passkeys}")
-                        .allowedOrigins("${CLIENT_URI:http://localhost:8080}"))
-                .formLogin(Customizer.withDefaults());
+                .webAuthn(webauth ->
+                        webauth.allowedOrigins(webAuthNProperties.getAllowedOrigins())
+                                .rpId(webAuthNProperties.getRpId())
+                                .rpName(webAuthNProperties.getRpName())
+                )
+                .formLogin(Customizer.withDefaults())
+                // Add OAuth2 Login for social providers
+                .oauth2Login(oauth2Login -> oauth2Login
+                                .userInfoEndpoint(userInfo -> userInfo
+                                        .oidcUserService(oidcUserService) // For OIDC providers (e.g., Google)
+                                        .userService(oauth2UserService)   // For generic OAuth2 providers (e.g., GitHub)
+                                )
+                        // .loginPage("/login") // If you have a custom login page listing social options
+                        // .defaultSuccessUrl("/user-profile", true) // Redirect after successful social login
+                );
 
         // No explicit matcher needed here as it's the fallback chain
         return http.build();
     }
 
-    @Bean
-    public RegisteredClientRepository registeredClientRepository() {
+    // The JpaRegisteredClientRepositoryAdapter bean (defined as @Service)
+    // will be automatically picked up by Spring Authorization Server.
+    // No explicit InMemoryRegisteredClientRepository bean for client definitions is needed here.
 
-        // --- Client credentials type ---
-        RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("amlumeapi")
-                .clientSecret("{noop}VxubZgAXyyTq9lGjj3qGvWNsHtE4SqTq") // Do not use noop(plaintext value) in production, use secret management or BCryptPasswordEncoder and mention bcrypt encoding instead
-                // How the client is going to send the credentials:
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC) // It is possible to use more than one method, set more as below
-                // Which grant type flow is being supported:
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS) // This also supports multiple methods
-                // The role scopes:
-                .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID, "ADMIN", "USER")))
-                // Token settings: JWT or OPAQUE
-                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
-                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
+    @PostConstruct
+    @Transactional // Ensure seeding is atomic
+    public void seedInitialOAuth2Clients() {
+        // Check if clients already exist to avoid duplicates on every startup
+        if (this.jpaRegisteredClientRepositoryAdapter.findByClientId("amlumeapi") == null) {
+            log.info("Seeding initial OAuth2 registered clients into the database...");
 
-        // --- Introspection type ---
-        RegisteredClient introspectClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("amlumeintrospect")
-                .clientSecret("{noop}c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID)))
-                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
-                        .accessTokenFormat(OAuth2TokenFormat.REFERENCE).build()).build();
+            String defaultRedirectBase = this.webAuthNProperties.getAllowedOrigins().stream().findFirst().orElse("http://localhost:8080");
 
-        // --- Authorization code type ---
-        RegisteredClient authCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("amlumeclient")
-                .clientSecret("{noop}Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("https://oauth.pstmn.io/v1/callback") // Example redirect URI
-                .scope(OidcScopes.OPENID).scope(OidcScopes.EMAIL)
-                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
-                        .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
-                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
+            RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("amlumeapi")
+                    .clientSecret("VxubZgAXyyTq9lGjj3qGvWNsHtE4SqTq") // Raw secret, adapter's save will hash it
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                    .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                    .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID, "ADMIN", "USER")))
+                    .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
+                            .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
-        // --- PKCE type ---
-        RegisteredClient pkceClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                .clientId("amlumeapipublicclient")
-                .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
-                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                .redirectUri("https://oauth.pstmn.io/v1/callback") // Example redirect URI
-                .scope(OidcScopes.OPENID).scope(OidcScopes.EMAIL)
-                .clientSettings(ClientSettings.builder().requireProofKey(true).build())
-                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
-                        .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false) // Set false as it is a public client. If it is a confidential client, set true
-                        .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
+            RegisteredClient introspectClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("amlumeintrospect")
+                    .clientSecret("c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj") // Raw secret
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                    .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                    .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID)))
+                    .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
+                            .accessTokenFormat(OAuth2TokenFormat.REFERENCE).build()).build();
 
-//        Implement RegisteredClientRepository?
+            RegisteredClient authCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("amlumeclient")
+                    .clientSecret("Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB") // Raw secret
+                    .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                    .redirectUri("https://oauth.pstmn.io/v1/callback")
+                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom")
+                    .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
+                    .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
+                            .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
+                            .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
+            RegisteredClient pkceClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("amlumeapipublicclient")
+                    .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                    .redirectUri("https://oauth.pstmn.io/v1/callback")
+                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom-public")
+                    .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
+                    .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+                    .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
+                            .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
+                            .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
-        // If the application has few clients(like 10s), it is recommended to use the InMemory implementation, otherwise use JdbcRegisteredClientRepository()
-        return new InMemoryRegisteredClientRepository(clientCredClient, introspectClient, authCodeClient, pkceClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(clientCredClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(introspectClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(authCodeClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(pkceClient);
+            log.info("Finished seeding OAuth2 clients.");
+        } else {
+            log.info("OAuth2 registered clients already seem to exist. Skipping seeding.");
+        }
     }
 
     // @Bean (if not already implicitly configured by Spring Boot)
@@ -212,7 +251,6 @@ public class LocalSecurityConfig {
     // http.userDetailsService(myUserDetailsService)
 
     /**
-     *
      * @param userRepository {@link UserRepository}
      * @return {@link UserDetailsService}
      */
@@ -258,26 +296,44 @@ public class LocalSecurityConfig {
         return AuthorizationServerSettings.builder().build();
     }
 
+    // --- OAuth2TokenCustomizer ---
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserRepository userRepository) {
         return (context) -> {
-            if (context.getTokenType().equals(OAuth2TokenType.ACCESS_TOKEN)) {
+            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
                 context.getClaims().claims((claims) -> {
-                    if (context.getAuthorizationGrantType().equals(AuthorizationGrantType.CLIENT_CREDENTIALS)) {
-                        Set<String> roles = context.getClaims().build().getClaim("scope");
+                    // String principalName = context.getPrincipal().getName();
+                    if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
+                        Set<String> roles = context.getRegisteredClient().getScopes();
                         claims.put("roles", roles);
-                    } else if (context.getAuthorizationGrantType().equals(AuthorizationGrantType.AUTHORIZATION_CODE)) {
+                    } else { // For user-based grants
                         Set<String> roles = AuthorityUtils.authorityListToSet(context.getPrincipal().getAuthorities())
                                 .stream()
-                                .map(c -> c.replaceFirst("^ROLE_", ""))
+                                .map(r -> r.replaceFirst("^ROLE_", ""))
                                 .collect(Collectors.collectingAndThen(Collectors.toSet(), Collections::unmodifiableSet));
                         claims.put("roles", roles);
+
+                        // Add user_id and full_name if the principal is a UserDetails representing your User
+                        Object principal = context.getPrincipal().getPrincipal(); // Get the actual principal object
+                        if (principal instanceof me.amlu.authserver.model.User appUser) { // Check if it's your User class
+                            claims.put("user_id_numeric", appUser.getId());
+                            claims.put("full_name", appUser.getDisplayableFullName());
+                            claims.put("email", appUser.getEmail().getValue());
+                        } else if (context.getPrincipal().getName() != null) {
+                            // Fallback for other UserDetails implementations or if principal is just username string
+                            userRepository.findByEmail_Value(context.getPrincipal().getName()).ifPresent(user -> {
+                                claims.put("user_id_numeric", user.getId());
+                                claims.put("full_name", user.getDisplayableFullName());
+                                claims.put("email", user.getEmail().getValue());
+                            });
+                        }
                     }
                 });
             }
         };
     }
 
+    // --- PasswordEncoder, CompromisedPasswordChecker ---
     @Bean
     public PasswordEncoder passwordEncoder() {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
@@ -293,4 +349,108 @@ public class LocalSecurityConfig {
         return new HaveIBeenPwnedRestApiPasswordChecker();
     }
 
+    // --- Passkey/WebAuthn Beans (Spring Security Native) ---
+
+    @Bean
+    public PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository(
+            UserRepository userRepository, AuthorityRepository authorityRepository) {
+        return new DbPublicKeyCredentialUserEntityRepository(userRepository, authorityRepository);
+    }
+
+    @Bean
+    public UserCredentialRepository userCredentialRepository(
+            PasskeyCredentialRepository passkeyCredentialRepository, UserRepository userRepository) {
+        return new DbUserCredentialRepository(passkeyCredentialRepository, userRepository);
+    }
+
+    @ConfigurationProperties(prefix = "spring.security.webauthn")
+    static class WebAuthNProperties {
+        private String rpId = "localhost"; // Default value
+        private String rpName = "Amlume Passkeys"; // Default value
+        private Set<String> allowedOrigins = Collections.singleton("http://localhost:8080"); // Default value
+
+        public WebAuthNProperties() {
+        }
+
+        public String getRpId() {
+            return this.rpId;
+        }
+
+        public String getRpName() {
+            return this.rpName;
+        }
+
+        public Set<String> getAllowedOrigins() {
+            return this.allowedOrigins;
+        }
+
+        public void setRpId(String rpId) {
+            this.rpId = rpId;
+        }
+
+        public void setRpName(String rpName) {
+            this.rpName = rpName;
+        }
+
+        public void setAllowedOrigins(Set<String> allowedOrigins) {
+            this.allowedOrigins = allowedOrigins;
+        }
+
+        public boolean equals(final Object o) {
+            if (o == this) return true;
+            if (!(o instanceof WebAuthNProperties)) return false;
+            final WebAuthNProperties other = (WebAuthNProperties) o;
+            if (!other.canEqual((Object) this)) return false;
+            final Object this$rpId = this.getRpId();
+            final Object other$rpId = other.getRpId();
+            if (!Objects.equals(this$rpId, other$rpId)) return false;
+            final Object this$rpName = this.getRpName();
+            final Object other$rpName = other.getRpName();
+            if (!Objects.equals(this$rpName, other$rpName)) return false;
+            final Object this$allowedOrigins = this.getAllowedOrigins();
+            final Object other$allowedOrigins = other.getAllowedOrigins();
+            return Objects.equals(this$allowedOrigins, other$allowedOrigins);
+        }
+
+        protected boolean canEqual(final Object other) {
+            return other instanceof WebAuthNProperties;
+        }
+
+        public int hashCode() {
+            final int PRIME = 59;
+            int result = 1;
+            final Object $rpId = this.getRpId();
+            result = result * PRIME + ($rpId == null ? 43 : $rpId.hashCode());
+            final Object $rpName = this.getRpName();
+            result = result * PRIME + ($rpName == null ? 43 : $rpName.hashCode());
+            final Object $allowedOrigins = this.getAllowedOrigins();
+            result = result * PRIME + ($allowedOrigins == null ? 43 : $allowedOrigins.hashCode());
+            return result;
+        }
+
+        public String toString() {
+            return "LocalSecurityConfig.WebAuthNProperties(rpId=" + this.getRpId() + ", rpName=" + this.getRpName() + ", allowedOrigins=" + this.getAllowedOrigins() + ")";
+        }
+    }
+
+    @PostConstruct
+    public void registerWebAuthnJacksonModules() {
+        ObjectConverter objectConverter = new ObjectConverter();
+        // Register the WebAuthnJSONModule with the Spring-managed ObjectMapper
+        this.objectMapper.registerModule(new WebAuthnJSONModule(objectConverter));
+        log.info("Registered WebAuthnJSONModule with Spring's ObjectMapper.");
+    }
+
+    // --- Social Login Beans (OAuth2 Client) ---
+    @Bean
+    public OAuth2UserService<OAuth2UserRequest, OAuth2User> customOAuth2UserService(
+            UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+        return new CustomOAuth2UserService(userRepository, authorityRepository);
+    }
+
+    @Bean
+    public OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> customOidcUserService(
+            UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+        return new CustomOidcUserService(userRepository, authorityRepository, passwordEncoder);
+    }
 }
