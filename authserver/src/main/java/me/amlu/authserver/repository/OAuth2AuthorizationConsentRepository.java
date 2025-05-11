@@ -41,13 +41,17 @@ public interface OAuth2AuthorizationConsentRepository extends JpaRepository<OAut
     Optional<OAuth2AuthorizationConsent> findByIdPrincipalName(String principalName);
 
     @Override
-    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
     void delete(@NonNull OAuth2AuthorizationConsent entity);
 
     @Override
-    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
     void deleteById(@NonNull OAuth2AuthorizationConsentId id);
 
-    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
         void deleteByIdRegisteredClientIdAndIdPrincipalName(String registeredClientId, String principalName);
+
+//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+    void deleteByIdPrincipalName(@NonNull String principalName);
+
 }
