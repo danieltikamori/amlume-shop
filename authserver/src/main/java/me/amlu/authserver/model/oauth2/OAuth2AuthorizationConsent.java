@@ -14,7 +14,12 @@ import jakarta.persistence.*;
 import me.amlu.authserver.model.vo.OAuth2AuthorizationConsentId;
 
 @Entity
-@Table(name = "oauth2_authorization_consent") // Table name used by Spring Authorization Server JDBC schema
+@Table(name = "oauth2_authorization_consent", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"registered_client_id", "principal_name"})},
+        indexes = {
+                @Index(name = "idx_registered_client_id", columnList = "registered_client_id"),
+                @Index(name = "idx_principal_name", columnList = "principal_name"),
+        }) // Table name used by Spring Authorization Server JDBC schema
 public class OAuth2AuthorizationConsent {
 
     @EmbeddedId
