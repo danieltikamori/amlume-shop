@@ -36,7 +36,14 @@ import java.util.stream.Collectors;
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email"),
-        @UniqueConstraint(columnNames = "mobile_number")
+        @UniqueConstraint(columnNames = "mobile_number"),
+        @UniqueConstraint(columnNames = "external_id")
+}, indexes = {
+        @Index(name = "idx_email", columnList = "email"),
+        @Index(name = "idx_mobile_number", columnList = "mobile_number"),
+        @Index(name = "idx_created_at", columnList = "created_at"),
+        @Index(name = "idx_updated_at", columnList = "updated_at"),
+        @Index(name = "idx_external_id", columnList = "external_id")
 })
 public class User implements UserDetails {
 
@@ -48,7 +55,7 @@ public class User implements UserDetails {
     @Column(name = "user_id")
     private Long id;
 
-    @Column(name = "EXTERNAL_ID", unique = true) // Ensure externalId is unique if used as a primary lookup
+    @Column(name = "external_id", unique = true) // Ensure externalId is unique if used as a primary lookup
     public String externalId; // User handle for WebAuthn.
 
     @Column(name = "first_name", nullable = false)
@@ -61,7 +68,7 @@ public class User implements UserDetails {
     private String nickname;
 
     @Embedded
-    @AttributeOverride(name = "value", column = @Column(name = "email", nullable = false, unique = true, length = 254))
+    @AttributeOverride(name = "value", column = @Column(name = "email", nullable = false, unique = true))
     private EmailAddress email;
 
     @Embedded
@@ -73,7 +80,7 @@ public class User implements UserDetails {
     private Set<PasskeyCredential> passkeyCredentials = new HashSet<>(); // Initialize to avoid NullPointerExceptions
 
     @Embedded
-    @AttributeOverride(name = "value", column = @Column(name = "password", nullable = true, length = 128))
+    @AttributeOverride(name = "value", column = @Column(name = "password", nullable = true, length = 127))
     @JsonIgnore
     private HashedPassword password;
 
