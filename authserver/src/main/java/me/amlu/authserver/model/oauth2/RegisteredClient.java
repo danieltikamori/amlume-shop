@@ -19,7 +19,15 @@ import java.time.Instant;
 import java.util.Set;
 
 @Entity
-@Table(name = "oauth2_registered_client") // Table name used by Spring Authorization Server JDBC schema
+@Table(name = "oauth2_registered_client", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"client_id", "client_name"})
+}, indexes = {
+        @Index(name = "idx_client_id", columnList = "client_id"),
+        @Index(name = "idx_client_name", columnList = "client_name"),
+        @Index(name = "idx_client_authentication_methods", columnList = "client_authentication_method"),
+        @Index(name = "idx_client_secret_expires_at", columnList = "client_secret_expires_at"),
+
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -29,17 +37,19 @@ public class RegisteredClient {
     @Column(length = 100)
     private String id;
 
-    @Column(length = 100, unique = true, nullable = false)
+    @Column(name = "client_id", length = 100, unique = true, nullable = false)
     private String clientId;
 
+    @Column(name = "client_id_issued_at", nullable = false)
     private Instant clientIdIssuedAt;
 
-    @Column(length = 200) // Store hashed secrets
+    @Column(name = "client_secret", length = 200) // Store hashed secrets
     private String clientSecret;
 
+    @Column(name = "client_secret_expires_at")
     private Instant clientSecretExpiresAt;
 
-    @Column(length = 200, nullable = false)
+    @Column(name = "client_name", length = 200, unique = true, nullable = false)
     private String clientName;
 
     @ElementCollection(fetch = FetchType.EAGER)
