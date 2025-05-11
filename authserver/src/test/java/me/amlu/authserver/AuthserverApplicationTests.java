@@ -36,7 +36,7 @@ class AuthserverApplicationTests {
         // ------------------------------------
 
 
-        // --- CORRECT THE JDBC URL STRING ---
+        // --- JDBC URL STRING ---
         String jdbcUrl = "jdbc:mysql://localhost:3406/amlume_db?sslMode=DISABLED&allowPublicKeyRetrieval=true"; // REMOVED "url: " and "\n"
         // -----------------------------------
 
