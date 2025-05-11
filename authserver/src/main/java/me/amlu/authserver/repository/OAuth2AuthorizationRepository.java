@@ -12,6 +12,7 @@ package me.amlu.authserver.repository;
 
 import me.amlu.authserver.model.oauth2.OAuth2Authorization;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -53,4 +54,10 @@ public interface OAuth2AuthorizationRepository extends JpaRepository<OAuth2Autho
             "(:tokenType = 'user_code' AND a.userCodeValue = :token) OR " +
             "(:tokenType = 'device_code' AND a.deviceCodeValue = :token)")
     Optional<OAuth2Authorization> findByTokenValueAndTokenType(@Param("token") String token, @Param("tokenType") String tokenType);
+
+    void deleteByPrincipalName(String principalName);
+
+    @Modifying // Necessary for delete operations
+    @Query("DELETE FROM OAuth2Authorization a WHERE a.principalName = :principalName")
+    void deleteAllByPrincipalName(@Param("principalName") String principalName);
 }
