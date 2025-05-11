@@ -68,6 +68,8 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
+import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
+import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -81,6 +83,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import javax.sql.DataSource;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
@@ -96,16 +99,23 @@ import java.util.stream.Collectors;
 public class LocalSecurityConfig {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(LocalSecurityConfig.class);
 
+    private final PersistentTokenRepository persistentTokenRepository;
+
     private final ObjectMapper objectMapper;
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
+    private final DataSource dataSource;
+    @Value("${spring.security.rememberme.key:${spring.security.webauthn.rpId}_RememberMeKey2024}")
+    private String rememberMeKey;
 
     public LocalSecurityConfig(ObjectMapper objectMapper,
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
-                               WebAuthNProperties webAuthNProperties) {
+                               WebAuthNProperties webAuthNProperties, PersistentTokenRepository persistentTokenRepository, DataSource dataSource) {
         this.objectMapper = objectMapper;
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
         this.webAuthNProperties = webAuthNProperties;
+        this.persistentTokenRepository = persistentTokenRepository;
+        this.dataSource = dataSource;
     }
 
     @Bean
@@ -139,11 +149,13 @@ public class LocalSecurityConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
-                                                          WebAuthNProperties webAuthNProperties,
-                                                          UserCredentialRepository userCredentialRepository,
-                                                          PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository,
+                                                          // WebAuthNProperties webAuthNProperties, // Already a field
+                                                          // UserCredentialRepository userCredentialRepository, // Already a field or bean
+                                                          // PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository, // Already a field or bean
                                                           OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> oidcUserService,
-                                                          OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService
+                                                          OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService,
+                                                          UserDetailsService userDetailsService, // Injected for remember-me
+                                                          PersistentTokenRepository persistentTokenRepository // Injected for remember-me
     ) throws Exception {
 
         // Theoretically Spring Security's WebAuthnConfigurer automatically makes its necessary endpoints (e.g., /webauthn/register/options, /webauthn/register, /webauthn/authenticate/options, /webauthn/authenticate) accessible.
@@ -151,43 +163,46 @@ public class LocalSecurityConfig {
         // One way to potentially mitigate the "unchecked" warning is to assign the configurer to a typed variable first.
 //        WebAuthnConfigurer<HttpSecurity> webAuthnConfigurer = new WebAuthnConfigurer<>();
 
-        // Allow png images to be served without authentication
         http.authorizeHttpRequests(
-                authorize -> authorize.requestMatchers(new AntPathRequestMatcher("/images/*.png")).permitAll());
-
-        // Icons from the line-awesome addon
-        http.authorizeHttpRequests(authorize -> authorize
-                .requestMatchers(new AntPathRequestMatcher("/line-awesome/**/*.svg")).permitAll());
-
-        // TODO: implement password reset / account recovery mechanism
+                authorize -> authorize
+                        .requestMatchers(new AntPathRequestMatcher("/images/*.png")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/line-awesome/**/*.svg")).permitAll()
+                        .requestMatchers("/login/**", "/webauthn/**", "/error").permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/api/profile/passkeys/**")).authenticated()
+                        .requestMatchers(new AntPathRequestMatcher("/api/profile/**")).authenticated() // Secure profile endpoints
+                        .requestMatchers(new AntPathRequestMatcher("/api/register/**")).permitAll() // Allow registration
+                        .anyRequest().authenticated()
+        );
 
         http
-                .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/login/**", "/webauthn/**", "/error").permitAll() // Permit error page
-                        .requestMatchers(new AntPathRequestMatcher("/api/profile/passkeys/**")).authenticated() // Passkeys
-                        .anyRequest().authenticated()
+                .webAuthn(Customizer.withDefaults())
+                .formLogin(formLogin -> formLogin
+                        .loginPage("/login") // Specify your custom login page if you have one
+                        .permitAll() // Allow access to the login page
                 )
-                .webAuthn(Customizer.withDefaults()) // This would use the bean by default
-
-//                .webAuthn(webauth ->
-//                        webauth.allowedOrigins(webAuthNProperties.getAllowedOrigins())
-//                                .rpId(webAuthNProperties.getRpId())
-//                                .rpName(webAuthNProperties.getRpName())
-//                )
-                .formLogin(Customizer.withDefaults())
-                // Add OAuth2 Login for social providers
+                // --- Remember-Me Configuration ---
+                .rememberMe(rememberMe -> rememberMe
+                                .tokenRepository(persistentTokenRepository) // Use the bean
+                                .userDetailsService(userDetailsService)     // Crucial for re-authenticating
+                                .key(this.rememberMeKey) // Use a unique, secure key. Consider externalizing.
+//                        .key(this.webAuthNProperties.getRpId() + "_RememberMeKey2024") // Use a unique, secure key. Consider externalizing.
+                                .tokenValiditySeconds((int) Duration.ofDays(30).toSeconds()) // e.g., 30 days
+                )
                 .oauth2Login(oauth2Login -> oauth2Login
-                                .userInfoEndpoint(userInfo -> userInfo
-                                        .oidcUserService(oidcUserService) // For OIDC providers (e.g., Google)
-                                        .userService(oauth2UserService)   // For generic OAuth2 providers (e.g., GitHub)
-                                )
-                        // .loginPage("/login") // If you have a custom login page listing social options
-                        // .defaultSuccessUrl("/user-profile", true) // Redirect after successful social login
+                        .userInfoEndpoint(userInfo -> userInfo
+                                .oidcUserService(oidcUserService)
+                                .userService(oauth2UserService)
+                        )
                 );
 
-        // CSRF
         http.csrf(cfg -> cfg.ignoringRequestMatchers(
-                new AntPathRequestMatcher("/webauthn/**"), new AntPathRequestMatcher("/login/webauthn")));
+                new AntPathRequestMatcher("/webauthn/**"),
+                new AntPathRequestMatcher("/login/webauthn"),
+                new AntPathRequestMatcher("/api/**") // If your API clients handle CSRF differently or are stateless
+        ));
+        // If your API is stateful and uses cookies, CSRF protection is important.
+        // For stateless APIs (token-based), CSRF might be less relevant for those specific endpoints.
+        // Consider CSRF for /api/profile if it's used by a browser-based frontend with sessions.
 
         // No explicit matcher needed here as it's the fallback chain
         return http.build();
@@ -220,7 +235,7 @@ public class LocalSecurityConfig {
                     .clientSecret("c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj") // Raw secret
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
-                    .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID)))
+                    .scopes(scopeConfig -> scopeConfig.add(OidcScopes.OPENID))
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .accessTokenFormat(OAuth2TokenFormat.REFERENCE).build()).build();
 
@@ -321,7 +336,7 @@ public class LocalSecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
-        config.addAllowedOrigin("http://127.0.0.1:8080");
+        config.addAllowedOrigin("http://127.0.0.1:8080"); // Consider making this more configurable
         config.setAllowCredentials(true);
         source.registerCorsConfiguration("/**", config);
         return source;
@@ -419,10 +434,94 @@ public class LocalSecurityConfig {
         return new DbUserCredentialRepository(passkeyCredentialRepository, userRepository);
     }
 
+    /**
+     *  Remember me feature
+     *
+     * Step 1 and 2:
+     * Key Changes in LocalSecurityConfig.java:
+     *
+     * 1. DataSource Injection:
+     * - DataSource is injected into the constructor and stored as a field.
+     *
+     * 2. defaultSecurityFilterChain Parameters:
+     * - Added UserDetailsService userDetailsService and PersistentTokenRepository persistentTokenRepository
+     * as parameters to be injected by Spring .
+     *
+     * 3. .rememberMe() Configuration:
+     * - tokenRepository(persistentTokenRepository):
+     * - Tells Spring Security to use our database-backed token repository.
+     * - userDetailsService(userDetailsService):
+     * - Specifies the service to load user details when a remember-me token is validated.
+     * - This is your existing JpaUserDetailsService.
+     * - key("yourSuperSecretAndUniqueRememberMeKey"):
+     * - A private key used to hash the contents of the remember-me cookie.
+     * - Change this to a strong, unique, random string.
+     * - It's good practice to externalize this to your application.properties or a secrets manager.
+     * - I've used this.webAuthNProperties.getRpId() + "_RememberMeKey2024" as a placeholder;
+     * generate a proper secret.
+     * - tokenValiditySeconds((int) Duration.ofDays(30).toSeconds()):
+     * - Sets how long the remember-me token is valid (e.g., 30 days).
+     *
+     * 4. PersistentTokenRepository Bean:
+     * - A bean named persistentTokenRepository of type PersistentTokenRepository is defined.
+     * - It instantiates JdbcTokenRepositoryImpl and sets the dataSource.
+     * - The line tokenRepository.setCreateTableOnStartup(true); is commented out.
+     * - It's useful for the very first run in a development environment to create the persistent_logins table automatically.
+     * - For subsequent runs or in production, this table should be managed by your database migration scripts
+     * (e.g., Flyway, Liquibase).
+     *
+     * 5. CSRF for /api/**:
+     * - I've added /api/** to ignoringRequestMatchers for CSRF.
+     * - This is a common setup if your API is primarily consumed by non-browser clients or SPAs that handle tokens differently.
+     * - If your /api/profile endpoints are called from traditional web forms within your authserver's UI
+     * and rely on session cookies, you might need more granular CSRF configuration.
+     * - For now, this simplifies things.
+     *
+     * 6. Login Page:
+     * - Added .loginPage("/login").permitAll() to formLogin to explicitly state the login page URL,
+     * assuming you have one or will create one.
+     * - If you rely on Spring Security's default login page, this can be omitted, but a custom page is usually preferred.
+     *
+     * Step 3: Database Schema for persistent_logins
+     *
+     * You need to create the persistent_logins table in your MySQL database. If you didn't use setCreateTableOnStartup(true), you must create it manually or via a migration script.
+     *
+     * CREATE TABLE persistent_logins (
+     *     username VARCHAR(255) NOT NULL, -- Ensure this matches the length of your User's email/username
+     *     series VARCHAR(64) PRIMARY KEY,
+     *     token VARCHAR(64) NOT NULL,
+     *     last_used TIMESTAMP NOT NULL
+     * );
+     *
+     * Note: username column length should be sufficient for your usernames (emails). VARCHAR(255) is usually safe for emails.
+     *
+     *
+     */
+
+    /**
+     * Implement Remember me feature
+     * <p>
+     * Users do not need to authenticate in trusted browsers and devices.
+     * <p>
+     * Needs a persistent storage for remember me tokens.
+     *
+     * @return {@link PersistentTokenRepository}
+     */
+    @Bean
+    public PersistentTokenRepository persistentTokenRepository() {
+        JdbcTokenRepositoryImpl tokenRepository = new JdbcTokenRepositoryImpl();
+        tokenRepository.setDataSource(dataSource);
+        // For initial development, you can let it create the table.
+        // In production, you should manage schema via Flyway/Liquibase.
+        // tokenRepository.setCreateTableOnStartup(true);
+        // In production, manage schema via Flyway/Liquibase and keep setCreateTableOnStartup(false) (default).
+        return tokenRepository;
+    }
+
     @ConfigurationProperties(prefix = "spring.security.webauthn")
-    static class WebAuthNProperties {
+    public static class WebAuthNProperties {
         private String rpId = "localhost"; // Default value
-        private String rpName = "Amlume Passkeys"; // Default value
+        private String rpName = "Amlume Passkeys"; // Default value - domain name of the application
         private Set<String> allowedOrigins = Collections.singleton("http://localhost:8080"); // Default value
 
         public WebAuthNProperties() {
@@ -454,9 +553,8 @@ public class LocalSecurityConfig {
 
         public boolean equals(final Object o) {
             if (o == this) return true;
-            if (!(o instanceof WebAuthNProperties)) return false;
-            final WebAuthNProperties other = (WebAuthNProperties) o;
-            if (!other.canEqual((Object) this)) return false;
+            if (!(o instanceof WebAuthNProperties other)) return false;
+            if (!other.canEqual(this)) return false;
             final Object this$rpId = this.getRpId();
             final Object other$rpId = other.getRpId();
             if (!Objects.equals(this$rpId, other$rpId)) return false;
