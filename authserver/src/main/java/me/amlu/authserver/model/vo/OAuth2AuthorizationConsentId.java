@@ -22,10 +22,10 @@ public class OAuth2AuthorizationConsentId implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Column(length = 100)
+    @Column(name = "registered_client_id", length = 100)
     private String registeredClientId;
 
-    @Column(length = 200)
+    @Column(name = "principal_name", length = 200)
     private String principalName;
 
     public OAuth2AuthorizationConsentId(String registeredClientId, String principalName) {
