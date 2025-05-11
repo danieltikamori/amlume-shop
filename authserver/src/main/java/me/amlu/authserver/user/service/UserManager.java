@@ -19,7 +19,6 @@ import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.model.vo.PhoneNumber;
-import me.amlu.authserver.repository.*;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
