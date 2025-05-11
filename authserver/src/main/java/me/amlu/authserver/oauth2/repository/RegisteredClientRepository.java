@@ -8,16 +8,15 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver;
+package me.amlu.authserver.oauth2.repository;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+import me.amlu.authserver.oauth2.model.RegisteredClient;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
-@SpringBootApplication
-public class AuthserverApplication {
+import java.util.Optional;
 
-    public static void main(String[] args) {
-        SpringApplication.run(AuthserverApplication.class, args);
-    }
-
+@Repository
+public interface RegisteredClientRepository extends JpaRepository<RegisteredClient, String> {
+    Optional<RegisteredClient> findByClientId(String clientId);
 }

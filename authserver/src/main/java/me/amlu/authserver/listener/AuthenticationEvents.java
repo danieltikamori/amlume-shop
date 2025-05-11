@@ -10,7 +10,7 @@
 
 package me.amlu.authserver.listener;
 
-import me.amlu.authserver.service.UserServiceInterface;
+import me.amlu.authserver.user.service.UserServiceInterface;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
 import org.springframework.security.authentication.event.AuthenticationSuccessEvent;
