@@ -20,11 +20,17 @@ import com.webauthn4j.converter.jackson.WebAuthnJSONModule;
 import com.webauthn4j.converter.util.ObjectConverter;
 import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
-import me.amlu.authserver.repository.*;
-import me.amlu.authserver.service.CustomOAuth2UserService;
-import me.amlu.authserver.service.CustomOidcUserService;
-import me.amlu.authserver.service.JpaUserDetailsService;
+import me.amlu.authserver.oauth2.repository.AuthorityRepository;
+import me.amlu.authserver.oauth2.service.CustomOAuth2UserService;
+import me.amlu.authserver.oauth2.service.CustomOidcUserService;
+import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
+import me.amlu.authserver.passkey.repository.DbPublicKeyCredentialUserEntityRepository;
+import me.amlu.authserver.passkey.repository.DbUserCredentialRepository;
+import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
+import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -37,7 +43,6 @@ import org.springframework.security.authentication.password.CompromisedPasswordC
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.WebAuthnConfigurer;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -63,11 +68,18 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.security.web.webauthn.api.PublicKeyCredentialRpEntity;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;
+import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
+import org.springframework.security.web.webauthn.management.Webauthn4JRelyingPartyOperations;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -84,22 +96,13 @@ import java.util.stream.Collectors;
 public class LocalSecurityConfig {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(LocalSecurityConfig.class);
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthorityRepository authorityRepository;
     private final ObjectMapper objectMapper;
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
 
-    public LocalSecurityConfig(UserRepository userRepository,
-                               PasswordEncoder passwordEncoder,
-                               AuthorityRepository authorityRepository,
-                               ObjectMapper objectMapper,
+    public LocalSecurityConfig(ObjectMapper objectMapper,
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
                                WebAuthNProperties webAuthNProperties) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.authorityRepository = authorityRepository;
         this.objectMapper = objectMapper;
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
         this.webAuthNProperties = webAuthNProperties;
@@ -117,11 +120,6 @@ public class LocalSecurityConfig {
         // This is used to ensure this SecurityFilterChain only applies to these specific endpoints.
         RequestMatcher authorizationServerEndpointsMatcher =
                 http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).getEndpointsMatcher();
-        // ----------------------------------------------------
-
-        // --- OIDC config might be included in defaults, but explicit doesn't hurt ---
-        http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
-                .oidc(Customizer.withDefaults()); // Enable OIDC endpoints if needed (often included in applyDefaultSecurity)
 
         http
                 .securityMatcher(authorizationServerEndpointsMatcher) // CRITICAL: Restrict this chain to AS endpoints
@@ -147,19 +145,35 @@ public class LocalSecurityConfig {
                                                           OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> oidcUserService,
                                                           OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService
     ) throws Exception {
+
+        // Theoretically Spring Security's WebAuthnConfigurer automatically makes its necessary endpoints (e.g., /webauthn/register/options, /webauthn/register, /webauthn/authenticate/options, /webauthn/authenticate) accessible.
+
         // One way to potentially mitigate the "unchecked" warning is to assign the configurer to a typed variable first.
-        WebAuthnConfigurer<HttpSecurity> webAuthnConfigurer = new WebAuthnConfigurer<>();
+//        WebAuthnConfigurer<HttpSecurity> webAuthnConfigurer = new WebAuthnConfigurer<>();
+
+        // Allow png images to be served without authentication
+        http.authorizeHttpRequests(
+                authorize -> authorize.requestMatchers(new AntPathRequestMatcher("/images/*.png")).permitAll());
+
+        // Icons from the line-awesome addon
+        http.authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(new AntPathRequestMatcher("/line-awesome/**/*.svg")).permitAll());
+
+        // TODO: implement password reset / account recovery mechanism
 
         http
                 .authorizeHttpRequests((authorize) -> authorize
-                        .requestMatchers("/login/**", "/error").permitAll() // Permit error page
+                        .requestMatchers("/login/**", "/webauthn/**", "/error").permitAll() // Permit error page
+                        .requestMatchers(new AntPathRequestMatcher("/api/profile/passkeys/**")).authenticated() // Passkeys
                         .anyRequest().authenticated()
                 )
-                .webAuthn(webauth ->
-                        webauth.allowedOrigins(webAuthNProperties.getAllowedOrigins())
-                                .rpId(webAuthNProperties.getRpId())
-                                .rpName(webAuthNProperties.getRpName())
-                )
+                .webAuthn(Customizer.withDefaults()) // This would use the bean by default
+
+//                .webAuthn(webauth ->
+//                        webauth.allowedOrigins(webAuthNProperties.getAllowedOrigins())
+//                                .rpId(webAuthNProperties.getRpId())
+//                                .rpName(webAuthNProperties.getRpName())
+//                )
                 .formLogin(Customizer.withDefaults())
                 // Add OAuth2 Login for social providers
                 .oauth2Login(oauth2Login -> oauth2Login
@@ -170,6 +184,10 @@ public class LocalSecurityConfig {
                         // .loginPage("/login") // If you have a custom login page listing social options
                         // .defaultSuccessUrl("/user-profile", true) // Redirect after successful social login
                 );
+
+        // CSRF
+        http.csrf(cfg -> cfg.ignoringRequestMatchers(
+                new AntPathRequestMatcher("/webauthn/**"), new AntPathRequestMatcher("/login/webauthn")));
 
         // No explicit matcher needed here as it's the fallback chain
         return http.build();
@@ -296,6 +314,19 @@ public class LocalSecurityConfig {
         return AuthorizationServerSettings.builder().build();
     }
 
+    // --- CORS ---
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        CorsConfiguration config = new CorsConfiguration();
+        config.addAllowedHeader("*");
+        config.addAllowedMethod("*");
+        config.addAllowedOrigin("http://127.0.0.1:8080");
+        config.setAllowCredentials(true);
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
     // --- OAuth2TokenCustomizer ---
     @Bean
     public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserRepository userRepository) {
@@ -315,7 +346,7 @@ public class LocalSecurityConfig {
 
                         // Add user_id and full_name if the principal is a UserDetails representing your User
                         Object principal = context.getPrincipal().getPrincipal(); // Get the actual principal object
-                        if (principal instanceof me.amlu.authserver.model.User appUser) { // Check if it's your User class
+                        if (principal instanceof User appUser) { // Check if it's your User class
                             claims.put("user_id_numeric", appUser.getId());
                             claims.put("full_name", appUser.getDisplayableFullName());
                             claims.put("email", appUser.getEmail().getValue());
@@ -340,7 +371,7 @@ public class LocalSecurityConfig {
     }
 
     /**
-     * From Spring Security 6.3 version
+     * Checks for compromised passwords.
      *
      * @return {@link CompromisedPasswordChecker}
      */
@@ -350,6 +381,31 @@ public class LocalSecurityConfig {
     }
 
     // --- Passkey/WebAuthn Beans (Spring Security Native) ---
+
+    /**
+     * In Spring Security, the “relaying party parameter” is defined by defining a bean for WebAuthnRelyingPartyOperations.
+     * You’ll need an ID (which is essentially your domain), name, and allowed origin (URL).
+     *
+     * @param userEntities    {@link PublicKeyCredentialUserEntityRepository}
+     * @param userCredentials {@link UserCredentialRepository}
+     * @param webauthnId      is the domain
+     * @param webauthnName    is the application name
+     * @param webauthnOrigin  is the origin URL
+     * @return {@link WebAuthnRelyingPartyOperations}
+     */
+    @Bean
+    public WebAuthnRelyingPartyOperations relyingPartyOperations(
+            PublicKeyCredentialUserEntityRepository userEntities,
+            UserCredentialRepository userCredentials,
+            @Value("${spring.security.webauthn.rpId}") String webauthnId,
+            @Value("${spring.security.webauthn.rpName}") String webauthnName,
+            @Value("${spring.security.webauthn.allowedOrigins}") String webauthnOrigin) {
+        return new Webauthn4JRelyingPartyOperations(userEntities, userCredentials,
+                PublicKeyCredentialRpEntity.builder()
+                        .id(webauthnId)
+                        .name(webauthnName).build(),
+                Set.of(webauthnOrigin));
+    }
 
     @Bean
     public PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository(
@@ -444,7 +500,7 @@ public class LocalSecurityConfig {
     // --- Social Login Beans (OAuth2 Client) ---
     @Bean
     public OAuth2UserService<OAuth2UserRequest, OAuth2User> customOAuth2UserService(
-            UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+            UserRepository userRepository, AuthorityRepository authorityRepository) {
         return new CustomOAuth2UserService(userRepository, authorityRepository);
     }
 
