@@ -31,3 +31,5 @@ build/
 
 ### VS Code ###
 .vscode/
+!/src/main/resources/certificates/
+!/src/main/resources/config/
