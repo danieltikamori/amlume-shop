@@ -353,6 +353,11 @@ public class LocalSecurityConfig {
                         Set<String> roles = context.getRegisteredClient().getScopes();
                         claims.put("roles", roles);
                     } else { // For user-based grants
+                        //  When you are creating JWT claims,
+                        //  you are explicitly removing the ROLE_ prefix.
+                        //  This means if a user has the authority "ROLE_ADMIN",
+                        //  the JWT roles claim will contain "ADMIN".
+                        //  This is a common practice to make the claims cleaner.
                         Set<String> roles = AuthorityUtils.authorityListToSet(context.getPrincipal().getAuthorities())
                                 .stream()
                                 .map(r -> r.replaceFirst("^ROLE_", ""))
