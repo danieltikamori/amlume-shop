@@ -54,15 +54,15 @@ public class Authority implements GrantedAuthority {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Authority authority = (Authority) o;
+        Authority otherAuthority = (Authority) o;
         // For entities, equality is often based on ID if persisted,
-        // or business key (like 'name' here if it's guaranteed unique and stable before persistence)
-        return Objects.equals(authority, authority.authority);
+        // or business key (like 'authority' here if it's guaranteed unique and stable before persistence)
+        return Objects.equals(this.authority, otherAuthority.authority);
     }
 
     @Override
     public int hashCode() {
-        return authority != null ? authority.hashCode() : 0;
+        return Objects.hash(authority);
     }
 
     @Override
