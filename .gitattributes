@@ -1,7 +1,10 @@
 # Autodetect text files
 * text=auto
+
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+* text eol=lf
 
 # ...Unless the name matches the following
 # overriding patterns
