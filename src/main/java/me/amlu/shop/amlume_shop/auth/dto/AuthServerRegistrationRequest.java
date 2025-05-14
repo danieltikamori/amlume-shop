@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.auth.dto;
 
+import org.jetbrains.annotations.NotNull;
+
 // This DTO is used to send registration data to the authserver API.
 // Its structure should match the RegistrationRequest DTO expected by authserver's /api/register endpoint.
 public record AuthServerRegistrationRequest(
@@ -17,8 +19,25 @@ public record AuthServerRegistrationRequest(
         String lastName,
         String nickname,
         String email,
-        String password,
+        String password, // Contains the raw password
         String mobileNumber,
         String defaultRegion
 ) {
+    // NOTE: The default toString() for records includes all components, including the password.
+    // If instances of this record are logged, the password will appear in logs.
+    // Consider overriding toString() to redact the password if logging this object is necessary.
+
+    @NotNull
+    @Override
+    public String toString() {
+        return "AuthServerRegistrationRequest{" +
+                "firstName='" + firstName + '\'' +
+                ", lastName='" + lastName + '\'' +
+                ", nickname='" + nickname + '\'' +
+                ", email='" + email + '\'' +
+                ", password='[REDACTED]'" + // Redact the password
+                ", mobileNumber='" + mobileNumber + '\'' +
+                ", defaultRegion='" + defaultRegion + '\'' +
+                '}';
+    }
 }
