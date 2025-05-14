@@ -225,6 +225,19 @@ public class SecurityAuditService {
         log.warn("Failed role assignment attempt logged: {}", event);
     }
 
+    public void logFailedAttempt(String username, String ipAddress, String reason) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.ROLE_ASSIGNMENT_FAILED)
+                .username(username)
+                .ipAddress(ipAddress)
+                .timestamp(Instant.now())
+                .details(Map.of("reason", reason).toString())
+                .build();
+
+        securityEventRepository.save(event);
+        log.warn("Failed attempt logged: {}", event);
+    }
+
     private String getResourceId(Object resource) {
         return switch (resource) {
             case Product product -> String.valueOf(product.getProductId());
@@ -250,5 +263,18 @@ public class SecurityAuditService {
     private String getCurrentUsername() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null ? authentication.getName() : "system";
+    }
+
+    public void logFailedRegistration(String username, String ipAddress, String reason) {
+        SecurityEvent event = SecurityEvent.builder()
+                .eventType(SecurityEventType.REGISTRATION_FAILED)
+                .username(username)
+                .ipAddress(ipAddress)
+                .timestamp(Instant.now())
+                .details(Map.of("reason", reason).toString())
+                .build();
+
+        securityEventRepository.save(event);
+        log.warn("Failed registration attempt logged: {}", event);
     }
 }
