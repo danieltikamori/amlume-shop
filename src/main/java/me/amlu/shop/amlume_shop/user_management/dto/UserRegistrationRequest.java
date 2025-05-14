@@ -10,20 +10,79 @@
 
 package me.amlu.shop.amlume_shop.user_management.dto;
 
-import lombok.Builder;
+import me.amlu.shop.amlume_shop.user_management.ContactInfo;
 import me.amlu.shop.amlume_shop.user_management.UserPassword;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
-import me.amlu.shop.amlume_shop.user_management.Username;
 
-@Builder
-public record UserRegistrationRequest(Username username, UserPassword password, String userEmail, UserRole roles,
-                                      String captchaResponse) {
+public record UserRegistrationRequest(
+        ContactInfo firstName,
+        ContactInfo lastName,
+        ContactInfo nickname,
+        UserPassword password,
+        ContactInfo userEmail,
+        UserRole roles,
+        String captchaResponse) {
 
-    public String getUsername() {
-        return username.getUsername();
+    public static UserRegistrationRequestBuilder builder() {
+        return new UserRegistrationRequestBuilder();
     }
 
-//    private String firstname;
-//    private String lastname;
+
+    public static class UserRegistrationRequestBuilder {
+        private ContactInfo firstName;
+        private ContactInfo lastName;
+        private ContactInfo nickname;
+        private UserPassword password;
+        private ContactInfo userEmail;
+        private UserRole roles;
+        private String captchaResponse;
+
+        UserRegistrationRequestBuilder() {
+        }
+
+        public UserRegistrationRequestBuilder firstName(ContactInfo firstName) {
+            this.firstName = firstName;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder lastName(ContactInfo lastName) {
+            this.lastName = lastName;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder nickname(ContactInfo nickname) {
+            this.nickname = nickname;
+            return this;
+        }
+
+
+        public UserRegistrationRequestBuilder password(UserPassword password) {
+            this.password = password;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder userEmail(ContactInfo userEmail) {
+            this.userEmail = userEmail;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder roles(UserRole roles) {
+            this.roles = roles;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder captchaResponse(String captchaResponse) {
+            this.captchaResponse = captchaResponse;
+            return this;
+        }
+
+        public UserRegistrationRequest build() {
+            return new UserRegistrationRequest(this.firstName, this.lastName, this.nickname, this.password, this.userEmail, this.roles, this.captchaResponse);
+        }
+
+        public String toString() {
+            return "UserRegistrationRequest.UserRegistrationRequestBuilder(firstName=" + this.firstName + ", lastName=" + this.lastName + ", nickname=" + this.nickname + ", password=" + this.password + ", userEmail=" + this.userEmail + ", roles=" + this.roles + ", captchaResponse=" + this.captchaResponse + ")";
+        }
+    }
 
 }
