@@ -10,209 +10,296 @@
 
 package me.amlu.shop.amlume_shop.auth.service;
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import me.amlu.shop.amlume_shop.auth.dto.AuthResponse;
+import me.amlu.shop.amlume_shop.auth.dto.AuthServerRegistrationRequest;
 import me.amlu.shop.amlume_shop.auth.dto.LoginRequest;
 import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
-import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
-import me.amlu.shop.amlume_shop.security.model.UserDeviceFingerprint;
-import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
-import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
 import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintRepository;
-import me.amlu.shop.amlume_shop.security.service.*;
-import me.amlu.shop.amlume_shop.user_management.AuthenticationInfo;
+import me.amlu.shop.amlume_shop.security.service.CaptchaService;
+import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
+import me.amlu.shop.amlume_shop.security.service.SecurityAuditService;
+import me.amlu.shop.amlume_shop.security.service.SecurityNotificationService;
 import me.amlu.shop.amlume_shop.user_management.User;
-import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.Optional;
 import java.util.stream.Collectors;
-
-import static me.amlu.shop.amlume_shop.commons.Constants.AUTH_CACHE;
-import static me.amlu.shop.amlume_shop.commons.Constants.AUTH_CACHE_KEY_PREFIX;
 
 @Service
 @Transactional
-public class UserAuthenticator implements AuthenticationInterface {
+public class UserAuthenticator implements AuthenticationInterface { // Keep interface for now
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(UserAuthenticator.class);
 
-    private final CacheService cacheService;
-    private final CaptchaService captchaService;
-    private final MeterRegistry meterRegistry;
-    private final UserService userService;
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
-    private final DeviceFingerprintService deviceFingerprintService;
-    private final HttpServletRequest httpServletRequest;
-    private final PasetoTokenService pasetoTokenService;
-    private final FailedLoginAttemptService failedLoginAttemptService;
-    private final SecurityAuditService auditService;
-    private final SecurityNotificationService notificationService;
-    private final TokenRevocationService tokenRevocationService;
+    // Keep dependencies for remaining local checks/features
+    private final CacheService cacheService; // For local caching (if any remains)
+    private final CaptchaService captchaService; // For local captcha validation
+    private final MeterRegistry meterRegistry; // For metrics
+    private final FailedLoginAttemptService failedLoginAttemptService; // For local IP/username rate limiting
+    private final DeviceFingerprintService deviceFingerprintService; // For local device fingerprinting
+    private final UserDeviceFingerprintRepository userDeviceFingerprintRepository; // For local device fingerprinting storage
+    private final HttpServletRequest httpServletRequest; // For request details (IP, User-Agent)
+    private final SecurityAuditService auditService; // For local audit logging
+    private final SecurityNotificationService notificationService; // For local notifications (e.g., account locked - though this moves to authserver)
+    private final UserService userService; // For accessing local User entity (linked by authserver ID)
 
-    // Inject maxDevicesPerUser property
+    // REMOVE dependencies related to old local auth/token flow
+    // private final UserRepository userRepository;
+    // private final PasswordEncoder passwordEncoder;
+    // private final PasetoTokenService pasetoTokenService;
+    // private final TokenRevocationService tokenRevocationService;
+
+    // ADD WebClient for calling authserver
+    private final WebClient authServerWebClient;
+
+    // Inject maxDevicesPerUser property (if still relevant for amlume-shop's device tracking)
     @Value("${security.max-devices-per-user}")
     private int maxDevicesPerUser;
 
     // --- Constructor ---
+    // Update constructor parameters to reflect remaining dependencies
     public UserAuthenticator(CacheService cacheService, CaptchaService captchaService,
                              MeterRegistry meterRegistry,
-                             UserService userService,
-                             UserDeviceFingerprintRepository userDeviceFingerprintRepository,
+                             FailedLoginAttemptService failedLoginAttemptService,
                              DeviceFingerprintService deviceFingerprintService,
+                             UserDeviceFingerprintRepository userDeviceFingerprintRepository,
                              HttpServletRequest httpServletRequest,
                              SecurityAuditService auditService,
                              SecurityNotificationService notificationService,
-                             UserRepository userRepository,
-                             PasswordEncoder passwordEncoder,
-                             @Lazy PasetoTokenService pasetoTokenService, FailedLoginAttemptService failedLoginAttemptService,
-                             @Lazy TokenRevocationService tokenRevocationService) {
+                             UserService userService, // Keep for local user access
+                             WebClient authServerWebClient // Inject WebClient
+                             // Remove old dependencies: UserRepository, PasswordEncoder, PasetoTokenService, TokenRevocationService
+    ) {
         this.cacheService = cacheService;
         this.captchaService = captchaService;
         this.meterRegistry = meterRegistry;
-        this.userService = userService;
-        this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
+        this.failedLoginAttemptService = failedLoginAttemptService;
         this.deviceFingerprintService = deviceFingerprintService;
+        this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
         this.httpServletRequest = httpServletRequest;
         this.auditService = auditService;
         this.notificationService = notificationService;
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.pasetoTokenService = pasetoTokenService;
-        this.failedLoginAttemptService = failedLoginAttemptService;
-        this.tokenRevocationService = tokenRevocationService;
+        this.userService = userService; // Assign local UserService
+        this.authServerWebClient = authServerWebClient; // Assign WebClient
     }
 
     // --- Registration ---
+    // Apply Resilience4j annotations
+    @Retry(name = "authserverRegistration") // Use the name defined in properties/ResilienceConfig
+    @CircuitBreaker(name = "authserverRegistration", fallbackMethod = "registerFallback")
+    // Use the name defined in properties/ResilienceConfig
     @Override
-    public AuthResponse register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException {
-        try {
-            // 0. Pre-flight checks
-            performPreFlightChecks(request.getUsername(), ipAddress, "Registration", request.captchaResponse());
+    @Transactional // Keep transaction if local pre-flight checks involve DB (e.g., rate limiting)
+    // CHANGED: Return type is now void
+    public void register(@Valid UserRegistrationRequest request, String ipAddress)
+            throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
 
-            User user = userService.registerUser(request);
+        // Use the mapped email for logging consistency
+        String emailForLogging = request.userEmail() != null ? request.userEmail().getEmail() : "[email_not_provided_in_request]";
+        log.info("Attempting to register user via authserver API: email={}", emailForLogging);
 
-            // Generate tokens
-            AuthTokenGenerator generateAuthTokens = generateAuthTokens(user);
-            auditService.logSuccessfulRegistration(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
+        // 0. Perform local pre-flight checks (rate limiting, captcha)
+        // Keep these if amlume-shop should enforce them before hitting authserver
+        // Use email as the identifier for local rate limiting
+        // Ensure request.userEmail() and request.userEmail().getEmail() are not null before calling
+        String emailForPreCheck = (request.userEmail() != null && request.userEmail().getEmail() != null)
+                ? request.userEmail().getEmail()
+                : "unknown_email_for_precheck"; // Or handle as error
+        performPreFlightChecks(emailForPreCheck, ipAddress, "Registration", request.captchaResponse());
+        log.debug("Local pre-flight checks passed for registration of user email: {}", emailForPreCheck);
 
-            // --- Associate Fingerprint during Registration ---
-            // Generate fingerprint based on registration request details
-            String deviceFingerprint = generateAndHandleFingerprint(request.captchaResponse(), null, null); // Use available info, screen might be null
-            if (deviceFingerprint != null && user.isDeviceFingerprintingEnabled()) { // Check if enabled
-                try {
-                    associateFingerprintWithTokens(user, generateAuthTokens.accessToken(), generateAuthTokens.refreshToken(), deviceFingerprint, true); // Mark as trusted on registration
-                } catch (MaxDevicesExceededException e) {
-                    log.warn("Max devices reached during registration for user [{}]. Fingerprint not associated. Registration continues.", user.getUsername());
-                    // POLICY DECISION: Registration currently proceeds even if fingerprint association fails due to device limit.
-                    // Consider failing registration here if strict device limits are required.
-                    // auditService.logSecurityEvent("MAX_DEVICES_REACHED_ON_REGISTRATION", user.getUserId(), ipAddress);
-                }
-            }
-            // --- End Fingerprint Association ---
+        // 1. Map amlume-shop DTO to authserver DTO
+        AuthServerRegistrationRequest authServerRequest = new AuthServerRegistrationRequest(
+                request.firstName() != null ? request.firstName().getFirstName() : null,
+                request.lastName() != null ? request.lastName().getLastName() : null,
+                request.nickname() != null ? request.nickname().getNickname() : null,
+                request.userEmail() != null ? request.userEmail().getEmail() : null, // Get email string from ContactInfo
+                request.password() != null ? request.password().getPassword() : null, // Get raw password string from VO
+                request.userEmail() != null ? request.userEmail().getPhoneNumberString() : null, // Get phone from ContactInfo if available
+                null  // defaultRegion - assuming not directly available in UserRegistrationRequest, or derive if possible
+        );
+        // Use the email from the DTO sent to authserver for subsequent logs
+        String mappedEmail = authServerRequest.email() != null ? authServerRequest.email() : "[mapped_email_is_null]";
+        log.debug("Mapped amlume-shop registration request to authserver DTO for email: {}", mappedEmail);
 
-            return AuthResponse.builder()
-                    .accessToken(generateAuthTokens.accessToken())
-                    .refreshToken(generateAuthTokens.refreshToken())
-                    .success(true) // Indicate success
-                    .message("Registration successful")
-                    .build();
-        } catch (TooManyAttemptsException | InvalidCaptchaException | UserAlreadyExistsException e) {
-            // Re-throw specific exceptions
-            throw e;
-        } catch (Exception e) {
-            log.error("Error during registration for user [{}]: {}", request.username().getUsername(), e.getMessage(), e);
-            throw new UserRegistrationException("Registration failed due to an internal error.");
+        // 2. Call authserver's registration API
+        // The WebClient call is now wrapped by Resilience4j annotations
+        authServerWebClient.post()
+                .uri("/api/register") // Endpoint on authserver
+                .bodyValue(authServerRequest)
+                .retrieve()
+                .onStatus(
+                        httpStatusCode -> httpStatusCode.is2xxSuccessful(), // Use lambda
+                        clientResponse -> {
+                            log.info("Authserver registration successful for email: {}", mappedEmail);
+                            return Mono.empty();
+                        })
+                .onStatus(
+                        httpStatusCode -> HttpStatus.CONFLICT.equals(httpStatusCode), // Use lambda and equals
+                        clientResponse -> {
+                            log.warn("Authserver reported user already exists for email: {}", mappedEmail);
+                            return Mono.error(new UserAlreadyExistsException("User with this email already exists."));
+                        })
+                .onStatus(
+                        httpStatusCode -> HttpStatus.BAD_REQUEST.equals(httpStatusCode), // Use lambda and equals
+                        clientResponse -> {
+                            log.warn("Authserver reported bad request for registration of email: {}", mappedEmail);
+                            // Explicitly type the Mono chain to Mono<Throwable>
+                            Mono<Throwable> errorMono = clientResponse.bodyToMono(String.class)
+                                    .flatMap(errorMessage -> {
+                                        log.warn("Authserver 400 error details: {}", errorMessage);
+                                        // Ensure this returns Mono.error of a Throwable
+                                        return Mono.error(new IllegalArgumentException("Invalid registration data: " + errorMessage));
+                                    })
+                                    .cast(Throwable.class) // Cast the item type to Throwable
+                                    .switchIfEmpty(Mono.error(new IllegalArgumentException("Invalid registration data (no details from authserver).")));
+                            return errorMono; // Return the explicitly typed Mono<Throwable>
+                        })
+                .onStatus(
+                        HttpStatusCode::isError, // Predicate for any other error
+                        clientResponse -> {
+                            log.error("Authserver returned error status {} for registration of email: {}", clientResponse.statusCode(), mappedEmail);
+                            // Explicitly type the Mono chain to Mono<Throwable>
+                            Mono<Throwable> errorMono = clientResponse.bodyToMono(String.class)
+                                    .flatMap(errorMessage -> {
+                                        log.error("Authserver error details: {}", errorMessage);
+                                        // Ensure this returns Mono.error of a Throwable
+                                        return Mono.error(new UserRegistrationException("Authserver registration failed: " + errorMessage));
+                                    })
+                                    .cast(Throwable.class) // Cast the item type to Throwable
+                                    .switchIfEmpty(Mono.error(new UserRegistrationException("Authserver registration failed (no details).")));
+                            return errorMono; // Return the explicitly typed Mono<Throwable>
+                        })
+                .bodyToMono(Void.class)
+                .block(); // Block to make the method synchronous
+
+        // Audit local registration attempt success (meaning the call to authserver succeeded)
+        assert request.userEmail() != null;
+        auditService.logSuccessfulRegistration(null, request.userEmail().getEmail(), ipAddress); // userId is null at this stage in amlume-shop
+
+        log.info("Registration process completed successfully for user: {}", request.userEmail().getEmail());
+
+        // Note: Specific exceptions like TooManyAttemptsException, InvalidCaptchaException,
+        // UserAlreadyExistsException, IllegalArgumentException are handled by the onStatus
+        // blocks and re-thrown *before* the generic catch blocks or fallback are triggered
+        // for transient/unexpected errors.
+
+    }
+
+    // Fallback method signature must match the original method's parameters + a Throwable
+    // It should re-throw specific business exceptions that shouldn't be hidden by resilience,
+    // and wrap transient/unexpected errors in a suitable exception for the caller (AuthController).
+    public void registerFallback(@Valid UserRegistrationRequest request, String ipAddress, Throwable t)
+            throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
+
+        String userEmail = request.userEmail() != null ? request.userEmail().getEmail() : "unknown_email_for_fallback";
+        log.error("Fallback for register method triggered for user [{}], IP [{}]. Cause: {}", userEmail, ipAddress, t.getMessage());
+        // Audit the failure, potentially with more detail from the exception 't'
+        auditService.logFailedRegistration(userEmail, ipAddress, "Authserver registration fallback triggered: " + t.getMessage());
+
+        // Re-throw specific exceptions that were ignored by Retry/CircuitBreaker and should propagate
+        // These are typically the exceptions thrown by the onStatus handlers.
+        if (t instanceof TooManyAttemptsException) throw (TooManyAttemptsException) t;
+        if (t instanceof InvalidCaptchaException) throw (InvalidCaptchaException) t;
+        if (t instanceof UserAlreadyExistsException) throw (UserAlreadyExistsException) t;
+        if (t instanceof IllegalArgumentException) throw (IllegalArgumentException) t;
+
+        // For other exceptions (network issues, timeouts, circuit breaker open, etc.)
+        // throw a generic UserRegistrationException or a more specific fallback exception.
+        // The cause 't' provides the original error details.
+        if (t instanceof CallNotPermittedException) {
+            // Specific message for circuit breaker open
+            throw new UserRegistrationException("Registration service is temporarily unavailable (circuit breaker open). Please try again later.", t);
+        } else {
+            // Generic message for other failures (e.g., after retries exhausted, unexpected WebClient error)
+            throw new UserRegistrationException("Registration failed due to an issue communicating with the authentication server. Please try again later.", t);
         }
     }
 
-    // --- Authentication ---
-    @Override
-    public AuthResponse authenticateUser(@Valid LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException {
-        try {
-            // 0. Pre-flight checks
-            validateLoginRequest(request);
-            performPreFlightChecks(request.username(), ipAddress, "Login", request.captchaResponse());
 
-            // 1. Fetch user
-            User user = userRepository.findByAuthenticationInfoUsername_Username(request.username())
-                    .orElseThrow(() -> {
-                        auditService.logFailedLogin(request.username(), ipAddress, Constants.USER_NOT_FOUND_MESSAGE);
-                        return new UsernameNotFoundException(Constants.INVALID_CREDENTIALS_MESSAGE); // Generic message
-                    });
+    // --- Authentication is handled by the Authorization Server (oauth2Login) ---
+    // This method is now deprecated and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    @Transactional
+//    public AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException {
+//        // This entire method is part of the old PASETO/local auth flow.
+//        // It should be removed once amlume-shop uses oauth2Login().
+//        log.warn("authenticateUser method is deprecated and should not be used.");
+//        throw new UnsupportedOperationException("Direct username/password authentication is handled by the authentication server.");
+//    }
 
-            // 2. Check account lock status
-            checkAccountLockStatus(user, ipAddress);
-
-            // 3. Check password
-            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-                handleFailedLogin(user, ipAddress); // Increments attempts, locks if needed
-                throw new BadCredentialsException(Constants.INVALID_CREDENTIALS_MESSAGE);
-            }
-
-            // 4. MFA Block REMOVED - Proceed directly to successful login
-            log.info("Password validation successful for user [{}]. Passkey flow expected.", user.getUsername());
-            String deviceFingerprint = generateAndHandleFingerprint(request.userAgent(), request.screenWidth(), request.screenHeight());
-            return handleSuccessfulLogin(user, ipAddress, deviceFingerprint);
-
-        } catch (TooManyAttemptsException | LockedException | UsernameNotFoundException e) {
-            // Re-throw specific exceptions
-            throw e;
-        }
-    }
 
     // --- Logout ---
     @Transactional
     @Override
     public void logout(String accessToken, String refreshToken) { // Accept tokens to revoke
+        // This method needs to be adapted for OAuth2/OIDC logout.
+        // It should trigger Spring Security's logout handler which, if configured,
+        // will redirect to the authserver's end session endpoint.
+        // Token revocation might happen implicitly via the end session endpoint,
+        // or you might need to call authserver's token revocation endpoint if it exists.
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated() && !(authentication.getPrincipal() instanceof String && authentication.getPrincipal().equals("anonymousUser"))) {
             String username = authentication.getName();
             String userId = ""; // Try to get user ID if principal is User object
-            if (authentication.getPrincipal() instanceof User userPrincipal) {
+            // If using OAuth2Login, principal might be OAuth2User or OidcUser
+            if (authentication.getPrincipal() instanceof User userPrincipal) { // Assuming local User entity is still used
                 userId = String.valueOf(userPrincipal.getUserId());
+            } else if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.core.user.OAuth2User oauth2User) {
+                // Get user ID from claims, e.g., 'sub'
+                userId = oauth2User.getName(); // Often 'sub' claim
+                // Or get from attributes: userId = String.valueOf(oauth2User.getAttributes().get("sub"));
             }
+
+
             log.info("Logging out user: {}", username);
 
             String reason = "User initiated logout"; // Define a reason for logging
 
             // Standard Spring Security logout (clears context, invalidates session if applicable)
+            // If OidcClientInitiatedLogoutSuccessHandler is configured, this will trigger the redirect to authserver
             new SecurityContextLogoutHandler().logout(httpServletRequest, null, authentication);
 
-            // Revoke tokens by adding them to the blocklist
-            if (StringUtils.isNotBlank(accessToken)) {
-                tokenRevocationService.revokeAccessToken(accessToken, TokenConstants.ACCESS_TOKEN_DURATION, reason); // Use appropriate duration
-            }
-            if (StringUtils.isNotBlank(refreshToken)) {
-                tokenRevocationService.revokeRefreshToken(refreshToken, TokenConstants.REFRESH_TOKEN_DURATION, reason); // Use appropriate duration
-            }
+            // --- Token Revocation (Optional, depends on authserver's logout flow) ---
+            // If authserver's end session endpoint handles token revocation, you might not need this.
+            // If you need to explicitly revoke tokens from amlume-shop:
+            // You would need to call authserver's token revocation endpoint here using WebClient.
+            // This requires amlume-shop to authenticate to the revocation endpoint (e.g., using client credentials).
+            // This is more complex than relying on the end session redirect.
+            // For now, let's assume the end session redirect is sufficient or token expiry handles it.
+            // If you *must* revoke locally issued PASETO tokens (if amlume-shop still issues them *after* OAuth2 login):
+            // if (StringUtils.isNotBlank(accessToken)) {
+            //     tokenRevocationService.revokeAccessToken(accessToken, TokenConstants.ACCESS_TOKEN_DURATION, reason);
+            // }
+            // if (StringUtils.isNotBlank(refreshToken)) {
+            //     tokenRevocationService.revokeRefreshToken(refreshToken, TokenConstants.REFRESH_TOKEN_DURATION, reason);
+            // }
+            // --- End Token Revocation ---
+
             auditService.logLogout(userId, username, httpServletRequest.getRemoteAddr()); // Pass more info to audit
         } else {
             log.debug("Logout called but no authenticated user found in context.");
@@ -222,106 +309,66 @@ public class UserAuthenticator implements AuthenticationInterface {
 
     // --- Helper Methods ---
 
+    // This method is part of the old PASETO flow and should be removed later.
+    @Deprecated(since = "2025-05-15", forRemoval = true)
     private void validateLoginRequest(LoginRequest loginRequest) {
-        if (loginRequest == null ||
-                StringUtils.isBlank(loginRequest.username()) ||
-                StringUtils.isBlank(loginRequest.password())) {
-            throw new IllegalArgumentException("Username and password cannot be empty.");
-        }
-        // TODO: Add captcha validation here or in preFlightChecks if required for login
-        // if (!captchaService.validateCaptcha(loginRequest.captchaResponse(), ipAddress)) {
-        //     throw new InvalidCaptchaException("Invalid CAPTCHA response");
-        // }
+        log.warn("validateLoginRequest method is deprecated and should not be used.");
+        // Implementation removed
     }
 
     /**
      * Consolidated pre-flight checks for registration and login.
+     // The 'identifier' parameter will now be an email address.
+     * Keep these if amlume-shop should enforce them before hitting authserver/login flow.
      */
-    private void performPreFlightChecks(String username, String ipAddress, String actionType, String captchaResponse) throws TooManyAttemptsException {
+    private void performPreFlightChecks(String identifier, String ipAddress, String actionType, String captchaResponse) throws TooManyAttemptsException {
 
         // Check failed login attempts (applies to log in/MFA verify, maybe registration too)
+        // This logic might need adjustment if authserver handles all failed attempts centrally.
+        // If amlume-shop still wants to block based on *local* failed attempts (e.g., attempts to hit its login endpoint directly), keep this.
+        // If authserver handles it, remove this.
+        // For now, assuming local IP/username rate limiting is still desired before calling authserver.
         try {
-            failedLoginAttemptService.checkAndThrowIfBlocked(username); // Check by username
+            failedLoginAttemptService.checkAndThrowIfBlocked(identifier); // Check by username/email
             failedLoginAttemptService.checkAndThrowIfBlocked(ipAddress); // Check by IP
         } catch (TooManyAttemptsException e) {
             // Use the exception message which likely contains the key type information
-            auditService.logFailedLogin(username, ipAddress, "Too Many Attempts (Backoff) for " + e.getMessage());
+            auditService.logFailedAttempt(identifier, ipAddress, "Too Many Attempts (Backoff) for " + e.getMessage());
             throw e;
         }
 
-        // TODO: Add Captcha validation here if required for the actionType
+        // Keep Captcha validation here if required for the actionType (e.g., on amlume-shop's registration form)
         if ("Login".equals(actionType) || "Registration".equals(actionType)) {
             captchaService.verifyRateLimitAndCaptcha(captchaResponse, ipAddress);
         }
 
-        log.trace("Pre-flight checks passed for user [{}], action [{}]", username, actionType);
+        log.trace("Local pre-flight checks passed for identifier [{}], action [{}]", identifier, actionType);
     }
 
+    // This method is part of the old PASETO flow and should be removed later.
+    @Deprecated(since = "2025-05-15", forRemoval = true)
     private void checkAccountLockStatus(User user, String ipAddress) throws LockedException {
-        if (!user.isAccountNonLocked()) {
-            if (!unlockWhenTimeExpired(user)) {
-                // The Account is still locked
-                auditService.logAccessDeniedLockedAccount(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
-                throw new LockedException(Constants.ACCOUNT_LOCKED_MESSAGE);
-            } else {
-                // The Account was locked but now unlocked by time expiry
-                auditService.logAccountUnlocked(String.valueOf(user.getUserId()), user.getUsername(), ipAddress + " (Automatic)");
-                log.info("Account for user [{}] automatically unlocked due to time expiry.", user.getUsername());
-            }
-        }
+        log.warn("checkAccountLockStatus method is deprecated and should not be used.");
+        // Implementation removed
     }
 
-    @Override
-    @Transactional // Ensure all operations succeed or fail together
-    public AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint) {
-        resetFailedAttempts(user); // Resets attempts in DB and cache
-        user.updateLastLoginTime(Instant.now());
-        userRepository.save(user); // Save updated last login time
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    @Transactional
+//    public AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint) {
+//        log.warn("handleSuccessfulLogin method is deprecated and should not be used.");
+//        throw new UnsupportedOperationException("Successful login handling is part of the OAuth2/OIDC flow.");
+//    }
 
-        auditService.logSuccessfulLogin(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
-
-        // Generate tokens
-        AuthTokenGenerator tokens = generateAuthTokens(user);
-
-        // Associate fingerprint with tokens if enabled and fingerprint available
-        if (user.isDeviceFingerprintingEnabled() && deviceFingerprint != null) {
-            try {
-                // Associate, marking as untrusted if it's a new device found during login
-                associateFingerprintWithTokens(user, tokens.accessToken(), tokens.refreshToken(), deviceFingerprint, false); // false = not trusted by default on login
-            } catch (MaxDevicesExceededException e) {
-                log.warn("Max devices reached during login for user [{}]. Fingerprint not associated. Login continues.", user.getUsername());
-                // POLICY DECISION: Login currently proceeds even if fingerprint association fails due to device limit.
-                // Consider failing login here if strict device limits are required:
-                // throw new AuthenticationFailException("Cannot log in, maximum device limit reached.");
-                // auditService.logSecurityEvent("MAX_DEVICES_REACHED_ON_LOGIN", user.getUserId(), ipAddress);
-            }
-        } else if (deviceFingerprint == null && user.isDeviceFingerprintingEnabled()) {
-            log.warn("Device fingerprint could not be generated during login for user [{}], but fingerprinting is enabled. Proceeding without association.", user.getUsername());
-        }
-
-        return AuthResponse.builder()
-                .accessToken(tokens.accessToken())
-                .refreshToken(tokens.refreshToken())
-                .username(user.getUsername())
-                .authorities(user.getAuthorities()) // Assuming getAuthorities returns Collection<? extends GrantedAuthority>
-                .success(true)
-                .message("Login successful")
-                .build();
-    }
-
-    @Override
-    @Transactional
-    public void handleFailedLogin(User user, String ipAddress) {
-        increaseFailedAttempts(user); // This saves the user and records in cache
-        auditService.logFailedLogin(user.getUsername(), ipAddress, Constants.INVALID_CREDENTIALS_MESSAGE);
-
-        // Check lock condition using the updated count from the user entity
-        if (user.getFailedLoginAttempts() >= Constants.MAX_FAILED_ATTEMPTS) {
-            lockUser(user); // This saves the user
-            notificationService.sendAccountLockedEmail(user);
-            auditService.logAccountLocked(String.valueOf(user.getUserId()), user.getUsername(), ipAddress);
-        }
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    @Transactional
+//    public void handleFailedLogin(User user, String ipAddress) {
+//        log.warn("handleFailedLogin method is deprecated and should not be used.");
+//        // Implementation removed
+//    }
 
     /**
      * @deprecated Redundant method. Logic is handled by {@link #checkAccountLockStatus(User, String)}.
@@ -329,13 +376,14 @@ public class UserAuthenticator implements AuthenticationInterface {
     @Deprecated(since = "2025-04-20", forRemoval = true) // Mark as deprecated
 //    @Override
     public void handleLockedAccount(User user, String ipAddress) throws LockedException {
-        // Implementation removed as logic is in checkAccountLockStatus
-        log.warn("handleLockedAccount method is deprecated and should not be used directly. Use checkAccountLockStatus.");
-        // checkAccountLockStatus(user, ipAddress); // No need to call it here, the caller should use checkAccountLockStatus directly
+        log.warn("handleLockedAccount method is deprecated and should not be used directly.");
+        // Implementation removed
     }
 
     /**
      * Associates device fingerprint with tokens, checking device limits for new devices.
+     * This method is part of the old PASETO flow. If amlume-shop still needs device tracking,
+     * this logic needs to be adapted to the OAuth2/OIDC flow (e.g., triggered after OAuth2 login success).
      *
      * @param user              The user.
      * @param accessToken       The access token.
@@ -344,254 +392,156 @@ public class UserAuthenticator implements AuthenticationInterface {
      * @param trustOnCreate     Whether to mark the device as trusted if it's being created (e.g., during registration).
      * @throws MaxDevicesExceededException if adding a new device would exceed the limit.
      */
+    // This method is part of the old PASETO flow. Needs adaptation if local device tracking is kept.
     private void associateFingerprintWithTokens(User user, String accessToken, String refreshToken, String deviceFingerprint, boolean trustOnCreate) throws MaxDevicesExceededException {
-        Optional<UserDeviceFingerprint> existingOpt = userDeviceFingerprintRepository
-                .findByUserAndDeviceFingerprint(user, deviceFingerprint);
-
-        UserDeviceFingerprint userDeviceFingerprint;
-        boolean isNewDevice = existingOpt.isEmpty();
-
-        if (isNewDevice) {
-            // --- New Device ---
-            log.debug("Associating new device fingerprint for user [{}]", user.getUsername());
-            // Check device limit BEFORE creating
-            long deviceCount = userDeviceFingerprintRepository.countByUserAndActiveTrue(user);
-            if (deviceCount >= maxDevicesPerUser) {
-                log.warn("Max device limit ({}) reached for user [{}]. Cannot associate new device fingerprint.", maxDevicesPerUser, user.getUsername());
-                throw new MaxDevicesExceededException("Maximum device limit reached, cannot add new device.");
-            }
-            userDeviceFingerprint = UserDeviceFingerprint.builder()
-                    .user(user)
-                    .deviceFingerprint(deviceFingerprint)
-                    .isActive(true)
-                    .trusted(trustOnCreate) // Set trust status based on context (e.g., true for registration, false for login)
-                    .failedAttempts(0)
-                    // TODO: Derive deviceName/browserInfo if possible from request/fingerprint data
-                    // .deviceName("Derived Name")
-                    // .browserInfo("Derived Info")
-                    .build();
-        } else {
-            // --- Existing Device ---
-            log.debug("Updating existing device fingerprint association for user [{}]", user.getUsername());
-            userDeviceFingerprint = existingOpt.get();
-            userDeviceFingerprint.setActive(true); // Ensure it's active if used successfully
-            userDeviceFingerprint.setDeactivatedAt(null); // Clear deactivation time if re-activated
-            userDeviceFingerprint.setFailedAttempts(0); // Reset failed attempts on successful association
-        }
-
-        // Update common fields
-        userDeviceFingerprint.setAccessToken(accessToken); // Store/Update the access token
-        userDeviceFingerprint.setRefreshToken(refreshToken); // Store/Update the refresh token
-        userDeviceFingerprint.setLastUsedAt(Instant.now());
-        userDeviceFingerprint.setLastKnownIp(httpServletRequest.getRemoteAddr()); // Update IP
-
-        userDeviceFingerprintRepository.save(userDeviceFingerprint);
-        log.info("Successfully associated tokens with {} fingerprint for user [{}] (Trusted: {})",
-                isNewDevice ? "new" : "existing", user.getUsername(), userDeviceFingerprint.isTrusted());
+        log.warn("associateFingerprintWithTokens method is part of the old PASETO flow. Needs adaptation if local device tracking is kept.");
+        // Implementation removed or adapted elsewhere
     }
 
 
-    @Override
-    @Transactional
-    public void resetFailedAttempts(User user) {
-        String username = user.getUsername();
-        // Check if there's anything to reset to avoid unnecessary DB write/cache op
-        if (user.getFailedLoginAttempts() > 0 || user.getLockTime() != null) {
-            failedLoginAttemptService.resetAttempts(username); // Reset cache/counter
-            user.updateFailedLoginAttempts(0);
-            user.updateLockTime(null);
-            // Save user to persist changes to embedded AccountStatus
-            userRepository.save(user);
-            log.debug("Reset failed login attempts for user [{}]", user.getUsername());
-        } else {
-            log.trace("No failed attempts or lock time to reset for user [{}]", user.getUsername());
-        }
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional
+//    @Override
+//    public void resetFailedAttempts(User user) {
+//        log.warn("resetFailedAttempts method is deprecated and should not be used.");
+//        // Implementation removed
+//    }
 
-    @Override
-    @Transactional
-    public void increaseFailedAttempts(User user) {
-        int newAttemptCount = user.getFailedLoginAttempts() + 1;
-        user.updateFailedLoginAttempts(newAttemptCount);
-        userRepository.save(user); // Save updated count
-        failedLoginAttemptService.recordFailure(user.getUsername()); // Record in cache/counter
-        log.debug("Increased failed login attempts for user [{}] to {}", user.getUsername(), newAttemptCount);
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional
+//    @Override
+//    public void increaseFailedAttempts(User user) {
+//        log.warn("increaseFailedAttempts method is deprecated and should not be used.");
+//        // Implementation removed
+//    }
 
-    @Override
-    @Transactional
-    public void lockUser(User user) {
-        if (user.isAccountNonLocked()) { // Only lock if not already locked
-            user.updateAccountNonLocked(false);
-            user.updateLockTime(Instant.now());
-            userRepository.save(user);
-            log.warn("Locked account for user [{}] due to excessive failed attempts.", user.getUsername());
-        } else {
-            log.debug("Account for user [{}] is already locked.", user.getUsername());
-        }
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional
+//    @Override
+//    public void lockUser(User user) {
+//        log.warn("lockUser method is deprecated and should not be used.");
+//        // Implementation removed
+//    }
 
-    @Override
-    @Transactional
-    public void unlockUser(String username) {
-        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
-                .orElseThrow(() -> new UsernameNotFoundException(Constants.USER_NOT_FOUND_MESSAGE));
-        if (!user.isAccountNonLocked()) {
-            user.updateAccountNonLocked(true);
-            user.updateLockTime(null);
-            user.updateFailedLoginAttempts(0); // Reset attempts on manual unlock
-            userRepository.save(user);
-            failedLoginAttemptService.resetAttempts(username); // Also reset cache/counter
-            log.info("Manually unlocked account for user [{}]", username);
-            auditService.logAccountUnlocked(String.valueOf(user.getUserId()), username, "Manual Unlock"); // Add context
-        } else {
-            log.debug("Account for user [{}] is already unlocked.", username);
-        }
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional
+//    @Override
+//    public void unlockUser(String username) {
+//        log.warn("unlockUser method is deprecated and should not be used.");
+//        // Implementation removed
+//    }
 
-    @Override
-    @Transactional
-    public boolean unlockWhenTimeExpired(User user) {
-        // Check if actually locked and lock time is set
-        if (!user.isAccountNonLocked() && user.getLockTime() != null) {
-            long lockTimeInMillis = user.getLockTime().toEpochMilli();
-            long currentTimeInMillis = System.currentTimeMillis();
-
-            if (currentTimeInMillis - lockTimeInMillis >= Constants.LOCK_DURATION_MILLIS) {
-                user.updateAccountNonLocked(true);
-                user.updateLockTime(null);
-                user.updateFailedLoginAttempts(0); // Reset attempts on auto-unlock
-                userRepository.save(user);
-                failedLoginAttemptService.resetAttempts(user.getUsername()); // Reset cache/counter
-                log.info("Account for user [{}] automatically unlocked.", user.getUsername());
-                // Audit log is handled in checkAccountLockStatus
-                return true; // Unlocked now
-            }
-            return false; // Still locked
-        }
-        return true; // Not locked or no lock time set
-    }
+    // This method is part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional
+//    @Override
+//    public boolean unlockWhenTimeExpired(User user) {
+//        log.warn("unlockWhenTimeExpired method is deprecated and should not be used.");
+//        // Implementation removed
+//        return false; // Placeholder
+//    }
 
     @Override
     public String generateAndHandleFingerprint(String userAgent, String screenWidth, String screenHeight) {
+        // This method can remain if amlume-shop needs its own device fingerprinting for shop-specific logic
+        // (distinct from authserver's passkey/WebAuthn device handling).
+        // Its usage would be triggered after successful OAuth2 login.
+        log.debug("Generating and handling device fingerprint locally.");
         String deviceFingerprint = deviceFingerprintService.generateDeviceFingerprint(userAgent, screenWidth, screenHeight, httpServletRequest);
 
         if (deviceFingerprint == null) {
-            log.warn("Device fingerprint could not be generated.");
-            // Policy decision: Allow login without fingerprint? For now, return null.
-            // If fingerprinting is mandatory, could throw an exception here.
-            // throw new DeviceFingerprintGenerationException("Could not generate mandatory device fingerprint");
+            log.warn("Local device fingerprint could not be generated.");
             return null;
         }
-        log.trace("Generated device fingerprint: {}", deviceFingerprint); // Log trace level
+        log.trace("Generated local device fingerprint: {}", deviceFingerprint);
         return deviceFingerprint;
     }
 
     @Override
     public String determineUserScope() {
+        // This method needs to be adapted to read roles/scopes from the JWT claims
+        // provided by authserver via the OAuth2 Resource Server configuration.
+        // The JwtAuthenticationConverter already maps claims to GrantedAuthority.
+        // This method might become redundant if you directly use SecurityContextHolder.getContext().getAuthentication().getAuthorities()
+        // where roles are needed.
+        log.warn("determineUserScope method needs adaptation to read roles from JWT claims.");
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || authentication.getAuthorities() == null || authentication.getAuthorities().isEmpty()) {
-            // Handle anonymous or unauthenticated users appropriately
-            return "ROLE_ANONYMOUS"; // Or throw exception if authentication is strictly required here
+            return "ROLE_ANONYMOUS";
         }
 
+        // Assuming authorities are already SimpleGrantedAuthority with "ROLE_" prefix from JwtAuthenticationConverter
         return authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .filter(StringUtils::isNotBlank) // Ensure authorities are not blank
+                .filter(StringUtils::isNotBlank)
                 .collect(Collectors.joining(" "));
     }
 
     // --- Token Generation ---
+    // This method is part of the old PASETO flow and should be removed later.
+    @Deprecated(since = "2025-05-15", forRemoval = true)
     @NotNull
     private AuthTokenGenerator generateAuthTokens(User user) {
-        String userId = String.valueOf(user.getUserId());
-        // Consider adding roles/authorities to access token claims if needed, but keep it minimal
-        var accessToken = pasetoTokenService.generatePublicAccessToken(userId, TokenConstants.ACCESS_TOKEN_DURATION);
-        // Refresh token typically only needs user ID for lookup during refresh
-        var refreshToken = pasetoTokenService.generateRefreshToken(user); // Assuming this generates a suitable refresh token
-        log.debug("Generated new tokens for user ID [{}]", userId);
-        return new AuthTokenGenerator(accessToken, refreshToken);
+        log.warn("generateAuthTokens method is deprecated and should not be used.");
+        throw new UnsupportedOperationException("Token generation is handled by the authentication server.");
     }
 
+    // This record is part of the old PASETO flow and should be removed later.
+    @Deprecated(since = "2025-05-15", forRemoval = true)
     private record AuthTokenGenerator(String accessToken, String refreshToken) {
     }
 
     // --- Duration Getters ---
-    @Override
-    public Duration getAccessTokenDuration() {
-        return TokenConstants.ACCESS_TOKEN_DURATION;
-    }
+    // These methods are part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    public Duration getAccessTokenDuration() {
+//        log.warn("getAccessTokenDuration method is deprecated and should not be used.");
+//        return Duration.ZERO; // Placeholder
+//    }
 
-    @Override
-    public Duration getRefreshTokenDuration() {
-        return TokenConstants.REFRESH_TOKEN_DURATION;
-    }
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    public Duration getRefreshTokenDuration() {
+//        log.warn("getRefreshTokenDuration method is deprecated and should not be used.");
+//        return Duration.ZERO; // Placeholder
+//    }
 
-    @Override
-    public Duration getJtiDuration() {
-        return TokenConstants.JTI_DURATION;
-    }
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Override
+//    public Duration getJtiDuration() {
+//        log.warn("getJtiDuration method is deprecated and should not be used.");
+//        return Duration.ZERO; // Placeholder
+//    }
 
     // --- Authentication Info Caching ---
-    @Transactional(readOnly = true)
-    @Override
-    public AuthenticationInfo getAuthenticationInfo(String username) {
-        io.micrometer.core.instrument.Timer.Sample sample = Timer.start(meterRegistry);
-        String cacheKey = AUTH_CACHE_KEY_PREFIX + username;
-        try {
-            // Use cacheService which handles cache misses and supplier execution
-            AuthenticationInfo info = cacheService.getOrCache(
-                    AUTH_CACHE,
-                    cacheKey,
-                    () -> userRepository.findByAuthenticationInfoUsername_Username(username)
-                            .orElseThrow(() -> new UsernameNotFoundException("AuthInfo not found for user: " + username)) // Handle not found in supplier
-            ).getAuthenticationInfo();
-            sample.stop(meterRegistry.timer("auth.info.fetch", "status", "success"));
-            return info;
-        } catch (Exception e) {
-            sample.stop(meterRegistry.timer("auth.info.fetch", "status", "error"));
-            log.error("Failed to fetch authentication info for user [{}]: {}", username, e.getMessage(), e);
-            // Re-throw specific exceptions if needed, or a generic one
-            if (e instanceof UsernameNotFoundException) {
-                throw e;
-            }
-            throw new RuntimeException("Failed to fetch authentication info", e); // Or custom exception
-        }
-    }
+    // These methods are part of the old PASETO flow and should be removed later.
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional(readOnly = true)
+//    @Override
+//    public AuthenticationInfo getAuthenticationInfo(String username) {
+//        log.warn("getAuthenticationInfo method is deprecated and should not be used.");
+//        throw new UnsupportedOperationException("Authentication info is managed by the authentication server.");
+//    }
 
-    @Transactional(noRollbackFor = Exception.class) // Allow commit even if cache eviction fails? Review this.
-    // Corrected CacheEvict key to use the constant properly with SpEL
-    @CacheEvict(value = AUTH_CACHE, key = "'" + Constants.AUTH_CACHE_KEY_PREFIX + "' + #username")
-    @Override
-    public void updateAuthenticationInfo(String username, AuthenticationInfo newInfo) {
-        if (username == null || newInfo == null) {
-            throw new IllegalArgumentException("Username and new info cannot be null");
-        }
-        if (!username.equals(newInfo.getUsername())) {
-            throw new IllegalArgumentException("Username mismatch in updateAuthenticationInfo");
-        }
-
-        // Fetch existing user to ensure they exist before updating auth info
-        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Cannot update auth info, user not found: " + username));
-
-        // Update the embedded object on the user entity
-        user.updateAuthentication(newInfo); // Assuming the User entity has a method to update the embedded object
-        userRepository.save(user); // Save the user entity with the updated embedded object
-
-        // Log success - Cache eviction is handled by @CacheEvict
-        log.info("Updated authentication info for user [{}] and evicted cache entry", username);
-
-        // Removed manual cache invalidation - handled by @CacheEvict
-        // cacheService.invalidate(AUTH_CACHE, AUTH_CACHE_KEY_PREFIX + username);
-    }
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional(noRollbackFor = Exception.class)
+//    @CacheEvict(value = AUTH_CACHE, key = "'" + Constants.AUTH_CACHE_KEY_PREFIX + "' + #username")
+//    @Override
+//    public void updateAuthenticationInfo(String username, AuthenticationInfo newInfo) {
+//        log.warn("updateAuthenticationInfo method is deprecated and should not be used.");
+//        throw new UnsupportedOperationException("Authentication info is managed by the authentication server.");
+//    }
 
     // --- REMOVED Unused/Deprecated Methods ---
     // private Authentication performAuthentication(LoginRequest loginRequest) { ... }
     // public Authentication createSuccessfulAuthentication(User user) { ... }
     // public void handleLockedAccount(User user, String ipAddress) { ... } // Removed as deprecated
 }
-
 
 // TODO: Consider backup codes for account recovery
 // TODO: Review transaction boundaries and propagation, especially around cache operations.

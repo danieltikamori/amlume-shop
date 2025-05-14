@@ -33,17 +33,18 @@ public interface AuthenticationInterface {
     // --- Registration ---
 
     /**
-     * Registers a new user.
+     * Registers a new user by delegating to the central authentication server.
      *
      * @param request   The user registration details.
      * @param ipAddress The IP address of the registration request.
-     * @return AuthResponse containing tokens and registration status.
-     * @throws TooManyAttemptsException    If registration attempts does exceed limits.
-     * @throws InvalidCaptchaException     If captcha validation fails.
-     * @throws UserAlreadyExistsException  If the username or email is already taken.
-     * @throws UserRegistrationException   If an internal error occurs during registration.
+     * @throws TooManyAttemptsException    If registration attempts does exceed limits (local check).
+     * @throws InvalidCaptchaException     If captcha validation fails (local check).
+     * @throws UserAlreadyExistsException  If the username or email is already taken (reported by authserver).
+     * @throws UserRegistrationException   If an internal error occurs during registration (local or authserver).
+     * @throws IllegalArgumentException    If the request is invalid (reported by authserver).
      */
-    AuthResponse register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException;
+    // CHANGED: Return type is now void
+    void register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException;
 
     /**
      * Authenticates a user based on login credentials.
@@ -56,7 +57,9 @@ public interface AuthenticationInterface {
      * @throws InvalidCaptchaException  If captcha validation fails.
      * @throws AuthenticationFailException If authentication fails due to credentials, locking, or internal errors.
      */
-    AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException;
+    // This method will likely become obsolete as login is handled by oauth2Login()
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException;
 
     // --- Logout ---
 
@@ -80,7 +83,9 @@ public interface AuthenticationInterface {
      * @param deviceFingerprint The generated device fingerprint for this login.
      * @return AuthResponse containing the access and refresh tokens.
      */
-    AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint);
+    // This method is part of the old PASETO flow and will be superseded by OAuth2/OIDC login handling
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint);
 
     /**
      * Handles actions upon a failed login attempt (e.g., incorrect password).
@@ -89,35 +94,45 @@ public interface AuthenticationInterface {
      * @param user      The user for whom the login failed.
      * @param ipAddress The IP address of the failed login attempt.
      */
-    void handleFailedLogin(User user, String ipAddress);
+    // This method is part of the old PASETO flow and will be superseded by authserver's event handling
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    void handleFailedLogin(User user, String ipAddress);
 
     /**
      * Resets the failed login attempt counter for a user (in DB and cache).
      *
      * @param user The user whose attempts should be reset.
      */
-    void resetFailedAttempts(User user);
+    // This method is part of the old PASETO flow and will be superseded by authserver's UserManager
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    void resetFailedAttempts(User user);
 
     /**
      * Increments the failed login attempt counter for a user (in DB and cache).
      *
      * @param user The user whose attempts should be incremented.
      */
-    void increaseFailedAttempts(User user);
+    // This method is part of the old PASETO flow and will be superseded by authserver's UserManager
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    void increaseFailedAttempts(User user);
 
     /**
      * Locks a user account in the database.
      *
      * @param user The user to lock.
      */
-    void lockUser(User user);
+    // This method is part of the old PASETO flow and will be superseded by authserver's UserManager
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    void lockUser(User user);
 
     /**
      * Manually unlocks a user account.
      *
      * @param username The username of the account to unlock.
      */
-    void unlockUser(String username);
+    // This method is part of the old PASETO flow and will be superseded by authserver's UserManager
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    void unlockUser(String username);
 
     /**
      * Checks if a locked user account's lock duration has expired and unlocks it if so.
@@ -125,7 +140,9 @@ public interface AuthenticationInterface {
      * @param user The user to check.
      * @return true if the account was unlocked or was already unlocked, false if it remains locked.
      */
-    boolean unlockWhenTimeExpired(User user);
+    // This method is part of the old PASETO flow and will be superseded by authserver's UserManager
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    boolean unlockWhenTimeExpired(User user);
 
     // --- Device Fingerprinting ---
 
@@ -137,6 +154,7 @@ public interface AuthenticationInterface {
      * @param screenHeight The screen height.
      * @return The generated device fingerprint string, or null if generation fails.
      */
+    // This can potentially remain if amlume-shop needs its own device tracking for shop-specific actions
     String generateAndHandleFingerprint(String userAgent, String screenWidth, String screenHeight);
 
     // --- Token Information ---
@@ -146,6 +164,7 @@ public interface AuthenticationInterface {
      *
      * @return A space-separated string of authorities.
      */
+    // This method will need to be adapted to read claims from the JWT issued by authserver
     String determineUserScope();
 
     /**
@@ -153,21 +172,27 @@ public interface AuthenticationInterface {
      *
      * @return The access token duration.
      */
-    Duration getAccessTokenDuration();
+    // This is for the old PASETO tokens, will be superseded by authserver's token settings
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    Duration getAccessTokenDuration();
 
     /**
      * Gets the configured duration for refresh tokens.
      *
      * @return The refresh token duration.
      */
-    Duration getRefreshTokenDuration();
+    // This is for the old PASETO tokens, will be superseded by authserver's token settings
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    Duration getRefreshTokenDuration();
 
     /**
      * Gets the configured duration for the JTI (token ID) blocklist entry.
      *
      * @return The JTI duration.
      */
-    Duration getJtiDuration();
+    // This is for the old PASETO tokens, will be superseded by authserver's token settings
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    Duration getJtiDuration();
 
     // --- Authentication Info Caching ---
 
@@ -178,8 +203,10 @@ public interface AuthenticationInterface {
      * @return The AuthenticationInfo object.
      * @throws org.springframework.security.core.userdetails.UsernameNotFoundException if the user is not found.
      */
-    @Transactional(readOnly = true)
-    AuthenticationInfo getAuthenticationInfo(String username);
+    // This is for the old PASETO flow and local password management, will be superseded
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional(readOnly = true)
+//    AuthenticationInfo getAuthenticationInfo(String username);
 
     /**
      * Updates the authentication information for a user and evicts the corresponding cache entry.
@@ -187,9 +214,11 @@ public interface AuthenticationInterface {
      * @param username The username whose info is being updated.
      * @param newInfo  The new AuthenticationInfo object.
      */
-    @Transactional(noRollbackFor = Exception.class) // Allow commit even if cache eviction fails? Review this.
-    @CacheEvict(value = AUTH_CACHE, key = "'" + Constants.AUTH_CACHE_KEY_PREFIX + "' + #username") // Use SpEL for key prefix
-    void updateAuthenticationInfo(String username, AuthenticationInfo newInfo);
+    // This is for the old PASETO flow and local password management, will be superseded
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    @Transactional(noRollbackFor = Exception.class) // Allow commit even if cache eviction fails? Review this.
+//    @CacheEvict(value = AUTH_CACHE, key = "'" + Constants.AUTH_CACHE_KEY_PREFIX + "' + #username") // Use SpEL for key prefix
+//    void updateAuthenticationInfo(String username, AuthenticationInfo newInfo);
 
     // --- DEPRECATED ---
     // @Deprecated(since = "2025-04-20", forRemoval = true)
