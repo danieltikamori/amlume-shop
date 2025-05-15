@@ -10,11 +10,11 @@
 
 package me.amlu.shop.amlume_shop.auth.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.auth.service.AuthenticationInterface;
 import me.amlu.shop.amlume_shop.dto.ErrorResponse;
-import me.amlu.shop.amlume_shop.exceptions.GlobalExceptionHandler;
-import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
-import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
+import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.paseto.TokenRevocationService;
 import me.amlu.shop.amlume_shop.security.paseto.TokenValidationService;
 import me.amlu.shop.amlume_shop.user_management.User;
@@ -32,7 +32,6 @@ import org.springframework.validation.ObjectError;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -40,41 +39,78 @@ public class AuthController {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(AuthController.class);
 
-    // --- Constructors ---
-    private final UserService userService;
-    private final TokenValidationService tokenValidationService;
-    private final TokenRevocationService tokenRevocationService;
+    // Keep dependencies for remaining functionality
+    private final UserService userService; // For local user data access (if any)
+    private final AuthenticationInterface authService; // Use the interface for the authenticator
+    private final TokenValidationService tokenValidationService; // REMOVE or adapt for JWT validation
+    private final TokenRevocationService tokenRevocationService; // REMOVE or adapt for OAuth2 token revocation
 
+    // Keep GlobalExceptionHandler if used for other error mapping
     private final GlobalExceptionHandler globalExceptionHandler;
 
-    public AuthController(UserService userService, TokenValidationService tokenValidationService, TokenRevocationService tokenRevocationService, GlobalExceptionHandler globalExceptionHandler) {
+    // --- Constructors ---
+    // Update constructor parameters
+    public AuthController(UserService userService,
+                          AuthenticationInterface authService, // Inject the interface
+                          TokenValidationService tokenValidationService, // REMOVE or adapt
+                          TokenRevocationService tokenRevocationService, // REMOVE or adapt
+                          GlobalExceptionHandler globalExceptionHandler) {
         this.userService = userService;
-        this.tokenValidationService = tokenValidationService;
-        this.tokenRevocationService = tokenRevocationService;
+        this.authService = authService; // Assign the injected authenticator
+        this.tokenValidationService = tokenValidationService; // REMOVE or adapt
+        this.tokenRevocationService = tokenRevocationService; // REMOVE or adapt
         this.globalExceptionHandler = globalExceptionHandler;
     }
 
     @PostMapping("/v1/register")
-    public ResponseEntity<GetRegisterResponse> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) throws RoleNotFoundException {
+    // REMOVE throws RoleNotFoundException as authserver handles role assignment
+    public ResponseEntity<GetRegisterResponse> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult, HttpServletRequest httpRequest) { // Inject HttpServletRequest for IP
         if (bindingResult.hasErrors()) {
-            // Handle validation errors
+            log.warn("Registration validation failed for user email: {}", request.userEmail());
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
+        }
 
-        }
-        User user;
+        String ipAddress = httpRequest.getRemoteAddr(); // Get IP address
+
         try {
-            user = userService.registerUser(request);
-        } catch (DataIntegrityViolationException e) {
-            GetRegisterResponse response = new GetRegisterResponse(null, java.util.List.of(new ObjectError("DUPLICATE_EMAIL", "Email already exists")));
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+            // Call the updated register method which delegates to authserver
+            authService.register(request, ipAddress);
+
+            // If authService.register completes without throwing an exception, registration was successful on authserver.
+            // We don't get user details back here, just confirmation of success.
+            // The local amlume-shop user will be provisioned on first login via OAuth2.
+
+            log.info("Registration request successfully processed for email: {}", request.userEmail());
+            // Return 201 Created on success
+            return ResponseEntity.status(HttpStatus.CREATED).body(new GetRegisterResponse(null, null));
+
+        } catch (TooManyAttemptsException e) {
+            log.warn("Registration failed due to too many attempts for email {}: {}", request.userEmail(), e.getMessage());
+            // Map TooManyAttemptsException to 429 Too Many Requests
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new GetRegisterResponse(null, List.of(new ObjectError("rate.limit.exceeded", e.getMessage()))));
+        } catch (InvalidCaptchaException e) {
+            log.warn("Registration failed due to invalid captcha for email {}: {}", request.userEmail(), e.getMessage());
+            // Map InvalidCaptchaException to 400 Bad Request
+            return ResponseEntity.badRequest().body(new GetRegisterResponse(null, List.of(new ObjectError("captcha.invalid", e.getMessage()))));
+        } catch (UserAlreadyExistsException e) {
+            log.warn("Registration failed: User already exists for email {}: {}", request.userEmail(), e.getMessage());
+            // Map UserAlreadyExistsException (from authserver 409) to 409 Conflict
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(new GetRegisterResponse(null, List.of(new ObjectError("user.exists", e.getMessage()))));
+        } catch (IllegalArgumentException e) {
+            log.warn("Registration failed due to invalid data for email {}: {}", request.userEmail(), e.getMessage());
+            // Map IllegalArgumentException (from authserver 400) to 400 Bad Request
+            return ResponseEntity.badRequest().body(new GetRegisterResponse(null, List.of(new ObjectError("invalid.data", e.getMessage()))));
+        } catch (UserRegistrationException e) {
+            log.error("Authserver registration failed for email {}: {}", request.userEmail(), e.getMessage(), e);
+            // Map generic UserRegistrationException to 500 Internal Server Error
+            ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "REGISTRATION_FAILED", e.getMessage()).getBody();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, List.of(new ObjectError("internal.error", errorResponse != null ? errorResponse.message() : "Internal server error"))));
         } catch (Exception e) {
-            ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "An error occurred while registering user.").getBody();
-            if (errorResponse != null) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, java.util.List.of(new ObjectError(errorResponse.code(), errorResponse.message()))));
-            }
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, java.util.List.of(new ObjectError("INTERNAL_SERVER_ERROR", "An error occurred while registering user."))));
+            // Catch any other unexpected exceptions
+            log.error("Unexpected error during registration for email {}: {}", request.userEmail(), e.getMessage(), e);
+            ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "UNEXPECTED_ERROR", "An unexpected error occurred during registration.").getBody();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, List.of(new ObjectError("unexpected.error", errorResponse != null ? errorResponse.message() : "Unexpected server error"))));
         }
-        return ResponseEntity.ok(new GetRegisterResponse(new UserResponse(user), null));
     }
 
     // @Deprecated
@@ -82,30 +118,10 @@ public class AuthController {
 
 //    @PostMapping("/v1/login")
 //    public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest, HttpServletRequest request) {
-//        String ipAddress = request.getRemoteAddr();
-//
-//        try {
-//            AuthResponse authResponse = authService.authenticateUser(loginRequest, ipAddress);
-//            LoginResponse response = LoginResponse.builder()
-//                    .authResponse(authResponse)
-//                    .build();
-//
-//            if (authResponse.isMfaRequired()) { // Check if MFA is required, using AuthResponse.isMfaRequired() method
-//                return ResponseEntity.ok()
-//                        .header("Mfa-Status", "required")
-//                        .body(response); // Return details.toString() for setting up mfa.
-//            }
-//            return ResponseEntity.ok(response);
-//
-//        } catch (AuthenticationException | ExecutionException e) {
-
-    /// /            return globalExceptionHandler.sendErrorResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", e.getMessage());
-//            ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", e.getMessage()).getBody();
-//            LoginResponse response = LoginResponse.builder()
-//                    .errorResponse(errorResponse)
-//                    .build();
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
-//        }
+//        // This endpoint is part of the old PASETO/local auth flow.
+//        // It should be removed once amlume-shop uses oauth2Login().
+//        log.warn("/api/auth/v1/login endpoint is deprecated and should not be used.");
+//        throw new UnsupportedOperationException("Direct username/password login is handled by the authentication server via OAuth2.");
 //    }
 
     /**
@@ -132,10 +148,14 @@ public class AuthController {
         }
 
         try {
+            // NOTE: This method in UserServiceImpl still creates the user locally.
+            // If admin users should also be managed centrally by authserver,
+            // this logic would also need to call authserver's API (perhaps a different admin endpoint).
+            // Assuming for now admin users are managed locally in amlume-shop's DB, but authenticated centrally.
             User registeredAdmin = userService.registerAdminUser(request);
             UserResponse userResponse = new UserResponse(registeredAdmin); // Map to response DTO
             GetRegisterResponse successResponse = new GetRegisterResponse(userResponse, null);
-            log.info("Successfully registered admin user: {}", registeredAdmin.getUsername());
+            log.info("Successfully registered admin user: {} (ID: {})", registeredAdmin.getUsername(), registeredAdmin.getUserId());
             return ResponseEntity.status(HttpStatus.CREATED).body(successResponse); // 201 Created
 
         } catch (UserAlreadyExistsException e) {
@@ -160,27 +180,16 @@ public class AuthController {
 
 
     @PostMapping("/logout")
+    // This endpoint is part of the old PASETO flow.
+    // It should be removed or adapted for OAuth2/OIDC logout.
     public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authHeader) {
-        try {
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                String token = authHeader.substring(7);
-                // Parse token to get its ID and expiration
-                Map<String, Object> claims = tokenValidationService.extractClaimsFromPublicAccessToken(token);
-                String tokenId = (String) claims.get("jti");
-                if (tokenId == null) {
-                    log.error("Logout failed: Token ID (jti) missing in Authorization header token.");
-//                    return ResponseEntity.badRequest().build();
-                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-                }
-                tokenRevocationService.revokeToken(tokenId, "User logged out");
-                log.info("User logged out with revoked token: {}", token);
-                return ResponseEntity.ok().build();
-            }
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        } catch (Exception e) {
-            log.error("Error during logout: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
+        log.warn("/api/auth/logout endpoint is part of the old PASETO flow. Needs adaptation for OAuth2/OIDC logout.");
+        // The logout logic in UserAuthenticator.logout needs to be adapted first.
+        // If you adapt it to trigger OIDC logout, this controller endpoint might still be the entry point.
+        // If you remove local token revocation, this method might just call the adapted authService.logout()
+        // and return ResponseEntity.noContent().build();
+        // For now, marking as unsupported as the underlying service method is also marked.
+        throw new UnsupportedOperationException("Logout endpoint needs to be adapted for OAuth2/OIDC flow.");
     }
 
     //TODO: Implement logout-all endpoint
@@ -189,12 +198,9 @@ public class AuthController {
 ////    @PreFilter("filterObject != authentication.name")
 //    @PostMapping("/logout-all")
 //    public ResponseEntity<Void> logoutAll(Authentication authentication) {
-//        try {
-//            tokenRevocationService.revokeAllUserTokens(authentication.getName(), "User logged out from all devices");
-//            return ResponseEntity.ok().build();
-//        } catch (Exception e) {
-//            log.error("Error during logout-all", e);
-//            return ResponseEntity.internalServerError().build();
-//        }
+//        // This endpoint is part of the old PASETO flow.
+//        // It should be removed or adapted for OAuth2/OIDC logout.
+//        log.warn("/api/auth/logout-all endpoint is part of the old PASETO flow. Needs adaptation for OAuth2/OIDC logout.");
+//        throw new UnsupportedOperationException("Logout-all endpoint needs to be adapted for OAuth2/OIDC flow.");
 //    }
 }
