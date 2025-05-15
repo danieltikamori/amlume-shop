@@ -72,6 +72,13 @@ public class User implements UserDetails {
     private EmailAddress email;
 
     @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(name = "value", column = @Column(name = "backup_email", unique = true, nullable = true)) // Nullable, maybe not unique globally
+    })
+    private EmailAddress backupEmail;
+
+
+    @Embedded
     @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number", length = 20, unique = true))
     private PhoneNumber mobileNumber;
 
