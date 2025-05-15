@@ -31,8 +31,8 @@ public class HashedPassword implements Serializable {
 
     // The column definition will be in the User entity via @AttributeOverride
     // or if the column name in User matches this field name.
-    // For clarity, we'll use @AttributeOverride in User.
-    @Column(name = "password_value", length = 128) // Example if not overridden, but User will override to "password"
+    // For clarity, we'll use the @AttributeOverride in User.
+    @Column(name = "password_value", length = 128) // Example, if not overridden, but User will override to "password"
     private String value;
 
     public HashedPassword(String hashedPasswordValue) {
