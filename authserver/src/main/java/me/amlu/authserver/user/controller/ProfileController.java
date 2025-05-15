@@ -11,21 +11,21 @@
 package me.amlu.authserver.user.controller;
 
 import jakarta.persistence.EntityNotFoundException;
-import jakarta.servlet.ServletException; // For request.logout()
-import jakarta.servlet.http.HttpServletRequest; // Import HttpServletRequest
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import me.amlu.authserver.user.model.User;
-import me.amlu.authserver.user.service.UserManager;
 import me.amlu.authserver.user.dto.ChangePasswordRequest;
 import me.amlu.authserver.user.dto.GetUserProfileResponse;
 import me.amlu.authserver.user.dto.UpdateUserProfileRequest;
+import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.service.UserManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-// import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler; // Alternative
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.bind.annotation.*;
@@ -53,16 +53,17 @@ public class ProfileController {
         }
         log.debug("User {} fetching their profile.", currentUser.getEmail().getValue());
 
-        GetUserProfileResponse response = new GetUserProfileResponse(
+        GetUserProfileResponse responseDto = new GetUserProfileResponse(
                 currentUser.getId(),
                 currentUser.getExternalId(),
                 currentUser.getFirstName(),
                 currentUser.getLastName(),
                 currentUser.getNickname(),
                 currentUser.getEmail() != null ? currentUser.getEmail().getValue() : null,
+                currentUser.getBackupEmail() != null ? currentUser.getBackupEmail().getValue() : null,
                 currentUser.getMobileNumber() != null ? currentUser.getMobileNumber().e164Value() : null
         );
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(responseDto);
     }
 
     @PutMapping // Maps to PUT /api/profile
@@ -86,7 +87,8 @@ public class ProfileController {
                     request.lastName(),
                     request.nickname(),
                     request.mobileNumber(),
-                    null // defaultRegion - not provided by this DTO
+                    null, // defaultRegion - not provided by this DTO
+                    request.backupEmail()
             );
 
             GetUserProfileResponse responseDto = new GetUserProfileResponse(
@@ -96,6 +98,7 @@ public class ProfileController {
                     updatedUser.getLastName(),
                     updatedUser.getNickname(),
                     updatedUser.getEmail() != null ? updatedUser.getEmail().getValue() : null,
+                    updatedUser.getBackupEmail() != null ? updatedUser.getBackupEmail().getValue() : null,
                     updatedUser.getMobileNumber() != null ? updatedUser.getMobileNumber().e164Value() : null
             );
             log.info("User {} profile updated successfully.", currentUser.getEmail().getValue());
@@ -108,6 +111,10 @@ public class ProfileController {
         } catch (IllegalArgumentException e) {
             log.warn("Invalid argument during profile update for user {}: {}", currentUser.getEmail().getValue(), e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+
+        } catch (DataIntegrityViolationException e) { // Catch potential backup email conflict
+            log.warn("Data integrity violation during profile update for user {}: {}", currentUser.getEmail().getValue(), e.getMessage());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
         } catch (Exception e) {
             log.error("Unexpected error updating profile for user {}: {}", currentUser.getEmail().getValue(), e.getMessage(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not update profile.", e);

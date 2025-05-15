@@ -45,15 +45,16 @@ public class RegistrationController {
                     request.firstName(),
                     request.lastName(),
                     request.nickname(),
-                    request.email(),
+                    request.email(), // PRIMARY LOGIN email
                     request.password(),
                     request.mobileNumber(),
-                    request.defaultRegion()
+                    request.defaultRegion(),
+                    request.backupEmail()
             );
             return ResponseEntity.status(HttpStatus.CREATED).build();
-        } catch (DataIntegrityViolationException e) { // Or a custom UserAlreadyExistsException
-            log.warn("Registration attempt for already existing email: {}", request.email());
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "User with this email already exists.");
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Registration attempt for already existing email or backup email: {} / {}", request.email(), request.backupEmail());
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User with this email or backup email already exists.");
         } catch (IllegalArgumentException e) {
             log.warn("Invalid registration request: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
@@ -66,10 +67,11 @@ public class RegistrationController {
             @NotBlank String firstName,
             String lastName, // Optional
             String nickname, // Optional
-            @NotBlank @Email String email,
+            @NotBlank @Email String email, // PRIMARY LOGIN email
             @NotBlank String password, // Consider password complexity rules
             String mobileNumber, // Optional
-            String defaultRegion // Optional, for phone number parsing
+            String defaultRegion, // Optional, for phone number parsing
+            @Email String backupEmail // Optional backup email
     ) {
     }
 }

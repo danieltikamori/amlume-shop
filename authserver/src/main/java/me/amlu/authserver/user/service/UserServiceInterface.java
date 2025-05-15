@@ -21,9 +21,9 @@ public interface UserServiceInterface {
     // Method called by authentication success handler
     void handleSuccessfulLogin(String username);
 
-    User createUser(String firstName, String lastName, String nickname, String email, String rawPassword, String mobileNumber, String defaultRegion);
+    User createUser(String firstName, String lastName, String nickname, String email, String rawPassword, String mobileNumber, String defaultRegion, String backupEmail);
 
-    User updateUserProfile(Long userId, String newFirstName, String newLastName, String newNickname, String newMobileNumber, String defaultRegion);
+    User updateUserProfile(Long userId, String newFirstName, String newLastName, String newNickname, String newMobileNumber, String defaultRegion, String newBackupEmail);
 
     void changeUserPassword(Long userId, String newRawPassword);
 

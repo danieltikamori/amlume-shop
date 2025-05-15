@@ -21,6 +21,7 @@ public record GetUserProfileResponse(
         String lastName,    // Can be null
         String nickname,    // Can be null
         String email,
+        String backupEmail, // Can be null
         String mobileNumber // String representation. Can be null
 ) {
 }

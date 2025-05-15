@@ -25,6 +25,13 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByExternalId(String externalId);
 
+    boolean existsByEmail_Value(String email);
+
+    boolean existsByBackupEmail_Value(String backupEmail);
+
+    boolean existsByBackupEmail_ValueAndIdNot(String backupEmail, Long id);
+
+
     // Optional<User> findByName(String username); // REMOVED as 'name' field is replaced by firstName/lastName
 
     // Consider adding if needed:

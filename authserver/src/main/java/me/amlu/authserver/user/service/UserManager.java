@@ -22,6 +22,7 @@ import me.amlu.authserver.user.model.vo.PhoneNumber;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -94,11 +95,26 @@ public class UserManager implements UserServiceInterface {
 
     @Transactional
     @Override
-    public User createUser(String firstName, String lastName, String nickname, String email, String rawPassword, String mobileNumber, String defaultRegion) {
-        log.info("Attempting to create user: email={}, firstName={}", email, firstName);
-        // Avoid logging rawPassword
+    public User createUser(String firstName, String lastName, String nickname,
+                           String email, String rawPassword, String mobileNumber,
+                           String defaultRegion, String backupEmailRaw) { // ADDED backupEmailRaw
+        log.info("Attempting to create user: email={}, backupEmail={}, firstName={}", email, backupEmailRaw, firstName);
 
         EmailAddress emailVO = new EmailAddress(email);
+        EmailAddress backupEmailVO = StringUtils.hasText(backupEmailRaw) ? new EmailAddress(backupEmailRaw) : null; // Process backup email
+
+        // Check for primary email conflict
+        if (userRepository.existsByEmail_Value(email)) {
+            log.warn("Primary email {} already exists.", email);
+            throw new DataIntegrityViolationException("User with this primary email already exists.");
+        }
+        // Check for backup email conflict if provided and if it should be unique
+        if (backupEmailVO != null && userRepository.existsByBackupEmail_Value(backupEmailVO.getValue())) {
+            log.warn("Backup email {} already exists.", backupEmailVO.getValue());
+            throw new DataIntegrityViolationException("User with this backup email already exists.");
+        }
+
+
         HashedPassword hashedPasswordVO = null;
         if (StringUtils.hasText(rawPassword)) { // Password can be optional for Passkey-first
             hashedPasswordVO = new HashedPassword(passwordEncoder.encode(rawPassword));
@@ -114,6 +130,7 @@ public class UserManager implements UserServiceInterface {
                 .lastName(lastName)
                 .nickname(nickname)
                 .email(emailVO)
+                .backupEmail(backupEmailVO)
                 .password(hashedPasswordVO) // Can be null
                 .externalId(UUID.randomUUID().toString()) // Must be generated as it needs to be populated.
                 .mobileNumber(phoneNumberVO)
@@ -127,20 +144,26 @@ public class UserManager implements UserServiceInterface {
         log.debug("Assigned default authorities (if found) to new user: {}", email);
 
         User savedUser = userRepository.save(newUser);
-        log.info("Successfully created and saved user: email={}, userId={}", savedUser.getEmail().getValue(), savedUser.getId());
+        log.info("Successfully created and saved user: email={}, backupEmail={}, userId={}",
+                savedUser.getEmail().getValue(),
+                (savedUser.getBackupEmail() != null ? savedUser.getBackupEmail().getValue() : "N/A"),
+                savedUser.getId());
         return savedUser;
     }
 
     @Transactional
     @Override
-    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')") // Or based on who can update profile
-    public User updateUserProfile(Long userId, String newFirstName, String newLastName, String newNickname, String newMobileNumber, String defaultRegion) {
-        log.info("Attempting to update profile for userId: {}. Provided updates: firstName={}, lastName={}, nickname={}, mobileNumber={}",
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
+    public User updateUserProfile(Long userId, String newFirstName, String newLastName,
+                                  String newNickname, String newMobileNumber, String defaultRegion,
+                                  String newBackupEmail) { // ADDED newBackupEmail
+        log.info("Attempting to update profile for userId: {}. Updates: firstName={}, lastName={}, nickname={}, mobileNumber={}, backupEmail={}",
                 userId,
                 (StringUtils.hasText(newFirstName) ? newFirstName : "[NO_CHANGE]"),
                 (newLastName != null ? (newLastName.isEmpty() ? "[CLEAR]" : newLastName) : "[NO_CHANGE]"),
                 (newNickname != null ? (newNickname.isEmpty() ? "[CLEAR]" : newNickname) : "[NO_CHANGE]"),
-                (newMobileNumber != null ? newMobileNumber : "[NO_CHANGE]")
+                (newMobileNumber != null ? newMobileNumber : "[NO_CHANGE]"),
+                (newBackupEmail != null ? (newBackupEmail.isEmpty() ? "[CLEAR]" : newBackupEmail) : "[NO_CHANGE]")
         );
 
         User user = userRepository.findById(userId)
@@ -184,6 +207,27 @@ public class UserManager implements UserServiceInterface {
                 updated = true;
             }
         }
+
+        // Update backup email
+        if (newBackupEmail != null) { // If an update attempt for backupEmail is made
+            EmailAddress newBackupEmailVO = StringUtils.hasText(newBackupEmail) ? new EmailAddress(newBackupEmail) : null;
+            if (!Objects.equals(user.getBackupEmail(), newBackupEmailVO)) {
+                // Check for conflict if new backup email is not null and different from primary email
+                if (newBackupEmailVO != null && newBackupEmailVO.equals(user.getEmail())) {
+                    log.warn("Attempt to set backup email same as primary email for userId: {}", userId);
+                    throw new IllegalArgumentException("Backup email cannot be the same as the primary email.");
+                }
+                // Check for conflict with other users' backup emails if backupEmail is unique
+                if (newBackupEmailVO != null && userRepository.existsByBackupEmail_ValueAndIdNot(newBackupEmailVO.getValue(), userId)) {
+                    log.warn("Backup email {} already in use by another user.", newBackupEmailVO.getValue());
+                    throw new DataIntegrityViolationException("This backup email is already in use.");
+                }
+                user.updateBackupEmail(newBackupEmailVO);
+                log.debug("Updated backupEmail for userId: {}", userId);
+                updated = true;
+            }
+        }
+
 
         if (updated) {
             User savedUser = userRepository.save(user);
