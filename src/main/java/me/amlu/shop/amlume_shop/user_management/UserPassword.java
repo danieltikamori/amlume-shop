@@ -51,7 +51,7 @@ public class UserPassword implements Serializable {
         return new UserPasswordBuilder();
     }
 
-    String getPassword() {
+    public String getPassword() {
         return password;
     }
 
