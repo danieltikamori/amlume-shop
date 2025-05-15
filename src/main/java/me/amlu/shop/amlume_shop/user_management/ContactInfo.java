@@ -10,8 +10,11 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.i18n.phonenumbers.Phonenumber;
+import com.google.i18n.phonenumbers.NumberParseException;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber; // Import the correct PhoneNumber type
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Embeddable;
@@ -20,12 +23,18 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
 import me.amlu.shop.amlume_shop.security.config.Phone;
 import me.amlu.shop.amlume_shop.service.PhoneNumberConverter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.util.Objects;
 
 @Embeddable
 public class ContactInfo implements Serializable {
+
+    private static final Logger log = LoggerFactory.getLogger(ContactInfo.class);
+    private static final PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
+
 
     @Column(name = "first_name")
     @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters")
@@ -34,6 +43,10 @@ public class ContactInfo implements Serializable {
     @Column(name = "last_name")
     @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters")
     private String lastName;
+
+    @Column(name = "nickname", unique = true)
+    @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters")
+    private String nickname;
 
     @Embedded
     @Email
@@ -45,22 +58,26 @@ public class ContactInfo implements Serializable {
     @Phone
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Convert(converter = PhoneNumberConverter.class)
-    @Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters")
-    @Column(name = "phone_number", length = 50)
-    private String phoneNumber;
+    // @Size is not applicable to Phonenumber.PhoneNumber type directly.
+    // Length/format validation is inherent to the Phonenumber object or handled by @Phone.
+    @Column(name = "phone_number", length = 50) // Database column still stores a String (e.g., E.164)
+    private Phonenumber.PhoneNumber phoneNumber;
 
     protected ContactInfo() {
     } // Required by JPA
 
-    public ContactInfo(String firstName, String lastName, UserEmail userEmail, boolean emailVerified, String phoneNumber) {
+    // Constructor updated to accept Phonenumber.PhoneNumber
+    public ContactInfo(String firstName, String lastName, String nickname, UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
         this.firstName = firstName;
         this.lastName = lastName;
+        this.nickname = nickname;
         this.userEmail = userEmail;
         this.emailVerified = emailVerified;
         this.phoneNumber = phoneNumber;
     }
 
-    public ContactInfo(UserEmail userEmail, String phoneNumber) {
+
+    public ContactInfo(UserEmail userEmail, Phonenumber.PhoneNumber phoneNumber) {
         this.userEmail = userEmail;
         this.phoneNumber = phoneNumber;
     }
@@ -74,20 +91,20 @@ public class ContactInfo implements Serializable {
     }
 
     public String getEmail() {
-        return userEmail.getEmail();
+        return userEmail != null ? userEmail.getEmail() : null;
     }
 
-    protected String getUserEmail() {
-        return userEmail.getEmail();
+    // Renamed for clarity, as UserEmail is the embedded object
+    public UserEmail getUserEmailObject() {
+        return userEmail;
     }
 
     public ContactInfo withFirstName(String firstName) {
-
-        return new ContactInfo(firstName, lastName, userEmail, emailVerified, phoneNumber);
+        return new ContactInfo(firstName, this.lastName, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
     }
 
     public ContactInfo withLastName(String lastName) {
-        return new ContactInfo(firstName, lastName, userEmail, emailVerified, phoneNumber);
+        return new ContactInfo(this.firstName, lastName, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
     }
 
     public @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String getFirstName() {
@@ -98,19 +115,43 @@ public class ContactInfo implements Serializable {
         return this.lastName;
     }
 
+    public @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters") String getNickname() {
+        return this.nickname;
+    }
+
+
     public boolean isEmailVerified() {
         return this.emailVerified;
     }
 
-    public String getPhoneNumber() {
+    // Getter now returns the Phonenumber.PhoneNumber object
+    public Phonenumber.PhoneNumber getPhoneNumber() {
         return this.phoneNumber;
     }
 
-    // Method to get the PhoneNumber object (optional, uses converter)
-    public Phonenumber.PhoneNumber getPhoneNumberObject() {
-        PhoneNumberConverter converter = new PhoneNumberConverter();
-        return converter.convertToEntityAttribute(this.phoneNumber);
+    // This method is no longer needed as getPhoneNumber() returns the object.
+    // public Phonenumber.PhoneNumber getPhoneNumberObject() { ... }
+
+    /**
+     * Provides the phone number as a string, typically in E.164 format.
+     * Useful for DTOs or when a string representation is needed.
+     * This method relies on the PhoneNumberConverter's logic or can use PhoneNumberUtil directly.
+     *
+     * @return Phone number as string, or null if not set.
+     */
+    @JsonIgnore // Avoid duplicate serialization if phoneNumber object is also serialized
+    public String getPhoneNumberString() {
+        if (this.phoneNumber == null) {
+            return null;
+        }
+        // Option 1: Use the converter (if accessible and appropriate)
+        // PhoneNumberConverter converter = new PhoneNumberConverter();
+        // return converter.convertToDatabaseColumn(this.phoneNumber);
+
+        // Option 2: Use PhoneNumberUtil directly (more common for this purpose)
+        return phoneUtil.format(this.phoneNumber, PhoneNumberUtil.PhoneNumberFormat.E164);
     }
+
 
     // --- Modifying Methods ---
 
@@ -119,27 +160,41 @@ public class ContactInfo implements Serializable {
     public void updateEmailAddress(String newEmailAddress) {
         if (newEmailAddress != null) {
             this.userEmail = new UserEmail(newEmailAddress);
+            // Consider if emailVerified should be reset upon email change
+            // this.emailVerified = false;
         }
     }
 
-    public void updatePhoneNumber(String newPhoneNumber) {
-        if (newPhoneNumber != null) {
-            this.phoneNumber = newPhoneNumber;
-        }
-    }
-
-    // Method to update using PhoneNumber object (optional, uses converter implicitly via setter)
-    public void updatePhoneNumber(Phonenumber.PhoneNumber newPhoneNumber) {
-        if (newPhoneNumber != null) {
-            // Convert to String before setting, or let the @Convert handle it if setter is used by JPA
-            // For direct calls, you might need manual conversion here or rely on the converter logic
-            // Simplest is to modify the setter or have the converter handle it.
-            // Assuming the converter handles the conversion when JPA persists:
-            PhoneNumberConverter converter = new PhoneNumberConverter();
-            this.phoneNumber = converter.convertToDatabaseColumn(newPhoneNumber);
+    /**
+     * Updates the phone number from a string.
+     * The string will be parsed into a Phonenumber.PhoneNumber object.
+     *
+     * @param newPhoneNumberString The new phone number as a string.
+     * @throws IllegalArgumentException if the string is not a valid phone number.
+     */
+    public void updatePhoneNumber(String newPhoneNumberString) {
+        if (newPhoneNumberString != null && !newPhoneNumberString.trim().isEmpty()) {
+            try {
+                // Attempt to parse. A default region might be needed if numbers are not always international.
+                // For simplicity, assuming international format or a default region configured elsewhere if necessary.
+                this.phoneNumber = phoneUtil.parse(newPhoneNumberString, null /* Default region, e.g., "US" */);
+            } catch (NumberParseException e) {
+                log.warn("Failed to parse phone number string '{}': {}", newPhoneNumberString, e.getMessage());
+                throw new IllegalArgumentException("Invalid phone number format: " + newPhoneNumberString, e);
+            }
         } else {
-            this.phoneNumber = null;
+            this.phoneNumber = null; // Clear the phone number
         }
+    }
+
+    /**
+     * Updates the phone number using a Phonenumber.PhoneNumber object.
+     * This is now the primary way to set the phoneNumber field with a rich type.
+     *
+     * @param newPhoneNumber The new Phonenumber.PhoneNumber object.
+     */
+    public void updatePhoneNumber(Phonenumber.PhoneNumber newPhoneNumber) {
+        this.phoneNumber = newPhoneNumber;
     }
 
     // --- End Modifying Methods ---
@@ -148,18 +203,21 @@ public class ContactInfo implements Serializable {
     public boolean equals(final Object o) {
         if (o == this) return true;
         if (!(o instanceof ContactInfo other)) return false;
-        if (!other.canEqual((Object) this)) return false;
+        if (!other.canEqual(this)) return false;
         final Object this$firstName = this.getFirstName();
         final Object other$firstName = other.getFirstName();
         if (!Objects.equals(this$firstName, other$firstName)) return false;
         final Object this$lastName = this.getLastName();
         final Object other$lastName = other.getLastName();
         if (!Objects.equals(this$lastName, other$lastName)) return false;
-        final Object this$userEmail = this.getUserEmail();
-        final Object other$userEmail = other.getUserEmail();
+        final Object this$nickname = this.getNickname();
+        final Object other$nickname = other.getNickname();
+        if (!Objects.equals(this$nickname, other$nickname)) return false;
+        final Object this$userEmail = this.userEmail; // Compare the UserEmail object
+        final Object other$userEmail = other.userEmail;
         if (!Objects.equals(this$userEmail, other$userEmail)) return false;
         if (this.isEmailVerified() != other.isEmailVerified()) return false;
-        final Object this$phoneNumber = this.getPhoneNumber();
+        final Object this$phoneNumber = this.getPhoneNumber(); // Compare Phonenumber.PhoneNumber objects
         final Object other$phoneNumber = other.getPhoneNumber();
         return Objects.equals(this$phoneNumber, other$phoneNumber);
     }
@@ -176,7 +234,9 @@ public class ContactInfo implements Serializable {
         result = result * PRIME + ($firstName == null ? 43 : $firstName.hashCode());
         final Object $lastName = this.getLastName();
         result = result * PRIME + ($lastName == null ? 43 : $lastName.hashCode());
-        final Object $userEmail = this.getUserEmail();
+        final Object $nickname = this.getNickname();
+        result = result * PRIME + ($nickname == null ? 43 : $nickname.hashCode());
+        final Object $userEmail = this.userEmail;
         result = result * PRIME + ($userEmail == null ? 43 : $userEmail.hashCode());
         result = result * PRIME + (this.isEmailVerified() ? 79 : 97);
         final Object $phoneNumber = this.getPhoneNumber();
@@ -186,16 +246,24 @@ public class ContactInfo implements Serializable {
 
     @Override
     public String toString() {
-        return "ContactInfo(firstName=" + this.getFirstName() + ", lastName=" + this.getLastName() + ", userEmail=" + this.getUserEmail() + ", emailVerified=" + this.isEmailVerified() + ", phoneNumber=" + this.getPhoneNumber() + ")";
+        return "ContactInfo(" +
+                "firstName=" + this.getFirstName() +
+                ", lastName=" + this.getLastName() +
+                ", nickname=" + this.getNickname() +
+                ", userEmail=" + this.userEmail + // Relies on UserEmail's toString
+                ", emailVerified=" + this.isEmailVerified() +
+                ", phoneNumber=" + (this.phoneNumber != null ? phoneUtil.format(this.phoneNumber, PhoneNumberUtil.PhoneNumberFormat.E164) : "null") +
+               ")";
     }
 
     public static class ContactInfoBuilder {
         private @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String firstName;
         private @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String lastName;
+        private @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters") String nickname;
         private UserEmail userEmail;
         private boolean emailVerified$value;
         private boolean emailVerified$set;
-        private String phoneNumber;
+        private Phonenumber.PhoneNumber phoneNumber;
 
         ContactInfoBuilder() {
         }
@@ -210,6 +278,11 @@ public class ContactInfo implements Serializable {
             return this;
         }
 
+        public ContactInfoBuilder nickname(@Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters") String nickname) {
+            this.nickname = nickname;
+            return this;
+        }
+
         public ContactInfoBuilder userEmail(UserEmail userEmail) {
             this.userEmail = userEmail;
             return this;
@@ -221,31 +294,44 @@ public class ContactInfo implements Serializable {
             return this;
         }
 
+        // Builder method now accepts Phonenumber.PhoneNumber
         @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-        public ContactInfoBuilder phoneNumber(@Size(min = 5, max = 50, message = "Phone number must be between 5 and 50 characters") String phoneNumber) {
+        public ContactInfoBuilder phoneNumber(Phonenumber.PhoneNumber phoneNumber) {
             this.phoneNumber = phoneNumber;
             return this;
         }
 
-        // Optional: Add a builder method accepting PhoneNumber object
+        // Optional: Keep a method to build from string, which involves parsing
         @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-        public ContactInfoBuilder phoneNumberObject(Phonenumber.PhoneNumber phoneNumber) {
-            PhoneNumberConverter converter = new PhoneNumberConverter();
-            this.phoneNumber = converter.convertToDatabaseColumn(phoneNumber);
+        public ContactInfoBuilder phoneNumberString(String phoneNumberString) {
+            if (phoneNumberString != null && !phoneNumberString.trim().isEmpty()) {
+                try {
+                    this.phoneNumber = phoneUtil.parse(phoneNumberString, null /* Default region */);
+                } catch (NumberParseException e) {
+                    log.warn("Builder: Failed to parse phone number string '{}': {}", phoneNumberString, e.getMessage());
+                    throw new IllegalArgumentException("Invalid phone number string for builder: " + phoneNumberString, e);
+                }
+            } else {
+                this.phoneNumber = null;
+            }
             return this;
         }
 
+
         public ContactInfo build() {
-            boolean emailVerified$value = this.emailVerified$value;
-            if (!this.emailVerified$set) {
-                emailVerified$value = ContactInfo.$default$emailVerified();
-            }
-            return new ContactInfo(this.firstName, this.lastName, this.userEmail, emailVerified$value, this.phoneNumber);
+            boolean emailVerifiedValue = this.emailVerified$set ? this.emailVerified$value : ContactInfo.$default$emailVerified();
+            return new ContactInfo(this.firstName, this.lastName, this.nickname, this.userEmail, emailVerifiedValue, this.phoneNumber);
         }
 
         @Override
         public String toString() {
-            return "ContactInfo.ContactInfoBuilder(firstName=" + this.firstName + ", lastName=" + this.lastName + ", userEmail=" + this.userEmail + ", emailVerified$value=" + this.emailVerified$value + ", phoneNumber=" + this.phoneNumber + ")";
+            return "ContactInfo.ContactInfoBuilder(firstName=" + this.firstName +
+                    ", lastName=" + this.lastName +
+                    ", nickname=" + this.nickname +
+                    ", userEmail=" + this.userEmail +
+                    ", emailVerified$value=" + this.emailVerified$value +
+                    ", phoneNumber=" + (this.phoneNumber != null ? phoneUtil.format(this.phoneNumber, PhoneNumberUtil.PhoneNumberFormat.E164) : "null") +
+                    ")";
         }
     }
 }
