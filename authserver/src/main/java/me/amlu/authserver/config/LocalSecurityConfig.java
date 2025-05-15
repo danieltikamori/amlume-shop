@@ -265,12 +265,32 @@ public class LocalSecurityConfig {
                             .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
+            RegisteredClient shopClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("amlumeclient")
+                    .clientSecret("Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB") // Raw secret, will be hashed
+                    .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
+                    .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                    .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
+                    .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
+                    .tokenSettings(TokenSettings.builder()
+                            .accessTokenTimeToLive(Duration.ofMinutes(10))
+                            .refreshTokenTimeToLive(Duration.ofHours(8))
+                            .reuseRefreshTokens(false)
+                            .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
+                            .build())
+                    .build();
+
+
             this.jpaRegisteredClientRepositoryAdapter.save(clientCredClient);
             this.jpaRegisteredClientRepositoryAdapter.save(introspectClient);
             this.jpaRegisteredClientRepositoryAdapter.save(authCodeClient);
             this.jpaRegisteredClientRepositoryAdapter.save(pkceClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(shopClient);
+            log.info("Finished seeding amlume-shop OAuth2 client.");
             log.info("Finished seeding OAuth2 clients.");
         } else {
+            log.info("amlume-shop OAuth2 client already exists. Skipping seeding.");
             log.info("OAuth2 registered clients already seem to exist. Skipping seeding.");
         }
     }
