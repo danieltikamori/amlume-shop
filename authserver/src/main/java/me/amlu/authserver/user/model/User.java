@@ -36,10 +36,13 @@ import java.util.stream.Collectors;
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email"),
+        @UniqueConstraint(columnNames = "nickname"),
         @UniqueConstraint(columnNames = "mobile_number"),
         @UniqueConstraint(columnNames = "external_id")
 }, indexes = {
         @Index(name = "idx_email", columnList = "email"),
+        @Index(name = "idx_backup_email", columnList = "backup_email"),
+        @Index(name = "idx_nickname", columnList = "nickname"),
         @Index(name = "idx_mobile_number", columnList = "mobile_number"),
         @Index(name = "idx_created_at", columnList = "created_at"),
         @Index(name = "idx_updated_at", columnList = "updated_at"),
@@ -116,7 +119,7 @@ public class User implements UserDetails {
     // Exclude from default toString to avoid issues with lazy loading or verbosity
     private Set<Authority> authorities = new HashSet<>(); // Initialize to avoid NullPointerExceptions
 
-    private User(Long id,String externalId, String firstName, String lastName, String nickname, EmailAddress email, PhoneNumber mobileNumber,
+    private User(Long id, String externalId, String firstName, String lastName, String nickname, EmailAddress email, EmailAddress backupEmail, PhoneNumber mobileNumber,
                  HashedPassword password, AccountStatus accountStatus, Instant createdAt, Instant updatedAt, Set<Authority> authorities) {
         Assert.hasText(firstName, "User first name cannot be empty.");
         Assert.notNull(email, "User email cannot be null.");
@@ -127,6 +130,7 @@ public class User implements UserDetails {
         this.lastName = lastName;
         this.nickname = nickname;
         this.email = email;
+        this.backupEmail = backupEmail;
         this.mobileNumber = mobileNumber;
         this.password = password;
         this.accountStatus = (accountStatus != null) ? accountStatus : AccountStatus.initial();
@@ -217,6 +221,16 @@ public class User implements UserDetails {
     public void updateNickname(String newNickname) {
         // nickname can be null or blank
         this.nickname = newNickname;
+    }
+
+    public void updateEmail(EmailAddress newEmail) {
+        Assert.notNull(newEmail, "User email cannot be null.");
+        this.email = newEmail;
+    }
+
+    public void updateBackupEmail(EmailAddress newBackupEmail) {
+        // Can be null to clear it
+        this.backupEmail = newBackupEmail;
     }
 
     /**
@@ -337,6 +351,10 @@ public class User implements UserDetails {
     public String getLastName() { return this.lastName; }
     public String getNickname() { return this.nickname; }
     public EmailAddress getEmail() { return this.email; }
+
+    public EmailAddress getBackupEmail() {
+        return this.backupEmail;
+    }
     public PhoneNumber getMobileNumber() { return this.mobileNumber; }
     public Set<PasskeyCredential> getPasskeyCredentials() { return Collections.unmodifiableSet(this.passkeyCredentials); }
     public AccountStatus getAccountStatus() { return this.accountStatus; }
@@ -376,6 +394,7 @@ public class User implements UserDetails {
                 ", lastName='" + lastName + '\'' +
                 ", nickname='" + nickname + '\'' +
                 ", email=" + email +
+                ", backupEmail=" + backupEmail +
                 ", mobileNumber=" + mobileNumber +
                 ", accountStatus=" + accountStatus +
                 ", createdAt=" + createdAt +
@@ -389,10 +408,12 @@ public class User implements UserDetails {
         // Ensure all fields managed by the private constructor are included
         return new UserBuilder()
                 .id(this.id)
+                .externalId(this.externalId)
                 .firstName(this.firstName)
                 .lastName(this.lastName)
                 .nickname(this.nickname)
                 .email(this.email)
+                .backupEmail(this.backupEmail)
                 .mobileNumber(this.mobileNumber)
                 .password(this.password)
                 .accountStatus(this.accountStatus)
@@ -412,6 +433,7 @@ public class User implements UserDetails {
         private String lastName;
         private String nickname;
         private EmailAddress email;
+        private EmailAddress backupEmail;
         private PhoneNumber mobileNumber;
         private HashedPassword password;
         private AccountStatus accountStatus;
@@ -433,6 +455,11 @@ public class User implements UserDetails {
         public UserBuilder lastName(String lastName) { this.lastName = lastName; return this; }
         public UserBuilder nickname(String nickname) { this.nickname = nickname; return this; }
         public UserBuilder email(EmailAddress email) { this.email = email; return this; }
+
+        public UserBuilder backupEmail(EmailAddress backupEmail) {
+            this.backupEmail = backupEmail;
+            return this;
+        }
         public UserBuilder mobileNumber(PhoneNumber mobileNumber) { this.mobileNumber = mobileNumber; return this; }
         @JsonIgnore public UserBuilder password(HashedPassword password) { this.password = password; return this; }
         public UserBuilder accountStatus(AccountStatus accountStatus) { this.accountStatus = accountStatus; return this; }
@@ -449,7 +476,8 @@ public class User implements UserDetails {
             if (!this.authorities$set) {
                 authoritiesValue = User.$default$authorities();
             }
-            return new User(this.id,this.externalId, this.firstName, this.lastName, this.nickname, this.email, this.mobileNumber,
+            return new User(this.id, this.externalId, this.firstName, this.lastName, this.nickname,
+                    this.email, this.backupEmail, this.mobileNumber,
                             this.password, this.accountStatus, this.createdAt, this.updatedAt, authoritiesValue);
         }
 
@@ -461,6 +489,7 @@ public class User implements UserDetails {
                     ", lastName=" + this.lastName +
                     ", nickname=" + this.nickname +
                     ", email=" + this.email +
+                    ", backupEmail=" + this.backupEmail +
                     ", mobileNumber=" + this.mobileNumber +
                     ", password=" + (password != null ? "[PROTECTED]" : "null") +
                     ", accountStatus=" + this.accountStatus +
