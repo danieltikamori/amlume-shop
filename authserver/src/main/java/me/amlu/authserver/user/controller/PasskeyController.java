@@ -8,6 +8,14 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
+/**
+ * Passkey registration and management endpoints.
+ * - POST   /api/profile/passkeys/registration-options : Begin registration (returns challenge/options)
+ * - POST   /api/profile/passkeys                      : Finish registration (save credential)
+ * - GET    /api/profile/passkeys                      : List user's passkeys
+ * - DELETE /api/profile/passkeys/{credentialId}       : Delete a passkey
+ */
+
 package me.amlu.authserver.user.controller;
 
 import com.webauthn4j.util.exception.WebAuthnException;
@@ -61,8 +69,8 @@ public class PasskeyController {
 
     @PostMapping
     public ResponseEntity<Void> finishPasskeyRegistration(
-            @AuthenticationPrincipal User currentUser, @Valid
-            @RequestBody PostPasskeyRegistrationRequest registrationRequest) {
+            @AuthenticationPrincipal User currentUser,
+            @Valid @RequestBody PostPasskeyRegistrationRequest registrationRequest) {
         if (currentUser == null) {
             log.warn("Attempt to finish passkey registration without authentication.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
