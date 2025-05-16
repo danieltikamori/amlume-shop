@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +35,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert; // For assertions
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Instant;
 import java.util.HashSet;
@@ -53,8 +55,10 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    // Removed self-injection: private final UserServiceImpl userService;
+    private final WebClient authServerAdminWebClient;
     private final CacheService cacheService; // Keep if providing specific caching beyond annotations
+    private final UserService self; // Use the interface
+
 
     /**
      * Constructor for dependency injection.
@@ -63,44 +67,139 @@ public class UserServiceImpl implements UserService, UserDetailsService {
      * @param passwordEncoder The encoder for hashing passwords.
      * @param cacheService    The service for custom caching operations.
      */
-    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, CacheService cacheService) {
+    public UserServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder, WebClient authServerAdminWebClient, CacheService cacheService, @Lazy UserService self) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.authServerAdminWebClient = authServerAdminWebClient;
         this.cacheService = cacheService;
+        this.self = self;
     }
 
     // --- Registration ---
 
 
     @Override
-    @Transactional // Ensure atomicity
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, allEntries = true) // Evict user caches on new admin registration
+    @Transactional // Keep transaction if local pre-checks or post-processing are needed
+    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, allEntries = true) // Evict user caches
     public User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException {
         Assert.notNull(request, "Registration request cannot be null");
 
-        String usernameString = request.getUsername(); // Gets the String value
+        String emailString = request.userEmail().getEmail();
+        log.info("Attempting to register new admin user via authserver admin API: email={}", emailString);
 
-        // Check if user already exists by username string or email
-        if (userRepository.existsByAuthenticationInfoUsername_Username(usernameString)) {
-            throw new UserAlreadyExistsException("Username '" + usernameString + "' already taken");
+        // --- Delegation to Authserver Admin API ---
+        // This requires authserver to have an endpoint like POST /api/admin/users
+        // that is secured for admins and accepts a DTO like AuthServerAdminRegistrationRequest
+        // and assigns the ADMIN role.
+
+        // You'll need a DTO matching authserver's admin registration request
+        // public record AuthServerAdminRegistrationRequest(String firstName, String lastName, String email, String password, Set<String> roles) {}
+        // And configure a WebClient that can authenticate to authserver's admin API
+
+        // Example (assuming AuthServerAdminRegistrationRequest DTO exists and authServerAdminWebClient is configured):
+        /*
+        AuthServerAdminRegistrationRequest adminRequest = new AuthServerAdminRegistrationRequest(
+            request.firstName() != null ? request.firstName().getFirstName() : null,
+            request.lastName() != null ? request.lastName().getLastName() : null,
+            emailString,
+            request.password() != null ? request.password().getPassword() : null,
+            Set.of("ADMIN") // Explicitly request ADMIN role
+        );
+
+        try {
+            // Call authserver's admin API
+            authServerAdminWebClient.post()
+                .uri("/api/admin/users") // Example admin endpoint
+                .bodyValue(adminRequest)
+                .retrieve()
+                // Handle success (e.g., 201 Created) - authserver creates the user
+                .onStatus(HttpStatus::is2xxSuccessful, clientResponse -> {
+                    log.info("Authserver admin registration successful for email: {}", emailString);
+                    return Mono.empty(); // Indicate success
+                })
+                // Handle conflicts (e.g., 409 User Exists)
+                 .onStatus(HttpStatus.CONFLICT::equals, clientResponse -> {
+                    log.warn("Authserver reported admin user already exists for email: {}", emailString);
+                    return Mono.error(new UserAlreadyExistsException("Admin user with this email already exists."));
+                })
+                // Handle bad requests (e.g., validation errors)
+                 .onStatus(HttpStatus.BAD_REQUEST::equals, clientResponse -> {
+                    log.warn("Authserver reported bad request for admin registration of email: {}", emailString);
+                    return clientResponse.bodyToMono(String.class)
+                            .flatMap(errorMessage -> Mono.error(new IllegalArgumentException("Invalid admin registration data: " + errorMessage)));
+                })
+                // Handle other errors
+                .onStatus(HttpStatus::isError, clientResponse -> {
+                    log.error("Authserver returned error status {} for admin registration of email: {}", clientResponse.statusCode(), emailString);
+                     return clientResponse.bodyToMono(String.class)
+                            .flatMap(errorMessage -> Mono.error(new UserRegistrationException("Authserver admin registration failed: " + errorMessage)));
+                })
+                .bodyToMono(Void.class) // Assuming no response body on success
+                .block(); // Block for synchronous behavior
+
+            // If successful, the user is created in authserver.
+            // The local amlume-shop User entity for this admin will be provisioned
+            // on their first login via the OAuth2 flow, linked by authServerSubjectId.
+            // We don't return a local User entity here as it doesn't exist yet.
+            // Consider returning a success DTO instead of User.
+
+            log.info("Admin registration request successfully processed for email: {}", emailString);
+            // You might return a simple success response DTO here
+            // return new GetRegisterResponse(null, null); // Example success response DTO
+
+            // If you MUST return a User entity here, you'd need to fetch it from authserver
+            // after creation, or wait for the first login. This is complex.
+            // It's better to just confirm the success of the authserver call.
+             throw new UnsupportedOperationException("Admin registration now delegates to authserver. This method should return a confirmation DTO, not a User entity.");
+
+
+        } catch (UserAlreadyExistsException | IllegalArgumentException e) {
+             throw e; // Re-throw mapped exceptions
+        } catch (Exception e) {
+            log.error("Unexpected error during admin registration API call to authserver for email [{}]: {}", emailString, e.getMessage(), e);
+            throw new UserRegistrationException("Admin registration failed due to an internal error communicating with the authentication server.", e);
         }
-        if (userRepository.existsByContactInfoUserEmailEmail(request.userEmail())) {
-            throw new UserAlreadyExistsException("Email '" + request.userEmail() + "' already registered");
+        */
+
+        // --- Keeping the old local implementation for now, but marking for refactoring ---
+        log.warn("registerAdminUser still creates user locally. This should be refactored to call authserver admin API.");
+        // Keep the existing local implementation for now, but understand its limitations
+        // (local password, local status, not linked by authServerSubjectId initially).
+        // You will need to manually link these local admins to authserver users after their first login.
+
+        // Existing local implementation (needs adjustment in case AuthenticationInfo/Username/UserPassword are removed)
+        // If AuthenticationInfo/Username/UserPassword are removed from amlume-shop.User:
+        // This method CANNOT create a user with a password or username locally anymore.
+        // It MUST delegate to authserver.
+        // If you keep AuthenticationInfo/Username/UserPassword temporarily:
+        // Adjust the code below to use request.userEmail().getEmail() instead of request.getUsername()
+        // and potentially remove password hashing if the password field is removed from local User.
+
+        // Assuming AuthenticationInfo/Username/UserPassword are still temporarily present in amlume-shop.User
+        // Check if user already exists by email (primary identifier)
+        if (userRepository.existsByContactInfoUserEmailEmail(emailString)) {
+            throw new UserAlreadyExistsException("Email '" + emailString + "' already registered");
         }
 
-        // Hash password
+        // Hash password (if the local User still has a password field)
         UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
 
-        // Create a new user entity
+        // Create a new user entity (local amlume-shop representation)
         User user = User.builder()
+                // If AuthenticationInfo is removed, remove this block
                 .authenticationInfo(AuthenticationInfo.builder()
-                        .username(request.username()) // Pass the Username VO
+                        // If Username is removed, remove this line
+                        // .username(new Username(emailString)) // Use email as username locally for UserDetails
+                        // If password field is removed, remove this line
                         .password(encodedPassword)
                         .build())
                 .contactInfo(ContactInfo.builder()
-                        .userEmail(new UserEmail(request.userEmail()))
-                        // Add other contact fields if available in request (e.g., first/last name if added to DTO)
+                        .userEmail(new UserEmail(emailString))
+                        .firstName(request.firstName() != null ? request.firstName().getFirstName() : null)
+                        .lastName(request.lastName() != null ? request.lastName().getLastName() : null)
+                        // Add other contact fields if available in request
                         .build())
+                // If AccountStatus is removed, remove this block
                 .accountStatus(AccountStatus.builder()
                         .creationTime(Instant.now())
                         .accountNonExpired(true)
@@ -109,96 +208,24 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                         .enabled(true) // Admins are typically enabled immediately
                         .failedLoginAttempts(0)
                         .build())
+                // If DeviceFingerprintingInfo is removed, remove this block
                 .deviceFingerprintingInfo(DeviceFingerprintingInfo.builder()
                         .deviceFingerprintingEnabled(false) // Default for admin? Or configurable?
                         .build())
+                // Add authServerSubjectId field here if it exists in amlume-shop.User
+                // .authServerSubjectId(null) // Will be set on first login
                 .build();
 
-        // --- Assign ADMIN Roles ---
+        // --- Assign ADMIN Roles (Local Roles) ---
         Set<UserRole> roles = new HashSet<>();
-        // Assign core admin role
         roles.add(new UserRole(AppRole.ROLE_ADMIN));
-        // Optionally assign base user role as well (hierarchy might cover this, but explicit is clearer)
-        roles.add(new UserRole(AppRole.ROLE_USER));
-        // Add other roles like ROLE_MANAGER if admins should inherit those permissions directly
-        // roles.add(new UserRole(AppRole.ROLE_MANAGER));
+        roles.add(new UserRole(AppRole.ROLE_USER)); // Admins are also users
         user.createRoleSet(roles);
         // --- End Role Assignment ---
 
-
-        // TODO: Implement email verification logic if required for admins? Usually not.
-
         User savedUser = userRepository.save(user);
-        log.info("Registered new ADMIN user: {} (ID: {})", savedUser.getUsername(), savedUser.getUserId());
-        return savedUser;
-    }
-
-    /**
-     * Registers a new user based on the provided request details.
-     *
-     * @param request The user registration request DTO.
-     * @return The newly created and saved User entity.
-     * @throws RoleNotFoundException      If the default role cannot be found (should not happen with hardcoded default).
-     * @throws UserAlreadyExistsException If the username or email is already taken.
-     */
-    @Override
-    public User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException, UserAlreadyExistsException {
-        Assert.notNull(request, "Registration request cannot be null");
-
-        // Use the specific username string getter from the request record
-        String usernameString = request.getUsername(); // Gets the String value
-
-        // Check if user already exists by username string or email
-        // Use the updated repository method name
-        if (userRepository.existsByAuthenticationInfoUsername_Username(usernameString)) {
-            throw new UserAlreadyExistsException("Username '" + usernameString + "' already taken");
-        }
-        if (userRepository.existsByContactInfoUserEmailEmail(request.userEmail())) {
-            throw new UserAlreadyExistsException("Email '" + request.userEmail() + "' already registered");
-        }
-
-        // Hash password
-        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
-
-        // Create a new user with hashed password and initial details
-        // Pass the Username VO from the request to the builder
-        User user = User.builder()
-                .authenticationInfo(AuthenticationInfo.builder()
-                        .username(request.username()) // Pass the Username VO
-                        .password(encodedPassword)
-                        .build())
-                .contactInfo(ContactInfo.builder()
-                        .userEmail(new UserEmail(request.userEmail()))
-                        // Add other contact fields if available in request
-                        .build())
-                .accountStatus(AccountStatus.builder()
-                        .creationTime(Instant.now()) // Set creation timestamp
-                        .accountNonExpired(true)
-                        .accountNonLocked(true)
-                        .credentialsNonExpired(true)
-                        .enabled(true) // Or false if email verification is required first
-                        .failedLoginAttempts(0)
-                        .build())
-                .deviceFingerprintingInfo(DeviceFingerprintingInfo.builder()
-                        .deviceFingerprintingEnabled(false) // Default to disabled?
-                        .build())
-                // Initialize other embedded objects as needed
-                .build();
-
-        // Assign default roles (Consider making default role configurable)
-        Set<UserRole> roles = new HashSet<>();
-        // Assuming UserRole has a constructor or static factory for AppRole
-        roles.add(new UserRole(AppRole.ROLE_CUSTOMER));
-        user.createRoleSet(roles);
-
-        // TODO: Implement email verification logic if required
-        // String verificationToken = generateVerificationToken(request.getEmail());
-        // sendVerificationEmail(request.getEmail(), verificationToken);
-        // user.setEmailVerificationToken(verificationToken);
-        // user.setAccountStatus(user.getAccountStatus().withEnabled(false)); // Example
-
-        User savedUser = userRepository.save(user);
-        log.info("Registered new user: {} (ID: {})", savedUser.getUsername(), savedUser.getUserId());
+        // Log using email as the primary identifier
+        log.info("Registered new local ADMIN user: {} (ID: {})", savedUser.getContactInfo().getEmail(), savedUser.getUserId());
         return savedUser;
     }
 
@@ -208,7 +235,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     /**
      * Finds a user by their username string. Results are cached.
      *
-     * @param username The username string to search for.
+     * @param userEmail The username string to search for.
      * @return The found User entity.
      * @throws UserNotFoundException If no user is found with the given username.
      */
@@ -217,23 +244,22 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     // However, since User implements UserDetails and uses embedded objects, caching
     // the User object directly is a common and often acceptable approach.
     // Ensure the User entity and all embedded objects are Serializable for cache providers like Redis.
-    @Cacheable(value = USERS_CACHE, key = "#username") // Cache name from Constants.java
-    public User findUserByUsername(String username) {
-        // 1. Precondition Check: Ensure username is not null or empty.
-        Assert.hasText(username, "Username must not be empty");
-        log.debug("Attempting to find user by username: {}", username); // Added debug log
+    @Cacheable(value = USERS_CACHE, key = "#userEmail") // Cache name from Constants.java
+    public User findUserByEmail(String userEmail) {
+        // 1. Precondition Check: Ensure username (email) is not null or empty.
+        Assert.hasText(userEmail, "Username (email) must not be empty");
+        log.debug("Attempting to find user by username (email): {}", userEmail);
 
         // 2. Repository Call: Find user by username within the AuthenticationInfo embedded object.
         // The repository method returns Optional<User>.
-        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
+        User user = userRepository.findByContactInfoUserEmailEmail(userEmail)
                 // 3. Handle Not Found: Throw a specific custom exception if the Optional is empty.
                 .orElseThrow(() -> {
-                    log.warn("User not found with username: {}", username); // Log warning on failure
-                    return new UserNotFoundException("User not found with username: " + username);
+                    log.warn("User not found with username (email): {}", userEmail);
+                    return new UserNotFoundException("User not found with username (email): " + userEmail);
                 });
 
-        // 4. Log Success and Return: Log if found (optional, could be verbose) and return the user.
-        log.debug("Successfully found user by username: {}", username);
+        log.debug("Successfully found user by username (email): {}", userEmail);
         return user;
     }
 
@@ -253,54 +279,36 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     /**
-     * Retrieves a user by their email address.
-     *
-     * @param email The email address to search for.
-     * @return The found User entity.
-     * @throws UserNotFoundException If no user is found with the given email.
-     */
-    @Override
-//     @Cacheable(value = USERS_CACHE, key = "'email:' + #email") // Consider caching if frequently used
-    public User getUserByEmail(String email) {
-        Assert.hasText(email, "Email must not be empty");
-        // Assuming repository method returns Optional now for consistency
-        return userRepository.findByContactInfoUserEmailEmail(email)
-                .orElseThrow(() -> new UserNotFoundException("User not found with email: " + email));
-    }
-
-    /**
-     * Retrieves a user by either their username string or email address.
-     *
-     * @param usernameOrEmail The username string or email address to search for.
-     * @return The found User entity.
-     * @throws UserNotFoundException If no user is found with the given identifier.
-     */
-    @Override
-    public User getUserByUsernameOrEmail(String usernameOrEmail) {
-        Assert.hasText(usernameOrEmail, "Username or email must not be empty");
-        // Assuming repository method handles searching both fields
-        return userRepository.findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(usernameOrEmail, usernameOrEmail)
-                .orElseThrow(() -> new UserNotFoundException("User not found with username or email: " + usernameOrEmail));
-    }
-
-    /**
      * Implementation of {@link UserDetailsService#loadUserByUsername(String)}.
      * Loads user-specific data by username for Spring Security authentication.
-     * Delegates to {@link #findUserByUsername(String)} and converts the exception type.
+     * Delegates to {@link #findUserByEmail(String)} and converts the exception type.
      *
      * @param username the username identifying the user whose data is required.
      * @return a fully populated user record (never {@code null}).
      * @throws UsernameNotFoundException if the user could not be found or the user has no GrantedAuthority.
      */
     @Override
+    // Action: Keep method signature as required by UserDetailsService
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Delegate to findUserByUsername which throws custom exception
-        // Spring Security expects UsernameNotFoundException
+        // The 'username' parameter here is the identifier Spring Security uses.
+        // With OAuth2/OIDC, this will typically be the 'sub' claim from the token,
+        // or the username from form login (which is email in authserver).
+        // In authserver, UserDetails.getUsername() returns email.
+        // So, the 'username' parameter here will be the email.
+
+        log.debug("loadUserByUsername (from Spring Security): username={}", username);
+
         try {
-            // findUserByUsername is already cached
-            return findUserByUsername(username);
+            // Action: Call the method that finds by email (which was findUserByEmail, now renamed)
+            // Assuming findUserByEmail is renamed to findUserByEmail:
+            return self.findUserByEmail(username); // Call the renamed method (findUserByEmail)
+            // Or directly:
+            // return userRepository.findByContactInfoUserEmailEmail(username)
+            //         .orElseThrow(() -> new UserNotFoundException("User not found with email: " + username));
+
         } catch (UserNotFoundException e) {
             // Convert custom exception to Spring Security's exception
+            log.warn("User not found for loadUserByUsername (email): {}", username);
             throw new UsernameNotFoundException(e.getMessage(), e);
         }
     }
@@ -324,24 +332,59 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             throw new UnauthorizedException("No authenticated user found or user is anonymous");
         }
 
-        if (authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-            String userEmail = jwt.getSubject(); // 'sub' claim is the Keycloak User ID
-            // String username = jwt.getClaimAsString("preferred_username"); // Or get username
+        // Action: Handle OAuth2/OIDC principal correctly
+        Object principal = authentication.getPrincipal();
 
-            // Option 1: If you only need the ID/username from token
-//             return createTransientUserFromJwt(jwt); // A helper to build a temporary User object
+        if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+            // For JWT principal, the 'sub' claim is the user ID from authserver.
+            String authServerSubjectId = jwt.getSubject(); // This is the authserver User.id (as a String)
+            // The 'email' claim might also be present and useful for logging/display
+            String emailFromToken = jwt.getClaimAsString("email"); // Assuming authserver adds email claim
 
-            // Option 2: If you need the full local User entity linked to Keycloak
-//            return userRepository.findBykeycloakId(keycloakUserId) // Need this method in repo
-//                    .orElseThrow(() -> new UserNotFoundException("Local user not found for Keycloak ID: " + keycloakUserId));\
-            // Spring Authorization Server implementation
+            log.debug("Authenticated via JWT. Subject (authserver user ID): {}, Email from token: {}", authServerSubjectId, emailFromToken);
 
-            userRepository.findByContactInfoUserEmailEmail(userEmail);
-            return userRepository.findByContactInfoUserEmailEmail(userEmail)
-                    .orElseThrow(() -> new UserNotFoundException("User not found with email: " + userEmail));
-        } else {
-            // Should not happen with JWT config, but handle defensively
-            log.error("Unexpected principal type: {}", authentication.getPrincipal().getClass());
+            // Action: Find the local amlume-shop User entity using the authServerSubjectId
+            // You need a new repository method: findByAuthServerSubjectId(String subjectId)
+            // And the authServerSubjectId field in amlume-shop.User entity.
+            User currentUser = userRepository.findByAuthServerSubjectId(authServerSubjectId)
+                    .orElseThrow(() -> {
+                        log.error("Local user not found for authserver subject ID: {}", authServerSubjectId);
+                        // This indicates a provisioning issue - the user logged in via authserver
+                        // but no corresponding local user record was created/linked.
+                        // This should be handled by the OidcUserService/OAuth2UserService.
+                        // Throwing UnauthorizedException or a specific provisioning error might be appropriate.
+                        return new UnauthorizedException("Local user profile not found for authenticated identity.");
+                    });
+
+            // Optional: Update local user data from token claims if needed (e.g., name, email)
+            // This logic might be better placed in the OidcUserService/OAuth2UserService during provisioning/loading.
+            // if (emailFromToken != null && !emailFromToken.equals(currentUser.getContactInfo().getEmail())) {
+            //     currentUser.updateContactInfo(currentUser.getContactInfo().withEmail(emailFromToken));
+            //     userRepository.save(currentUser); // Save the updated local user
+            // }
+
+            log.debug("Successfully retrieved local user for authserver subject ID {}: userId={}", authServerSubjectId, currentUser.getUserId());
+            return currentUser;
+
+        } else if (principal instanceof UserDetails userDetails) {
+            // This branch handles cases where the principal is already a UserDetails object,
+            // which might happen with local form login (if still enabled) or other custom auth.
+            // If local form login is removed, this branch might become less relevant or indicate an issue.
+            // If UserDetails is your amlume-shop.User entity, return it directly.
+            if (userDetails instanceof User localUser) {
+                log.debug("Authenticated via UserDetails principal: username={}", userDetails.getUsername());
+                return localUser;
+            } else {
+                // Handle other UserDetails types if necessary, or throw error
+                log.error("Authenticated with unexpected UserDetails type: {}", userDetails.getClass());
+                throw new UnauthorizedException("Unexpected authenticated principal type.");
+            }
+        }
+        // Remove or adapt other principal types if they were handled here (e.g., old PASETO principals)
+
+        else {
+            // Should not happen with standard Spring Security setup after OAuth2 config
+            log.error("Unexpected principal type in SecurityContext: {}", principal.getClass());
             throw new UnauthorizedException("Unexpected authentication principal type");
         }
     }
@@ -356,6 +399,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     @Override
     public Long getCurrentUserId() {
         // Delegates to getCurrentUser() which handles authentication checks
+        // This method is fine as is, assuming getCurrentUser is correctly implemented
         return this.getCurrentUser().getUserId();
     }
 
@@ -399,23 +443,47 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         Assert.notNull(userId, "User ID must not be null");
         Assert.notNull(profileRequest, "Profile request cannot be null");
 
-        User userToUpdate = getUserById(userId); // Fetch the existing user (uses cache if available)
+        User userToUpdate = self.getUserById(userId); // Fetch the existing user (uses cache if available)
 
         // --- Map *only* profile-related fields from DTO to entity ---
         // Example: Assuming UserProfileUpdateRequest has relevant fields
         // Use the 'with...' methods assuming ContactInfo is immutable or provides them
         ContactInfo updatedContactInfo = userToUpdate.getContactInfo(); // Get current embedded
+
+        boolean changed = false;
+
         if (profileRequest.getFirstName() != null) {
-            updatedContactInfo = updatedContactInfo.withFirstName(profileRequest.getFirstName());
+            // Assuming ContactInfo has a withFirstName method
+            ContactInfo newContactInfo = updatedContactInfo.withFirstName(profileRequest.getFirstName());
+            if (!newContactInfo.equals(updatedContactInfo)) { // Check if change occurred
+                updatedContactInfo = newContactInfo;
+                changed = true;
+            }
         }
         if (profileRequest.getLastName() != null) {
-            updatedContactInfo = updatedContactInfo.withLastName(profileRequest.getLastName());
+            // Assuming ContactInfo has a withLastName method
+            ContactInfo newContactInfo = updatedContactInfo.withLastName(profileRequest.getLastName());
+            if (!newContactInfo.equals(updatedContactInfo)) { // Check if change occurred
+                updatedContactInfo = newContactInfo;
+                changed = true;
+            }
         }
-        // Add other updatable profile fields (phone number, etc.)
-        // Example: if (profileRequest.getPhoneNumber() != null) { updatedContactInfo = updatedContactInfo.withPhoneNumber(profileRequest.getPhoneNumber()); }
+        // Add other updatable profile fields (phone number, etc.) from UserProfileUpdateRequest
+        // Example: if (profileRequest.getPhoneNumber() != null) {
+        //    ContactInfo newContactInfo = updatedContactInfo.withPhoneNumber(profileRequest.getPhoneNumber());
+        //    if (!newContactInfo.equals(updatedContactInfo)) {
+        //         updatedContactInfo = newContactInfo;
+        //         changed = true;
+        //    }
+        // }
+
 
         // Set the potentially new embedded instance back onto the user entity
-        userToUpdate.updateContactInfo(updatedContactInfo);
+        // Only update if ContactInfo actually changed
+        if (changed) {
+            userToUpdate.updateContactInfo(updatedContactInfo); // Assuming User has updateContactInfo method
+        }
+
 
         // Updating MFA preference (if allowed in profile update)
         // Consider if this belongs here or in a dedicated security settings update method
@@ -424,6 +492,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
         // --- DO NOT update sensitive fields like email, username, password, roles here ---
         // These should have dedicated methods/flows with appropriate security checks.
+        // Email and password updates should happen via authserver's API.
 
         User savedUser = userRepository.save(userToUpdate);
         log.info("Updated profile for user ID: {}", userId);
@@ -431,9 +500,10 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     // Add dedicated methods for other updates, e.g.:
-    // public void changeUserPassword(Long userId, String oldPassword, String newPassword) { ... }
-    // public void updateUserEmail(Long userId, String newEmail) { ... } // Requires verification flow
-    // public void updateUserRoles(Long userId, Set<AppRole> newRoles) { ... }
+    // public void changeUserPassword(Long userId, String oldPassword, String newPassword) { ... } // Should call authserver API
+    // public void updateUserEmail(Long userId, String newEmail) { ... } // Should call authserver API and trigger verification flow
+    // public void updateUserRoles(Long userId, Set<AppRole> newRoles) { ... } // Should call authserver admin API
+
 
     // --- Deletion (Soft Delete) ---
 
@@ -449,7 +519,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public void deleteUser(Long userId) {
         Assert.notNull(userId, "User ID must not be null");
         // Fetch user to ensure it exists before attempting delete (uses cache if available)
-        User userToDelete = this.getUserById(userId);
+        User userToDelete = self.getUserById(userId);
         // Assuming deleteById triggers the @SoftDelete mechanism via AuditingEntityListener/Hibernate interceptor
         // If not, need a custom repository method: userRepository.softDelete(userToDelete);
         userRepository.delete(userToDelete); // Use delete(entity) which works well with @SoftDelete
@@ -459,23 +529,9 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     // --- Existence Checks ---
 
     @Override
-    public boolean existsByUsername(String username) {
-        Assert.hasText(username, "Username must not be empty");
-        return userRepository.existsByAuthenticationInfoUsername_Username(username);
-    }
-
-    @Override
     public boolean existsByEmail(String email) {
         Assert.hasText(email, "Email must not be empty");
         return userRepository.existsByContactInfoUserEmailEmail(email);
-    }
-
-    @Override
-    public boolean existsByUsernameOrEmail(String username, String email) {
-        Assert.hasText(username, "Username must not be empty");
-        Assert.hasText(email, "Email must not be empty");
-        // Efficient check using OR condition
-        return userRepository.existsByAuthenticationInfoUsername_Username(username) || userRepository.existsByContactInfoUserEmailEmail(email);
     }
 
     @Override
@@ -512,34 +568,29 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
     // --- Account Status Management ---
 
-    /**
-     * Increments the failed login attempt count for a user. Locks the account if the maximum attempts are reached.
-     * Uses a targeted repository update for efficiency.
-     *
-     * @param username The username of the user.
-     * @throws UserNotFoundException If the user is not found.
-     */
-    @Transactional // Ensures atomicity of read, increment, check, and potential lock
-    @Override
-    // No cache eviction here, as only the count changes. Lock operation handles eviction.
-    public void incrementFailedLogins(String username) {
-        // Fetch fresh user state within the transaction to get the current attempt count
-        // Note: findUserByUsername might hit cache, but subsequent DB update will be correct.
-        // Consider if fetching directly from DB is needed for absolute guarantee on count before update.
-        // For now, assuming cache consistency or accepting minor race condition risk.
-        User user = this.findUserByUsername(username);
-        int newAttemptCount = user.getAccountStatus().getFailedLoginAttempts() + 1;
-
-        // Use targeted repository update for efficiency
-        userRepository.updateFailedLoginAttempts(user.getUserId(), newAttemptCount);
-        log.debug("Incremented failed login attempts for user '{}' to {}", username, newAttemptCount);
-
-        // Check if lock threshold is reached
-        if (newAttemptCount >= MAX_FAILED_ATTEMPTS) {
-            // Call internal method directly using 'this' (will participate in the current transaction)
-            this.lockUserAccount(user.getUserId()); // Pass ID for consistency
-        }
-    }
+    //    @Transactional // Ensures atomicity of read, increment, check, and potential lock
+//    @Override
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    // No cache eviction here, as only the count changes. Lock operation handles eviction.
+//    public void incrementFailedLogins(String username) {
+////        // Fetch fresh user state within the transaction to get the current attempt count
+////        // Note: findUserByEmail might hit cache, but subsequent DB update will be correct.
+////        // Consider if fetching directly from DB is needed for absolute guarantee on count before update.
+////        // For now, assuming cache consistency or accepting minor race condition risk.
+////        User user = this.findUserByEmail(username);
+////        int newAttemptCount = user.getAccountStatus().getFailedLoginAttempts() + 1;
+////
+////        // Use targeted repository update for efficiency
+////        userRepository.updateFailedLoginAttempts(user.getUserId(), newAttemptCount);
+////        log.debug("Incremented failed login attempts for user '{}' to {}", username, newAttemptCount);
+////
+////        // Check if lock threshold is reached
+////        if (newAttemptCount >= MAX_FAILED_ATTEMPTS) {
+////            // Call internal method directly using 'this' (will participate in the current transaction)
+////            this.lockUserAccount(user.getUserId()); // Pass ID for consistency
+////        }
+//        throw new UnsupportedOperationException("Local failed login tracking is deprecated.");
+//    }
 
     /**
      * Locks a user account by setting the lock status and timestamp.
@@ -547,15 +598,17 @@ public class UserServiceImpl implements UserService, UserDetailsService {
      *
      * @param userId The ID of the user to lock.
      */
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict user details cache
-    @Override
-    public void lockUserAccount(Long userId) {
-        Instant lockTime = Instant.now();
-        // Use targeted repository update
-        userRepository.updateAccountLockStatus(userId, false, lockTime); // false means locked
-        log.warn("Locked account for user ID: {} at {}", userId, lockTime);
-    }
+//    @Transactional
+//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict user details cache
+//    @Override
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    public void lockUserAccount(Long userId) {
+////        Instant lockTime = Instant.now();
+////        // Use targeted repository update
+////        userRepository.updateAccountLockStatus(userId, false, lockTime); // false means locked
+////        log.warn("Locked account for user ID: {} at {}", userId, lockTime);
+//        throw new UnsupportedOperationException("Local account locking is deprecated.");
+//    }
 
     /**
      * Unlocks a user account if the lock duration has expired.
@@ -566,47 +619,49 @@ public class UserServiceImpl implements UserService, UserDetailsService {
      * @return true if the account was unlocked, false otherwise.
      * @throws UserNotFoundException If the user is not found.
      */
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict on potential unlock
-    @Override
-    public boolean unlockAccountIfExpired(Long userId) {
-        User user = this.getUserById(userId); // Fetch fresh state (uses cache if available)
-        AccountStatus status = user.getAccountStatus();
-
-        // Check if already unlocked (accountNonLocked is true)
-        if (status.isAccountNonLocked()) {
-            log.trace("Account for user ID {} is already unlocked.", userId);
-            return false; // Already unlocked, nothing to do
-        }
-
-        // Account is locked, check lock timestamp
-        Instant lockTime = status.getLockTime();
-        if (lockTime != null) {
-            long lockTimeMillis = lockTime.toEpochMilli();
-            long currentTimeMillis = System.currentTimeMillis(); // Use System.currentTimeMillis for efficiency
-
-            // Check if lock duration has passed
-            if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
-                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock timestamp
-                userRepository.updateAccountLockStatus(userId, true, null);
-                // Also reset failed attempts upon successful unlock
-                this.resetFailedLoginAttempts(userId); // Call the existing method (already transactional and evicts cache)
-                log.info("Unlocked account for user ID: {} due to lock expiration.", userId);
-                return true; // Account was unlocked
-            } else {
-                log.trace("Lock duration not yet expired for user ID {}.", userId);
-            }
-        } else {
-            // Handle inconsistency: account is locked but has no lock timestamp
-            log.warn("User ID {} is locked but has no lock timestamp recorded. Unlocking as a safety measure.", userId);
-            // For safety, let's unlock if lockTime is null, but the account is locked
-            userRepository.updateAccountLockStatus(userId, true, null);
-            this.resetFailedLoginAttempts(userId);
-            log.info("Unlocked account for user ID: {} due to missing lock timestamp.", userId);
-            return true; // Account was unlocked (due to inconsistency handling)
-        }
-        return false; // Account remains locked (duration not expired)
-    }
+//    @Transactional
+//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict on potential unlock
+//    @Override
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    public boolean unlockAccountIfExpired(Long userId) {
+//        User user = this.getUserById(userId); // Fetch fresh state (uses cache if available)
+////        AccountStatus status = user.getAccountStatus();
+////
+////        // Check if already unlocked (accountNonLocked is true)
+////        if (status.isAccountNonLocked()) {
+////            log.trace("Account for user ID {} is already unlocked.", userId);
+////
+////            throw new UnsupportedOperationException("Local account unlocking is deprecated.");
+////        }
+////
+////        // Account is locked, check lock timestamp
+////        Instant lockTime = status.getLockTime();
+////        if (lockTime != null) {
+////            long lockTimeMillis = lockTime.toEpochMilli();
+////            long currentTimeMillis = System.currentTimeMillis(); // Use System.currentTimeMillis for efficiency
+////
+////            // Check if lock duration has passed
+////            if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
+////                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock timestamp
+////                userRepository.updateAccountLockStatus(userId, true, null);
+////                // Also reset failed attempts upon successful unlock
+////                this.resetFailedLoginAttempts(userId); // Call the existing method (already transactional and evicts cache)
+////                log.info("Unlocked account for user ID: {} due to lock expiration.", userId);
+////                throw new UnsupportedOperationException("Local account unlocking is deprecated.");
+////            } else {
+////                log.trace("Lock duration not yet expired for user ID {}.", userId);
+////            }
+////        } else {
+////            // Handle inconsistency: account is locked but has no lock timestamp
+////            log.warn("User ID {} is locked but has no lock timestamp recorded. Unlocking as a safety measure.", userId);
+////            // For safety, let's unlock if lockTime is null, but the account is locked
+////            userRepository.updateAccountLockStatus(userId, true, null);
+////            this.resetFailedLoginAttempts(userId);
+////            log.info("Unlocked account for user ID: {} due to missing lock timestamp.", userId);
+////            throw new UnsupportedOperationException("Local account unlocking is deprecated.");
+////        }
+//        throw new UnsupportedOperationException("Local account unlocking is deprecated.");
+//    }
 
     /**
      * Resets the failed login attempt count for a user to zero.
@@ -614,20 +669,23 @@ public class UserServiceImpl implements UserService, UserDetailsService {
      *
      * @param userId The ID of the user.
      */
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
-    @Override
-    public void resetFailedLoginAttempts(Long userId) {
-        // Use targeted repository update
-        userRepository.updateFailedLoginAttempts(userId, 0);
-        log.debug("Reset failed login attempts for user ID: {}", userId);
-    }
-
-    // Removed redundant resetFailedLogins (was identical to resetFailedLoginAttempts)
+//    @Transactional
+//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
+//    @Override
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    public void resetFailedLoginAttempts(Long userId) {
+////        // Use targeted repository update
+////        userRepository.updateFailedLoginAttempts(userId, 0);
+////        log.debug("Reset failed login attempts for user ID: {}", userId);
+//        throw new UnsupportedOperationException("Local failed login attempt reset is deprecated.");
+//    }
 
     /**
      * Updates the last login timestamp for a user to the current time.
-     * Evicts relevant caches. Uses a targeted repository update.
+     * Tracks Amlume-shop access time, distinct from AuthServer
+     * It should be called by the OidcUserService/OAuth2UserService after successful OAuth2 login.
+     * Evicts relevant caches.
+     * It uses a targeted repository update.
      *
      * @param userId The ID of the user.
      */
@@ -635,16 +693,9 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
     @Override
     public void updateLastLoginTime(Long userId) {
+        Assert.notNull(userId, "User ID must not be null");
         // Use targeted repository update
         userRepository.updateLastLoginTime(userId, Instant.now());
-        log.trace("Updated last login timestamp for user ID: {}", userId);
+        log.trace("Updated last login timestamp for local user ID: {}", userId);
     }
-
-    // --- Validation Helper (Use with caution) ---
-
-//    // This is a very basic check. Consider if it's truly necessary
-//    // or if DTO validation covers requirements.
-//    public boolean isValidUserDto(UserDTO user) {
-//        return user != null && user.getUserId() != null && user.username() != null && user.userEmail() != null;
-//    }
 }

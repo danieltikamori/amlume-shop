@@ -15,13 +15,9 @@ import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.user_management.dto.UserProfileUpdateRequest;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
-
-import static me.amlu.shop.amlume_shop.commons.Constants.CURRENT_USER_CACHE;
-import static me.amlu.shop.amlume_shop.commons.Constants.USERS_CACHE;
 
 public interface UserService {
 
@@ -31,7 +27,7 @@ public interface UserService {
      * @param request The user registration request DTO.
      * @return The newly created and saved User entity with admin roles.
      * @throws UserAlreadyExistsException If the username or email is already taken.
-     * @throws RoleNotFoundException (Potentially, if role logic changes)
+     * @throws RoleNotFoundException      (Potentially, if role logic changes)
      */
     User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException;
 
@@ -45,62 +41,44 @@ public interface UserService {
 
     User getUserById(Long userId);
 
-//    User getUserByUsername(String username);
-
-    User getUserByEmail(String email);
-
-    User getUserByUsernameOrEmail(String usernameOrEmail);
-
-//    User getUserProfile(Long userId);
-
-//    UserDetails getUserDetails(String userId);
-
-//    User createUser(User user);
-
-//    User updateUser(User user);
-
     UserDetails getUserDetails(Long userId);
 
-//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict relevant caches
     User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest);
 
     void deleteUser(Long userId);
 
-    boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
 
-    boolean existsByUsernameOrEmail(String username, String email);
-
     boolean existsById(Long userId);
 
-    User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException;
+//    @Deprecated(since = "2025-05-15", forRemoval = true)
+//    User registerUser(@Valid UserRegistrationRequest request) throws RoleNotFoundException;
 
 //    boolean authenticateUser(String username, String password);
 
-    User findUserByUsername(String username);
+    User findUserByEmail(String username);
 
 //    boolean hasRole(User user, UserRole role);
 
     boolean hasRole(User user, String role);
 
-    @Transactional
-        // Ensure atomicity
-    void incrementFailedLogins(String username);
+//    @Transactional
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    void incrementFailedLogins(String username);
+//
+//    @Transactional
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    void lockUserAccount(Long userId);
+//
+//    @Transactional
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    boolean unlockAccountIfExpired(Long userId);
+//
+//    @Transactional
+//    @Deprecated(since = "2025-05-16", forRemoval = true)
+//    void resetFailedLoginAttempts(Long userId);
 
     @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
-    void lockUserAccount(Long userId);
-
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
-    boolean unlockAccountIfExpired(Long userId);
-
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
-    void resetFailedLoginAttempts(Long userId);
-
-    @Transactional
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict relevant caches
     void updateLastLoginTime(Long userId);
 }
