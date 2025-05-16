@@ -14,8 +14,8 @@ import com.google.i18n.phonenumbers.Phonenumber;
 import jakarta.persistence.*;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.model.BaseEntity;
-import me.amlu.shop.amlume_shop.security.model.RefreshToken;
 import me.amlu.shop.amlume_shop.product_management.Product;
+import me.amlu.shop.amlume_shop.security.model.RefreshToken;
 import me.amlu.shop.amlume_shop.user_management.address.Address;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
@@ -45,6 +45,11 @@ public class User extends BaseEntity implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long userId;
+
+    @Column(name = "auth_server_subject_id", unique = true, nullable = true)
+    // Nullable until first login via authserver
+    private String authServerSubjectId;
+
 
     @Embedded
     // Override the column name for the 'username' field within AuthenticationInfo
@@ -145,6 +150,7 @@ public class User extends BaseEntity implements UserDetails {
     private User(UserBuilder<?, ?> b) {
         super(b); // Call superclass constructor
         this.userId = b.userId;
+        this.authServerSubjectId = b.authServerSubjectId;
         this.authenticationInfo = b.authenticationInfo;
         this.contactInfo = b.contactInfo;
         this.accountStatus = b.accountStatus;
@@ -230,6 +236,11 @@ public class User extends BaseEntity implements UserDetails {
     public Long getUserId() {
         return this.userId;
     }
+
+    public String getAuthServerSubjectId() {
+        return this.authServerSubjectId;
+    }
+
 
     public AuthenticationInfo getAuthenticationInfo() {
         return this.authenticationInfo;
@@ -320,6 +331,7 @@ public class User extends BaseEntity implements UserDetails {
         // Exclude collections and embedded objects from toString to avoid lazy loading issues or cycles
         return "User(" +
                 "userId=" + this.userId +
+                ", authServerSubjectId=" + (this.authServerSubjectId != null ? "present" : "null") +
                 ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
                 ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
                 ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
@@ -342,7 +354,7 @@ public class User extends BaseEntity implements UserDetails {
         if (this.roles == null) { // Paranoid check, should be initialized
             this.roles = new HashSet<>();
         }
-        if (role != null && !this.roles.contains(role)) {
+        if (role != null) {
             this.roles.add(role);
             // If UserRole had a back-reference to User, set it here: role.setUser(this);
         }
@@ -529,6 +541,14 @@ public class User extends BaseEntity implements UserDetails {
         return this.userId;
     }
 
+    public String getSubjectId() {
+        return this.authServerSubjectId;
+    }
+
+    public void updateAuthServerSubjectId(String authServerSubjectId) {
+        this.authServerSubjectId = Objects.requireNonNull(authServerSubjectId, "authServerSubjectId cannot be null");
+    }
+
     // Simple role check helper
     public boolean hasRole(UserRole role) {
         return roles != null && roles.contains(role);
@@ -554,6 +574,7 @@ public class User extends BaseEntity implements UserDetails {
     public static abstract class UserBuilder<C extends User, B extends UserBuilder<C, B>> extends BaseEntityBuilder<C, B> {
         // Fields remain in the builder to hold values during construction
         private Long userId;
+        private String authServerSubjectId;
         private AuthenticationInfo authenticationInfo;
         private ContactInfo contactInfo;
         private AccountStatus accountStatus;
@@ -570,6 +591,11 @@ public class User extends BaseEntity implements UserDetails {
         // Builder methods (Keep as is - these set values *on the builder*)
         public B userId(Long userId) {
             this.userId = userId;
+            return self();
+        }
+
+        public B authServerSubjectId(String authServerSubjectId) {
+            this.authServerSubjectId = authServerSubjectId;
             return self();
         }
 
@@ -641,7 +667,9 @@ public class User extends BaseEntity implements UserDetails {
         public String toString() {
             // toString for builder is okay to show contained values
             return "User.UserBuilder(super=" + super.toString() +
-                    ", userId=" + this.userId + ", authenticationInfo=" + this.authenticationInfo +
+                    ", userId=" + this.userId + "," +
+                    " authServerSubjectId=" + this.authServerSubjectId +
+                    " authenticationInfo=" + this.authenticationInfo +
                     ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus +
                     ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
                     ", locationInfo=" + this.locationInfo + ", roles=" + this.roles +
