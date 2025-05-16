@@ -17,6 +17,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+// REMOVED: import java.lang.ScopedValue; // Not needed for this repository method
 import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
@@ -25,69 +26,31 @@ import java.util.Set;
 public interface UserRepository extends JpaRepository<User, Long> {
 
     // --- Standard Finders ---
-    Optional<User> findByUserId(Long userId); // Keep standard findById just in case
+    Optional<User> findByUserId(Long userId);
 
     // --- Finders based on Embedded Objects ---
 
     /**
-     * Finds a user by their username string stored within the AuthenticationInfo.Username embedded object.
-     * Uses property expression: authenticationInfo.username.username (assuming Username VO has a 'username' field)
-     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
-     *
-     * @param username The username string to search for.
-     * @return An Optional containing the User if found.
-     */
-    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username")
-    Optional<User> findByAuthenticationInfoUsername_Username(@Param("username") String username); // FIX: Added @Query and @Param
-
-    default Optional<User> findByUsername(Username username) {
-        return findByAuthenticationInfoUsername_Username(username.getUsername());
-    }
-
-    /**
      * Finds a user by their email address stored within the ContactInfo.UserEmail embedded object.
+     * This email is considered the primary email for the amlume-shop user.
      *
      * @param email The email address to search for.
      * @return An Optional containing the User if found.
      */
     Optional<User> findByContactInfoUserEmailEmail(String email);
 
-    default Optional<User> findByEmail(String email) {
-        return findByContactInfoUserEmailEmail(email);
-    }
-
+    // --- CORRECTED: Method to find user by authServerSubjectId ---
     /**
-     * Finds a user by either their username string or email address.
-     * Uses property expression: authenticationInfo.username.username
-     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
+     * Finds a user by their authServerSubjectId.
+     * This ID is the 'sub' claim from the JWT issued by the authserver,
+     * linking the local amlume-shop user to the central authserver identity.
      *
-     * @param username The username string to search for.
-     * @param email    The email address to search for.
-     * @return An Optional containing the User if found by either identifier.
+     * @param authServerSubjectId The subject ID from the authserver.
+     * @return An Optional containing the User if found.
      */
-    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username OR u.contactInfo.userEmail.email = :email")
-    Optional<User> findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(@Param("username") String username, @Param("email") String email); // FIX: Added @Query and @Param
+    Optional<User> findByAuthServerSubjectId(String authServerSubjectId);
+    // --- END CORRECTION ---
 
-    default Optional<User> findByUsernameOrEmail(Username username, String email) {
-        return findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(username.getUsername(), email);
-    }
-
-    // --- Existence Checks based on Embedded Objects ---
-
-    /**
-     * Checks if a user exists with the given username string.
-     * Uses property expression: authenticationInfo.username.username
-     * Added @Query to resolve potential issues with derived query generation for nested embeddables.
-     *
-     * @param username The username string to check.
-     * @return true if a user with the username exists, false otherwise.
-     */
-    @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.authenticationInfo.username.username = :username")
-    boolean existsByAuthenticationInfoUsername_Username(@Param("username") String username); // FIX: Added @Query and @Param
-
-    default boolean existsByUsername(Username username) {
-        return existsByAuthenticationInfoUsername_Username(username.getUsername());
-    }
 
     /**
      * Checks if a user exists with the given email address.
@@ -97,9 +60,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     boolean existsByContactInfoUserEmailEmail(String email);
 
-    default boolean existsByEmail(String email) {
-        return existsByContactInfoUserEmailEmail(email);
-    }
+    /**
+     * Checks if a user exists with the given authServerSubjectId.
+     *
+     * @param authServerSubjectId The subject ID from the authserver.
+     * @return true if a user with this authServerSubjectId exists, false otherwise.
+     */
+    boolean existsByAuthServerSubjectId(String authServerSubjectId);
+
 
     // --- Custom Queries ---
 
@@ -118,80 +86,107 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /**
      * Updates the failed login attempt count for a user.
+     * (This method should be deprecated/removed as authserver handles this)
      *
      * @param userId              The ID of the user to update.
      * @param failedLoginAttempts The new count of failed attempts.
      */
+    @Deprecated(since = "OAuth2-Integration", forRemoval = true)
     @Modifying
-    @Transactional // Add Transactional if called outside a transactional service method
+    @Transactional
     @Query("UPDATE User u SET u.accountStatus.failedLoginAttempts = :failedLoginAttempts WHERE u.userId = :userId")
     void updateFailedLoginAttempts(@Param("userId") Long userId, @Param("failedLoginAttempts") int failedLoginAttempts);
 
     /**
      * Updates the account lock status and lock timestamp for a user.
+     * (This method should be deprecated/removed as authserver handles this)
      *
      * @param userId        The ID of the user to update.
      * @param accountNonLocked The new lock status (true means NOT locked, false means locked).
      * @param lockTime      The timestamp when the lock was applied (null if unlocking).
      */
+    @Deprecated(since = "OAuth2-Integration", forRemoval = true)
     @Modifying
-    @Transactional // Add Transactional if called outside a transactional service method
+    @Transactional
     @Query("UPDATE User u SET u.accountStatus.accountNonLocked = :accountNonLocked, u.accountStatus.lockTime = :lockTime WHERE u.userId = :userId")
     void updateAccountLockStatus(@Param("userId") Long userId, @Param("accountNonLocked") boolean accountNonLocked, @Param("lockTime") Instant lockTime);
 
 
     /**
      * Unlocks a user account by setting locked status to true (not locked), clearing lock timestamp, and resetting failed attempts.
+     * (This method should be deprecated/removed as authserver handles this)
      *
      * @param userId The ID of the user to unlock.
      */
+    @Deprecated(since = "OAuth2-Integration", forRemoval = true)
     @Modifying
-    @Transactional // Add Transactional if called outside a transactional service method
+    @Transactional
     @Query("UPDATE User u SET u.accountStatus.accountNonLocked = true, u.accountStatus.lockTime = null, u.accountStatus.failedLoginAttempts = 0 WHERE u.userId = :userId")
     void unlockUser(@Param("userId") Long userId);
 
     /**
      * Updates the user's password.
      * IMPORTANT: The newPassword provided MUST be already encoded/hashed.
+     * (This method should be deprecated/removed as authserver handles this)
      *
      * @param userId      The ID of the user whose password is to be updated.
      * @param newPassword The new, encoded password (as a UserPassword object).
      */
+    @Deprecated(since = "OAuth2-Integration", forRemoval = true)
     @Modifying
-    @Transactional // Add Transactional if called outside a transactional service method
+    @Transactional
     @Query("UPDATE User u SET u.authenticationInfo.password = :newPassword WHERE u.userId = :userId")
     void updatePassword(@Param("userId") Long userId, @Param("newPassword") UserPassword newPassword);
 
     /**
      * Updates the last login timestamp for a user.
+     * This tracks amlume-shop specific access time.
      *
      * @param userId The ID of the user to update.
      * @param now    The current timestamp to set as the last login timestamp.
      */
     @Modifying
-    @Transactional // Add Transactional if called outside a transactional service method
+    @Transactional
     @Query("UPDATE User u SET u.accountStatus.lastLoginTime = :now WHERE u.userId = :userId")
     void updateLastLoginTime(@Param("userId") Long userId, @Param("now") Instant now);
 
 
-    // --- Potentially Unused / To Be Reviewed ---
+    // --- Methods to be removed (related to old local username concept) ---
 
-    // Optional<User> findByRefreshToken(String hashpw); // Review if refresh tokens are stored differently
+    /**
+     * @deprecated Username field is being removed. Use findByContactInfoUserEmailEmail or findByAuthServerSubjectId.
+     */
+    @Deprecated(since = "OAuth2-Integration-Username-Removal", forRemoval = true)
+    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username")
+    Optional<User> findByAuthenticationInfoUsername_Username(@Param("username") String username);
 
-    // @Modifying
-    // @Query("UPDATE User u SET u.refreshToken = :refreshToken WHERE u.userId = :userId")
-    // void updateRefreshToken(@Param("userId") Long userId, @Param("refreshToken") String refreshToken); // Review: User entity doesn't show refreshToken field
+    /**
+     * @deprecated Username field is being removed. Use findByContactInfoUserEmailEmail or findByAuthServerSubjectId.
+     */
+    @Deprecated(since = "OAuth2-Integration-Username-Removal", forRemoval = true)
+    default Optional<User> findByUsername(Username username) {
+        return findByAuthenticationInfoUsername_Username(username.getUsername());
+    }
 
-    // @Modifying
-    // @Query("UPDATE User u SET u.refreshToken = null WHERE u.userId = :userId")
-    // void clearRefreshToken(@Param("userId") Long userId); // Review: User entity doesn't show refreshToken field
+    /**
+     * @deprecated Username field is being removed. Use findByContactInfoUserEmailEmail or findByAuthServerSubjectId.
+     */
+    @Deprecated(since = "OAuth2-Integration-Username-Removal", forRemoval = true)
+    @Query("SELECT u FROM User u WHERE u.authenticationInfo.username.username = :username OR u.contactInfo.userEmail.email = :email")
+    Optional<User> findByAuthenticationInfoUsername_UsernameOrContactInfoUserEmailEmail(@Param("username") String username, @Param("email") String email);
 
-    // UserDetails findUserDetails(Long userId); // Review if needed, findById returns User which is UserDetails
+    /**
+     * @deprecated Username field is being removed. Use existsByContactInfoUserEmailEmail or existsByAuthServerSubjectId.
+     */
+    @Deprecated(since = "OAuth2-Integration-Username-Removal", forRemoval = true)
+    @Query("SELECT COUNT(u) > 0 FROM User u WHERE u.authenticationInfo.username.username = :username")
+    boolean existsByAuthenticationInfoUsername_Username(@Param("username") String username);
 
-    // --- Removed Methods ---
-    // Removed existsByUsername, findByEmail, findByUsername, findByUsernameOrEmail (use embedded object paths)
-    // Removed existsByContactInfoEmail (use existsByContactInfoUserEmailEmail)
-    // Removed findAuthenticationInfoByUsername (conflicting AuthenticationInfo class)
-    // Removed updateAuthenticationInfo (conflicting AuthenticationInfo class)
-    // Removed update(User profile) (non-standard JPA method)
+    /**
+     * @deprecated Username field is being removed. Use existsByContactInfoUserEmailEmail or existsByAuthServerSubjectId.
+     */
+    @Deprecated(since = "OAuth2-Integration-Username-Removal", forRemoval = true)
+    default boolean existsByUsername(Username username) {
+        return existsByAuthenticationInfoUsername_Username(username.getUsername());
+    }
 }
