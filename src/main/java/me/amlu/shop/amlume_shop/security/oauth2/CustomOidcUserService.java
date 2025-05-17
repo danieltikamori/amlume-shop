@@ -10,7 +10,6 @@
 
 package me.amlu.shop.amlume_shop.security.oauth2;
 
-import com.google.i18n.phonenumbers.Phonenumber;
 import me.amlu.shop.amlume_shop.user_management.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,42 +51,75 @@ public class CustomOidcUserService extends OidcUserService {
         // For authserver, 'user_id_numeric' is the stable internal ID.
         Object authServerSubjectIdObject = attributes.get("user_id_numeric");
         if (authServerSubjectIdObject == null) {
-            log.error("Claim 'user_id_numeric' (authserver subject ID) not found in OIDC token attributes for user: {}", oidcUser.getName());
-            throw new OAuth2AuthenticationException("Missing 'user_id_numeric' claim in OIDC token.");
+            log.error("Claim 'user_id_numeric' not found for OIDC user: {}", oidcUser.getName());
+            throw new OAuth2AuthenticationException("Missing 'user_id_numeric' claim.");
         }
         String authServerSubjectId = String.valueOf(authServerSubjectIdObject);
+        String emailFromToken = oidcUser.getEmail();
 
-        String email = oidcUser.getEmail(); // Standard OIDC claim (also in the custom claims)
+        if (!StringUtils.hasText(emailFromToken)) {
+            log.error("Email claim is missing or empty for user with authServerSubjectId: {}. Cannot provision.", authServerSubjectId);
+            throw new OAuth2AuthenticationException("Email claim is required for provisioning user.");
+        }
+
         String firstName = oidcUser.getGivenName(); // Standard OIDC claim
         String lastName = oidcUser.getFamilyName(); // Standard OIDC claim
         String nickname = oidcUser.getNickName(); // Standard OIDC claim (or preferred_username)
-        // You also have 'full_name' claim, which could be used if given_name/family_name are not standardly populated by all IdPs
+        // We also have 'full_name' claim, which could be used if given_name/family_name are not standardly populated by all IdPs
         // String fullNameFromToken = (String) attributes.get("full_name");
 
         // Extract roles - authserver puts roles like "USER", "ADMIN" into the 'roles' claim
         @SuppressWarnings("unchecked")
         Collection<String> rolesFromToken = (Collection<String>) attributes.getOrDefault("roles", new HashSet<String>());
 
-        // 3. Find or create the local amlume-shop User
-        Optional<User> userOptional = userRepository.findByAuthServerSubjectId(authServerSubjectId);
         User shopUser;
 
-        if (userOptional.isEmpty()) {
-            // User does not exist locally, provision a new one
-            log.info("User with authServerSubjectId '{}' not found locally. Provisioning new user.", authServerSubjectId);
-            shopUser = createNewShopUser(authServerSubjectId, email, firstName, lastName, nickname, rolesFromToken);
+        // 4. Try to find user by the definitive authServerSubjectId
+        Optional<User> userBySubjectIdOptional = userRepository.findByAuthServerSubjectId(authServerSubjectId);
+
+        if (userBySubjectIdOptional.isPresent()) {
+            // User already linked to this authServerSubjectId. Update their details.
+            shopUser = userBySubjectIdOptional.get();
+            log.debug("Found existing local user '{}' by authServerSubjectId '{}'. Updating details.", shopUser.getUsername(), authServerSubjectId);
+            shopUser = updateExistingShopUser(shopUser, emailFromToken, firstName, lastName, nickname, rolesFromToken);
         } else {
-            // User exists, update their details if necessary
-            shopUser = userOptional.get();
-            log.debug("Found existing local user '{}' for authServerSubjectId '{}'. Updating details.", shopUser.getUsername(), authServerSubjectId);
-            shopUser = updateExistingShopUser(shopUser, email, firstName, lastName, nickname, rolesFromToken);
+            // No user found for this authServerSubjectId. This is a new IdP login for amlume-shop.
+            // Now, check if the email from the token is ALREADY IN USE by another local account.
+            Optional<User> userByEmailOptional = userRepository.findByContactInfoUserEmailEmail(emailFromToken);
+
+            if (userByEmailOptional.isPresent()) {
+                User existingUserWithEmail = userByEmailOptional.get();
+                // Email is in use.
+                if (existingUserWithEmail.getAuthServerSubjectId() == null || existingUserWithEmail.getAuthServerSubjectId().isEmpty()) {
+                    // Scenario: Email exists locally, but NOT linked to any authServerSubjectId.
+                    // This local account might have been created before OAuth2, or by an admin.
+                    // Action: Link this existing local account to the new authServerSubjectId.
+                    log.info("Email {} (from token for new authSubId {}) found in local user (ID: {}) without an authSubId. Linking accounts.",
+                            emailFromToken, authServerSubjectId, existingUserWithEmail.getUserId());
+                    existingUserWithEmail.updateAuthServerSubjectId(authServerSubjectId); // Ensure User entity has this method
+                    shopUser = updateExistingShopUser(existingUserWithEmail, emailFromToken, firstName, lastName, nickname, rolesFromToken); // Update other details
+                } else {
+                    // Scenario: Email exists locally AND IS ALREADY LINKED to a DIFFERENT authServerSubjectId.
+                    // This is a more serious conflict. The email from the token is claimed by another IdP-linked user.
+                    log.error("CRITICAL CONFLICT: Email {} (from token for new authSubId {}) is already linked to a different local user (ID: {}, existingAuthSubId: {}).",
+                            emailFromToken, authServerSubjectId, existingUserWithEmail.getUserId(), existingUserWithEmail.getAuthServerSubjectId());
+                    // Policy: Deny login. This is the safest approach, prevents one IdP user from "taking over" an email linked to another or unintended linking.
+                    throw new OAuth2AuthenticationException(
+                            String.format("Email '%s' is already associated with another authenticated account. Please contact support.", emailFromToken)
+                    );
+                }
+            } else {
+                // Email is not in use locally by any account. Provision a brand new user.
+                log.info("User with authServerSubjectId '{}' (email: {}) not found locally. Provisioning new user.", authServerSubjectId, emailFromToken);
+                shopUser = createNewShopUser(authServerSubjectId, emailFromToken, firstName, lastName, nickname, rolesFromToken);
+            }
         }
 
-        // 4. Update last login time for amlume-shop access
+        // 5. Update last login time for amlume-shop access
         userService.updateLastLoginTime(shopUser.getUserId());
         log.debug("Updated amlume-shop last access time for user: {}", shopUser.getUsername());
 
-        // 5. Return a custom OidcUser implementation that wraps the amlume-shop User
+        // 6. Return a custom OidcUser implementation that wraps the amlume-shop User
         return new ShopOidcUser(shopUser, oidcUser);
     }
 
@@ -153,56 +185,53 @@ public class CustomOidcUserService extends OidcUserService {
                                         String lastNameFromToken, String nicknameFromToken, Collection<String> rolesFromToken) {
         boolean overallUpdated = false;
 
-        // --- Update contact info --- if changed (assuming authserver is the source of truth for these)
         ContactInfo currentContactInfo = existingUser.getContactInfo();
-        // Initialize with current values
-        String effectiveEmail = (currentContactInfo != null && currentContactInfo.getUserEmailObject() != null) ? currentContactInfo.getUserEmailObject().getEmail() : null;
-        String effectiveFirstName = (currentContactInfo != null) ? currentContactInfo.getFirstName() : null;
-        String effectiveLastName = (currentContactInfo != null) ? currentContactInfo.getLastName() : null;
-        String effectiveNickname = (currentContactInfo != null) ? currentContactInfo.getNickname() : null;
-        boolean effectiveEmailVerified = (currentContactInfo != null) && currentContactInfo.isEmailVerified();
-        Phonenumber.PhoneNumber effectivePhoneNumber = (currentContactInfo != null) ? currentContactInfo.getPhoneNumber() : null;
+        ContactInfo.ContactInfoBuilder contactInfoBuilder = ContactInfo.builder() // Start with a fresh builder
+                .firstName(currentContactInfo.getFirstName())
+                .lastName(currentContactInfo.getLastName())
+                .nickname(currentContactInfo.getNickname())
+                .userEmail(currentContactInfo.getUserEmailObject())
+                .emailVerified(currentContactInfo.isEmailVerified())
+                .phoneNumber(currentContactInfo.getPhoneNumber());
 
-        boolean contactInfoChanged = false;
 
-        if (StringUtils.hasText(emailFromToken) && !Objects.equals(emailFromToken, effectiveEmail)) {
-            effectiveEmail = emailFromToken;
-            contactInfoChanged = true;
-            effectiveEmailVerified = true; // Email from IdP is considered verified
+        // --- Email Update Logic ---
+        if (StringUtils.hasText(emailFromToken) && !emailFromToken.equals(currentContactInfo.getEmail())) {
+            // Email from token is different. Check if this new email is already used by ANOTHER user.
+            Optional<User> otherUserWithNewEmail = userRepository.findByContactInfoUserEmailEmail(emailFromToken);
+            if (otherUserWithNewEmail.isPresent() && !Objects.equals(otherUserWithNewEmail.get().getAuthServerSubjectId(), existingUser.getAuthServerSubjectId())) {
+                // The new email is taken by a different user. Log and DO NOT update email.
+                log.warn("User (authSubId: {}) attempted to update email to '{}', but it's already in use by another user (authSubId: {}). Email update skipped.",
+                        existingUser.getAuthServerSubjectId(), emailFromToken, otherUserWithNewEmail.get().getAuthServerSubjectId());
+            } else {
+                // New email is not taken by another user, or it's the same user (e.g., case change)
+                contactInfoBuilder.userEmail(new UserEmail(emailFromToken));
+                contactInfoBuilder.emailVerified(true); // Email from IdP is considered verified
+                overallUpdated = true;
+            }
         }
-        if (StringUtils.hasText(firstNameFromToken) && !Objects.equals(firstNameFromToken, effectiveFirstName)) {
-            effectiveFirstName = firstNameFromToken;
-            contactInfoChanged = true;
-        }
-        // For lastName and nickname, an empty string from token might mean "clear", null means "no change"
-        if (lastNameFromToken != null && !Objects.equals(lastNameFromToken, effectiveLastName)) {
-            effectiveLastName = lastNameFromToken; // Allow setting to "" or a value
-            contactInfoChanged = true;
-        }
-        if (nicknameFromToken != null && !Objects.equals(nicknameFromToken, effectiveNickname)) {
-            effectiveNickname = nicknameFromToken;
-            contactInfoChanged = true;
-        }
+        // --- End Email Update Logic ---
 
-        if (contactInfoChanged) {
-            ContactInfo updatedContactInfo = ContactInfo.builder()
-                    .userEmail(effectiveEmail != null ? new UserEmail(effectiveEmail) : null)
-                    .firstName(effectiveFirstName)
-                    .lastName(effectiveLastName)
-                    .nickname(effectiveNickname)
-                    .emailVerified(effectiveEmailVerified) // Use the (potentially updated) verification status
-                    .phoneNumber(effectivePhoneNumber) // Preserve existing phone number
-                    .build();
-            existingUser.updateContactInfo(updatedContactInfo);
+        if (StringUtils.hasText(firstNameFromToken) && !Objects.equals(firstNameFromToken, currentContactInfo.getFirstName())) {
+            contactInfoBuilder.firstName(firstNameFromToken);
+            overallUpdated = true;
+        }
+        if (lastNameFromToken != null && !Objects.equals(lastNameFromToken, currentContactInfo.getLastName())) {
+            contactInfoBuilder.lastName(lastNameFromToken);
+            overallUpdated = true;
+        }
+        if (nicknameFromToken != null && !Objects.equals(nicknameFromToken, currentContactInfo.getNickname())) {
+            contactInfoBuilder.nickname(nicknameFromToken);
             overallUpdated = true;
         }
 
-        // --- Update Roles ---
+        if (overallUpdated) { // Only update if any of the above fields actually changed the builder
+            existingUser.updateContactInfo(contactInfoBuilder.build());
+        }
+
+        // --- Update Roles --- (logic remains similar)
         Set<UserRole> newShopRoles = mapRoles(rolesFromToken);
         Set<UserRole> currentShopRoles = existingUser.getRoles() != null ? new HashSet<>(existingUser.getRoles()) : new HashSet<>();
-
-        // Only update roles if they have actually changed and new roles are not empty
-        // (to avoid removing all roles if token has no roles but user had local ones)
         if (!newShopRoles.isEmpty() && !currentShopRoles.equals(newShopRoles)) {
             existingUser.createRoleSet(newShopRoles);
             overallUpdated = true;
