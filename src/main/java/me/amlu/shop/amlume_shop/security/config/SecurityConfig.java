@@ -11,8 +11,7 @@
 package me.amlu.shop.amlume_shop.security.config;
 
 import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
-// REMOVE: Custom filter imports if they are no longer needed (most likely)
-// import me.amlu.shop.amlume_shop.filter.*;
+import me.amlu.shop.amlume_shop.security.oauth2.CustomOidcUserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,13 +20,10 @@ import org.springframework.core.annotation.Order;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
-// REMOVE: AuthenticationManager imports if not explicitly needed by remaining custom components
-// import org.springframework.security.authentication.AuthenticationManager;
-// import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer; // Import for disabling CSRF/formLogin concisely
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
@@ -35,11 +31,6 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-// REMOVE: Session registry beans if using STATELESS policy
-// import org.springframework.security.core.session.SessionRegistry;
-// import org.springframework.security.core.session.SessionRegistryImpl;
-// import org.springframework.boot.web.servlet.ServletListenerRegistrationBean;
-// import org.springframework.security.web.session.HttpSessionEventPublisher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -50,40 +41,24 @@ import java.util.stream.Collectors;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true, securedEnabled = true) // Keep method security
-// REMOVE: @EnableAsync if only used for removed components
-@Profile("local") // Keep profile if needed
+@Profile("local")
 public class SecurityConfig {
 
-    // REMOVE: maxConcurrentSessions if using STATELESS
-    // private final int maxConcurrentSessions;
-
-    // REMOVE: AuthenticationConfiguration, custom filters, AuthenticationManager if not needed
-    // private final AuthenticationConfiguration authenticationConfiguration;
-    // private final GlobalRateLimitingFilter globalRateLimitingFilter;
-    // private final DeviceFingerprintVerificationFilter deviceFingerprintVerificationFilter;
-    // private final AuthenticationManager authenticationManager;
-
-    // --- Values for Opaque Tokens
-
-//        @Value("${spring.security.oauth2.resourceserver.opaque.introspection-uri}")
-//    String introspectionUri;
-//
-//    @Value("${spring.security.oauth2.resourceserver.opaque.introspection-client-id}")
-//    String clientId;
-//
-//    @Value("${spring.security.oauth2.resourceserver.opaque.introspection-client-secret}")
-//    String clientSecret;
+    private final CustomOidcUserService customOidcUserService;
+    private final CorsConfigurationSource corsConfigurationSource; // Assuming you have this bean
+    private final JwtAuthenticationConverter jwtAuthenticationConverter; // Assuming you have this bean
 
     @Value("${cors.allowed-origins}")
     private List<String> allowedOrigins;
 
     // --- Simplified Constructor ---
-    public SecurityConfig(@Value("${cors.allowed-origins}") List<String> allowedOrigins) {
+    public SecurityConfig(CustomOidcUserService customOidcUserService, CorsConfigurationSource corsConfigurationSource, JwtAuthenticationConverter jwtAuthenticationConverter, @Value("${cors.allowed-origins}") List<String> allowedOrigins) {
+        this.customOidcUserService = customOidcUserService;
+        this.corsConfigurationSource = corsConfigurationSource;
+        this.jwtAuthenticationConverter = jwtAuthenticationConverter;
         this.allowedOrigins = allowedOrigins;
-        // Remove injections for components that are being removed
     }
 
-    // REMOVE: authenticationManager bean if not needed
 
     @Bean
     @Order(100) // Keep order if other SecurityFilterChain beans might exist
@@ -94,14 +69,16 @@ public class SecurityConfig {
                 .sessionManagement(sessionConfig -> sessionConfig
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
+
                 // --- CORS Configuration ---
-                .cors(corsConfig -> corsConfig.configurationSource(corsConfigurationSource())) // Keep CORS
+                .cors(corsConfig -> corsConfig.configurationSource(this.corsConfigurationSource))
                 // --- CSRF: Disable for stateless JWT-based APIs ---
                 .csrf(AbstractHttpConfigurer::disable)
                 // --- Remove Form Login ---
                 // .formLogin(AbstractHttpConfigurer::disable) // Disable default form login
                 // --- Remove Custom Filters (if they handled authentication/tokens) ---
                 // Remove .addFilterBefore / .addFilterAfter for custom auth filters
+
                 // --- Security Headers (Keep or adjust) ---
                 .headers(headers -> headers // Keep security headers
                                 .httpStrictTransportSecurity(hsts -> hsts.includeSubDomains(true).maxAgeInSeconds(31536000))
@@ -110,11 +87,11 @@ public class SecurityConfig {
                                 .contentTypeOptions(HeadersConfigurer.ContentTypeOptionsConfig::disable)
                         // .referrerPolicy(...)
                 )
-                // --- OAuth2 Resource Server Configuration ---
 
+                // --- OAuth2 Resource Server Configuration ---
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt
-                                .jwtAuthenticationConverter(jwtAuthenticationConverter()) // Configure role mapping
+                                .jwtAuthenticationConverter(this.jwtAuthenticationConverter)
                         )
                 )
                 // --- For Opaque tokens - recommended for critical applications -
@@ -123,13 +100,24 @@ public class SecurityConfig {
 //                        rsc.opaqueToken(otc ->
 //                                otc.authenticationConverter(new KeycloakOpaqueRoleConverter())
 //                                        .introspectionUri(introspectionUri).introspectionClientCredentials(this.clientId,this.clientSecret)))
+
                 // --- Authorization Rules ---
+                // Enables OAuth2 login with the configured client
+                .oauth2Login(oauth2Login -> oauth2Login
+                                .userInfoEndpoint(userInfo -> userInfo
+                                        .oidcUserService(this.customOidcUserService) // Use your custom service
+                                )
+                        // Optional: Configure login page, success/failure handlers if needed
+                        // .loginPage("/login") // If you have a custom login initiation page
+                        // .defaultSuccessUrl("/home", true) // Redirect after successful login
+                )
                 .authorizeHttpRequests((requests) -> requests
                         // --- Public Endpoints ---
                         .requestMatchers(
-                                "/api/auth/v1/register",
-                                "/api/auth/v1/login",
-                                "/login",
+                                "/api/auth/v1/register", // Keep if amlume-shop has its own reg form calling authserver API
+                                // "/api/auth/v1/login", // REMOVE: Login is via OAuth2 redirect
+                                "/api/auth/**", // Review what's under here, some might need auth
+                                "/login", // Spring Security's default login page path, or your custom one
                                 "/public/**",
                                 "/error",
                                 "/actuator/**", // Secure actuator in production!
@@ -152,6 +140,7 @@ public class SecurityConfig {
                         // --- Default Rule: Any other request needs authentication ---
                         .anyRequest().authenticated()
                 )
+
                 // --- Exception Handling ---
                 .exceptionHandling(ehc -> ehc.accessDeniedHandler(new CustomAccessDeniedHandler())); // Keep custom access denied handler
 
@@ -193,8 +182,6 @@ public class SecurityConfig {
 
 
     // REMOVE: SessionRegistry and HttpSessionEventPublisher beans if using STATELESS
-
-    // REMOVE: compromisedPasswordChecker bean
 
     // Keep RoleHierarchy if your @PreAuthorize/@Secured annotations rely on it
     @Bean
