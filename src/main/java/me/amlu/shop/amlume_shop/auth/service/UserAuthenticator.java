@@ -17,7 +17,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.auth.dto.AuthServerRegistrationRequest;
-import me.amlu.shop.amlume_shop.auth.dto.LoginRequest;
 import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.failedlogin.FailedLoginAttemptService;
@@ -30,7 +29,6 @@ import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -238,20 +236,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         }
     }
 
-
-    // --- Authentication is handled by the Authorization Server (oauth2Login) ---
-    // This method is now deprecated and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    @Transactional
-//    public AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException {
-//        // This entire method is part of the old PASETO/local auth flow.
-//        // It should be removed once amlume-shop uses oauth2Login().
-//        log.warn("authenticateUser method is deprecated and should not be used.");
-//        throw new UnsupportedOperationException("Direct username/password authentication is handled by the authentication server.");
-//    }
-
-
     // --- Logout ---
     @Transactional
     @Override
@@ -309,16 +293,9 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
 
     // --- Helper Methods ---
 
-    // This method is part of the old PASETO flow and should be removed later.
-    @Deprecated(since = "2025-05-15", forRemoval = true)
-    private void validateLoginRequest(LoginRequest loginRequest) {
-        log.warn("validateLoginRequest method is deprecated and should not be used.");
-        // Implementation removed
-    }
-
     /**
      * Consolidated pre-flight checks for registration and login.
-     // The 'identifier' parameter will now be an email address.
+     * // The 'identifier' parameter will now be an email address.
      * Keep these if amlume-shop should enforce them before hitting authserver/login flow.
      */
     private void performPreFlightChecks(String identifier, String ipAddress, String actionType, String captchaResponse) throws TooManyAttemptsException {
@@ -352,34 +329,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         // Implementation removed
     }
 
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    @Transactional
-//    public AuthResponse handleSuccessfulLogin(User user, String ipAddress, String deviceFingerprint) {
-//        log.warn("handleSuccessfulLogin method is deprecated and should not be used.");
-//        throw new UnsupportedOperationException("Successful login handling is part of the OAuth2/OIDC flow.");
-//    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    @Transactional
-//    public void handleFailedLogin(User user, String ipAddress) {
-//        log.warn("handleFailedLogin method is deprecated and should not be used.");
-//        // Implementation removed
-//    }
-
-    /**
-     * @deprecated Redundant method. Logic is handled by {@link #checkAccountLockStatus(User, String)}.
-     */
-    @Deprecated(since = "2025-04-20", forRemoval = true) // Mark as deprecated
-//    @Override
-    public void handleLockedAccount(User user, String ipAddress) throws LockedException {
-        log.warn("handleLockedAccount method is deprecated and should not be used directly.");
-        // Implementation removed
-    }
-
     /**
      * Associates device fingerprint with tokens, checking device limits for new devices.
      * This method is part of the old PASETO flow. If amlume-shop still needs device tracking,
@@ -397,53 +346,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         log.warn("associateFingerprintWithTokens method is part of the old PASETO flow. Needs adaptation if local device tracking is kept.");
         // Implementation removed or adapted elsewhere
     }
-
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional
-//    @Override
-//    public void resetFailedAttempts(User user) {
-//        log.warn("resetFailedAttempts method is deprecated and should not be used.");
-//        // Implementation removed
-//    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional
-//    @Override
-//    public void increaseFailedAttempts(User user) {
-//        log.warn("increaseFailedAttempts method is deprecated and should not be used.");
-//        // Implementation removed
-//    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional
-//    @Override
-//    public void lockUser(User user) {
-//        log.warn("lockUser method is deprecated and should not be used.");
-//        // Implementation removed
-//    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional
-//    @Override
-//    public void unlockUser(String username) {
-//        log.warn("unlockUser method is deprecated and should not be used.");
-//        // Implementation removed
-//    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional
-//    @Override
-//    public boolean unlockWhenTimeExpired(User user) {
-//        log.warn("unlockWhenTimeExpired method is deprecated and should not be used.");
-//        // Implementation removed
-//        return false; // Placeholder
-//    }
 
     @Override
     public String generateAndHandleFingerprint(String userAgent, String screenWidth, String screenHeight) {
@@ -481,66 +383,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
                 .collect(Collectors.joining(" "));
     }
 
-    // --- Token Generation ---
-    // This method is part of the old PASETO flow and should be removed later.
-    @Deprecated(since = "2025-05-15", forRemoval = true)
-    @NotNull
-    private AuthTokenGenerator generateAuthTokens(User user) {
-        log.warn("generateAuthTokens method is deprecated and should not be used.");
-        throw new UnsupportedOperationException("Token generation is handled by the authentication server.");
-    }
-
-    // This record is part of the old PASETO flow and should be removed later.
-    @Deprecated(since = "2025-05-15", forRemoval = true)
-    private record AuthTokenGenerator(String accessToken, String refreshToken) {
-    }
-
-    // --- Duration Getters ---
-    // These methods are part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    public Duration getAccessTokenDuration() {
-//        log.warn("getAccessTokenDuration method is deprecated and should not be used.");
-//        return Duration.ZERO; // Placeholder
-//    }
-
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    public Duration getRefreshTokenDuration() {
-//        log.warn("getRefreshTokenDuration method is deprecated and should not be used.");
-//        return Duration.ZERO; // Placeholder
-//    }
-
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Override
-//    public Duration getJtiDuration() {
-//        log.warn("getJtiDuration method is deprecated and should not be used.");
-//        return Duration.ZERO; // Placeholder
-//    }
-
-    // --- Authentication Info Caching ---
-    // These methods are part of the old PASETO flow and should be removed later.
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional(readOnly = true)
-//    @Override
-//    public AuthenticationInfo getAuthenticationInfo(String username) {
-//        log.warn("getAuthenticationInfo method is deprecated and should not be used.");
-//        throw new UnsupportedOperationException("Authentication info is managed by the authentication server.");
-//    }
-
-//    @Deprecated(since = "2025-05-15", forRemoval = true)
-//    @Transactional(noRollbackFor = Exception.class)
-//    @CacheEvict(value = AUTH_CACHE, key = "'" + Constants.AUTH_CACHE_KEY_PREFIX + "' + #username")
-//    @Override
-//    public void updateAuthenticationInfo(String username, AuthenticationInfo newInfo) {
-//        log.warn("updateAuthenticationInfo method is deprecated and should not be used.");
-//        throw new UnsupportedOperationException("Authentication info is managed by the authentication server.");
-//    }
-
-    // --- REMOVED Unused/Deprecated Methods ---
-    // private Authentication performAuthentication(LoginRequest loginRequest) { ... }
-    // public Authentication createSuccessfulAuthentication(User user) { ... }
-    // public void handleLockedAccount(User user, String ipAddress) { ... } // Removed as deprecated
 }
 
 // TODO: Consider backup codes for account recovery
