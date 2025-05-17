@@ -14,6 +14,11 @@ import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -22,18 +27,28 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
+    private static final Logger log = LoggerFactory.getLogger(CustomOAuth2UserService.class);
+
     private final UserRepository userRepository;
     private final AuthorityRepository authorityRepository;
+    private final WebClient webClient; // Inject WebClient
 
-    public CustomOAuth2UserService(UserRepository userRepository, AuthorityRepository authorityRepository) {
+    public CustomOAuth2UserService(UserRepository userRepository,
+                                   AuthorityRepository authorityRepository,
+                                   WebClient.Builder webClientBuilder) { // Inject WebClient.Builder
         this.userRepository = userRepository;
         this.authorityRepository = authorityRepository;
+        this.webClient = webClientBuilder.build(); // Build WebClient instance
     }
 
     @Override
@@ -41,49 +56,156 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         OAuth2User oauth2User = super.loadUser(userRequest);
         Map<String, Object> attributes = oauth2User.getAttributes();
-        String nameAttributeKey = userRequest.getClientRegistration().getProviderDetails().getUserInfoEndpoint().getUserNameAttributeName();
+        String registrationId = userRequest.getClientRegistration().getRegistrationId();
+        String nameAttributeKey = userRequest.getClientRegistration().getProviderDetails()
+                .getUserInfoEndpoint().getUserNameAttributeName(); // e.g., "id" or "login" for GitHub
 
-        String emailToUse; // This variable will be effectively final
+        String emailToUse = extractEmail(userRequest, attributes);
 
-        String emailFromProvider = (String) attributes.get("email");
-        if (!StringUtils.hasText(emailFromProvider)) {
-            // For some providers like GitHub, email might be null if not public or primary.
-            // You might need to make an additional API call to get verified emails.
-            // For now, we'll assume email is present or throw.
-            // Or, use another unique identifier like 'id' from the provider and store it.
-            String login = (String) attributes.get("login"); // e.g., GitHub username
-            if (StringUtils.hasText(login)) {
-                 emailToUse = login + "@" + userRequest.getClientRegistration().getRegistrationId() + ".example.com"; // Placeholder email
-            } else {
-                throw new OAuth2AuthenticationException("Email not found from OAuth2 provider, and login/id attribute also missing.");
-            }
-        } else {
-            emailToUse = emailFromProvider;
+        if (!StringUtils.hasText(emailToUse)) {
+            log.error("Could not determine a valid email for user from provider '{}'. Attributes: {}", registrationId, attributes);
+            throw new OAuth2AuthenticationException("Unable to derive email from provider " + registrationId);
         }
 
-        // Now, emailToUse holds the definitive email value and is effectively final.
+        // Extract profile information
+        String firstName = extractFirstName(attributes, registrationId, emailToUse);
+        String lastName = extractLastName(attributes, registrationId);
+        String nickname = extractNickname(attributes, registrationId); // Nickname might be 'login' for GitHub
 
         Optional<User> userOptional = userRepository.findByEmail_Value(emailToUse);
-        User localUser = userOptional.orElseGet(() -> {
-            // Use emailToUse inside this lambda, as it's effectively final
-            String fullName = (String) attributes.get("name");
-            String firstName = fullName != null ? fullName.split(" ")[0] : emailToUse.split("@")[0];
-            String lastName = fullName != null && fullName.contains(" ") ? fullName.substring(fullName.indexOf(" ") + 1) : null;
+        User localUser;
 
-            User newUser = User.builder()
-                    .email(new EmailAddress(emailToUse)) // Use emailToUse
+        if (userOptional.isEmpty()) {
+            log.info("No local user found for email '{}' from provider '{}'. Provisioning new user.", emailToUse, registrationId);
+            User.UserBuilder newUserBuilder = User.builder()
+                    .email(new EmailAddress(emailToUse))
                     .firstName(firstName)
                     .lastName(lastName)
-                    .build();
-            newUser.enableAccount(); // Sensible default for new OAuth2 users
-            authorityRepository.findByAuthority("ROLE_USER").ifPresent(newUser::assignAuthority);
-            return userRepository.save(newUser);
-        });
+                    .nickname(nickname);
+            // Password field in User entity is nullable, so no local password is set.
+            // externalId will be generated by the builder.
 
-        // Return your User object if it implements UserDetails and OAuth2User,
-        // or adapt it to DefaultOAuth2User.
-        // The DefaultOAuth2User constructor needs a collection of GrantedAuthority,
-        // the attributes map, and the name attribute key.
+            User newUser = newUserBuilder.build();
+            newUser.enableAccount();
+            authorityRepository.findByAuthority("ROLE_USER").ifPresent(newUser::assignAuthority);
+            localUser = userRepository.save(newUser);
+            log.info("Successfully provisioned new user ID {} for email '{}' from provider '{}'", localUser.getId(), emailToUse, registrationId);
+        } else {
+            localUser = userOptional.get();
+            log.debug("Found existing local user ID {} for email '{}' from provider '{}'. Checking for updates.", localUser.getId(), emailToUse, registrationId);
+
+            boolean updated = false;
+            if (StringUtils.hasText(firstName) && !Objects.equals(firstName, localUser.getFirstName())) {
+                localUser.updateFirstName(firstName);
+                updated = true;
+            }
+            if (!Objects.equals(lastName, localUser.getLastName())) {
+                localUser.updateLastName(lastName);
+                updated = true;
+            }
+            if (!Objects.equals(nickname, localUser.getNickname())) {
+                localUser.updateNickname(nickname);
+                updated = true;
+            }
+
+            if (updated) {
+                localUser = userRepository.save(localUser);
+                log.info("Updated profile details for user ID {} from provider '{}'", localUser.getId(), registrationId);
+            }
+        }
+
         return new DefaultOAuth2User(localUser.getAuthorities(), attributes, nameAttributeKey);
+    }
+
+    private String extractEmail(OAuth2UserRequest userRequest, Map<String, Object> attributes) {
+        String registrationId = userRequest.getClientRegistration().getRegistrationId();
+        String emailFromAttributes = (String) attributes.get("email");
+
+        if (StringUtils.hasText(emailFromAttributes)) {
+            return emailFromAttributes;
+        }
+
+        if ("github".equalsIgnoreCase(registrationId)) {
+            log.debug("Email not directly in attributes for GitHub user. Attempting to fetch from /user/emails API.");
+            String accessToken = userRequest.getAccessToken().getTokenValue();
+            try {
+                List<GitHubEmail> emails = webClient.get()
+                        .uri("https://api.github.com/user/emails")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToMono(new ParameterizedTypeReference<List<GitHubEmail>>() {
+                        })
+                        .block(); // Blocking for simplicity in this synchronous service method
+
+                if (emails != null) {
+                    Optional<String> primaryVerifiedEmail = emails.stream()
+                            .filter(e -> Boolean.TRUE.equals(e.primary()) && Boolean.TRUE.equals(e.verified()))
+                            .map(GitHubEmail::email)
+                            .findFirst();
+                    if (primaryVerifiedEmail.isPresent()) {
+                        log.info("Found primary verified email from GitHub API: {}", primaryVerifiedEmail.get());
+                        return primaryVerifiedEmail.get();
+                    }
+                    log.warn("No primary verified email found from GitHub API for user. Attributes: {}", attributes);
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch emails from GitHub API for user. Attributes: {}. Error: {}", attributes, e.getMessage());
+            }
+        }
+
+        // Fallback to placeholder if no real email found
+        String login = (String) attributes.get("login"); // e.g., GitHub username
+        if (StringUtils.hasText(login)) {
+            String placeholderEmail = login + "@" + registrationId + ".placeholder.authserver"; // More distinct placeholder
+            log.warn("Using placeholder email for provider '{}', login '{}': {}", registrationId, login, placeholderEmail);
+            return placeholderEmail;
+        }
+
+        return null; // No email could be determined
+    }
+
+    // Helper methods for name extraction (can be shared with CustomOidcUserService or kept separate)
+    private String extractFirstName(Map<String, Object> attributes, String registrationId, String email) {
+        String firstName = (String) attributes.get("given_name"); // Standard OIDC, might not be present for plain OAuth2
+        if (!StringUtils.hasText(firstName)) {
+            firstName = (String) attributes.get("first_name"); // Common alternative
+        }
+        if (!StringUtils.hasText(firstName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name");
+            if (StringUtils.hasText(fullName)) {
+                firstName = fullName.split(" ", 2)[0];
+            }
+        }
+        return StringUtils.hasText(firstName) ? firstName : email.split("@")[0]; // Fallback
+    }
+
+    private String extractLastName(Map<String, Object> attributes, String registrationId) {
+        String lastName = (String) attributes.get("family_name");
+        if (!StringUtils.hasText(lastName)) {
+            lastName = (String) attributes.get("last_name");
+        }
+        if (!StringUtils.hasText(lastName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name");
+            if (StringUtils.hasText(fullName)) {
+                String[] parts = fullName.split(" ", 2);
+                if (parts.length > 1) {
+                    lastName = parts[1];
+                }
+            }
+        }
+        return lastName;
+    }
+
+    private String extractNickname(Map<String, Object> attributes, String registrationId) {
+        String nickname = (String) attributes.get("nickname");
+        if (!StringUtils.hasText(nickname) && "github".equalsIgnoreCase(registrationId)) {
+            nickname = (String) attributes.get("login"); // GitHub username
+        }
+        return nickname;
+    }
+
+    // Simple record to map GitHub's email API response
+    private record GitHubEmail(String email, Boolean primary, Boolean verified, String visibility) {
     }
 }
