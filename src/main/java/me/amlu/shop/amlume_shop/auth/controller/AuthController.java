@@ -66,7 +66,7 @@ public class AuthController {
     // REMOVE throws RoleNotFoundException as authserver handles role assignment
     public ResponseEntity<GetRegisterResponse> registerUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult, HttpServletRequest httpRequest) { // Inject HttpServletRequest for IP
         if (bindingResult.hasErrors()) {
-            log.warn("Registration validation failed for user email: {}", request.userEmail());
+            log.warn("Registration validation failed for user userEmail: {}", request.userEmail());
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
         }
 
@@ -80,34 +80,34 @@ public class AuthController {
             // We don't get user details back here, just confirmation of success.
             // The local amlume-shop user will be provisioned on first login via OAuth2.
 
-            log.info("Registration request successfully processed for email: {}", request.userEmail());
+            log.info("Registration request successfully processed for userEmail: {}", request.userEmail());
             // Return 201 Created on success
             return ResponseEntity.status(HttpStatus.CREATED).body(new GetRegisterResponse(null, null));
 
         } catch (TooManyAttemptsException e) {
-            log.warn("Registration failed due to too many attempts for email {}: {}", request.userEmail(), e.getMessage());
+            log.warn("Registration failed due to too many attempts for userEmail {}: {}", request.userEmail(), e.getMessage());
             // Map TooManyAttemptsException to 429 Too Many Requests
             return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(new GetRegisterResponse(null, List.of(new ObjectError("rate.limit.exceeded", e.getMessage()))));
         } catch (InvalidCaptchaException e) {
-            log.warn("Registration failed due to invalid captcha for email {}: {}", request.userEmail(), e.getMessage());
+            log.warn("Registration failed due to invalid captcha for userEmail {}: {}", request.userEmail(), e.getMessage());
             // Map InvalidCaptchaException to 400 Bad Request
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, List.of(new ObjectError("captcha.invalid", e.getMessage()))));
         } catch (UserAlreadyExistsException e) {
-            log.warn("Registration failed: User already exists for email {}: {}", request.userEmail(), e.getMessage());
+            log.warn("Registration failed: User already exists for userEmail {}: {}", request.userEmail(), e.getMessage());
             // Map UserAlreadyExistsException (from authserver 409) to 409 Conflict
             return ResponseEntity.status(HttpStatus.CONFLICT).body(new GetRegisterResponse(null, List.of(new ObjectError("user.exists", e.getMessage()))));
         } catch (IllegalArgumentException e) {
-            log.warn("Registration failed due to invalid data for email {}: {}", request.userEmail(), e.getMessage());
+            log.warn("Registration failed due to invalid data for userEmail {}: {}", request.userEmail(), e.getMessage());
             // Map IllegalArgumentException (from authserver 400) to 400 Bad Request
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, List.of(new ObjectError("invalid.data", e.getMessage()))));
         } catch (UserRegistrationException e) {
-            log.error("Authserver registration failed for email {}: {}", request.userEmail(), e.getMessage(), e);
+            log.error("Authserver registration failed for userEmail {}: {}", request.userEmail(), e.getMessage(), e);
             // Map generic UserRegistrationException to 500 Internal Server Error
             ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "REGISTRATION_FAILED", e.getMessage()).getBody();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, List.of(new ObjectError("internal.error", errorResponse != null ? errorResponse.message() : "Internal server error"))));
         } catch (Exception e) {
             // Catch any other unexpected exceptions
-            log.error("Unexpected error during registration for email {}: {}", request.userEmail(), e.getMessage(), e);
+            log.error("Unexpected error during registration for userEmail {}: {}", request.userEmail(), e.getMessage(), e);
             ErrorResponse errorResponse = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "UNEXPECTED_ERROR", "An unexpected error occurred during registration.").getBody();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new GetRegisterResponse(null, List.of(new ObjectError("unexpected.error", errorResponse != null ? errorResponse.message() : "Unexpected server error"))));
         }
@@ -128,10 +128,10 @@ public class AuthController {
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     // -----------------------------------------
     public ResponseEntity<GetRegisterResponse> registerAdminUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) {
-        log.info("Attempting to register new admin user: {}", request.userEmail().getEmail()); // Log attempt
+        log.info("Attempting to register new admin user: {}", request.userEmail()); // Log attempt
 
         if (bindingResult.hasErrors()) {
-            log.warn("Admin registration validation failed for user {}: {}", request.userEmail().getEmail(), bindingResult.getAllErrors());
+            log.warn("Admin registration validation failed for user {}: {}", request.userEmail(), bindingResult.getAllErrors());
             // Use the same response structure as regular registration for consistency
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
         }
@@ -153,13 +153,13 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(conflictResponse); // 409 Conflict
 
         } catch (DataIntegrityViolationException e) {
-            // This might happen if unique constraints (like email) are violated concurrently
-            log.error("Admin registration failed due to data integrity violation for user {}: {}", request.userEmail().getEmail(), e.getMessage());
-            GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("database.error", "Username or email might already exist.")));
+            // This might happen if unique constraints (like userEmail) are violated concurrently
+            log.error("Admin registration failed due to data integrity violation for user {}: {}", request.userEmail(), e.getMessage());
+            GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("database.error", "Username or userEmail might already exist.")));
             return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
 
         } catch (Exception e) {
-            log.error("Unexpected error during admin registration for user {}: {}", request.userEmail().getEmail(), e.getMessage(), e);
+            log.error("Unexpected error during admin registration for user {}: {}", request.userEmail(), e.getMessage(), e);
             // Use GlobalExceptionHandler or return a generic error response
             ErrorResponse errorDetails = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "REGISTRATION_FAILED", "An unexpected error occurred during admin registration.").getBody();
             GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("internal.error", errorDetails != null ? errorDetails.message() : "Internal server error")));

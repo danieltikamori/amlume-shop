@@ -160,7 +160,7 @@ public class ContactInfo implements Serializable {
     public void updateEmailAddress(String newEmailAddress) {
         if (newEmailAddress != null) {
             this.userEmail = new UserEmail(newEmailAddress);
-            // Consider if emailVerified should be reset upon email change
+            // Consider if emailVerified should be reset upon userEmail change
             // this.emailVerified = false;
         }
     }

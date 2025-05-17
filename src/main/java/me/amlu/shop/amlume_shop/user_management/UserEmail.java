@@ -29,12 +29,12 @@ public class UserEmail implements Serializable {
     @NotBlank
     @Size(min = 5, max = 50)
     @Email
-    @Column(nullable = false, unique = true, name = "email")
+    @Column(nullable = false, unique = true, name = "userEmail")
     private String email;
 
     public UserEmail(String email) {
         if (email == null || !email.matches("^[a-zA-Z0-9_+&*-]+(?:\\\\.[a-zA-Z0-9_+&*-])++@[a-zA-Z0-9-]+(?:\\\\.[a-zA-Z0-9-])++[a-zA-Z]{2,7}$")) {
-            throw new IllegalArgumentException("Invalid email format");
+            throw new IllegalArgumentException("Invalid userEmail format");
         }
         this.email = email;
     }
@@ -86,7 +86,7 @@ public class UserEmail implements Serializable {
 
         @Override
         public String toString() {
-            return "UserEmail.UserEmailBuilder(email=" + this.email + ")";
+            return "UserEmail.UserEmailBuilder(userEmail=" + this.email + ")";
         }
     }
 }

@@ -10,16 +10,15 @@
 
 package me.amlu.shop.amlume_shop.user_management.dto;
 
-import me.amlu.shop.amlume_shop.user_management.ContactInfo;
-import me.amlu.shop.amlume_shop.user_management.UserPassword;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 
 public record UserRegistrationRequest(
-        ContactInfo firstName,
-        ContactInfo lastName,
-        ContactInfo nickname,
-        UserPassword password,
-        ContactInfo userEmail,
+        String firstName,
+        String lastName,
+        String nickname,
+        String password,
+        String userEmail,
+        String mobileNumber,
         UserRole roles,
         String captchaResponse) {
 
@@ -29,40 +28,46 @@ public record UserRegistrationRequest(
 
 
     public static class UserRegistrationRequestBuilder {
-        private ContactInfo firstName;
-        private ContactInfo lastName;
-        private ContactInfo nickname;
-        private UserPassword password;
-        private ContactInfo userEmail;
+        private String firstName;
+        private String lastName;
+        private String nickname;
+        private String password;
+        private String userEmail;
+        private String mobileNumber;
         private UserRole roles;
         private String captchaResponse;
 
         UserRegistrationRequestBuilder() {
         }
 
-        public UserRegistrationRequestBuilder firstName(ContactInfo firstName) {
+        public UserRegistrationRequestBuilder firstName(String firstName) {
             this.firstName = firstName;
             return this;
         }
 
-        public UserRegistrationRequestBuilder lastName(ContactInfo lastName) {
+        public UserRegistrationRequestBuilder lastName(String lastName) {
             this.lastName = lastName;
             return this;
         }
 
-        public UserRegistrationRequestBuilder nickname(ContactInfo nickname) {
+        public UserRegistrationRequestBuilder nickname(String nickname) {
             this.nickname = nickname;
             return this;
         }
 
 
-        public UserRegistrationRequestBuilder password(UserPassword password) {
+        public UserRegistrationRequestBuilder password(String password) {
             this.password = password;
             return this;
         }
 
-        public UserRegistrationRequestBuilder userEmail(ContactInfo userEmail) {
+        public UserRegistrationRequestBuilder userEmail(String userEmail) {
             this.userEmail = userEmail;
+            return this;
+        }
+
+        public UserRegistrationRequestBuilder mobileNumber(String mobileNumber) {
+            this.mobileNumber = mobileNumber;
             return this;
         }
 
@@ -77,11 +82,19 @@ public record UserRegistrationRequest(
         }
 
         public UserRegistrationRequest build() {
-            return new UserRegistrationRequest(this.firstName, this.lastName, this.nickname, this.password, this.userEmail, this.roles, this.captchaResponse);
+            return new UserRegistrationRequest(this.firstName, this.lastName, this.nickname, this.password, this.userEmail, this.mobileNumber, this.roles, this.captchaResponse);
         }
 
         public String toString() {
-            return "UserRegistrationRequest.UserRegistrationRequestBuilder(firstName=" + this.firstName + ", lastName=" + this.lastName + ", nickname=" + this.nickname + ", password=" + this.password + ", userEmail=" + this.userEmail + ", roles=" + this.roles + ", captchaResponse=" + this.captchaResponse + ")";
+            return "UserRegistrationRequest.UserRegistrationRequestBuilder(" +
+                    "firstName=" + this.firstName + "," +
+                    " lastName=" + this.lastName + "," +
+                    " nickname=" + this.nickname + "," +
+                    " password=" + this.password + "," +
+                    " userEmail=" + this.userEmail + "," +
+                    " mobileNumber=" + this.mobileNumber + "," +
+                    " roles=" + this.roles + "," +
+                    " captchaResponse=" + this.captchaResponse + ")";
         }
     }
 

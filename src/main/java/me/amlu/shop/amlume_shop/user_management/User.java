@@ -55,7 +55,7 @@ public class User extends BaseEntity implements UserDetails {
 
     // Override the column name for the 'userEmail' field within ContactInfo
     @AttributeOverrides({
-            @AttributeOverride(name = "userEmail.email", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
+            @AttributeOverride(name = "userEmail.userEmail", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
             @AttributeOverride(name = "firstName", column = @Column(name = "first_name", nullable = false, length = 127)),
             @AttributeOverride(name = "lastName", column = @Column(name = "last_name", nullable = false, length = 127)),
             @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
@@ -188,8 +188,8 @@ public class User extends BaseEntity implements UserDetails {
 
     /**
      * Required for UserDetails interface
-     * Username is the user email to simplify authentication
-     * @return user email
+     * Username is the user userEmail to simplify authentication
+     * @return user userEmail
      */
     @Override
     public String getUsername() {

@@ -30,10 +30,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // --- Finders based on Embedded Objects ---
 
     /**
-     * Finds a user by their email address stored within the ContactInfo.UserEmail embedded object.
-     * This email is considered the primary email for the amlume-shop user.
+     * Finds a user by their userEmail address stored within the ContactInfo.UserEmail embedded object.
+     * This userEmail is considered the primary userEmail for the amlume-shop user.
      *
-     * @param email The email address to search for.
+     * @param email The userEmail address to search for.
      * @return An Optional containing the User if found.
      */
     Optional<User> findByContactInfoUserEmailEmail(String email);
@@ -49,10 +49,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByAuthServerSubjectId(String authServerSubjectId);
 
     /**
-     * Checks if a user exists with the given email address.
+     * Checks if a user exists with the given userEmail address.
      *
-     * @param email The email address to check.
-     * @return true if a user with the email exists, false otherwise.
+     * @param email The userEmail address to check.
+     * @return true if a user with the userEmail exists, false otherwise.
      */
     boolean existsByContactInfoUserEmailEmail(String email);
 

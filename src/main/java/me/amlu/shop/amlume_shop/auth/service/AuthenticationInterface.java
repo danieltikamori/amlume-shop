@@ -29,7 +29,7 @@ public interface AuthenticationInterface {
      * @param ipAddress The IP address of the registration request.
      * @throws TooManyAttemptsException   If registration attempts does exceed limits (local check).
      * @throws InvalidCaptchaException    If captcha validation fails (local check).
-     * @throws UserAlreadyExistsException If the username or email is already taken (reported by authserver).
+     * @throws UserAlreadyExistsException If the username or userEmail is already taken (reported by authserver).
      * @throws UserRegistrationException  If an internal error occurs during registration (local or authserver).
      * @throws IllegalArgumentException   If the request is invalid (reported by authserver).
      */

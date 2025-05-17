@@ -114,33 +114,33 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
     public void register(@Valid UserRegistrationRequest request, String ipAddress)
             throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
 
-        // Use the mapped email for logging consistency
-        String emailForLogging = request.userEmail() != null ? request.userEmail().getEmail() : "[email_not_provided_in_request]";
-        log.info("Attempting to register user via authserver API: email={}", emailForLogging);
+        // Use the mapped userEmail for logging consistency
+        String emailForLogging = request.userEmail() != null ? request.userEmail() : "[email_not_provided_in_request]";
+        log.info("Attempting to register user via authserver API: userEmail={}", emailForLogging);
 
         // 0. Perform local pre-flight checks (rate limiting, captcha)
         // Keep these if amlume-shop should enforce them before hitting authserver
-        // Use email as the identifier for local rate limiting
+        // Use userEmail as the identifier for local rate limiting
         // Ensure request.userEmail() and request.userEmail().getEmail() are not null before calling
-        String emailForPreCheck = (request.userEmail() != null && request.userEmail().getEmail() != null)
-                ? request.userEmail().getEmail()
+        String emailForPreCheck = (request.userEmail() != null)
+                ? request.userEmail()
                 : "unknown_email_for_precheck"; // Or handle as error
         performPreFlightChecks(emailForPreCheck, ipAddress, "Registration", request.captchaResponse());
-        log.debug("Local pre-flight checks passed for registration of user email: {}", emailForPreCheck);
+        log.debug("Local pre-flight checks passed for registration of user userEmail: {}", emailForPreCheck);
 
         // 1. Map amlume-shop DTO to authserver DTO
         AuthServerRegistrationRequest authServerRequest = new AuthServerRegistrationRequest(
-                request.firstName() != null ? request.firstName().getFirstName() : null,
-                request.lastName() != null ? request.lastName().getLastName() : null,
-                request.nickname() != null ? request.nickname().getNickname() : null,
-                request.userEmail() != null ? request.userEmail().getEmail() : null, // Get email string from ContactInfo
-                request.password() != null ? request.password().getPassword() : null, // Get raw password string from VO
-                request.userEmail() != null ? request.userEmail().getPhoneNumberString() : null, // Get phone from ContactInfo if available
+                request.firstName() != null ? request.firstName() : null,
+                request.lastName() != null ? request.lastName() : null,
+                request.nickname() != null ? request.nickname() : null,
+                request.userEmail() != null ? request.userEmail() : null,
+                request.password() != null ? request.password() : null,
+                request.mobileNumber() != null ? request.mobileNumber() : null, // Get phone if available
                 null  // defaultRegion - assuming not directly available in UserRegistrationRequest, or derive if possible
         );
-        // Use the email from the DTO sent to authserver for subsequent logs
-        String mappedEmail = authServerRequest.email() != null ? authServerRequest.email() : "[mapped_email_is_null]";
-        log.debug("Mapped amlume-shop registration request to authserver DTO for email: {}", mappedEmail);
+        // Use the userEmail from the DTO sent to authserver for subsequent logs
+        String mappedEmail = authServerRequest.userEmail() != null ? authServerRequest.userEmail() : "[mapped_email_is_null]";
+        log.debug("Mapped amlume-shop registration request to authserver DTO for userEmail: {}", mappedEmail);
 
         // 2. Call authserver's registration API
         // The WebClient call is now wrapped by Resilience4j annotations
@@ -151,19 +151,19 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
                 .onStatus(
                         httpStatusCode -> httpStatusCode.is2xxSuccessful(), // Use lambda
                         clientResponse -> {
-                            log.info("Authserver registration successful for email: {}", mappedEmail);
+                            log.info("Authserver registration successful for userEmail: {}", mappedEmail);
                             return Mono.empty();
                         })
                 .onStatus(
                         httpStatusCode -> HttpStatus.CONFLICT.equals(httpStatusCode), // Use lambda and equals
                         clientResponse -> {
-                            log.warn("Authserver reported user already exists for email: {}", mappedEmail);
-                            return Mono.error(new UserAlreadyExistsException("User with this email already exists."));
+                            log.warn("Authserver reported user already exists for userEmail: {}", mappedEmail);
+                            return Mono.error(new UserAlreadyExistsException("User with this userEmail already exists."));
                         })
                 .onStatus(
                         httpStatusCode -> HttpStatus.BAD_REQUEST.equals(httpStatusCode), // Use lambda and equals
                         clientResponse -> {
-                            log.warn("Authserver reported bad request for registration of email: {}", mappedEmail);
+                            log.warn("Authserver reported bad request for registration of userEmail: {}", mappedEmail);
                             // Explicitly type the Mono chain to Mono<Throwable>
                             Mono<Throwable> errorMono = clientResponse.bodyToMono(String.class)
                                     .flatMap(errorMessage -> {
@@ -178,7 +178,7 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
                 .onStatus(
                         HttpStatusCode::isError, // Predicate for any other error
                         clientResponse -> {
-                            log.error("Authserver returned error status {} for registration of email: {}", clientResponse.statusCode(), mappedEmail);
+                            log.error("Authserver returned error status {} for registration of userEmail: {}", clientResponse.statusCode(), mappedEmail);
                             // Explicitly type the Mono chain to Mono<Throwable>
                             Mono<Throwable> errorMono = clientResponse.bodyToMono(String.class)
                                     .flatMap(errorMessage -> {
@@ -195,9 +195,9 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
 
         // Audit local registration attempt success (meaning the call to authserver succeeded)
         assert request.userEmail() != null;
-        auditService.logSuccessfulRegistration(null, request.userEmail().getEmail(), ipAddress); // userId is null at this stage in amlume-shop
+        auditService.logSuccessfulRegistration(null, request.userEmail(), ipAddress); // userId is null at this stage in amlume-shop
 
-        log.info("Registration process completed successfully for user: {}", request.userEmail().getEmail());
+        log.info("Registration process completed successfully for user: {}", request.userEmail());
 
         // Note: Specific exceptions like TooManyAttemptsException, InvalidCaptchaException,
         // UserAlreadyExistsException, IllegalArgumentException are handled by the onStatus
@@ -212,7 +212,7 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
     public void registerFallback(@Valid UserRegistrationRequest request, String ipAddress, Throwable t)
             throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
 
-        String userEmail = request.userEmail() != null ? request.userEmail().getEmail() : "unknown_email_for_fallback";
+        String userEmail = request.userEmail() != null ? request.userEmail() : "unknown_email_for_fallback";
         log.error("Fallback for register method triggered for user [{}], IP [{}]. Cause: {}", userEmail, ipAddress, t.getMessage());
         // Audit the failure, potentially with more detail from the exception 't'
         auditService.logFailedRegistration(userEmail, ipAddress, "Authserver registration fallback triggered: " + t.getMessage());
@@ -295,7 +295,7 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
 
     /**
      * Consolidated pre-flight checks for registration and login.
-     * // The 'identifier' parameter will now be an email address.
+     * // The 'identifier' parameter will now be an userEmail address.
      * Keep these if amlume-shop should enforce them before hitting authserver/login flow.
      */
     private void performPreFlightChecks(String identifier, String ipAddress, String actionType, String captchaResponse) throws TooManyAttemptsException {
@@ -306,7 +306,7 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         // If authserver handles it, remove this.
         // For now, assuming local IP/username rate limiting is still desired before calling authserver.
         try {
-            failedLoginAttemptService.checkAndThrowIfBlocked(identifier); // Check by username/email
+            failedLoginAttemptService.checkAndThrowIfBlocked(identifier); // Check by username/userEmail
             failedLoginAttemptService.checkAndThrowIfBlocked(ipAddress); // Check by IP
         } catch (TooManyAttemptsException e) {
             // Use the exception message which likely contains the key type information

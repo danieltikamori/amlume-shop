@@ -26,7 +26,7 @@ public interface UserService {
      *
      * @param request The user registration request DTO.
      * @return The newly created and saved User entity with admin roles.
-     * @throws UserAlreadyExistsException If the username or email is already taken.
+     * @throws UserAlreadyExistsException If the username or userEmail is already taken.
      * @throws RoleNotFoundException      (Potentially, if role logic changes)
      */
     User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException;

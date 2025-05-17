@@ -11,13 +11,13 @@
 package me.amlu.shop.amlume_shop.user_management;
 
 import jakarta.validation.Valid;
+import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
 import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
-import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException; // Custom exception
+import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.user_management.dto.UserProfileUpdateRequest;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
-import me.amlu.shop.amlume_shop.cache_management.service.CacheService; // Keep if custom cache logic is essential
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -27,14 +27,12 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-// Import UsernameNotFoundException from Spring Security if used, or custom UserNotFoundException
-// import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.Assert; // For assertions
+import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Instant;
@@ -84,8 +82,8 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException {
         Assert.notNull(request, "Registration request cannot be null");
 
-        String emailString = request.userEmail().getEmail();
-        log.info("Attempting to register new admin user via authserver admin API: email={}", emailString);
+        String emailString = request.userEmail();
+        log.info("Attempting to register new admin user via authserver admin API: userEmail={}", emailString);
 
         // --- Delegation to Authserver Admin API ---
         // This requires authserver to have an endpoint like POST /api/admin/users
@@ -93,7 +91,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         // and assigns the ADMIN role.
 
         // You'll need a DTO matching authserver's admin registration request
-        // public record AuthServerAdminRegistrationRequest(String firstName, String lastName, String email, String password, Set<String> roles) {}
+        // public record AuthServerAdminRegistrationRequest(String firstName, String lastName, String userEmail, String password, Set<String> roles) {}
         // And configure a WebClient that can authenticate to authserver's admin API
 
         // Example (assuming AuthServerAdminRegistrationRequest DTO exists and authServerAdminWebClient is configured):
@@ -114,23 +112,23 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                 .retrieve()
                 // Handle success (e.g., 201 Created) - authserver creates the user
                 .onStatus(HttpStatus::is2xxSuccessful, clientResponse -> {
-                    log.info("Authserver admin registration successful for email: {}", emailString);
+                    log.info("Authserver admin registration successful for userEmail: {}", emailString);
                     return Mono.empty(); // Indicate success
                 })
                 // Handle conflicts (e.g., 409 User Exists)
                  .onStatus(HttpStatus.CONFLICT::equals, clientResponse -> {
-                    log.warn("Authserver reported admin user already exists for email: {}", emailString);
-                    return Mono.error(new UserAlreadyExistsException("Admin user with this email already exists."));
+                    log.warn("Authserver reported admin user already exists for userEmail: {}", emailString);
+                    return Mono.error(new UserAlreadyExistsException("Admin user with this userEmail already exists."));
                 })
                 // Handle bad requests (e.g., validation errors)
                  .onStatus(HttpStatus.BAD_REQUEST::equals, clientResponse -> {
-                    log.warn("Authserver reported bad request for admin registration of email: {}", emailString);
+                    log.warn("Authserver reported bad request for admin registration of userEmail: {}", emailString);
                     return clientResponse.bodyToMono(String.class)
                             .flatMap(errorMessage -> Mono.error(new IllegalArgumentException("Invalid admin registration data: " + errorMessage)));
                 })
                 // Handle other errors
                 .onStatus(HttpStatus::isError, clientResponse -> {
-                    log.error("Authserver returned error status {} for admin registration of email: {}", clientResponse.statusCode(), emailString);
+                    log.error("Authserver returned error status {} for admin registration of userEmail: {}", clientResponse.statusCode(), emailString);
                      return clientResponse.bodyToMono(String.class)
                             .flatMap(errorMessage -> Mono.error(new UserRegistrationException("Authserver admin registration failed: " + errorMessage)));
                 })
@@ -143,7 +141,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
             // We don't return a local User entity here as it doesn't exist yet.
             // Consider returning a success DTO instead of User.
 
-            log.info("Admin registration request successfully processed for email: {}", emailString);
+            log.info("Admin registration request successfully processed for userEmail: {}", emailString);
             // You might return a simple success response DTO here
             // return new GetRegisterResponse(null, null); // Example success response DTO
 
@@ -156,7 +154,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         } catch (UserAlreadyExistsException | IllegalArgumentException e) {
              throw e; // Re-throw mapped exceptions
         } catch (Exception e) {
-            log.error("Unexpected error during admin registration API call to authserver for email [{}]: {}", emailString, e.getMessage(), e);
+            log.error("Unexpected error during admin registration API call to authserver for userEmail [{}]: {}", emailString, e.getMessage(), e);
             throw new UserRegistrationException("Admin registration failed due to an internal error communicating with the authentication server.", e);
         }
         */
@@ -176,44 +174,28 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         // and potentially remove password hashing if the password field is removed from local User.
 
         // Assuming AuthenticationInfo/Username/UserPassword are still temporarily present in amlume-shop.User
-        // Check if user already exists by email (primary identifier)
+        // Check if user already exists by userEmail (primary identifier)
         if (userRepository.existsByContactInfoUserEmailEmail(emailString)) {
             throw new UserAlreadyExistsException("Email '" + emailString + "' already registered");
         }
 
         // Hash password (if the local User still has a password field)
-        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password().getPassword()));
+        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password()));
 
         // Create a new user entity (local amlume-shop representation)
         User user = User.builder()
-                // If AuthenticationInfo is removed, remove this block
-                .authenticationInfo(AuthenticationInfo.builder()
-                        // If Username is removed, remove this line
-                        // .username(new Username(emailString)) // Use email as username locally for UserDetails
-                        // If password field is removed, remove this line
-                        .password(encodedPassword)
-                        .build())
                 .contactInfo(ContactInfo.builder()
                         .userEmail(new UserEmail(emailString))
-                        .firstName(request.firstName() != null ? request.firstName().getFirstName() : null)
-                        .lastName(request.lastName() != null ? request.lastName().getLastName() : null)
+                        .firstName(request.firstName() != null ? request.firstName() : null)
+                        .lastName(request.lastName() != null ? request.lastName() : null)
                         // Add other contact fields if available in request
-                        .build())
-                // If AccountStatus is removed, remove this block
-                .accountStatus(AccountStatus.builder()
-                        .creationTime(Instant.now())
-                        .accountNonExpired(true)
-                        .accountNonLocked(true)
-                        .credentialsNonExpired(true)
-                        .enabled(true) // Admins are typically enabled immediately
-                        .failedLoginAttempts(0)
                         .build())
                 // If DeviceFingerprintingInfo is removed, remove this block
                 .deviceFingerprintingInfo(DeviceFingerprintingInfo.builder()
                         .deviceFingerprintingEnabled(false) // Default for admin? Or configurable?
                         .build())
-                // Add authServerSubjectId field here if it exists in amlume-shop.User
-                // .authServerSubjectId(null) // Will be set on first login
+//                 Add authServerSubjectId field here if it exists in amlume-shop.User
+                .authServerSubjectId(null) // Will be set on first login
                 .build();
 
         // --- Assign ADMIN Roles (Local Roles) ---
@@ -224,7 +206,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         // --- End Role Assignment ---
 
         User savedUser = userRepository.save(user);
-        // Log using email as the primary identifier
+        // Log using userEmail as the primary identifier
         log.info("Registered new local ADMIN user: {} (ID: {})", savedUser.getContactInfo().getEmail(), savedUser.getUserId());
         return savedUser;
     }
@@ -246,20 +228,20 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     // Ensure the User entity and all embedded objects are Serializable for cache providers like Redis.
     @Cacheable(value = USERS_CACHE, key = "#userEmail") // Cache name from Constants.java
     public User findUserByEmail(String userEmail) {
-        // 1. Precondition Check: Ensure username (email) is not null or empty.
-        Assert.hasText(userEmail, "Username (email) must not be empty");
-        log.debug("Attempting to find user by username (email): {}", userEmail);
+        // 1. Precondition Check: Ensure username (userEmail) is not null or empty.
+        Assert.hasText(userEmail, "Username (userEmail) must not be empty");
+        log.debug("Attempting to find user by username (userEmail): {}", userEmail);
 
         // 2. Repository Call: Find user by username within the AuthenticationInfo embedded object.
         // The repository method returns Optional<User>.
         User user = userRepository.findByContactInfoUserEmailEmail(userEmail)
                 // 3. Handle Not Found: Throw a specific custom exception if the Optional is empty.
                 .orElseThrow(() -> {
-                    log.warn("User not found with username (email): {}", userEmail);
-                    return new UserNotFoundException("User not found with username (email): " + userEmail);
+                    log.warn("User not found with username (userEmail): {}", userEmail);
+                    return new UserNotFoundException("User not found with username (userEmail): " + userEmail);
                 });
 
-        log.debug("Successfully found user by username (email): {}", userEmail);
+        log.debug("Successfully found user by username (userEmail): {}", userEmail);
         return user;
     }
 
@@ -292,23 +274,23 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         // The 'username' parameter here is the identifier Spring Security uses.
         // With OAuth2/OIDC, this will typically be the 'sub' claim from the token,
-        // or the username from form login (which is email in authserver).
-        // In authserver, UserDetails.getUsername() returns email.
-        // So, the 'username' parameter here will be the email.
+        // or the username from form login (which is userEmail in authserver).
+        // In authserver, UserDetails.getUsername() returns userEmail.
+        // So, the 'username' parameter here will be the userEmail.
 
         log.debug("loadUserByUsername (from Spring Security): username={}", username);
 
         try {
-            // Action: Call the method that finds by email (which was findUserByEmail, now renamed)
+            // Action: Call the method that finds by userEmail (which was findUserByEmail, now renamed)
             // Assuming findUserByEmail is renamed to findUserByEmail:
             return self.findUserByEmail(username); // Call the renamed method (findUserByEmail)
             // Or directly:
             // return userRepository.findByContactInfoUserEmailEmail(username)
-            //         .orElseThrow(() -> new UserNotFoundException("User not found with email: " + username));
+            //         .orElseThrow(() -> new UserNotFoundException("User not found with userEmail: " + username));
 
         } catch (UserNotFoundException e) {
             // Convert custom exception to Spring Security's exception
-            log.warn("User not found for loadUserByUsername (email): {}", username);
+            log.warn("User not found for loadUserByUsername (userEmail): {}", username);
             throw new UsernameNotFoundException(e.getMessage(), e);
         }
     }
@@ -338,8 +320,8 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
             // For JWT principal, the 'sub' claim is the user ID from authserver.
             String authServerSubjectId = jwt.getSubject(); // This is the authserver User.id (as a String)
-            // The 'email' claim might also be present and useful for logging/display
-            String emailFromToken = jwt.getClaimAsString("email"); // Assuming authserver adds email claim
+            // The 'userEmail' claim might also be present and useful for logging/display
+            String emailFromToken = jwt.getClaimAsString("userEmail"); // Assuming authserver adds userEmail claim
 
             log.debug("Authenticated via JWT. Subject (authserver user ID): {}, Email from token: {}", authServerSubjectId, emailFromToken);
 
@@ -356,7 +338,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
                         return new UnauthorizedException("Local user profile not found for authenticated identity.");
                     });
 
-            // Optional: Update local user data from token claims if needed (e.g., name, email)
+            // Optional: Update local user data from token claims if needed (e.g., name, userEmail)
             // This logic might be better placed in the OidcUserService/OAuth2UserService during provisioning/loading.
             // if (emailFromToken != null && !emailFromToken.equals(currentUser.getContactInfo().getEmail())) {
             //     currentUser.updateContactInfo(currentUser.getContactInfo().withEmail(emailFromToken));
@@ -490,7 +472,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         // MfaInfo updatedMfaInfo = userToUpdate.getMfaInfo().withMfaEnabled(profileRequest.isMfaEnabled());
         // userToUpdate.updateMfaInfo(updatedMfaInfo);
 
-        // --- DO NOT update sensitive fields like email, username, password, roles here ---
+        // --- DO NOT update sensitive fields like userEmail, username, password, roles here ---
         // These should have dedicated methods/flows with appropriate security checks.
         // Email and password updates should happen via authserver's API.
 

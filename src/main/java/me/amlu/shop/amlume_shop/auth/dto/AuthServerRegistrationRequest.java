@@ -18,7 +18,7 @@ public record AuthServerRegistrationRequest(
         String firstName,
         String lastName,
         String nickname,
-        String email,
+        String userEmail,
         String password, // Contains the raw password
         String mobileNumber,
         String defaultRegion
@@ -34,7 +34,7 @@ public record AuthServerRegistrationRequest(
                 "firstName='" + firstName + '\'' +
                 ", lastName='" + lastName + '\'' +
                 ", nickname='" + nickname + '\'' +
-                ", email='" + email + '\'' +
+                ", userEmail='" + userEmail + '\'' +
                 ", password='[REDACTED]'" + // Redact the password
                 ", mobileNumber='" + mobileNumber + '\'' +
                 ", defaultRegion='" + defaultRegion + '\'' +
