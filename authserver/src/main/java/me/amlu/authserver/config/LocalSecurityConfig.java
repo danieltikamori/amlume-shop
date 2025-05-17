@@ -387,21 +387,32 @@ public class LocalSecurityConfig {
                         // Add user_id and full_name if the principal is a UserDetails representing your User
                         Object principal = context.getPrincipal().getPrincipal(); // Get the actual principal object
                         if (principal instanceof User appUser) { // Check if it's your User class
-                            claims.put("user_id_numeric", appUser.getId());
-                            claims.put("full_name", appUser.getDisplayableFullName());
-                            claims.put("email", appUser.getEmail().getValue());
+                            putClaims(claims, appUser);
                         } else if (context.getPrincipal().getName() != null) {
                             // Fallback for other UserDetails implementations or if principal is just username string
                             userRepository.findByEmail_Value(context.getPrincipal().getName()).ifPresent(user -> {
-                                claims.put("user_id_numeric", user.getId());
-                                claims.put("full_name", user.getDisplayableFullName());
-                                claims.put("email", user.getEmail().getValue());
+                                putClaims(claims, user);
                             });
                         }
                     }
                 });
             }
         };
+    }
+
+    /**
+     * Put claims into the JWT claims.
+     *
+     * @param claims  {@link Map}
+     * @param appUser {@link User}
+     */
+    private void putClaims(Map<String, Object> claims, User appUser) {
+        claims.put("user_id_numeric", appUser.getId());
+        claims.put("given_name", appUser.getFirstName());
+        claims.put("family_name", appUser.getLastName());
+        claims.put("full_name", appUser.getDisplayableFullName());
+        claims.put("nickname", appUser.getNickname());
+        claims.put("email", appUser.getEmail().getValue());
     }
 
     // --- PasswordEncoder, CompromisedPasswordChecker ---
