@@ -1,4 +1,4 @@
-    /*
+/*
  * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
  *
  * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
@@ -8,14 +8,14 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-    package me.amlu.authserver.oauth2.service;
+package me.amlu.authserver.oauth2.service;
 
-    import me.amlu.authserver.user.model.User;
-    import me.amlu.authserver.user.model.vo.EmailAddress;
-    import me.amlu.authserver.oauth2.repository.AuthorityRepository;
-    import me.amlu.authserver.user.repository.UserRepository;
-import org.springframework.security.crypto.password.PasswordEncoder;
-
+import me.amlu.authserver.oauth2.repository.AuthorityRepository;
+import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.model.vo.EmailAddress;
+import me.amlu.authserver.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
@@ -26,18 +26,19 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
 public class CustomOidcUserService extends OidcUserService {
+    private static final Logger log = LoggerFactory.getLogger(CustomOidcUserService.class);
+
     private final UserRepository userRepository;
     private final AuthorityRepository authorityRepository;
-    private final PasswordEncoder passwordEncoder; // For new users if a password hash is required
 
-    public CustomOidcUserService(UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+    public CustomOidcUserService(UserRepository userRepository, AuthorityRepository authorityRepository) {
         this.userRepository = userRepository;
         this.authorityRepository = authorityRepository;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
@@ -45,33 +46,101 @@ public class CustomOidcUserService extends OidcUserService {
     public OidcUser loadUser(OidcUserRequest userRequest) throws OAuth2AuthenticationException {
         OidcUser oidcUser = super.loadUser(userRequest);
         Map<String, Object> attributes = oidcUser.getAttributes();
+        String registrationId = userRequest.getClientRegistration().getRegistrationId(); // e.g., "google"
+
         String email = (String) attributes.get("email");
 
         if (!StringUtils.hasText(email)) {
-            throw new OAuth2AuthenticationException("Email not found from OIDC provider");
+            log.error("Email not found from OIDC provider '{}' for user attributes: {}", registrationId, attributes);
+            throw new OAuth2AuthenticationException("Email not found from OIDC provider: " + registrationId);
         }
 
+        // Extract profile information, attempting standard OIDC claims first
+        String firstName = extractFirstName(attributes, registrationId, email);
+        String lastName = extractLastName(attributes, registrationId);
+        String nickname = extractNickname(attributes, registrationId); // Nickname might be 'login' for GitHub
+
         Optional<User> userOptional = userRepository.findByEmail_Value(email);
-        User localUser = userOptional.orElseGet(() -> {
-            User newUser = User.builder()
+        User localUser;
+
+        if (userOptional.isEmpty()) {
+            log.info("No local user found for email '{}' from provider '{}'. Provisioning new user.", email, registrationId);
+            User.UserBuilder newUserBuilder = User.builder()
                     .email(new EmailAddress(email))
-                    .firstName((String) attributes.getOrDefault("given_name", email.split("@")[0]))
-                    .lastName((String) attributes.get("family_name"))
-                    // Password can be null for social-only login or a generated secure random one if your User entity requires it
-                    // .password(new HashedPassword(passwordEncoder.encode(UUID.randomUUID().toString())))
-                    .build();
+                    .firstName(firstName)
+                    .lastName(lastName)
+                    .nickname(nickname);
+            // The Password field in User entity is nullable, so no local password is set for OIDC users.
+            // externalId will be generated by the builder if not explicitly set.
+
+            User newUser = newUserBuilder.build();
             newUser.enableAccount(); // Enable account by default
             authorityRepository.findByAuthority("ROLE_USER").ifPresent(newUser::assignAuthority);
-            return userRepository.save(newUser);
-        });
+            localUser = userRepository.save(newUser);
+            log.info("Successfully provisioned new user ID {} for email '{}' from provider '{}'", localUser.getId(), email, registrationId);
+        } else {
+            localUser = userOptional.get();
+            log.debug("Found existing local user ID {} for email '{}' from provider '{}'. Checking for updates.", localUser.getId(), email, registrationId);
 
-        // Update existing user details if necessary (e.g., name changes)
-        // localUser.setFirstName((String) attributes.getOrDefault("given_name", localUser.getFirstName()));
-        // localUser.setLastName((String) attributes.getOrDefault("family_name", localUser.getLastName()));
-        // userRepository.save(localUser);
+            boolean updated = false;
+            if (StringUtils.hasText(firstName) && !Objects.equals(firstName, localUser.getFirstName())) {
+                localUser.updateFirstName(firstName);
+                updated = true;
+            }
+            // For lastName and nickname, allow them to be set to null if the provider clears them
+            if (!Objects.equals(lastName, localUser.getLastName())) {
+                localUser.updateLastName(lastName); // User.updateLastName should handle null
+                updated = true;
+            }
+            if (!Objects.equals(nickname, localUser.getNickname())) {
+                localUser.updateNickname(nickname); // User.updateNickname should handle null
+                updated = true;
+            }
+            // Potentially update other fields like profile picture URL if available and stored in your User model
 
+            if (updated) {
+                localUser = userRepository.save(localUser);
+                log.info("Updated profile details for user ID {} from provider '{}'", localUser.getId(), registrationId);
+            }
+        }
 
+        // The 'nameAttributeKey' for DefaultOidcUser. "email" is used here.
+        // This means Authentication.getName() within authserver will be the email.
         return new DefaultOidcUser(localUser.getAuthorities(), oidcUser.getIdToken(), oidcUser.getUserInfo(), "email");
     }
+
+    // Helper methods to extract names, can be expanded for provider-specific logic
+    private String extractFirstName(Map<String, Object> attributes, String registrationId, String email) {
+        String firstName = (String) attributes.get("given_name"); // Standard OIDC
+        if (!StringUtils.hasText(firstName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name"); // GitHub often provides full name
+            if (StringUtils.hasText(fullName)) {
+                firstName = fullName.split(" ", 2)[0];
+            }
+        }
+        // Fallback if no first name can be derived
+        return StringUtils.hasText(firstName) ? firstName : email.split("@")[0];
+    }
+
+    private String extractLastName(Map<String, Object> attributes, String registrationId) {
+        String lastName = (String) attributes.get("family_name"); // Standard OIDC
+        if (!StringUtils.hasText(lastName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name");
+            if (StringUtils.hasText(fullName)) {
+                String[] parts = fullName.split(" ", 2);
+                if (parts.length > 1) {
+                    lastName = parts[1];
+                }
+            }
+        }
+        return lastName; // Can be null
+    }
+
+    private String extractNickname(Map<String, Object> attributes, String registrationId) {
+        String nickname = (String) attributes.get("nickname"); // Standard OIDC
+        if (!StringUtils.hasText(nickname) && "github".equalsIgnoreCase(registrationId)) {
+            nickname = (String) attributes.get("login"); // GitHub username
+        }
+        return nickname; // Can be null
+    }
 }
-    
