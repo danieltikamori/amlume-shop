@@ -20,6 +20,7 @@ import com.webauthn4j.converter.jackson.WebAuthnJSONModule;
 import com.webauthn4j.converter.util.ObjectConverter;
 import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
+import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.service.CustomOAuth2UserService;
 import me.amlu.authserver.oauth2.service.CustomOidcUserService;
@@ -82,6 +83,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.sql.DataSource;
 import java.security.KeyPair;
@@ -293,6 +295,25 @@ public class LocalSecurityConfig {
             log.info("amlume-shop OAuth2 client already exists. Skipping seeding.");
             log.info("OAuth2 registered clients already seem to exist. Skipping seeding.");
         }
+
+        AuthorityRepository authorityRepository = this.jpaRegisteredClientRepositoryAdapter.getAuthorityRepository();
+        if (authorityRepository.findByAuthority("ROLE_USER").isEmpty()) {
+            authorityRepository.save(new Authority("ROLE_USER"));
+            log.info("Seeded default ROLE_USER authority.");
+        }
+        if (authorityRepository.findByAuthority("ROLE_ADMIN").isEmpty()) {
+            authorityRepository.save(new Authority("ROLE_ADMIN"));
+            log.info("Seeded default ROLE_ADMIN authority.");
+        }
+        if (authorityRepository.findByAuthority("ROLE_SUPER_ADMIN").isEmpty()) {
+            authorityRepository.save(new Authority("ROLE_SUPER_ADMIN"));
+            log.info("Seeded default ROLE_SUPER_ADMIN authority.");
+        }
+        if (authorityRepository.findByAuthority("ROLE_ROOR").isEmpty()) {
+            authorityRepository.save(new Authority("ROLE_ROOT"));
+            log.info("Seeded default ROLE_ROOT authority.");
+        }
+
     }
 
     // @Bean (if not already implicitly configured by Spring Boot)
@@ -634,13 +655,13 @@ public class LocalSecurityConfig {
     // --- Social Login Beans (OAuth2 Client) ---
     @Bean
     public OAuth2UserService<OAuth2UserRequest, OAuth2User> customOAuth2UserService(
-            UserRepository userRepository, AuthorityRepository authorityRepository) {
-        return new CustomOAuth2UserService(userRepository, authorityRepository);
+            UserRepository userRepository, AuthorityRepository authorityRepository, WebClient.Builder webClient) {
+        return new CustomOAuth2UserService(userRepository, authorityRepository, webClient);
     }
 
     @Bean
     public OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> customOidcUserService(
             UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
-        return new CustomOidcUserService(userRepository, authorityRepository, passwordEncoder);
+        return new CustomOidcUserService(userRepository, authorityRepository);
     }
 }
