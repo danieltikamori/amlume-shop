@@ -59,6 +59,7 @@ public class CustomOidcUserService extends OidcUserService {
         String firstName = extractFirstName(attributes, registrationId, email);
         String lastName = extractLastName(attributes, registrationId);
         String nickname = extractNickname(attributes, registrationId); // Nickname might be 'login' for GitHub
+        String pictureUrl = (String) attributes.get("picture");
 
         Optional<User> userOptional = userRepository.findByEmail_Value(email);
         User localUser;
@@ -96,6 +97,12 @@ public class CustomOidcUserService extends OidcUserService {
                 localUser.updateNickname(nickname); // User.updateNickname should handle null
                 updated = true;
             }
+
+            if (StringUtils.hasText(pictureUrl) && !Objects.equals(pictureUrl, localUser.getProfilePictureUrl())) {
+                localUser.updateProfilePictureUrl(pictureUrl); // Add this method to User
+                updated = true;
+            }
+
             // Potentially update other fields like profile picture URL if available and stored in your User model
 
             if (updated) {
