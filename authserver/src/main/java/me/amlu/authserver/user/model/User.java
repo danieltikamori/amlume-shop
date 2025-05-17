@@ -61,13 +61,13 @@ public class User implements UserDetails {
     @Column(name = "external_id", unique = true) // Ensure externalId is unique if used as a primary lookup
     public String externalId; // User handle for WebAuthn.
 
-    @Column(name = "first_name", nullable = false)
+    @Column(name = "first_name", nullable = false, length = 127)
     private String firstName;
 
-    @Column(name = "last_name") // Nullable
+    @Column(name = "last_name", length = 255) // Nullable
     private String lastName;
 
-    @Column(name = "nickname") // Nullable, user-defined display name
+    @Column(name = "nickname", length = 127) // Nullable, user-defined display name
     private String nickname;
 
     @Embedded
@@ -80,6 +80,8 @@ public class User implements UserDetails {
     })
     private EmailAddress backupEmail;
 
+    @Column(name = "profile_picture_url", length = 2046, unique = true)
+    private String profilePictureUrl;
 
     @Embedded
     @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number", length = 20, unique = true))
@@ -233,6 +235,13 @@ public class User implements UserDetails {
         this.backupEmail = newBackupEmail;
     }
 
+    public void updateProfilePictureUrl(String pictureUrl) {
+        if (pictureUrl.length() > 2046) {
+            throw new IllegalArgumentException("Profile picture URL cannot exceed 2046 characters.");
+        }
+        this.profilePictureUrl = Objects.requireNonNull(pictureUrl);
+    }
+
     /**
      * Changes the user's password.
      * The new password must already be hashed.
@@ -354,6 +363,10 @@ public class User implements UserDetails {
 
     public EmailAddress getBackupEmail() {
         return this.backupEmail;
+    }
+
+    public String getProfilePictureUrl() {
+        return this.profilePictureUrl;
     }
     public PhoneNumber getMobileNumber() { return this.mobileNumber; }
     public Set<PasskeyCredential> getPasskeyCredentials() { return Collections.unmodifiableSet(this.passkeyCredentials); }
