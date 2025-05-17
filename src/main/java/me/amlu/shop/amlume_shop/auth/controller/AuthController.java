@@ -113,17 +113,6 @@ public class AuthController {
         }
     }
 
-    // @Deprecated
-    // CustomAuthenticationFilter handles this endpoint
-
-//    @PostMapping("/v1/login")
-//    public ResponseEntity<LoginResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest, HttpServletRequest request) {
-//        // This endpoint is part of the old PASETO/local auth flow.
-//        // It should be removed once amlume-shop uses oauth2Login().
-//        log.warn("/api/auth/v1/login endpoint is deprecated and should not be used.");
-//        throw new UnsupportedOperationException("Direct username/password login is handled by the authentication server via OAuth2.");
-//    }
-
     /**
      * Registers a new user with administrative privileges.
      * IMPORTANT: This endpoint MUST be secured to prevent unauthorized admin creation.
@@ -139,10 +128,10 @@ public class AuthController {
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     // -----------------------------------------
     public ResponseEntity<GetRegisterResponse> registerAdminUser(@Valid @RequestBody UserRegistrationRequest request, BindingResult bindingResult) {
-        log.info("Attempting to register new admin user: {}", request.getUsername()); // Log attempt
+        log.info("Attempting to register new admin user: {}", request.userEmail().getEmail()); // Log attempt
 
         if (bindingResult.hasErrors()) {
-            log.warn("Admin registration validation failed for user {}: {}", request.getUsername(), bindingResult.getAllErrors());
+            log.warn("Admin registration validation failed for user {}: {}", request.userEmail().getEmail(), bindingResult.getAllErrors());
             // Use the same response structure as regular registration for consistency
             return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
         }
@@ -165,12 +154,12 @@ public class AuthController {
 
         } catch (DataIntegrityViolationException e) {
             // This might happen if unique constraints (like email) are violated concurrently
-            log.error("Admin registration failed due to data integrity violation for user {}: {}", request.getUsername(), e.getMessage());
+            log.error("Admin registration failed due to data integrity violation for user {}: {}", request.userEmail().getEmail(), e.getMessage());
             GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("database.error", "Username or email might already exist.")));
             return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
 
         } catch (Exception e) {
-            log.error("Unexpected error during admin registration for user {}: {}", request.getUsername(), e.getMessage(), e);
+            log.error("Unexpected error during admin registration for user {}: {}", request.userEmail().getEmail(), e.getMessage(), e);
             // Use GlobalExceptionHandler or return a generic error response
             ErrorResponse errorDetails = globalExceptionHandler.sendErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, "REGISTRATION_FAILED", "An unexpected error occurred during admin registration.").getBody();
             GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("internal.error", errorDetails != null ? errorDetails.message() : "Internal server error")));
