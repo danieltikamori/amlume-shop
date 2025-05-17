@@ -46,19 +46,12 @@ public class User extends BaseEntity implements UserDetails {
     @Column(name = "user_id")
     private Long userId;
 
+    /**
+     * Authorization Server (authserver) Subject ID
+     */
     @Column(name = "auth_server_subject_id", unique = true, nullable = true)
     // Nullable until first login via authserver
     private String authServerSubjectId;
-
-
-    @Embedded
-    // Override the column name for the 'username' field within AuthenticationInfo
-    @AttributeOverrides({
-            @AttributeOverride(name = "username.username", column = @Column(name = "username", nullable = false, unique = true)), // Assuming Username VO has 'username' field
-            // Add override for password if you need a specific column name, e.g.:
-            @AttributeOverride(name = "password.password", column = @Column(name = "userpassword", nullable = false, length = 128)) // Assuming UserPassword VO has 'password' field
-    })
-    private AuthenticationInfo authenticationInfo; // Set via constructor/builder
 
     // Override the column name for the 'userEmail' field within ContactInfo
     @AttributeOverrides({
@@ -151,7 +144,6 @@ public class User extends BaseEntity implements UserDetails {
         super(b); // Call superclass constructor
         this.userId = b.userId;
         this.authServerSubjectId = b.authServerSubjectId;
-        this.authenticationInfo = b.authenticationInfo;
         this.contactInfo = b.contactInfo;
         this.accountStatus = b.accountStatus;
         this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
@@ -184,16 +176,24 @@ public class User extends BaseEntity implements UserDetails {
                 : Collections.emptySet(); // Return an empty set if roles are null
     }
 
+    /**
+     * Required for UserDetails interface
+     *
+     * @return empty string as password is handled by authserver
+     */
     @Override
     public String getPassword() {
-        // Ensure authenticationInfo is not null for safety, though it shouldn't be with @Embedded
-        return (authenticationInfo != null) ? authenticationInfo.getPassword() : null;
+        return "";
     }
 
+    /**
+     * Required for UserDetails interface
+     * Username is the user email to simplify authentication
+     * @return user email
+     */
     @Override
     public String getUsername() {
-        // Ensure authenticationInfo is not null
-        return (authenticationInfo != null) ? authenticationInfo.getUsername() : null;
+        return this.contactInfo.getEmail();
     }
 
     @Override
@@ -241,10 +241,6 @@ public class User extends BaseEntity implements UserDetails {
         return this.authServerSubjectId;
     }
 
-
-    public AuthenticationInfo getAuthenticationInfo() {
-        return this.authenticationInfo;
-    }
 
     public ContactInfo getContactInfo() {
         return this.contactInfo;
@@ -332,7 +328,6 @@ public class User extends BaseEntity implements UserDetails {
         return "User(" +
                 "userId=" + this.userId +
                 ", authServerSubjectId=" + (this.authServerSubjectId != null ? "present" : "null") +
-                ", authenticationInfo=" + (this.authenticationInfo != null ? "present" : "null") + // Indicate presence
                 ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
                 ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
                 ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
@@ -464,7 +459,6 @@ public class User extends BaseEntity implements UserDetails {
     // --- Methods to update embedded objects ---
     public void updateAuthentication(AuthenticationInfo newAuthInfo) {
 
-        this.authenticationInfo = newAuthInfo;
     }
 
     public void updateContactInfo(ContactInfo newContactInfo) {
@@ -487,11 +481,6 @@ public class User extends BaseEntity implements UserDetails {
     // --- End Methods to update embedded objects ---
 
     // --- Methods to update specific fields within embedded objects ---
-    public void updatePassword(String encodedPassword) {
-        if (this.authenticationInfo != null) {
-            this.authenticationInfo.updatePassword(encodedPassword); // Requires updatePassword method in AuthenticationInfo
-        }
-    }
 
     public void updateEmailAddress(String newEmailAddress) {
         if (this.contactInfo != null) {
@@ -575,7 +564,6 @@ public class User extends BaseEntity implements UserDetails {
         // Fields remain in the builder to hold values during construction
         private Long userId;
         private String authServerSubjectId;
-        private AuthenticationInfo authenticationInfo;
         private ContactInfo contactInfo;
         private AccountStatus accountStatus;
         private DeviceFingerprintingInfo deviceFingerprintingInfo;
@@ -596,11 +584,6 @@ public class User extends BaseEntity implements UserDetails {
 
         public B authServerSubjectId(String authServerSubjectId) {
             this.authServerSubjectId = authServerSubjectId;
-            return self();
-        }
-
-        public B authenticationInfo(AuthenticationInfo authenticationInfo) {
-            this.authenticationInfo = authenticationInfo;
             return self();
         }
 
@@ -669,7 +652,6 @@ public class User extends BaseEntity implements UserDetails {
             return "User.UserBuilder(super=" + super.toString() +
                     ", userId=" + this.userId + "," +
                     " authServerSubjectId=" + this.authServerSubjectId +
-                    " authenticationInfo=" + this.authenticationInfo +
                     ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus +
                     ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
                     ", locationInfo=" + this.locationInfo + ", roles=" + this.roles +
