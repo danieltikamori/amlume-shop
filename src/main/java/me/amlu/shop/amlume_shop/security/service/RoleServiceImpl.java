@@ -13,15 +13,15 @@ package me.amlu.shop.amlume_shop.security.service;
 import me.amlu.shop.amlume_shop.category_management.Category;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.config.InputValidator;
-import me.amlu.shop.amlume_shop.notification.service.AlertService;
-import me.amlu.shop.amlume_shop.security.config.RoleHierarchyValidator;
-import me.amlu.shop.amlume_shop.security.config.SecurityValidator;
 import me.amlu.shop.amlume_shop.exceptions.RoleAssignmentException;
 import me.amlu.shop.amlume_shop.exceptions.SecurityValidationException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
+import me.amlu.shop.amlume_shop.notification.service.AlertService;
 import me.amlu.shop.amlume_shop.order_management.Order;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
+import me.amlu.shop.amlume_shop.security.config.RoleHierarchyValidator;
+import me.amlu.shop.amlume_shop.security.config.SecurityValidator;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.user_management.AppRole;
@@ -99,23 +99,26 @@ public class RoleServiceImpl implements RoleService {
         Assert.notNull(resource, "Resource cannot be null for role determination.");
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String username = authentication != null ? authentication.getName() : "anonymous"; // Handle anonymous case
+        // In OIDC flow, authentication.getName() will be the 'sub' claim (authServerSubjectId)
+        String authServerSubjectId = authentication != null ? authentication.getName() : "anonymous";
         User user = null;
         String userIdForAlert = "unknown";
 
         try {
             // 1. Initial Security Validations (Auth, Rate Limit, Input)
-            user = performInitialValidations(authentication, username, resource);
+            // Pass authServerSubjectId instead of a generic username
+            user = performInitialValidations(authentication, authServerSubjectId, resource);
             userIdForAlert = String.valueOf(user.getUserId()); // Get user ID for potential alerts
 
             // 2. Determine Roles based on Resource Type
             Set<UserRole> dynamicRoles = determineAndValidateRoles(resource, user, authentication);
 
             // 3. Audit Success
-            securityAuditService.logRoleAssignment(username, dynamicRoles, resource);
-            log.debug("Assigned roles {} to user {} for resource {}",
+            // Use authServerSubjectId for logging if the user object might be null or username is not set
+            securityAuditService.logRoleAssignment(authServerSubjectId, dynamicRoles, resource);
+            log.debug("Assigned roles {} to user (subjectId: {}) for resource {}",
                     dynamicRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()),
-                    username,
+                    authServerSubjectId,
                     resource.getClass().getSimpleName());
 
             return Collections.unmodifiableSet(dynamicRoles); // Return immutable set
@@ -125,8 +128,8 @@ public class RoleServiceImpl implements RoleService {
             return Collections.emptySet(); // Fail secure
         } catch (Exception e) {
             // Catch unexpected errors during role determination or validation
-            log.error("Failed to determine dynamic roles for user {} and resource {}: {}",
-                    username, resource.getClass().getSimpleName(), e.getMessage(), e);
+            log.error("Failed to determine dynamic roles for user (subjectId: {}) and resource {}: {}",
+                    authServerSubjectId, resource.getClass().getSimpleName(), e.getMessage(), e);
             alertService.alertSecurityTeam(new SecurityAlert(
                     userIdForAlert, // Use fetched userId if available
                     "Failed to determine dynamic roles for resource",
@@ -144,43 +147,47 @@ public class RoleServiceImpl implements RoleService {
      * Performs initial security checks: authentication, rate limiting, and input validation.
      * Fetches the User object.
      *
-     * @param authentication The current authentication object.
-     * @param username       The username from authentication.
-     * @param resource       The resource being accessed.
+     * @param authentication      The current authentication object.
+     * @param authServerSubjectId The subject ID from the authentication server (obtained from authentication.getName()).
+     * @param resource            The resource being accessed.
      * @return The validated User object.
      * @throws SecurityValidationException if any validation fails.
      * @throws UserNotFoundException       if the user cannot be found.
      */
-    private User performInitialValidations(Authentication authentication, String username, Object resource)
+    private User performInitialValidations(Authentication authentication, String authServerSubjectId, Object resource)
             throws SecurityValidationException, UserNotFoundException {
 
         // --- Authentication Check ---
         if (!securityValidator.validateAuthentication(authentication)) {
-            log.warn("Authentication validation failed for user '{}'", username);
-            securityAuditService.logFailedAttempt(username, "Authentication validation failed");
+            log.warn("Authentication validation failed for user (subjectId: '{}')", authServerSubjectId);
+            securityAuditService.logFailedAttempt(authServerSubjectId, "Authentication validation failed");
             throw new SecurityValidationException("Authentication validation failed");
         }
 
         // --- Fetch User ---
-        // Fetch user early to use User object instead of username string
-        User user = userRepository.findByAuthenticationInfoUsername_Username(username)
+        // Fetch user early to use the User object instead of username string
+        // Use authServerSubjectId for lookup
+        User user = userRepository.findByAuthServerSubjectId(authServerSubjectId) // <<< --- MODIFIED HERE ---
                 .orElseThrow(() -> {
-                    log.error("User not found in repository: {}", username);
-                    securityAuditService.logFailedAttempt(username, "User not found");
-                    return new UserNotFoundException("User not found: " + username);
+                    log.error("User not found in repository for authServerSubjectId: {}", authServerSubjectId);
+                    securityAuditService.logFailedAttempt(authServerSubjectId, "User not found");
+                    // This implies a provisioning issue if the user is authenticated by authserver
+                    // but no corresponding local user exists.
+                    return new UserNotFoundException("Local user profile not found for subject ID: " + authServerSubjectId);
                 });
 
         // --- Rate Limiting Check ---
         try {
-            if (!rateLimiter.tryAcquire(username)) { // Use tryAcquire which returns boolean
-                log.warn("Rate limit exceeded for user {} while determining dynamic roles.", username);
-                securityAuditService.logFailedAttempt(username, "Rate limit exceeded");
+            // Use authServerSubjectId for rate limiting
+            if (!rateLimiter.tryAcquire(authServerSubjectId)) {
+                log.warn("Rate limit exceeded for user (subjectId: {}) while determining dynamic roles.", authServerSubjectId);
+                securityAuditService.logFailedAttempt(authServerSubjectId, "Rate limit exceeded");
                 throw new SecurityValidationException("Rate limit exceeded");
             }
-            log.trace("Rate limit check passed for user {}", username);
+            log.trace("Rate limit check passed for user (subjectId: {})", authServerSubjectId);
         } catch (Exception e) { // Catch potential Redis errors
-            log.error("Error during rate limit check for user {}: {}", username, e.getMessage());
-            securityAuditService.logFailedAttempt(username, "Rate limit check error");
+            log.error("Error during rate limit check for user (subjectId: {}): {}", authServerSubjectId, e.getMessage());
+            securityAuditService.logFailedAttempt(authServerSubjectId, "Rate limit check error");
             // Fail closed for security
             throw new SecurityValidationException("Rate limit check error", e);
         }
@@ -188,7 +195,7 @@ public class RoleServiceImpl implements RoleService {
         // --- Input Validation ---
         if (!inputValidator.validateResource(resource)) {
             log.warn("Resource validation failed for resource type: {}", resource.getClass().getSimpleName());
-            securityAuditService.logFailedAttempt(username, "Resource validation failed");
+            securityAuditService.logFailedAttempt(authServerSubjectId, "Resource validation failed");
             throw new SecurityValidationException("Resource validation failed");
         }
 
@@ -209,8 +216,9 @@ public class RoleServiceImpl implements RoleService {
             throws SecurityValidationException, IllegalStateException {
 
         Set<UserRole> dynamicRoles = new HashSet<>();
-        log.debug("Determining dynamic roles for user {} and resource type: {}",
-                user.getUsername(), resource.getClass().getSimpleName());
+        // Use user.getAuthServerSubjectId() or user.getUsername() (which is email) for logging
+        log.debug("Determining dynamic roles for user (subjectId: {}) and resource type: {}",
+                user.getAuthServerSubjectId(), resource.getClass().getSimpleName());
 
         // --- Resource-specific role determination ---
         switch (resource) {
@@ -227,8 +235,8 @@ public class RoleServiceImpl implements RoleService {
 
         // --- Role Hierarchy Validation ---
         if (roleHierarchyValidator.isRoleAssignmentInvalid(dynamicRoles, authentication)) {
-            log.warn("Role hierarchy validation failed for user {} with roles {}", user.getUsername(), dynamicRoles);
-            securityAuditService.logFailedAttempt(user.getUsername(), "Role hierarchy validation failed");
+            log.warn("Role hierarchy validation failed for user (subjectId: {}) with roles {}", user.getAuthServerSubjectId(), dynamicRoles);
+            securityAuditService.logFailedAttempt(user.getAuthServerSubjectId(), "Role hierarchy validation failed");
             throw new SecurityValidationException("Role hierarchy validation failed");
         }
 
@@ -279,7 +287,7 @@ public class RoleServiceImpl implements RoleService {
         // Compare user IDs for reliability
         if (order.getCustomerId() != null && order.getCustomerId().equals(String.valueOf(user.getUserId()))) {
             roles.add(new UserRole(AppRole.ROLE_ORDER_OWNER));
-            log.info("User {} is the owner of order {}", user.getUsername(), order.getOrderId());
+            log.info("User (subjectId: {}) is the owner of order {}", user.getAuthServerSubjectId(), order.getOrderId());
         }
 
         // Roles based on order status
@@ -345,16 +353,16 @@ public class RoleServiceImpl implements RoleService {
         securityAuditService.logCacheCleared("All roles cache cleared by clearAllRoles()");
     }
 
-    @CacheEvict(key = "#username + '_' + #resource.hashCode()")
+    @CacheEvict(key = "#authServerSubjectId + '_' + #resource.hashCode()") // Use authServerSubjectId for key
     @Override
-    public void clearUserRoles(String username, @NotNull Object resource) {
-        Assert.notNull(username, "Username cannot be null");
+    public void clearUserRoles(String authServerSubjectId, @NotNull Object resource) {
+        Assert.notNull(authServerSubjectId, "Auth Server Subject ID cannot be null");
         Assert.notNull(resource, "Resource cannot be null");
-        log.info("Clearing role cache for user: {} and resource: {}",
-                username, resource.getClass().getSimpleName());
+        log.info("Clearing role cache for user (subjectId: {}) and resource: {}",
+                authServerSubjectId, resource.getClass().getSimpleName());
         securityAuditService.logCacheCleared(
-                String.format("Role cache cleared for user %s and resource %s",
-                        username, resource.getClass().getSimpleName())
+                String.format("Role cache cleared for user (subjectId: %s) and resource %s",
+                        authServerSubjectId, resource.getClass().getSimpleName())
         );
     }
 
@@ -376,13 +384,14 @@ public class RoleServiceImpl implements RoleService {
         Assert.notNull(newRoles, "New roles set cannot be null.");
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication(); // Get current context for validation
+        String userIdentifier = user.getAuthServerSubjectId() != null ? user.getAuthServerSubjectId() : user.getUsername(); // Prefer subjectId
 
         try {
             // Validate role assignment based on hierarchy and current user's authority
             if (roleHierarchyValidator.isRoleAssignmentInvalid(newRoles, authentication)) {
-                log.warn("Role assignment validation failed for user: {} attempting to assign roles: {}",
-                        user.getUsername(), newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()));
-                securityAuditService.logFailedAttempt(user.getUsername(), "Invalid role assignment attempt (hierarchy validation)");
+                log.warn("Role assignment validation failed for user (identifier: {}) attempting to assign roles: {}",
+                        userIdentifier, newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()));
+                securityAuditService.logFailedAttempt(userIdentifier, "Invalid role assignment attempt (hierarchy validation)");
                 return false; // Indicate failure
             }
 
@@ -390,24 +399,18 @@ public class RoleServiceImpl implements RoleService {
             user.createRoleSet(new HashSet<>(newRoles)); // Use a mutable copy if needed, or ensure User handles it
             userRepository.save(user); // Persist changes
 
-            log.info("Successfully assigned roles {} to user {}",
-                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), user.getUsername());
+            log.info("Successfully assigned roles {} to user (identifier: {})",
+                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), userIdentifier);
             // Audit successful assignment (consider adding details about the assigner)
-            securityAuditService.logRoleAssignment(user.getUsername(), newRoles, user); // Audit assignment to the user resource itself
-
-            // Clear dynamic role cache for this user (since static roles changed)
-            // This requires iterating through potential resources or clearing all user entries.
-            // Using allEntries = true on a user-specific cache eviction might be simpler if feasible.
-            // For now, let's rely on the user cache eviction above and potential TTL expiry for dynamic roles.
-            // clearUserRolesForAllResources(user.getUsername()); // Hypothetical method
+            securityAuditService.logRoleAssignment(userIdentifier, newRoles, user); // Audit assignment to the user resource itself
 
             return true; // Indicate success
 
         } catch (Exception e) {
-            log.error("Error assigning roles {} to user {}: {}",
-                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), user.getUsername(), e.getMessage(), e);
+            log.error("Error assigning roles {} to user (identifier: {}): {}",
+                    newRoles.stream().map(UserRole::getRoleName).collect(Collectors.toSet()), userIdentifier, e.getMessage(), e);
             // Audit failure
-            securityAuditService.logFailedAttempt(user.getUsername(), "Error during role assignment: " + e.getMessage());
+            securityAuditService.logFailedAttempt(userIdentifier, "Error during role assignment: " + e.getMessage());
             // Optionally alert security team
             alertService.alertSecurityTeam(new SecurityAlert(
                     String.valueOf(user.getUserId()),
@@ -415,9 +418,7 @@ public class RoleServiceImpl implements RoleService {
                     Map.of("assignedRoles", newRoles.toString(), "error", e.getMessage()),
                     AlertSeverityEnum.HIGH, Instant.now(), "production")
             );
-            // Consider throwing a specific exception instead of returning false
-            throw new RoleAssignmentException("Failed to assign roles to user " + user.getUsername(), e);
-            // return false; // Indicate failure
+            throw new RoleAssignmentException("Failed to assign roles to user " + userIdentifier, e);
         }
     }
 
@@ -452,15 +453,4 @@ public class RoleServiceImpl implements RoleService {
         return isSeller && product.getSeller() != null && user.getUserId().equals(product.getSeller().getUserId()); // User is the seller of this specific product
 // No sufficient privileges found
     }
-
-    /*
-     * Removed determineRoles and its helpers (determineProductRoles, etc.)
-     * as the logic is now integrated into add*Roles methods called from
-     * determineAndValidateRoles.
-     */
-    // private Set<UserRole> determineRoles(Object resource) { ... }
-    // private Set<UserRole> determineProductRoles(Product product) { ... }
-    // private Set<UserRole> determineOrderRoles(Order order) { ... }
-    // private Set<UserRole> determineCategoryRoles(Category category) { ... }
-
 }
