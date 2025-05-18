@@ -240,6 +240,15 @@ public class LocalSecurityConfig {
                     .findFirst()
                     .orElse("http://localhost:9000"); // Fallback to authserver's typical local port
 
+            /*
+             * •Purpose: Machine-to-Machine (M2M) communication.
+             * •Grant Type: client_credentials
+             * •Client Authentication: client_secret_basic
+             * •Token Format: SELF_CONTAINED (JWT)
+             * •Safety:
+             * This is a standard and secure configuration for an M2M client that can keep its secret.
+             * The secret (amlumeapiClientSecret) should be strong and stored securely (Vault is good).
+             */
             RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeapi")
                     .clientSecret(this.amlumeapiClientSecret)  // USE VAULT-INJECTED SECRET
@@ -249,6 +258,59 @@ public class LocalSecurityConfig {
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
+            /*
+             * Client: introspectClient (amlumeintrospect)
+             * ----------------------------------------------------------------------------------------------------
+             * • Purpose: Machine-to-Machine (M2M) client specifically designed to receive an OPAQUE (REFERENCE)
+             *   access token. This type of token is not self-contained and requires resource servers that
+             *   consume it to call back to this authorization server's introspection endpoint
+             *   (e.g., /oauth2/introspect) for validation and to retrieve token details.
+             *
+             * • Grant Type: client_credentials
+             *   Standard for M2M communication where the client authenticates itself directly.
+             *
+             * • Client Authentication: client_secret_basic
+             *   The client authenticates using its clientId and clientSecret via an HTTP Basic auth header.
+             *
+             * • Token Format Received by this Client: REFERENCE (Opaque)
+             *   The access token issued to this client will be an opaque string.
+             *
+             * • Safety & Considerations:
+             *   - Client-Side: The configuration of this client itself (as a confidential client using
+             *     client_secret_basic) is standard. The security of its `clientSecret` is paramount and
+             *     should be managed securely (e.g., via Vault).
+             *   - Ecosystem Impact (Resource Intensity): The primary concern with opaque tokens is the
+             *     impact on resource servers and the authorization server itself. Resource servers
+             *     must make a network call to the introspection endpoint for every request that uses
+             *     an opaque token. This can:
+             *       - Increase latency for API requests.
+             *       - Increase the load on the authorization server (authserver).
+             *       - Create a tight coupling between resource servers and the authorization server.
+             *     Self-contained JWTs, on the other hand, can be validated locally by resource servers
+             *     once they have the public key, reducing these dependencies and overheads.
+             *
+             * • Recommendation (Considering the preference to avoid resource-intensive opaque tokens):
+             *   - KEEP THIS CLIENT IF:
+             *     1. You specifically need to test the introspection endpoint functionality of this `authserver`.
+             *     2. You have existing or planned resource servers that are *only* designed to work with
+             *        opaque tokens and perform introspection.
+             *     3. You have a security policy that mandates opaque tokens for certain types of clients or resources
+             *        despite the performance trade-offs (e.g., for immediate revocation needs that JWTs handle differently).
+             *
+             *   - CONSIDER REMOVING OR COMMENTING IT OUT IF:
+             *     1. Your primary architectural goal is to use self-contained JWTs for your resource servers
+             *        (like `amlume-shop`) to minimize resource intensity and reduce calls to `authserver`.
+             *        In this scenario, a client that *only* receives opaque tokens might be of limited practical
+             *        use for your main application flows.
+             *     2. You want to actively discourage the adoption of opaque tokens within your ecosystem to
+             *        maintain performance and reduce the load on `authserver`'s introspection endpoint.
+             *     3. The overhead of maintaining and testing flows involving opaque tokens is not justified
+             *        by a clear business or technical requirement for them.
+             *
+             *   If you are aiming for a JWT-based architecture for your resource servers, this client
+             *   might primarily serve as a test case for the introspection feature rather than a client
+             *   used by typical services in your ecosystem.
+             */
             RegisteredClient introspectClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeintrospect")
                     .clientSecret(this.amlumeintrospectClientSecret) // USE VAULT-INJECTED SECRET
@@ -258,6 +320,17 @@ public class LocalSecurityConfig {
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .accessTokenFormat(OAuth2TokenFormat.REFERENCE).build()).build();
 
+            /*
+             * •Purpose: Testing user-interactive flows, likely with Postman.
+             * •Grant Types: authorization_code, refresh_token
+             * •Client Authentication: client_secret_post, client_secret_basic (Confidential Client)
+             * •Token Format: SELF_CONTAINED (JWT)
+             * •PKCE: Not explicitly required (it's a confidential client).•Redirect URIs: https://oauth.pstmn.io/v1/callback and a custom one.
+             * •Safety: Good for a confidential client. The secret (postmanClientSecret) needs to be managed.
+             * •Recommendation:
+             *  •Keep as is for testing confidential client flows.
+             *  •Consider adding PKCE: While not mandatory for confidential clients, enabling PKCE (.clientSettings(ClientSettings.builder().requireProofKey(true).build())) adds an extra layer of security against authorization code interception, even for confidential clients. This is a good hardening step.
+             */
             // Client for Postman or general testing
             RegisteredClient postmanAuthCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("postman-client") // DISTINCT CLIENT ID
@@ -272,6 +345,15 @@ public class LocalSecurityConfig {
                             .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
+            /*
+             * Purpose: Represents a public client (e.g., SPA, mobile app) that cannot securely store a client secret.
+             * •Grant Types: authorization_code, refresh_token
+             * •Client Authentication: none (Public Client)
+             * •PKCE: clientSettings(ClientSettings.builder().requireProofKey(true).build()) - Excellent! This is critical for public clients.
+             * •Token Format: SELF_CONTAINED (JWT)
+             * •Safety: This is the safest configuration for a public client using the Authorization Code grant.
+             * •Recommendation: Keep as is and use this pattern for any actual public clients.
+             */
             RegisteredClient pkceClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeapipublicclient")
                     .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
@@ -285,7 +367,18 @@ public class LocalSecurityConfig {
                             .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
-            // Client specifically for amlume-shop
+            /*
+             * •Purpose: This is the client registration for your amlume-shop application itself, which will act as an OAuth2 client to authserver.
+             * •Grant Types: authorization_code, refresh_token
+             * •Client Authentication: client_secret_post, client_secret_basic (Confidential Client, as amlume-shop is a backend server)
+             * •Token Format: SELF_CONTAINED (JWT)•PKCE: Not explicitly required.
+             * •Redirect URI: Custom for amlume-shop (http://localhost:9000/login/oauth2/code/amlumeclient - note port 9000, this should be the redirect URI registered with authserver and where amlume-shop expects the callback, typically amlume-shop's own address like http://localhost:8080/...).
+             *  •Important: The redirectUri for shopClient in authserver's configuration must point to amlume-shop's actual callback endpoint (e.g., http://localhost:8080/login/oauth2/code/amlumeclient if amlume-shop runs on 8080). The current defaultRedirectBase in your seeding logic seems to point to authserver's own base URL.
+             * •Safety: Good for a confidential client. The secret (shopClientSecret) must be securely managed by amlume-shop (e.g., loaded from its own Vault instance or environment variables).
+             * •Recommendation:
+             *  •Correct the redirectUri: Ensure it points to amlume-shop's callback endpoint.
+             *  •Highly Recommended: Add PKCE: Even though amlume-shop is a confidential client, adding PKCE (.clientSettings(ClientSettings.builder().requireProofKey(true).build())) provides robust protection against authorization code interception attacks. This is a best practice.
+             */
             RegisteredClient shopClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeclient") // This is the ID amlume-shop will use
                     .clientSecret(this.shopClientSecret) // USE VAULT-INJECTED SECRET
@@ -293,13 +386,14 @@ public class LocalSecurityConfig {
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                     // IMPORTANT: This redirect URI MUST match what amlume-shop configures
-//                    .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
-                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
+                    .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
+//                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
                     .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
+                    .clientSettings(ClientSettings.builder().requireProofKey(true).build()) // ADDED PKCE
                     .tokenSettings(TokenSettings.builder()
                             .accessTokenTimeToLive(Duration.ofMinutes(10))
                             .refreshTokenTimeToLive(Duration.ofHours(8))
-                            .reuseRefreshTokens(false)
+                            .reuseRefreshTokens(false) // Good: enables refresh token rotation
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                             .build()).build();
 
@@ -686,3 +780,49 @@ public class LocalSecurityConfig {
 //        return new CustomOidcUserService(userRepository, authorityRepository);
 //    }
 }
+
+/*
+ * What we Should Do (Recommendations for Safest Configurations):
+ *
+ * 1. For Public Clients (e.g., SPAs, Mobile Apps that will talk to authserver):
+ * • Use the pattern of pkceClient (amlumeapipublicclient).
+ * • clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+ * • authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+ * • authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN) (if refresh tokens are needed)
+ * • clientSettings(ClientSettings.builder().requireProofKey(true).build()) (Mandatory PKCE)
+ * • Specific, HTTPS redirect URIs.
+ * • Self-contained JWTs are fine.
+ *
+ * 2. For Confidential Clients (like your amlume-shop backend, or other backend services):
+ * • Use the pattern of shopClient (amlumeclient) or postmanAuthCodeClient.
+ * • clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
+ * • authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+ * • authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+ * • Highly Recommended: Add PKCE: .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+ * • Securely manage the clientSecret.
+ * • Specific, HTTPS redirect URIs.
+ * • Self-contained JWTs are fine.
+ *
+ * 3. For Machine-to-Machine (M2M) Communication:
+ * • Use the pattern of clientCredClient (amlumeapi).
+ * • clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+ * • authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+ * • Securely manage the clientSecret.
+ * • Self-contained JWTs are fine.
+ *
+ * Specific Actions for LocalSecurityConfig.java:
+ *
+ * • shopClient (for amlume-shop):
+ * • Verify and Correct redirectUri:
+ * Change: .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
+ * To something like (assuming amlume-shop runs on 8080 locally):
+ * .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
+ * (This URI must match exactly what amlume-shop is configured to use in its
+ * spring.security.oauth2.client.registration.amlumeclient.redirect-uri property).
+ * • Add PKCE: Add this line to the shopClient configuration:
+ * .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+ *
+ * • postmanAuthCodeClient (for testing):
+ * • Consider Adding PKCE (Optional but good practice): Add this line:
+ * .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+ */
