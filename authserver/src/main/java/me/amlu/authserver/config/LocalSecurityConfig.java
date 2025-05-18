@@ -575,12 +575,6 @@ public class LocalSecurityConfig {
     }
 
     @Bean
-    public PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository(
-            UserRepository userRepository, AuthorityRepository authorityRepository) {
-        return new DbPublicKeyCredentialUserEntityRepository(userRepository, authorityRepository);
-    }
-
-    @Bean
     public UserCredentialRepository userCredentialRepository(
             PasskeyCredentialRepository passkeyCredentialRepository, UserRepository userRepository) {
         return new DbUserCredentialRepository(passkeyCredentialRepository, userRepository);
