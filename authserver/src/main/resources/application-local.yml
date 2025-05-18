@@ -9,7 +9,11 @@ app:
       # For now, assuming APP_CENTRAL_TRUSTSTORE_PASSWORD is an env var Spring Boot picks up
       # or you can map it from Vault: ${authserver.security.truststore.password}
       password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
-      # type: JKS # Optional: Specify type if not JKS
+
+oauth2:
+  clients:
+    shopClient:
+      secret: ${oauth2.clients.shopClient.secret} # This is the key Spring Boot resolves     # type: JKS # Optional: Specify type if not JKS
 
 spring:
   application:
@@ -59,10 +63,10 @@ spring:
     #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS&trustCertificateKeyStorePassword=${APP_CENTRAL_TRUSTSTORE_PASSWORD} # <-- Corrected and password added
     #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS
     #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=DISABLED
-    url: jdbc:mysql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT_LOCAL:3407}/${DATABASE_NAME:amlume_auth_db}sslMode=DISABLED&allowPublicKeyRetrieval=true
-    #    url: jdbc:mysql://${DATABASE_HOST:localhost}:${DATABASE_PORT:3306}/${DATABASE_NAME:amlume_db}
-    username: ${AUTH_DB_USER} # Ensure this is the correct user (e.g., auth_user)
-    password: ${AUTH_DB_PASSWORD} # Ensure this is the correct password for the user
+    url: jdbc:mysql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT_LOCAL:3407}/${AUTH_DB_NAME:amlume_auth_db}?sslMode=DISABLED&allowPublicKeyRetrieval=true
+    #    url: jdbc:mysql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT_LOCAL:3306}/${AUTH_DB_NAME:amlume_auth_db}
+    username: ${spring.datasource.username}
+    password: ${spring.datasource.password}
     driverClassName: com.mysql.cj.jdbc.Driver
 
   # --- JPA / Hibernate ---
@@ -111,21 +115,20 @@ spring:
             # 'spring.security.oauth2.client.registration.google.client-id' and
             # 'spring.security.oauth2.client.registration.google.client-secret'
             # exist in secret/data/authserver/local (or secret/data/authserver)
-            client-id: ${GOOGLE_CLIENT_ID} # Get from Google Cloud Console
-            client-secret: ${GOOGLE_CLIENT_SECRET} # Get from Google Cloud Console
+            client-id: ${spring.security.oauth2.client.registration.google.client-id} # Matches key in Vault
+            client-secret: ${spring.security.oauth2.client.registration.google.client-secret} # Matches key in Vault
             scope: openid, profile, email
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
           github:
-            client-id: ${GITHUB_CLIENT_ID} # Get from GitHub Developer Settings
-            client-secret: ${GITHUB_CLIENT_SECRET} # Get from GitHub Developer Settings
+            client-id: ${spring.security.oauth2.client.registration.github.client-id} # Matches key in Vault
+            client-secret: ${spring.security.oauth2.client.registration.github.client-secret} # Matches key in Vault
             scope: read:user, user:email # Ensure 'user:email' for primary email
             redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
         # provider: # Often auto-discovered for OIDC, or common providers are pre-configured
         #   google:
         #     issuer-uri: https://accounts.google.com
     rememberme:
-      # key will be overridden by Vault if 'spring.security.rememberme.key' exists in secret/data/authserver/local
-      key: ${REMEMBER_ME_KEY}
+      key: ${spring.security.rememberme.key} # Matches key in Vault
     webauthn:
       rpName: "Amlume-Passkeys"
       # Replace it with the domain name of the application
@@ -169,12 +172,10 @@ logging:
     oauth2:
       clients:
         amlumeapi:
-          secret: ${OAUTH2_CLIENT_AMLUMEAPI_SECRET_PLACEHOLDER}
+          secret: ${oauth2.clients.amlumeapi.secret} # Matches key in Vault
         amlumeintrospect:
-          secret: ${OAUTH2_CLIENT_AMLUMEINTROSPECT_SECRET_PLACEHOLDER}
-        # For the client used by amlume-shop (and Postman if sharing secret)
-        shopClient: # Renamed for clarity
-          secret: ${OAUTH2_CLIENT_SHOPCLIENT_SECRET_PLACEHOLDER}
-        # If postman-client needs a different secret:
+          secret: ${oauth2.clients.amlumeintrospect.secret} # Matches key in Vault
+        shopClient:
+          secret: ${oauth2.clients.shopClient.secret} # Matches key in Vault
         postmanClient:
-          secret: ${OAUTH2_CLIENT_POSTMANCLIENT_SECRET_PLACEHOLDER}
+          secret: ${oauth2.clients.postmanClient.secret} # Matches key in Vault

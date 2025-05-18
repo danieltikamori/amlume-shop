@@ -18,6 +18,11 @@ app:
       password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
       # type: JKS # Optional: Specify type if not JKS
 
+
+# --- Authserver Integration ---
+authserver:
+  base-url: http://localhost:9000 # Ensure this matches your authserver's actual URL
+
 # --- Logging ---
 logging:
   level:
@@ -205,11 +210,32 @@ spring:
         jwt:
           # IMPORTANT: Adjust realm name as needed
           jwk-set-uri: ${JWK_SET_URI:http://localhost:9000/oauth2/jwks}
+          issuer-uri: http://localhost:9000 # URL of the authserver
   #        opaque:
   #          introspection-uri: ${INTROSPECT_URI:http://localhost:9000/oauth2/introspect}
   #          introspection-client-id: ${INTROSPECT_ID:amlumeintrospect}
   #          introspection-client-secret: ${INTROSPECT_SECRET:c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj}
 
+      # client: # This is the parent key
+      client:
+        registration:
+          amlumeclient: # This is the registrationId for your amlume-shop client
+            provider: amlumeauth # Links to the provider configuration below
+            client-id: amlumeclient # The client_id registered in your authserver
+            # IMPORTANT: This secret should ideally be loaded from Vault for amlume-shop as well
+            client-secret: ${spring.security.oauth2.client.registration.amlumeclient.secret:Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/amlumeclient" # {baseUrl} is placeholder, path matches registrationId
+            scope: openid,profile,email
+            client-name: "Amlume Shop Client" # A descriptive name for this client registration
+        provider:
+          amlumeauth: # This is the providerId, matching the 'provider' key in the registration above
+            issuer-uri: http://localhost:9000 # URL of your authserver
+            # Optional: If your authserver endpoints are not standard, configure them here:
+            # authorization-uri: http://localhost:9000/oauth2/authorize
+            # token-uri: http://localhost:9000/oauth2/token
+            # user-info-uri: http://localhost:9000/userinfo (if authserver provides it)
+            # jwk-set-uri: http://localhost:9000/oauth2/jwks (already in resourceserver, but can be here too)
 
   # --- Spring Security Filters ---
   # security: # Merged under spring.security above
@@ -232,6 +258,16 @@ spring:
   threads:
     virtual:
       enabled: true
+
+  webflux:
+    client:
+      # Connection timeout for establishing the connection
+      connect-timeout: 5000ms # 5 seconds
+      # Response timeout for the entire response (connection + request + response)
+      response-timeout: 15000ms # 15 seconds
+      # Read timeout for inactivity on the connection (often handled by response-timeout or lower level)
+      # read-timeout: 10000ms # Use response-timeout instead for overall call timeout
+
 
 # --- Actuator ---
 management:
@@ -473,6 +509,29 @@ resilience4j: # Used by ResilienceConfig and related properties beans
         slidingWindowSize: 20
         minimumNumberOfCalls: 10
         waitDurationInOpenState: 30s
+      # Configuration for the circuit breaker around the authserver registration call
+      authserverRegistration: # Name used in @CircuitBreaker annotation
+        failureRateThreshold: 50 # Percentage of failed calls to trip the circuit
+        waitDurationInOpenState: 30s # Time the circuit stays open
+        permittedNumberOfCallsInHalfOpenState: 5 # Calls allowed in half-open state
+        slidingWindowSize: 20 # Number of calls in the sliding window
+        minimumNumberOfCalls: 10 # Minimum calls before calculating failure rate
+        # Record exceptions that should count towards failure rate (transient errors, server errors)
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.reactive.function.client.WebClientRequestException # Network/connection errors
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError # 500
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable # 503
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout # 504
+          # Do NOT record expected business errors or client errors (these are handled by onStatus)
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException # Expected conflict (409)
+          - java.lang.IllegalArgumentException # Expected bad request mapping (400)
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Conflict # 409 Conflict
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest # 400 Bad Request
+          - me.amlu.shop.amlume_shop.exceptions.UserRegistrationException # Treat authserver internal errors as non-retryable business errors
+
       captchaValidation:
         failureRateThreshold: 50
         slowCallDurationThreshold: 2s
@@ -539,6 +598,29 @@ resilience4j: # Used by ResilienceConfig and related properties beans
         ignoreExceptions:
           - me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException
           - jakarta.validation.ValidationException
+      # Configuration for retries on the authserver registration call
+      authserverRegistration: # Name used in @Retry annotation
+        maxAttempts: 3 # Number of retry attempts (initial call + 2 retries)
+        waitDuration: 1s # Base wait duration between retries
+        enableExponentialBackoff: true # Use exponential backoff (uses global exponential config)
+        # retryExceptions: Exceptions that should trigger a retry. Defaults to empty, retries on all exceptions unless ignored.
+        # Let's explicitly list transient exceptions to be clear.
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.reactive.function.client.WebClientRequestException # Network/connection errors
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError # 500
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable # 503
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout # 504
+        # ignoreExceptions: Exceptions that should NOT trigger a retry. Defaults to empty.
+        # Crucially, do NOT retry on expected business errors or client errors.
+        ignoreExceptions:
+          - me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException # Expected conflict (409)
+          - java.lang.IllegalArgumentException # Expected bad request mapping (400)
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Conflict # 409 Conflict
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest # 400 Bad Request
+          - me.amlu.shop.amlume_shop.exceptions.UserRegistrationException # Treat authserver internal errors as non-retryable business errors
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException # Don't retry if CB is open
       captchaValidation:
         maxAttempts: 3
         waitDuration: 1s

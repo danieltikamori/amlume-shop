@@ -29,6 +29,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - amlume-shop-network
 
 # --- Auth Database (Local Dev) ---
 # Define the mysql-auth service for local development
@@ -58,6 +60,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 6
+    networks:
+      - amlume-shop-network
 
   # --- Shop Database (Local Dev) ---
   # We override 'mysql-shop' from the base file for the single local instance
@@ -91,6 +95,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 6
+    networks:
+      - amlume-shop-network
 
   # --- Valkey Cache Dev Configuration ---
   valkey-cache:
@@ -107,6 +113,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - amlume-shop-network
 
   # --- Vault Seeder (Dev Only) ---
   vault-seeder:
@@ -127,7 +135,28 @@ services:
       vault:
         condition: service_healthy
     restart: 'no' # Run once
+    networks:
+      - amlume-shop-network
 
+  # --- Vault Seeder for authserver ---
+  vault-seeder-authserver:
+    build:
+      context: . # Assuming Dockerfile is accessible from project root
+      dockerfile: ./docker/vault-seeders/authserver/vault-seeder-authserver.Dockerfile
+    container_name: vault-seeder-authserver-job
+    environment:
+      VAULT_TOKEN: "token" # Can use the same dev token
+      VAULT_PATH: "secret/authserver/local" # *** Path for authserver secrets ***
+      ENV_FILE_PATH: "/app/authserver.env" # *** Path to authserver's .env file ***
+      VAULT_ADDR: http://vault:8200
+    volumes:
+      - ./authserver/.env:/app/authserver.env:ro # *** Mount authserver's .env file ***
+    depends_on:
+      vault:
+        condition: service_healthy
+    restart: 'no'
+    networks:
+      - amlume-shop-network
 
 # Use this command to run locally:
 #  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder
@@ -153,3 +182,11 @@ volumes:
   # Add vault_config and vault_data if needed by prod but not base
   vault_config: {}
   vault_data: {}
+
+# Ensure the network is defined in the override if not relying solely on the base file
+# (though it should inherit from the base docker-compose.yaml if named the same)
+networks:
+  amlume-shop-network:
+    # If defined in base, this can be empty or just 'external: true' if pre-existing
+    # If this override is the sole definition for local, ensure 'name' matches base.
+    name: amlume-shop-network # Ensure this matches the name in docker-compose.yaml

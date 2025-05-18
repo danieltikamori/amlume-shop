@@ -1,5 +1,4 @@
 #!/bin/sh
-# Seeder script for Vault
 #
 # Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
 #
@@ -120,8 +119,8 @@ add_pair() {
 add_pair "app.ssl.trust-store.password" "${APP_CENTRAL_TRUSTSTORE_PASSWORD}"
 add_pair "cors.allowed-origins" "${CORS_ALLOWED_ORIGINS}"
 
-add_pair "database.password" "${DB_PASSWORD}"
-add_pair "database.username" "${DB_USERNAME}"
+add_pair "database.password" "${SHOP_DB_PASSWORD}"
+add_pair "database.username" "${SHOP_DB_USER}"
 # Add other database.* properties if needed (e.g., database.url if not hardcoded)
 
 add_pair "device-fingerprint.salt" "${DEVICE_FINGERPRINT_SALT}" # Assuming property name matches
