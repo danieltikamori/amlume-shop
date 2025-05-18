@@ -22,15 +22,12 @@ import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
-import me.amlu.authserver.oauth2.service.CustomOAuth2UserService;
-import me.amlu.authserver.oauth2.service.CustomOidcUserService;
 import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
 import me.amlu.authserver.passkey.repository.DbPublicKeyCredentialUserEntityRepository;
 import me.amlu.authserver.passkey.repository.DbUserCredentialRepository;
 import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
-import org.checkerframework.common.returnsreceiver.qual.This;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -41,14 +38,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
-import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -69,8 +63,6 @@ import org.springframework.security.oauth2.server.authorization.token.JwtEncodin
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
-import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
-import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -84,7 +76,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.web.reactive.function.client.WebClient;
 
 import javax.sql.DataSource;
 import java.security.KeyPair;
@@ -115,14 +106,15 @@ public class LocalSecurityConfig {
     @Value("${oauth2.clients.postmanClient.secret}") // For Postman testing
     private String postmanClientSecret;
 
+    @Value("${spring.security.rememberme.key:${spring.security.webauthn.rpId}_RememberMeKey2024}")
+    private String rememberMeKey;
+
     private final PersistentTokenRepository persistentTokenRepository;
 
     private final ObjectMapper objectMapper;
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
     private final DataSource dataSource;
-    @Value("${spring.security.rememberme.key:${spring.security.webauthn.rpId}_RememberMeKey2024}")
-    private String rememberMeKey;
 
     public LocalSecurityConfig(ObjectMapper objectMapper,
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
@@ -589,18 +581,18 @@ public class LocalSecurityConfig {
     }
 
     /**
-     *  Remember me feature
-     *
+     * Remember me feature
+     * <p>
      * Step 1 and 2:
      * Key Changes in LocalSecurityConfig.java:
-     *
+     * <p>
      * 1. DataSource Injection:
      * - DataSource is injected into the constructor and stored as a field.
-     *
+     * <p>
      * 2. defaultSecurityFilterChain Parameters:
      * - Added UserDetailsService userDetailsService and PersistentTokenRepository persistentTokenRepository
      * as parameters to be injected by Spring .
-     *
+     * <p>
      * 3. .rememberMe() Configuration:
      * - tokenRepository(persistentTokenRepository):
      * - Tells Spring Security to use our database-backed token repository.
@@ -615,7 +607,7 @@ public class LocalSecurityConfig {
      * generate a proper secret.
      * - tokenValiditySeconds((int) Duration.ofDays(30).toSeconds()):
      * - Sets how long the remember-me token is valid (e.g., 30 days).
-     *
+     * <p>
      * 4. PersistentTokenRepository Bean:
      * - A bean named persistentTokenRepository of type PersistentTokenRepository is defined.
      * - It instantiates JdbcTokenRepositoryImpl and sets the dataSource.
@@ -623,54 +615,32 @@ public class LocalSecurityConfig {
      * - It's useful for the very first run in a development environment to create the persistent_logins table automatically.
      * - For subsequent runs or in production, this table should be managed by your database migration scripts
      * (e.g., Flyway, Liquibase).
-     *
+     * <p>
      * 5. CSRF for /api/**:
      * - I've added /api/** to ignoringRequestMatchers for CSRF.
      * - This is a common setup if your API is primarily consumed by non-browser clients or SPAs that handle tokens differently.
      * - If your /api/profile endpoints are called from traditional web forms within your authserver's UI
      * and rely on session cookies, you might need more granular CSRF configuration.
      * - For now, this simplifies things.
-     *
+     * <p>
      * 6. Login Page:
      * - Added .loginPage("/login").permitAll() to formLogin to explicitly state the login page URL,
      * assuming you have one or will create one.
      * - If you rely on Spring Security's default login page, this can be omitted, but a custom page is usually preferred.
-     *
+     * <p>
      * Step 3: Database Schema for persistent_logins
-     *
+     * <p>
      * You need to create the persistent_logins table in your MySQL database. If you didn't use setCreateTableOnStartup(true), you must create it manually or via a migration script.
-     *
+     * <p>
      * CREATE TABLE persistent_logins (
-     *     username VARCHAR(255) NOT NULL, -- Ensure this matches the length of your User's email/username
-     *     series VARCHAR(64) PRIMARY KEY,
-     *     token VARCHAR(64) NOT NULL,
-     *     last_used TIMESTAMP NOT NULL
+     * username VARCHAR(255) NOT NULL, -- Ensure this matches the length of your User's email/username
+     * series VARCHAR(64) PRIMARY KEY,
+     * token VARCHAR(64) NOT NULL,
+     * last_used TIMESTAMP NOT NULL
      * );
-     *
+     * <p>
      * Note: username column length should be sufficient for your usernames (emails). VARCHAR(255) is usually safe for emails.
-     *
-     *
      */
-
-    /**
-     * Implement Remember me feature
-     * <p>
-     * Users do not need to authenticate in trusted browsers and devices.
-     * <p>
-     * Needs a persistent storage for remember me tokens.
-     *
-     * @return {@link PersistentTokenRepository}
-     */
-    @Bean
-    public PersistentTokenRepository persistentTokenRepository() {
-        JdbcTokenRepositoryImpl tokenRepository = new JdbcTokenRepositoryImpl();
-        tokenRepository.setDataSource(dataSource);
-        // For initial development, you can let it create the table.
-        // In production, you should manage schema via Flyway/Liquibase.
-        // tokenRepository.setCreateTableOnStartup(true);
-        // In production, manage schema via Flyway/Liquibase and keep setCreateTableOnStartup(false) (default).
-        return tokenRepository;
-    }
 
     @ConfigurationProperties(prefix = "spring.security.webauthn")
     public static class WebAuthNProperties {

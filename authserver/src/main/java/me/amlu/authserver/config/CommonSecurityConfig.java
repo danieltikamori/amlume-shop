@@ -16,9 +16,37 @@ import org.springframework.security.authentication.password.CompromisedPasswordC
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
+import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
+import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 
 @Configuration
 public class CommonSecurityConfig {
+
+    private final javax.sql.DataSource dataSource;
+
+    public CommonSecurityConfig(javax.sql.DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    /**
+     * Implement Remember me feature
+     * <p>
+     * Users do not need to authenticate in trusted browsers and devices.
+     * <p>
+     * Needs a persistent storage for remember me tokens.
+     *
+     * @return {@link PersistentTokenRepository}
+     */
+    @Bean
+    public PersistentTokenRepository persistentTokenRepository() {
+        JdbcTokenRepositoryImpl tokenRepository = new JdbcTokenRepositoryImpl();
+        tokenRepository.setDataSource(dataSource);
+        // For initial development, you can let it create the table.
+        // In production, you should manage schema via Flyway/Liquibase.
+        // tokenRepository.setCreateTableOnStartup(true);
+        // In production, manage schema via Flyway/Liquibase and keep setCreateTableOnStartup(false) (default).
+        return tokenRepository;
+    }
 
     // --- PasswordEncoder, CompromisedPasswordChecker ---
     @Bean
