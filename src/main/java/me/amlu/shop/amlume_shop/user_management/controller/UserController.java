@@ -11,6 +11,8 @@
 package me.amlu.shop.amlume_shop.user_management.controller;
 
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.dto.GetUserResponse;
@@ -25,8 +27,9 @@ import java.util.Optional;
 @RequestMapping("/api")
 public class UserController {
 
-private final UserService userService;
-private final UserRepository userRepository;
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
+    private final UserService userService;
+    private final UserRepository userRepository;
 
     public UserController(UserService userService, UserRepository userRepository) {
         this.userService = userService;
@@ -36,17 +39,37 @@ private final UserRepository userRepository;
     @GetMapping("/profile")
     @RequiresAuthentication
     public ResponseEntity<GetUserResponse> getUserProfile() {
+        // userService.getCurrentUser() should correctly fetch the user
+        // based on the authServerSubjectId from the OIDC token.
         User currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(GetUserResponse.fromUser(currentUser));
     }
 
-
-    @RequestMapping("/user")
+    // This endpoint might be redundant given /api/profile, but if kept, it needs correction.
+    // It assumes the Authentication object is populated by Spring Security after OIDC/JWT validation.
+    @GetMapping("/user") // Changed to @GetMapping as it's a read operation
     public User getUserDetailsAfterLogin(Authentication authentication) {
-        String username = authentication.getName();
-        Optional<User> optionalUser = userRepository.findByAuthenticationInfoUsername_Username(username);
+        if (authentication == null || !authentication.isAuthenticated()) {
+            log.warn("Attempt to access /api/user without valid authentication.");
+            // Depending on requirements, you might return HTTP 401 or null
+            return null;
+        }
+
+        // After OIDC login and JWT validation by the resource server,
+        // authentication.getName() will be the 'sub' claim from the JWT,
+        // which is the authServerSubjectId.
+        String authServerSubjectId = authentication.getName();
+        log.debug("Fetching user details for /api/user endpoint using authServerSubjectId: {}", authServerSubjectId);
+
+        // Ensure UserRepository has findByAuthServerSubjectId method
+        Optional<User> optionalUser = userRepository.findByAuthServerSubjectId(authServerSubjectId);
+
+        if (optionalUser.isEmpty()) {
+            log.warn("No local user found for authServerSubjectId: {} when accessing /api/user endpoint. This might indicate a user provisioning issue.", authServerSubjectId);
+        }
         return optionalUser.orElse(null);
     }
+
 //    @PostMapping("v1/admin/user/")
 //    public ResponseEntity<UserRegistrationRequest> registerUser(@Valid @RequestBody UserRegistrationRequest userRegistrationRequest, @PathVariable String password) throws ProductAlreadyExistsException {
 //
@@ -54,5 +77,4 @@ private final UserRepository userRepository;
 //        return new ResponseEntity<>(userResponse, null, HttpStatus.CREATED);
 //
 //    }
-
 }
