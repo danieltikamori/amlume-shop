@@ -83,6 +83,7 @@ import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -243,6 +244,7 @@ public class LocalSecurityConfig {
              */
             RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeapi")
+                    .clientIdIssuedAt(Instant.now())
                     .clientSecret(this.amlumeapiClientSecret)  // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
@@ -305,6 +307,7 @@ public class LocalSecurityConfig {
              */
             RegisteredClient introspectClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeintrospect")
+                    .clientIdIssuedAt(Instant.now())
                     .clientSecret(this.amlumeintrospectClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
@@ -326,6 +329,7 @@ public class LocalSecurityConfig {
             // Client for Postman or general testing
             RegisteredClient postmanAuthCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("postman-client") // DISTINCT CLIENT ID
+                    .clientIdIssuedAt(Instant.now())
                     .clientSecret(this.postmanClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
@@ -348,6 +352,7 @@ public class LocalSecurityConfig {
              */
             RegisteredClient pkceClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeapipublicclient")
+                    .clientIdIssuedAt(Instant.now())
                     .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
@@ -373,6 +378,7 @@ public class LocalSecurityConfig {
              */
             RegisteredClient shopClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeclient") // This is the ID amlume-shop will use
+                    .clientIdIssuedAt(Instant.now())
                     .clientSecret(this.shopClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
