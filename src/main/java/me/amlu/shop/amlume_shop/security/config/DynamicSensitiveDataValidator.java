@@ -37,17 +37,21 @@ import java.util.stream.Collectors;
 public class DynamicSensitiveDataValidator implements ConstraintValidator<SensitiveData, Object> {
 
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(DynamicSensitiveDataValidator.class);
-    //    @Autowired
-    private RoleService roleService; // Make sure this service is properly implemented
+
+    private final RoleService roleService;
 
     private Set<String> staticRolesAllowed;
+
+    public DynamicSensitiveDataValidator(RoleService roleService) {
+        this.roleService = roleService;
+    }
 
     @Override
     public void initialize(SensitiveData constraintAnnotation) {
         try {
             this.staticRolesAllowed = Set.of(constraintAnnotation.rolesAllowed())
                     .stream()
-                    .map(role -> "ROLE_" + role.toUpperCase())
+                    .map(role -> "ROLE_" + role.toUpperCase()) // Ensure ROLE_ prefix for comparison
                     .collect(Collectors.toSet());
             log.debug("Initialized static roles: {}", staticRolesAllowed);
         } catch (Exception e) {
@@ -68,7 +72,7 @@ public class DynamicSensitiveDataValidator implements ConstraintValidator<Sensit
                 return false;
             }
 
-            // Get user roles
+            // Get user roles (Set<String>)
             Set<String> userRoles = authentication.getAuthorities().stream()
                     .map(GrantedAuthority::getAuthority)
                     .collect(Collectors.toSet());
@@ -81,19 +85,27 @@ public class DynamicSensitiveDataValidator implements ConstraintValidator<Sensit
             boolean hasStaticRole = !Collections.disjoint(staticRolesAllowed, userRoles);
             log.debug("Static role check result: {}", hasStaticRole);
 
-            // Get and check dynamic roles
-            Set<UserRole> dynamicRoles = getDynamicRoles(value);
-            boolean hasDynamicRole = !Collections.disjoint(dynamicRoles, userRoles);
+            // Get dynamic roles (Set<UserRole>)
+            Set<UserRole> dynamicUserRolesObject = getDynamicRoles(value);
+
+            // Convert dynamic roles (Set<UserRole>) to a Set<String> of authority names
+            Set<String> dynamicRolesAsString = dynamicUserRolesObject.stream()
+                    .map(userRole -> userRole.getRoleName().name()) // Get AppRole enum, then its string name
+                    .collect(Collectors.toSet());
+            log.debug("Dynamic roles (as strings) for resource: {}", dynamicRolesAsString);
+
+            // Check dynamic roles (comparing Set<String> with Set<String>)
+            boolean hasDynamicRole = !Collections.disjoint(dynamicRolesAsString, userRoles);
             log.debug("Dynamic role check result: {}", hasDynamicRole);
 
             boolean hasAccess = hasStaticRole || hasDynamicRole;
 
             // Log the result
             if (!hasAccess) {
-                log.warn("Access denied for user: {}. Required static roles: {}, dynamic roles: {}, user roles: {}",
+                log.warn("Access denied for user: {}. Required static roles: {}, dynamic roles (strings): {}, user roles: {}",
                         authentication.getName(),
                         staticRolesAllowed,
-                        dynamicRoles,
+                        dynamicRolesAsString, // Log the string representation
                         userRoles);
             } else {
                 log.debug("Access granted for user: {}", authentication.getName());
@@ -112,12 +124,17 @@ public class DynamicSensitiveDataValidator implements ConstraintValidator<Sensit
             if (value == null) {
                 return Collections.emptySet();
             }
+            // Ensure roleService is not null
+            if (roleService == null) {
+                log.error("RoleService is not injected. Cannot retrieve dynamic roles.");
+                return Collections.emptySet();
+            }
 
             Set<UserRole> dynamicRoles = roleService.getDynamicRolesForResource(value);
             log.debug("Retrieved dynamic roles for resource type {}: {}",
                     value.getClass().getSimpleName(),
                     dynamicRoles.stream()
-                            .map(UserRole::getRoleName)
+                            .map(userRole -> userRole.getRoleName().name()) // Log the AppRole enum name
                             .collect(Collectors.toSet()));
             return dynamicRoles;
         } catch (Exception e) {
