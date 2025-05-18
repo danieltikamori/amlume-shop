@@ -574,12 +574,6 @@ public class LocalSecurityConfig {
                 Set.of(webauthnOrigin));
     }
 
-    @Bean
-    public UserCredentialRepository userCredentialRepository(
-            PasskeyCredentialRepository passkeyCredentialRepository, UserRepository userRepository) {
-        return new DbUserCredentialRepository(passkeyCredentialRepository, userRepository);
-    }
-
     /**
      * Remember me feature
      * <p>
