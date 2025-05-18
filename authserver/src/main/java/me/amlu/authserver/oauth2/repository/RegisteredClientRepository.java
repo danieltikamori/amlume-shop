@@ -19,4 +19,5 @@ import java.util.Optional;
 @Repository
 public interface RegisteredClientRepository extends JpaRepository<RegisteredClient, String> {
     Optional<RegisteredClient> findByClientId(String clientId);
+
 }

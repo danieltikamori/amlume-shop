@@ -14,6 +14,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import me.amlu.authserver.oauth2.model.RegisteredClient;
+import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.repository.RegisteredClientRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -40,12 +41,14 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
     private final RegisteredClientRepository jpaRepository;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final AuthorityRepository authorityRepository;
 
-    public JpaRegisteredClientRepositoryAdapter(RegisteredClientRepository jpaRepository, PasswordEncoder passwordEncoder) {
+    public JpaRegisteredClientRepositoryAdapter(RegisteredClientRepository jpaRepository, PasswordEncoder passwordEncoder, AuthorityRepository authorityRepository) {
         Assert.notNull(jpaRepository, "jpaRepository cannot be null");
         Assert.notNull(passwordEncoder, "passwordEncoder cannot be null");
         this.jpaRepository = jpaRepository;
         this.passwordEncoder = passwordEncoder;
+        this.authorityRepository = authorityRepository;
 
         // Configure ObjectMapper with necessary modules for ClientSettings and TokenSettings
         ClassLoader classLoader = JpaRegisteredClientRepositoryAdapter.class.getClassLoader();
@@ -162,5 +165,9 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
         } catch (Exception ex) {
             throw new IllegalArgumentException("Error writing map to JSON string", ex);
         }
+    }
+
+    public AuthorityRepository getAuthorityRepository() {
+        return this.authorityRepository;
     }
 }
