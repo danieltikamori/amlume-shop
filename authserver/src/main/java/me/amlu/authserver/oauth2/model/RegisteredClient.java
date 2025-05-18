@@ -24,7 +24,6 @@ import java.util.Set;
 }, indexes = {
         @Index(name = "idx_client_id", columnList = "client_id"),
         @Index(name = "idx_client_name", columnList = "client_name"),
-        @Index(name = "idx_client_authentication_methods", columnList = "client_authentication_method"),
         @Index(name = "idx_client_secret_expires_at", columnList = "client_secret_expires_at"),
 
 })
@@ -64,12 +63,14 @@ public class RegisteredClient {
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "oauth2_redirect_uris", joinColumns = @JoinColumn(name = "registered_client_id"))
-    @Column(name = "redirect_uri", nullable = false, length = 1000)
+    // Do not set too high length, as 3072 bytes is the limit for MySQL InnoDB primary keys
+    @Column(name = "redirect_uri", nullable = false, length = 255)
     private Set<String> redirectUris;
 
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "oauth2_post_logout_redirect_uris", joinColumns = @JoinColumn(name = "registered_client_id"))
-    @Column(name = "post_logout_redirect_uri", length = 1000)
+    // Do not set too high length, as 3072 bytes is the limit for MySQL InnoDB primary keys
+    @Column(name = "post_logout_redirect_uri", length = 255)
     private Set<String> postLogoutRedirectUris;
 
     @ElementCollection(fetch = FetchType.EAGER)
