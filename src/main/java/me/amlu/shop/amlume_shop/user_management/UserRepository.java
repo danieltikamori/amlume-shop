@@ -44,7 +44,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * linking the local amlume-shop user to the central authserver identity.
      *
      * @param authServerSubjectId The subject ID from the authserver.
-     * @return An Optional containing the User if found.
+     * @return An Optional containing the User if found, or empty otherwise.
      */
     Optional<User> findByAuthServerSubjectId(String authServerSubjectId);
 
