@@ -30,6 +30,7 @@ import me.amlu.authserver.passkey.repository.DbUserCredentialRepository;
 import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.checkerframework.common.returnsreceiver.qual.This;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -100,6 +101,19 @@ import java.util.stream.Collectors;
 @EnableWebSecurity
 public class LocalSecurityConfig {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(LocalSecurityConfig.class);
+
+    // Inject secrets for OAuth2 client seeding from application-local.yml (which are loaded from Vault)
+    @Value("${oauth2.clients.amlumeapi.secret}")
+    private String amlumeapiClientSecret;
+
+    @Value("${oauth2.clients.amlumeintrospect.secret}")
+    private String amlumeintrospectClientSecret;
+
+    @Value("${oauth2.clients.shopClient.secret}") // For amlume-shop
+    private String shopClientSecret;
+
+    @Value("${oauth2.clients.postmanClient.secret}") // For Postman testing
+    private String postmanClientSecret;
 
     private final PersistentTokenRepository persistentTokenRepository;
 
@@ -221,11 +235,14 @@ public class LocalSecurityConfig {
         if (this.jpaRegisteredClientRepositoryAdapter.findByClientId("amlumeapi") == null) {
             log.info("Seeding initial OAuth2 registered clients into the database...");
 
-            String defaultRedirectBase = this.webAuthNProperties.getAllowedOrigins().stream().findFirst().orElse("http://localhost:8080");
+            String defaultRedirectBase = this.webAuthNProperties.getAllowedOrigins().stream()
+                    .filter(o -> o.contains("localhost:9000") || o.contains("authserver")) // Prefer authserver's own origin for its test clients
+                    .findFirst()
+                    .orElse("http://localhost:9000"); // Fallback to authserver's typical local port
 
             RegisteredClient clientCredClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeapi")
-                    .clientSecret("VxubZgAXyyTq9lGjj3qGvWNsHtE4SqTq") // Raw secret, adapter's save will hash it
+                    .clientSecret(this.amlumeapiClientSecret)  // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                     .scopes(scopeConfig -> scopeConfig.addAll(List.of(OidcScopes.OPENID, "ADMIN", "USER")))
@@ -234,21 +251,22 @@ public class LocalSecurityConfig {
 
             RegisteredClient introspectClient = RegisteredClient.withId(UUID.randomUUID().toString())
                     .clientId("amlumeintrospect")
-                    .clientSecret("c1BK9Bg2REeydBbvUoUeKCbD2bvJzXGj") // Raw secret
+                    .clientSecret(this.amlumeintrospectClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
                     .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
                     .scopes(scopeConfig -> scopeConfig.add(OidcScopes.OPENID))
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .accessTokenFormat(OAuth2TokenFormat.REFERENCE).build()).build();
 
-            RegisteredClient authCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                    .clientId("amlumeclient")
-                    .clientSecret("Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB") // Raw secret
+            // Client for Postman or general testing
+            RegisteredClient postmanAuthCodeClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                    .clientId("postman-client") // DISTINCT CLIENT ID
+                    .clientSecret(this.postmanClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
-                    .redirectUri("https://oauth.pstmn.io/v1/callback")
-                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom")
+                    .redirectUri("https://oauth.pstmn.io/v1/callback") // Standard Postman callback
+                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom-postman") // A specific callback for this client
                     .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
@@ -260,19 +278,22 @@ public class LocalSecurityConfig {
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                     .redirectUri("https://oauth.pstmn.io/v1/callback")
-                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom-public")
+                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/custom-public-pkce")
                     .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
-                    .clientSettings(ClientSettings.builder().requireProofKey(true).build())
+                    .clientSettings(ClientSettings.builder().requireProofKey(true).build()) // Enforce PKCE
                     .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(Duration.ofMinutes(10))
                             .refreshTokenTimeToLive(Duration.ofHours(8)).reuseRefreshTokens(false)
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED).build()).build();
 
+            // Client specifically for amlume-shop
             RegisteredClient shopClient = RegisteredClient.withId(UUID.randomUUID().toString())
-                    .clientId("amlumeclient")
-                    .clientSecret("Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB") // Raw secret, will be hashed
+                    .clientId("amlumeclient") // This is the ID amlume-shop will use
+                    .clientSecret(this.shopClientSecret) // USE VAULT-INJECTED SECRET
                     .clientAuthenticationMethods(methods -> methods.addAll(Set.of(ClientAuthenticationMethod.CLIENT_SECRET_POST, ClientAuthenticationMethod.CLIENT_SECRET_BASIC)))
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
+                    // IMPORTANT: This redirect URI MUST match what amlume-shop configures
+//                    .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
                     .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
                     .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
                     .tokenSettings(TokenSettings.builder()
@@ -280,19 +301,17 @@ public class LocalSecurityConfig {
                             .refreshTokenTimeToLive(Duration.ofHours(8))
                             .reuseRefreshTokens(false)
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
-                            .build())
-                    .build();
+                            .build()).build();
 
 
             this.jpaRegisteredClientRepositoryAdapter.save(clientCredClient);
             this.jpaRegisteredClientRepositoryAdapter.save(introspectClient);
-            this.jpaRegisteredClientRepositoryAdapter.save(authCodeClient);
+            this.jpaRegisteredClientRepositoryAdapter.save(postmanAuthCodeClient);
             this.jpaRegisteredClientRepositoryAdapter.save(pkceClient);
             this.jpaRegisteredClientRepositoryAdapter.save(shopClient);
-            log.info("Finished seeding amlume-shop OAuth2 client.");
-            log.info("Finished seeding OAuth2 clients.");
+            log.info("Finished seeding OAuth2 clients using secrets from Vault.");
+//            log.info("Finished seeding OAuth2 clients.");
         } else {
-            log.info("amlume-shop OAuth2 client already exists. Skipping seeding.");
             log.info("OAuth2 registered clients already seem to exist. Skipping seeding.");
         }
 
@@ -653,15 +672,17 @@ public class LocalSecurityConfig {
     }
 
     // --- Social Login Beans (OAuth2 Client) ---
-    @Bean
-    public OAuth2UserService<OAuth2UserRequest, OAuth2User> customOAuth2UserService(
-            UserRepository userRepository, AuthorityRepository authorityRepository, WebClient.Builder webClient) {
-        return new CustomOAuth2UserService(userRepository, authorityRepository, webClient);
-    }
+//    There are a @Service class that defines this bean. Therefore, this bean can be removed.
+//    @Bean
+//    public OAuth2UserService<OAuth2UserRequest, OAuth2User> customOAuth2UserService(
+//            UserRepository userRepository, AuthorityRepository authorityRepository, WebClient.Builder webClient) {
+//        return new CustomOAuth2UserService(userRepository, authorityRepository, webClient);
+//    }
 
-    @Bean
-    public OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> customOidcUserService(
-            UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
-        return new CustomOidcUserService(userRepository, authorityRepository);
-    }
+//    There are a @Service class that defines this bean. Therefore, this bean can be removed.
+//    @Bean
+//    public OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> customOidcUserService(
+//            UserRepository userRepository, AuthorityRepository authorityRepository, PasswordEncoder passwordEncoder) {
+//        return new CustomOidcUserService(userRepository, authorityRepository);
+//    }
 }
