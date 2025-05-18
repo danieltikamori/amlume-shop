@@ -9,7 +9,7 @@
  */
 
 -- Create database if it doesn't exist (safer during init)
-CREATE DATABASE IF NOT EXISTS amlume_db;
+CREATE DATABASE IF NOT EXISTS amlume_auth_db;
 
 -- Authorization server - specific user with minimal required privileges
 -- Password MUST match the AUTH_DB_PASSWORD environment variable used by the application
@@ -19,11 +19,11 @@ CREATE USER IF NOT EXISTS 'auth_server_user'@'%' IDENTIFIED WITH caching_sha2_pa
 -- Grant ALL privileges ON THE SPECIFIC DATABASE 'amlume_db' to the user.
 -- This is simpler for local development where Hibernate manages the schema.
 -- For production, use more restrictive, specific table grants AFTER tables are created.
-GRANT ALL PRIVILEGES ON amlume_db.* TO 'auth_server_user'@'%';
+GRANT ALL PRIVILEGES ON amlume_auth_db.* TO 'auth_server_user'@'%';
 
 -- Add a dummy table to verify script completion (Optional)
-CREATE TABLE IF NOT EXISTS amlume_db.init_script_marker (id INT PRIMARY KEY, completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-INSERT IGNORE INTO amlume_db.init_script_marker (id) VALUES (1);
+# CREATE TABLE IF NOT EXISTS amlume_auth_db.init_script_marker (id INT PRIMARY KEY, completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+# INSERT IGNORE INTO amlume_auth_db.init_script_marker (id) VALUES (1);
 
 -- IMPORTANT: Apply the changes
 FLUSH PRIVILEGES;
