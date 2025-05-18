@@ -29,10 +29,10 @@ import java.util.stream.Collectors;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "username"),
+        @UniqueConstraint(columnNames = "auth_server_subject_id"),
         @UniqueConstraint(columnNames = "user_email")
 }, indexes = {
-        @Index(name = "idx_username", columnList = "username"),
+        @Index(name = "idx_auth_server_subject_id", columnList = "auth_server_subject_id"),
         @Index(name = "idx_user_email", columnList = "user_email"),
 //        @Index(name = "idx_user_orders", columnList = "user_orders")
 })
