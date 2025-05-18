@@ -549,22 +549,6 @@ public class LocalSecurityConfig {
         claims.put("email", appUser.getEmail().getValue());
     }
 
-    // --- PasswordEncoder, CompromisedPasswordChecker ---
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-    }
-
-    /**
-     * Checks for compromised passwords.
-     *
-     * @return {@link CompromisedPasswordChecker}
-     */
-    @Bean
-    public CompromisedPasswordChecker compromisedPasswordChecker() {
-        return new HaveIBeenPwnedRestApiPasswordChecker();
-    }
-
     // --- Passkey/WebAuthn Beans (Spring Security Native) ---
 
     /**
