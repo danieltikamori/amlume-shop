@@ -12,6 +12,7 @@ package me.amlu.authserver.config;
 
 import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -54,6 +55,7 @@ public class CommonSecurityConfig {
      */
     @Bean
     @Primary
+    @Qualifier("mainUserDetailsService")
     public UserDetailsService userDetailsService(UserRepository userRepository) {
         return new JpaUserDetailsService(userRepository);
     }
