@@ -12,7 +12,6 @@ package me.amlu.shop.amlume_shop.security.config;
 
 import me.amlu.shop.amlume_shop.security.handler.CustomAccessDeniedHandler;
 import me.amlu.shop.amlume_shop.security.oauth2.CustomOidcUserService;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -31,11 +30,11 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Configuration
@@ -45,18 +44,15 @@ import java.util.stream.Collectors;
 public class SecurityConfig {
 
     private final CustomOidcUserService customOidcUserService;
-    private final CorsConfigurationSource corsConfigurationSource; // Assuming you have this bean
-    private final JwtAuthenticationConverter jwtAuthenticationConverter; // Assuming you have this bean
+    private final CorsConfigurationSource corsConfigurationSource;
+    private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
-    @Value("${cors.allowed-origins}")
-    private List<String> allowedOrigins;
 
     // --- Simplified Constructor ---
-    public SecurityConfig(CustomOidcUserService customOidcUserService, CorsConfigurationSource corsConfigurationSource, JwtAuthenticationConverter jwtAuthenticationConverter, @Value("${cors.allowed-origins}") List<String> allowedOrigins) {
+    public SecurityConfig(CustomOidcUserService customOidcUserService, CorsConfigurationSource corsConfigurationSource, JwtAuthenticationConverter jwtAuthenticationConverter) {
         this.customOidcUserService = customOidcUserService;
         this.corsConfigurationSource = corsConfigurationSource;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
-        this.allowedOrigins = allowedOrigins;
     }
 
 
@@ -146,40 +142,6 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(allowedOrigins); // Use property
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        // Allow Authorization header for Bearer token
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "accept", "Origin", "Access-Control-Request-Method", "Access-Control-Request-Headers"));
-        configuration.setExposedHeaders(Arrays.asList("Access-Control-Allow-Origin", "Access-Control-Allow-Credentials", "Retry-After")); // Adjust exposed headers
-        configuration.setAllowCredentials(true);
-        configuration.setMaxAge(3600L);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
-
-    /**
-     * Configures the JwtAuthenticationConverter to extract roles from the Keycloak token's
-     * 'realm_access.roles' and potentially 'resource_access.<client-id>.roles' claims,
-     * adding the "ROLE_" prefix.
-     */
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
-        // Configure a custom converter to extract authorities
-        jwtConverter.setJwtGrantedAuthoritiesConverter(new KeycloakRealmRoleConverter());
-
-        // Optional: Set principal name claim if different from 'sub' (e.g., 'preferred_username')
-        // jwtConverter.setPrincipalClaimName("preferred_username");
-
-        return jwtConverter;
-    }
-
 
     // REMOVE: SessionRegistry and HttpSessionEventPublisher beans if using STATELESS
 
