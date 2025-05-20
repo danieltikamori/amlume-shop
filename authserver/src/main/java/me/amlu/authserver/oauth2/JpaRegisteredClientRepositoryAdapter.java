@@ -16,10 +16,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import me.amlu.authserver.oauth2.model.RegisteredClient;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.repository.RegisteredClientRepository;
+import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient.Builder; // Spring Security's RegisteredClient
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient.Builder;
 import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
@@ -29,10 +30,10 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.List;
 
 
 @Service
@@ -42,13 +43,17 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AuthorityRepository authorityRepository;
+    private final UserRepository userRepository;
 
-    public JpaRegisteredClientRepositoryAdapter(RegisteredClientRepository jpaRepository, PasswordEncoder passwordEncoder, AuthorityRepository authorityRepository) {
+    public JpaRegisteredClientRepositoryAdapter(RegisteredClientRepository jpaRepository, PasswordEncoder passwordEncoder, AuthorityRepository authorityRepository, UserRepository userRepository) {
         Assert.notNull(jpaRepository, "jpaRepository cannot be null");
         Assert.notNull(passwordEncoder, "passwordEncoder cannot be null");
+        Assert.notNull(authorityRepository, "authorityRepository cannot be null");
+        Assert.notNull(userRepository, "userRepository cannot be null");
         this.jpaRepository = jpaRepository;
         this.passwordEncoder = passwordEncoder;
         this.authorityRepository = authorityRepository;
+        this.userRepository = userRepository;
 
         // Configure ObjectMapper with necessary modules for ClientSettings and TokenSettings
         ClassLoader classLoader = JpaRegisteredClientRepositoryAdapter.class.getClassLoader();
@@ -169,5 +174,9 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
 
     public AuthorityRepository getAuthorityRepository() {
         return this.authorityRepository;
+    }
+
+    public UserRepository getUserRepository() {
+        return this.userRepository;
     }
 }
