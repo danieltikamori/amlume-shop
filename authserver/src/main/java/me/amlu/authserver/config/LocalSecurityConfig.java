@@ -148,7 +148,9 @@ public class LocalSecurityConfig {
         // Get the RequestMatcher for the authorization server endpoints.
         // This is used to ensure this SecurityFilterChain only applies to these specific endpoints.
         RequestMatcher authorizationServerEndpointsMatcher =
-                http.getConfigurer(OAuth2AuthorizationServerConfigurer.class).getEndpointsMatcher();
+                http.getConfigurer(OAuth2AuthorizationServerConfigurer.class)
+                        .oidc(Customizer.withDefaults()) // Enable OpenID Connect 1.0
+                        .getEndpointsMatcher();
 
         http
                 .securityMatcher(authorizationServerEndpointsMatcher) // CRITICAL: Restrict this chain to AS endpoints
@@ -161,6 +163,7 @@ public class LocalSecurityConfig {
                 // Accept access tokens for User Info and/or Client Registration
                 .oauth2ResourceServer((resourceServer) -> resourceServer
                         .jwt(Customizer.withDefaults()));
+        http.authorizeHttpRequests((authorize) -> authorize.requestMatchers("/.well-known/openid-configuration").permitAll());
 
         return http.build();
     }
