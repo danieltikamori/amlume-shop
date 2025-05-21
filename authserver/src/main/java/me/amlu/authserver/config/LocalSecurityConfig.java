@@ -110,6 +110,12 @@ public class LocalSecurityConfig {
     @Value("${spring.security.rememberme.key:${spring.security.webauthn.rpId}_RememberMeKey2024}")
     private String rememberMeKey;
 
+    @Value("${spring.initial-root-user.email}")
+    private String initialRootUserEmail;
+
+    @Value("${spring.initial-root-user.password}")
+    private String initialRootUserPassword;
+
     private final PersistentTokenRepository persistentTokenRepository;
 
     private final ObjectMapper objectMapper;
@@ -420,30 +426,42 @@ public class LocalSecurityConfig {
             authorityRepository.save(new Authority("ROLE_SUPER_ADMIN"));
             log.info("Seeded default ROLE_SUPER_ADMIN authority.");
         }
-        if (authorityRepository.findByAuthority("ROLE_ROOR").isEmpty()) {
+        if (authorityRepository.findByAuthority("ROLE_ROOT").isEmpty()) {
             authorityRepository.save(new Authority("ROLE_ROOT"));
             log.info("Seeded default ROLE_ROOT authority.");
         }
 
+        // Seed initial root user
+
+        UserRepository userRepository = this.jpaRegisteredClientRepositoryAdapter.getUserRepository();
+
+        String rootEmail = this.initialRootUserEmail; // Or from config
+        String rootPassword = this.initialRootUserPassword; // LOAD SECURELY, e.g., from Vault/Env for the seeder
+
+        if (userRepository.findByEmail_Value(rootEmail).isEmpty()) {
+            User rootUser = User.builder()
+                    .firstName("Root")
+                    .lastName("Admin")
+                    .email(new EmailAddress(rootEmail))
+                    .password(new HashedPassword(passwordEncoder.encode(rootPassword)))
+                    .externalId(UUID.randomUUID().toString())
+                    .build();
+            rootUser.enableAccount(); // Ensure account is enabled
+
+            authorityRepository.findByAuthority("ROLE_ROOT").ifPresent(rootUser::assignAuthority);
+            // Optionally assign ROLE_ADMIN, ROLE_SUPER_ADMIN as well if your hierarchy doesn't imply it
+            authorityRepository.findByAuthority("ROLE_SUPER_ADMIN").ifPresent(rootUser::assignAuthority);
+            authorityRepository.findByAuthority("ROLE_ADMIN").ifPresent(rootUser::assignAuthority);
+
+
+            userRepository.save(rootUser);
+            log.info("***************************************************************************");
+            log.info("ROOT USER SEEDED: {} / (password in config/env)", rootEmail);
+            log.info("***************************************************************************");
+        } else {
+            log.info("Root user {} already exists. Skipping seeding.", rootEmail);
+        }
     }
-
-    // @Bean (if not already implicitly configured by Spring Boot)
-    // public UserDetailsService userDetailsService(UserRepository userRepository) {
-    //     return new JpaUserDetailsService(userRepository);
-    // }
-    // Spring Boot typically auto-configures UserDetailsService if there's one PasswordEncoder and one UserDetailsService bean.
-    // If you have multiple, you might need to specify it in HttpSecurity:
-    // http.userDetailsService(myUserDetailsService)
-
-    /**
-     * @param userRepository {@link UserRepository}
-     * @return {@link UserDetailsService}
-     */
-    @Bean
-    public UserDetailsService userDetailsService(UserRepository userRepository) {
-        return new JpaUserDetailsService(userRepository);
-    }
-
 
     // TODO: change to ECPrivateKey
     @Bean
