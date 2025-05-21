@@ -137,13 +137,13 @@ spring:
     rememberme:
       key: ${spring.security.rememberme.key} # Matches key in Vault
     webauthn:
-      rpName: "Amlume-Passkeys"
+      rpName: "Amlume Passkeys"
       # Replace it with the domain name of the application
       rpId: localhost
       allowedOrigins:
-        # Replace with the URL of the application. Notice: this _MUST_ be an HTTPS URL with a valid certificate
         - "http://localhost:8080" # amlume-shop
         - "http://localhost:9000" # authserver itself if its UI uses WebAuthn
+        # Replace with the URL of the application. Notice: this _MUST_ be an HTTPS URL with a valid certificate
 
 #    client:
 #      registration:
