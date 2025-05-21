@@ -34,6 +34,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -166,6 +167,7 @@ public class LocalSecurityConfig {
 
     @Bean
     @Order(2)
+    @DependsOn({"userDetailsService", "relyingPartyOperations"})
     public SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http,
                                                           // WebAuthNProperties webAuthNProperties, // Already a field
                                                           // UserCredentialRepository userCredentialRepository, // Already a field or bean
