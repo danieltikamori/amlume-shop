@@ -82,12 +82,20 @@ set -a
 set +a
 echo "Seeder: Environment variables sourced."
 
+# +++ START DEBUGGING +++
+echo "Seeder DEBUG: Value of ROOT_USER_EMAIL after sourcing: [${ROOT_USER_EMAIL}]"
+echo "Seeder DEBUG: Value of ROOT_USER_PASSWORD after sourcing: [${ROOT_USER_PASSWORD}]"
+# +++ END DEBUGGING +++
+
 # --- Construct the SINGLE JSON Payload for Authserver ---
 echo "Authserver Seeder: Constructing JSON payload for Vault..."
 JSON_DATA_PAIRS=""
 add_pair() {
    key="$1"
    value="$2"
+   # +++ DEBUG add_pair +++
+   echo "Seeder DEBUG add_pair: Adding key=[$key], value=[$value]"
+   # +++ END DEBUG add_pair +++
    escaped_value=$(echo "$value" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g')
    if [ -z "$JSON_DATA_PAIRS" ]; then
        JSON_DATA_PAIRS="\"$key\":\"$escaped_value\""
@@ -99,6 +107,10 @@ add_pair() {
 # --- Add Authserver-specific secrets with correct Spring property names ---
 # These keys MUST match what authserver's application-local.yml expects
 # or how Spring Cloud Vault maps them.
+
+# ROOT user credentials
+add_pair "spring.initial-root-user.email" "${ROOT_USER_EMAIL}"
+add_pair "spring.initial-root-user.password" "${ROOT_USER_PASSWORD}"
 
 # Database credentials for authserver
 add_pair "spring.datasource.username" "${AUTH_DB_USER}"
@@ -124,7 +136,9 @@ add_pair "oauth2.clients.postmanClient.secret" "${OAUTH2_CLIENT_POSTMANCLIENT_SE
 # add_pair "app.ssl.trust-store.password" "${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}"
 
 JSON_PAYLOAD="{\"data\":{$JSON_DATA_PAIRS}}"
-# echo "DEBUG Authserver Payload: $JSON_PAYLOAD"
+# +++ DEBUG PAYLOAD +++
+echo "Authserver Seeder DEBUG: Final JSON Payload: $JSON_PAYLOAD"
+# +++ END DEBUG PAYLOAD +++
 
 # --- Write the SINGLE Payload to Authserver's Vault Path ---
 echo "Authserver Seeder: Writing all secrets to Vault path $BASE_VAULT_PATH_PREFIX..."
