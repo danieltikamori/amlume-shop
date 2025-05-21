@@ -568,33 +568,6 @@ public class LocalSecurityConfig {
         claims.put("email", appUser.getEmail().getValue());
     }
 
-    // --- Passkey/WebAuthn Beans (Spring Security Native) ---
-
-    /**
-     * In Spring Security, the “relaying party parameter” is defined by defining a bean for WebAuthnRelyingPartyOperations.
-     * You’ll need an ID (which is essentially your domain), name, and allowed origin (URL).
-     *
-     * @param userEntities    {@link PublicKeyCredentialUserEntityRepository}
-     * @param userCredentials {@link UserCredentialRepository}
-     * @param webauthnId      is the domain
-     * @param webauthnName    is the application name
-     * @param webauthnOrigin  is the origin URL
-     * @return {@link WebAuthnRelyingPartyOperations}
-     */
-    @Bean
-    public WebAuthnRelyingPartyOperations relyingPartyOperations(
-            PublicKeyCredentialUserEntityRepository userEntities,
-            UserCredentialRepository userCredentials,
-            @Value("${spring.security.webauthn.rpId}") String webauthnId,
-            @Value("${spring.security.webauthn.rpName}") String webauthnName,
-            @Value("${spring.security.webauthn.allowedOrigins}") String webauthnOrigin) {
-        return new Webauthn4JRelyingPartyOperations(userEntities, userCredentials,
-                PublicKeyCredentialRpEntity.builder()
-                        .id(webauthnId)
-                        .name(webauthnName).build(),
-                Set.of(webauthnOrigin));
-    }
-
     /**
      * Remember me feature
      * <p>
