@@ -1,0 +1,94 @@
+<!--
+  ~ Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+  ~
+  ~ This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+  ~
+  ~ Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+  ~
+  ~ Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+  -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login Status</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            text-align: center;
+        }
+
+        .container {
+            margin-top: 50px;
+        }
+
+        .message {
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: inline-block;
+            min-width: 300px;
+        }
+
+        .success {
+            background-color: #e6ffed;
+            border-color: #b7ebc9;
+            color: #257942;
+        }
+
+        .info {
+            background-color: #e7f3fe;
+            border-color: #c3dafe;
+            color: #31708f;
+        }
+
+        .error {
+            background-color: #fbeaea;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Authentication Server</h1>
+    <div id="status-message" class="message info">
+        Processing your request...
+    </div>
+    <p style="margin-top: 20px;"><a href="/">Go to Authserver Home (if configured)</a></p>
+</div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const messageDiv = document.getElementById('status-message');
+
+    if (params.has('oauth2_login_success')) {
+        messageDiv.textContent = 'Login successful! You can now return to your application.';
+        messageDiv.classList.remove('info', 'error');
+        messageDiv.classList.add('success');
+    } else if (params.has('logout')) {
+        messageDiv.textContent = 'You have been logged out successfully.';
+        messageDiv.classList.remove('success', 'error');
+        messageDiv.classList.add('info');
+    } else if (params.has('error')) {
+        // Attempt to get a more descriptive error message if available
+        const errorParam = params.get('error'); // e.g., 'access_denied'
+        const errorDescriptionParam = params.get('error_description'); // e.g., 'User denied access'
+        let displayMessage = 'Login failed.';
+        if (errorDescriptionParam) {
+            displayMessage += ' Details: ' + decodeURIComponent(errorDescriptionParam.replace(/\+/g, ' '));
+        } else if (errorParam) {
+            displayMessage += ' Reason: ' + decodeURIComponent(errorParam.replace(/\+/g, ' '));
+        }
+        messageDiv.textContent = displayMessage;
+        messageDiv.classList.remove('success', 'info');
+        messageDiv.classList.add('error');
+    } else {
+        // Default message if no specific parameters are found on the /login page
+        messageDiv.textContent = 'Welcome to the Authentication Server.';
+    }
+</script>
+</body>
+</html>
