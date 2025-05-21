@@ -16,6 +16,9 @@ oauth2:
       secret: ${oauth2.clients.shopClient.secret} # This is the key Spring Boot resolves     # type: JKS # Optional: Specify type if not JKS
 
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+
   application:
     name: ${AS_NAME:authserver}
   #  config:
