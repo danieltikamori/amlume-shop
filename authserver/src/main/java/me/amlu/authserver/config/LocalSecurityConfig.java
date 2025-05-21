@@ -216,6 +216,8 @@ public class LocalSecurityConfig {
                                 .oidcUserService(oidcUserService)
                                 .userService(oauth2UserService)
                         )
+                        // Redirect to login page with success param. The 'true' flag forces the redirect, ignoring any saved request
+                        .defaultSuccessUrl("/login?oauth2_login_success", true)
                 );
 
         http.csrf(cfg -> cfg.ignoringRequestMatchers(
