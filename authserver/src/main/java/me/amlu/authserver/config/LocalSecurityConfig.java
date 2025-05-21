@@ -43,6 +43,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserRequest;
 import org.springframework.security.oauth2.client.userinfo.OAuth2UserService;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
@@ -122,15 +123,17 @@ public class LocalSecurityConfig {
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
     private final DataSource dataSource;
+    private final PasswordEncoder passwordEncoder;
 
     public LocalSecurityConfig(ObjectMapper objectMapper,
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
-                               WebAuthNProperties webAuthNProperties, PersistentTokenRepository persistentTokenRepository, DataSource dataSource) {
+                               WebAuthNProperties webAuthNProperties, PersistentTokenRepository persistentTokenRepository, DataSource dataSource, PasswordEncoder passwordEncoder) {
         this.objectMapper = objectMapper;
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
         this.webAuthNProperties = webAuthNProperties;
         this.persistentTokenRepository = persistentTokenRepository;
         this.dataSource = dataSource;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Bean
