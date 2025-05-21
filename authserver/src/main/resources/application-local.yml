@@ -72,6 +72,10 @@ spring:
     password: ${spring.datasource.password}
     driverClassName: com.mysql.cj.jdbc.Driver
 
+  initial-root-user:
+    email: ${ROOT_USER_EMAIL}
+    password: ${ROOT_USER_PASSWORD}
+
   # --- JPA / Hibernate ---
   # Disable open-in-view for performance
   jpa:
