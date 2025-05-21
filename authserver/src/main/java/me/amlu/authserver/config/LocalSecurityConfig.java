@@ -22,11 +22,9 @@ import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
-import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
-import me.amlu.authserver.passkey.repository.DbPublicKeyCredentialUserEntityRepository;
-import me.amlu.authserver.passkey.repository.DbUserCredentialRepository;
-import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
 import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.model.vo.EmailAddress;
+import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
@@ -69,11 +67,6 @@ import org.springframework.security.web.authentication.rememberme.PersistentToke
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
-import org.springframework.security.web.webauthn.api.PublicKeyCredentialRpEntity;
-import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
-import org.springframework.security.web.webauthn.management.UserCredentialRepository;
-import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
-import org.springframework.security.web.webauthn.management.Webauthn4JRelyingPartyOperations;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -139,7 +132,7 @@ public class LocalSecurityConfig {
 
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
-    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http)
+    public SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http, UserDetailsService userDetailsService)
             throws Exception {
 
         // --- Use the recommended 'http.with()' approach ---
@@ -153,6 +146,10 @@ public class LocalSecurityConfig {
                         .getEndpointsMatcher();
 
         http
+                // No explicit securityMatcher needed if applyDefaultSecurity handles it.
+                // If you keep securityMatcher, ensure it includes .well-known paths or remove it
+                // and let applyDefaultSecurity define the matcher.
+                // For simplicity, let's rely on applyDefaultSecurity for matching.
                 .securityMatcher(authorizationServerEndpointsMatcher) // CRITICAL: Restrict this chain to AS endpoints
                 .exceptionHandling((exceptions) -> exceptions
                         .defaultAuthenticationEntryPointFor(
@@ -160,6 +157,7 @@ public class LocalSecurityConfig {
                                 new MediaTypeRequestMatcher(MediaType.TEXT_HTML)
                         )
                 )
+                .userDetailsService(userDetailsService)
                 // Accept access tokens for User Info and/or Client Registration
                 .oauth2ResourceServer((resourceServer) -> resourceServer
                         .jwt(Customizer.withDefaults()));
@@ -177,8 +175,9 @@ public class LocalSecurityConfig {
                                                           // PublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository, // Already a field or bean
                                                           OAuth2UserService<org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest, OidcUser> oidcUserService,
                                                           OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService,
-                                                          UserDetailsService userDetailsService, // Injected for remember-me
-                                                          PersistentTokenRepository persistentTokenRepository // Injected for remember-me
+                                                          UserDetailsService userDetailsService, // Injected from CommonSecurityConfig
+                                                          PersistentTokenRepository persistentTokenRepository // Injected from CommonSecurityConfig
+//                                                          WebAuthnRelyingPartyOperations relyingPartyOperations
     ) throws Exception {
 
         // Theoretically Spring Security's WebAuthnConfigurer automatically makes its necessary endpoints (e.g., /webauthn/register/options, /webauthn/register, /webauthn/authenticate/options, /webauthn/authenticate) accessible.
@@ -198,11 +197,25 @@ public class LocalSecurityConfig {
         );
 
         http
-                .webAuthn(Customizer.withDefaults())
+                .userDetailsService(userDetailsService)
+                // In LocalSecurityConfig.java, inside defaultSecurityFilterChain method
+// UserDetailsService userDetailsService is already injected as a parameter to this method.
+
+//                .webAuthn(webauthn -> webauthn
+//                        .userDetailsService(userDetailsService) // Explicitly pass the injected UserDetailsService
+                // You might also need to explicitly set relyingPartyOperations if it's not picked up:
+//                 .relyingPartyOperations(relyingPartyOperations(userEntities, userCredentials, webAuthNProperties)) // Assuming these are available or injectable
+//        )
+//                .webAuthn(webauthn -> { // Explicitly configure WebAuthn
+//                    webauthn.userDetailsService(userDetailsService); // Pass the injected UserDetailsService
+//                    webauthn.relyingPartyOperations(relyingPartyOperations); // Pass the injected RelyingPartyOperations
+//                    // We can add other WebAuthn customizer settings here if needed
+//                })
                 .formLogin(formLogin -> formLogin
                         .loginPage("/login") // Specify your custom login page if you have one
                         .permitAll() // Allow access to the login page
                 )
+                .webAuthn(Customizer.withDefaults())
                 // --- Remember-Me Configuration ---
                 .rememberMe(rememberMe -> rememberMe
                                 .tokenRepository(persistentTokenRepository) // Use the bean
