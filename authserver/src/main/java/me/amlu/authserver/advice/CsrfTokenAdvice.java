@@ -16,6 +16,23 @@ import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ModelAttribute;
 
+/**
+ * A controller advice that provides CSRF (Cross-Site Request Forgery) token handling
+ * for the application. This class automatically makes CSRF tokens available to all
+ * controllers and views, ensuring protection against CSRF attacks.
+ *
+ * <p>This advice provides two model attributes:
+ * <ul>
+ *   <li>{@code csrf}: The raw CSRF token object</li>
+ *   <li>{@code csrfHiddenInput}: A pre-rendered hidden input field containing the CSRF token</li>
+ * </ul>
+ *
+ * <p>The CSRF token is automatically injected into the model for all controller methods,
+ * making it easily accessible in views for form submissions and AJAX requests.
+ *
+ * @see org.springframework.security.web.csrf.CsrfToken
+ * @see org.springframework.web.bind.annotation.ControllerAdvice
+ */
 @ControllerAdvice
 public class CsrfTokenAdvice {
 
