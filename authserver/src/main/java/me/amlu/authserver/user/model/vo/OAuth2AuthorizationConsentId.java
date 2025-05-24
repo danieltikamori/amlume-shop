@@ -40,12 +40,12 @@ public class OAuth2AuthorizationConsentId implements Serializable {
         return this.registeredClientId;
     }
 
-    public String getPrincipalName() {
-        return this.principalName;
-    }
-
     public void setRegisteredClientId(String registeredClientId) {
         this.registeredClientId = registeredClientId;
+    }
+
+    public String getPrincipalName() {
+        return this.principalName;
     }
 
     public void setPrincipalName(String principalName) {

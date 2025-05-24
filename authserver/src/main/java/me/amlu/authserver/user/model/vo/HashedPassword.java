@@ -19,7 +19,6 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- *
  * Includes validation
  *
  * @author Daniel Itiro Tikamori

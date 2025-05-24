@@ -17,7 +17,6 @@ import org.springframework.util.Assert;
 import java.time.Instant;
 
 /**
- *
  * Crucial security feature.
  *
  * @author Daniel Itiro Tikamori

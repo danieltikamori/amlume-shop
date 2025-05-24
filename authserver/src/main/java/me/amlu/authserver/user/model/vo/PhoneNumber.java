@@ -24,7 +24,7 @@ import java.io.Serializable;
 /**
  * Represents a validated phone number, stored in E.164 format.
  * This class is an immutable value object implemented as a record.
- *
+ * <p>
  * The {@code @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number", ...))}
  * in the {@code User} entity maps the {@code e164Value} field of this embeddable
  * to the {@code mobile_number} column in the {@code users} table.
@@ -77,7 +77,7 @@ public record PhoneNumber(
      *                      if the number is not in international E.164 format. Can be null if numbers
      *                      are expected to be in E.164 format already.
      * @return A {@code PhoneNumber} instance containing the number in E.164 format if valid,
-     *         or {@code null} if {@code rawNumber} is null/blank (representing no phone number).
+     * or {@code null} if {@code rawNumber} is null/blank (representing no phone number).
      * @throws IllegalArgumentException if {@code rawNumber} is provided but is unparseable or invalid.
      */
     public static PhoneNumber ofNullable(String rawNumber, String defaultRegion) {

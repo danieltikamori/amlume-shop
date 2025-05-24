@@ -71,6 +71,11 @@ public class EmailAddress implements Serializable {
     public EmailAddress() {
     }
 
+    // Static factory method (optional but good practice)
+    public static EmailAddress of(String address) {
+        return new EmailAddress(address);
+    }
+
     // Getter for localPart (optional, but can be useful)
     public String getLocalPart() {
         if (this.localPart == null && this.value != null) { // Lazy initialization if needed
@@ -97,15 +102,9 @@ public class EmailAddress implements Serializable {
         return domain;
     }
 
-
     @Override
     public String toString() {
         return value;
-    }
-
-    // Static factory method (optional but good practice)
-    public static EmailAddress of(String address) {
-        return new EmailAddress(address);
     }
 
     public String getValue() {
