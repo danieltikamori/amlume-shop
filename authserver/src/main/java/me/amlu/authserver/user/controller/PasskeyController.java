@@ -8,11 +8,11 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-/**
+/*
  * Passkey registration and management endpoints.
- * - POST   /api/profile/passkeys/registration-options : Begin registration (returns challenge/options)
- * - POST   /api/profile/passkeys                      : Finish registration (save credential)
- * - GET    /api/profile/passkeys                      : List user's passkeys
+ * - POST /api/profile/passkeys/registration-options : Begin registration (returns challenge/options)
+ * - POST /api/profile/passkeys                      : Finish registration (save credential)
+ * - GET /api/profile/passkeys                      : List user's passkeys
  * - DELETE /api/profile/passkeys/{credentialId}       : Delete a passkey
  */
 
@@ -20,10 +20,10 @@ package me.amlu.authserver.user.controller;
 
 import com.webauthn4j.util.exception.WebAuthnException;
 import jakarta.validation.Valid;
-import me.amlu.authserver.user.model.User;
-import me.amlu.authserver.passkey.service.PasskeyService;
 import me.amlu.authserver.passkey.dto.GetPasskeyDetailResponse;
 import me.amlu.authserver.passkey.dto.PostPasskeyRegistrationRequest;
+import me.amlu.authserver.passkey.service.PasskeyService;
+import me.amlu.authserver.user.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -31,10 +31,21 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException; // For cleaner error responses
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
+/**
+ * Controller for managing user passkeys (WebAuthn credentials).
+ * Provides endpoints for:
+ * <ul>
+ *     <li>Beginning passkey registration (getting creation options).</li>
+ *     <li>Finishing passkey registration (saving the new credential).</li>
+ *     <li>Listing a user's existing passkeys.</li>
+ *     <li>Deleting a user's passkey.</li>
+ * </ul>
+ * All endpoints require an authenticated user.
+ */
 @RestController
 @RequestMapping("/api/profile/passkeys") // Base path for passkey management
 public class PasskeyController {
@@ -43,10 +54,26 @@ public class PasskeyController {
 
     private final PasskeyService passkeyService;
 
+    /**
+     * Constructs a new PasskeyController.
+     *
+     * @param passkeyService The service responsible for passkey logic.
+     */
     public PasskeyController(PasskeyService passkeyService) {
         this.passkeyService = passkeyService;
     }
 
+    /**
+     * Begins the passkey registration process for the authenticated user.
+     * Generates and returns {@link PublicKeyCredentialCreationOptions} which include a challenge
+     * that the client (browser) will use to create a new passkey.
+     *
+     * @param currentUser The currently authenticated user, injected by Spring Security.
+     * @return A {@link ResponseEntity} containing the {@link PublicKeyCredentialCreationOptions} on success.
+     * @throws ResponseStatusException if the user is not authenticated (401),
+     *                                 if there's an issue generating options (400 for {@link IllegalStateException}),
+     *                                 or for any other unexpected errors (500).
+     */
     @PostMapping("/registration-options")
     public ResponseEntity<PublicKeyCredentialCreationOptions> beginPasskeyRegistration(
             @AuthenticationPrincipal User currentUser) {
@@ -67,6 +94,20 @@ public class PasskeyController {
         }
     }
 
+    /**
+     * Finishes the passkey registration process.
+     * The client sends the public key credential created in response to the challenge
+     * obtained from {@link #beginPasskeyRegistration(User)}. This endpoint validates
+     * and saves the new passkey for the authenticated user.
+     *
+     * @param currentUser         The currently authenticated user.
+     * @param registrationRequest The request body containing the passkey registration data and a friendly name.
+     * @return A {@link ResponseEntity} with status 201 (Created) on successful registration.
+     * @throws ResponseStatusException if the user is not authenticated (401),
+     *                                 if the request is invalid or validation fails (400 for {@link IllegalArgumentException},
+     *                                 {@link IllegalStateException}, or {@link WebAuthnException}),
+     *                                 or for any other unexpected errors (500).
+     */
     @PostMapping
     public ResponseEntity<Void> finishPasskeyRegistration(
             @AuthenticationPrincipal User currentUser,
@@ -92,6 +133,13 @@ public class PasskeyController {
         }
     }
 
+    /**
+     * Lists all passkeys registered by the authenticated user.
+     *
+     * @param currentUser The currently authenticated user.
+     * @return A {@link ResponseEntity} containing a list of {@link GetPasskeyDetailResponse} objects.
+     * @throws ResponseStatusException if the user is not authenticated (401).
+     */
     @GetMapping
     public ResponseEntity<List<GetPasskeyDetailResponse>> listUserPasskeys(
             @AuthenticationPrincipal User currentUser) {
@@ -104,6 +152,17 @@ public class PasskeyController {
         return ResponseEntity.ok(passkeys);
     }
 
+    /**
+     * Deletes a specific passkey belonging to the authenticated user.
+     *
+     * @param currentUser  The currently authenticated user.
+     * @param credentialId The ID of the passkey credential to delete.
+     * @return A {@link ResponseEntity} with status 204 (No Content) on successful deletion.
+     * @throws ResponseStatusException if the user is not authenticated (401),
+     *                                 if the passkey is not found (404 for {@link IllegalArgumentException}),
+     *                                 if the user is not authorized to delete the passkey (403 for {@link SecurityException}),
+     *                                 or for any other unexpected errors (500).
+     */
     @DeleteMapping("/{credentialId}")
     public ResponseEntity<Void> deleteUserPasskey(
             @AuthenticationPrincipal User currentUser,
