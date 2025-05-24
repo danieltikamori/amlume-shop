@@ -11,9 +11,9 @@
 package me.amlu.authserver.passkey.repository;
 
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
-import me.amlu.authserver.user.repository.UserRepository;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
+import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.springframework.security.web.webauthn.api.Bytes;
 import org.springframework.security.web.webauthn.api.ImmutablePublicKeyCredentialUserEntity;

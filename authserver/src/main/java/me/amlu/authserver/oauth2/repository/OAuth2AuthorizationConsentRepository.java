@@ -27,7 +27,7 @@ public interface OAuth2AuthorizationConsentRepository extends JpaRepository<OAut
      * Finds an OAuth2AuthorizationConsent by registered client ID and principal name.
      *
      * @param registeredClientId the ID of the registered client
-     * @param principalName the name of the principal
+     * @param principalName      the name of the principal
      * @return an Optional containing the found OAuth2AuthorizationConsent, or empty if not found
      */
     Optional<OAuth2AuthorizationConsent> findByIdRegisteredClientIdAndIdPrincipalName(String registeredClientId, String principalName);
@@ -48,10 +48,10 @@ public interface OAuth2AuthorizationConsentRepository extends JpaRepository<OAut
 //    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
     void deleteById(@NonNull OAuth2AuthorizationConsentId id);
 
-//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
-        void deleteByIdRegisteredClientIdAndIdPrincipalName(String registeredClientId, String principalName);
+    //    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+    void deleteByIdRegisteredClientIdAndIdPrincipalName(String registeredClientId, String principalName);
 
-//    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
+    //    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
     void deleteByIdPrincipalName(@NonNull String principalName);
 
 }

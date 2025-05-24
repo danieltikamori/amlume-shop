@@ -41,12 +41,12 @@ public class OAuth2AuthorizationConsent {
         return this.id;
     }
 
-    public String getAuthorities() {
-        return this.authorities;
-    }
-
     public void setId(OAuth2AuthorizationConsentId id) {
         this.id = id;
+    }
+
+    public String getAuthorities() {
+        return this.authorities;
     }
 
     public void setAuthorities(String authorities) {

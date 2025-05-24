@@ -10,9 +10,9 @@
 
 package me.amlu.authserver.passkey.service;
 
-import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.passkey.dto.GetPasskeyDetailResponse;
 import me.amlu.authserver.passkey.dto.PostPasskeyRegistrationRequest;
+import me.amlu.authserver.user.model.User;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
 
 import java.util.List;

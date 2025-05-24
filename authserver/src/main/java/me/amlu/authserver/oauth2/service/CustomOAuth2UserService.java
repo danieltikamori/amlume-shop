@@ -10,9 +10,10 @@
 
 package me.amlu.authserver.oauth2.service;
 
+import jakarta.annotation.Nullable;
+import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
-import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -171,6 +171,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         if (!StringUtils.hasText(firstName)) {
             firstName = (String) attributes.get("first_name"); // Common alternative
         }
+        return getFirstNameString(attributes, registrationId, email, firstName);
+    }
+
+    static String getFirstNameString(Map<String, Object> attributes, String registrationId, String email, String firstName) {
         if (!StringUtils.hasText(firstName) && "github".equalsIgnoreCase(registrationId)) {
             String fullName = (String) attributes.get("name");
             if (StringUtils.hasText(fullName)) {
@@ -185,6 +189,11 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         if (!StringUtils.hasText(lastName)) {
             lastName = (String) attributes.get("last_name");
         }
+        return getLastNameString(attributes, registrationId, lastName);
+    }
+
+    @Nullable
+    static String getLastNameString(Map<String, Object> attributes, String registrationId, String lastName) {
         if (!StringUtils.hasText(lastName) && "github".equalsIgnoreCase(registrationId)) {
             String fullName = (String) attributes.get("name");
             if (StringUtils.hasText(fullName)) {

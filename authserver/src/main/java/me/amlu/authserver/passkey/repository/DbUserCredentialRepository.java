@@ -10,9 +10,9 @@
 
 package me.amlu.authserver.passkey.repository;
 
-import me.amlu.authserver.user.repository.UserRepository;
-import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.passkey.model.PasskeyCredential;
+import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.springframework.security.web.webauthn.api.*;
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;

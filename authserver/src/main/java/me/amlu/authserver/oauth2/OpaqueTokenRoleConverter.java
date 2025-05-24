@@ -29,7 +29,7 @@ public class OpaqueTokenRoleConverter implements OpaqueTokenAuthenticationConver
      */
     @Override
     public Authentication convert(String introspectedToken, OAuth2AuthenticatedPrincipal authenticatedPrincipal) {
-        ArrayList<String> roles  = authenticatedPrincipal.getAttribute("scope");
+        ArrayList<String> roles = authenticatedPrincipal.getAttribute("scope");
         Collection<GrantedAuthority> grantedAuthorities = roles
                 .stream().map(roleName -> "ROLE_" + roleName)
                 .map(SimpleGrantedAuthority::new)

@@ -13,7 +13,7 @@ package me.amlu.authserver.passkey.model;
 import jakarta.persistence.*;
 import me.amlu.authserver.user.model.User;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.proxy.HibernateProxy; // For equals/hashCode
+import org.hibernate.proxy.HibernateProxy;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -31,7 +31,8 @@ public class PasskeyCredential {
     @Column(name = "id", nullable = false, updatable = false)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false) // optional=false means a PasskeyCredential MUST belong to a User
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    // optional=false means a PasskeyCredential MUST belong to a User
     @JoinColumn(name = "user_id", nullable = false) // Foreign key column in this table
     private User user;
 
@@ -44,7 +45,8 @@ public class PasskeyCredential {
     @Column(name = "credential_type", length = 50) // e.g., "public-key"
     private String credentialType;
 
-    @Column(name = "credential_id", nullable = false, unique = true, length = 512) // Raw Credential ID, often Base64URL string
+    @Column(name = "credential_id", nullable = false, unique = true, length = 512)
+    // Raw Credential ID, often Base64URL string
     private String credentialId;
 
     @Lob // For potentially large binary data (maps to BLOB or similar)

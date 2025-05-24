@@ -11,9 +11,6 @@
 package me.amlu.authserver.oauth2.model;
 
 import jakarta.persistence.*;
-import lombok.Getter;
-import lombok.Setter;
-import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 import java.util.Set;
@@ -27,9 +24,6 @@ import java.util.Set;
         @Index(name = "idx_client_secret_expires_at", columnList = "client_secret_expires_at"),
 
 })
-@Getter
-@Setter
-@NoArgsConstructor
 public class RegisteredClient {
 
     @Id
@@ -85,6 +79,113 @@ public class RegisteredClient {
     @Lob
     @Column(columnDefinition = "TEXT") // Or VARCHAR(4000) depending on DB
     private String tokenSettings; // JSON string for TokenSettings
+
+    public RegisteredClient() {
+    }
+
+    public String getId() {
+        return this.id;
+    }
+
+    public String getClientId() {
+        return this.clientId;
+    }
+
+    public Instant getClientIdIssuedAt() {
+        return this.clientIdIssuedAt;
+    }
+
+    public String getClientSecret() {
+        return this.clientSecret;
+    }
+
+    public Instant getClientSecretExpiresAt() {
+        return this.clientSecretExpiresAt;
+    }
+
+    public String getClientName() {
+        return this.clientName;
+    }
+
+    public Set<String> getClientAuthenticationMethods() {
+        return this.clientAuthenticationMethods;
+    }
+
+    public Set<String> getAuthorizationGrantTypes() {
+        return this.authorizationGrantTypes;
+    }
+
+    public Set<String> getRedirectUris() {
+        return this.redirectUris;
+    }
+
+    public Set<String> getPostLogoutRedirectUris() {
+        return this.postLogoutRedirectUris;
+    }
+
+    public Set<String> getScopes() {
+        return this.scopes;
+    }
+
+    public String getClientSettings() {
+        return this.clientSettings;
+    }
+
+    public String getTokenSettings() {
+        return this.tokenSettings;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public void setClientId(String clientId) {
+        this.clientId = clientId;
+    }
+
+    public void setClientIdIssuedAt(Instant clientIdIssuedAt) {
+        this.clientIdIssuedAt = clientIdIssuedAt;
+    }
+
+    public void setClientSecret(String clientSecret) {
+        this.clientSecret = clientSecret;
+    }
+
+    public void setClientSecretExpiresAt(Instant clientSecretExpiresAt) {
+        this.clientSecretExpiresAt = clientSecretExpiresAt;
+    }
+
+    public void setClientName(String clientName) {
+        this.clientName = clientName;
+    }
+
+    public void setClientAuthenticationMethods(Set<String> clientAuthenticationMethods) {
+        this.clientAuthenticationMethods = clientAuthenticationMethods;
+    }
+
+    public void setAuthorizationGrantTypes(Set<String> authorizationGrantTypes) {
+        this.authorizationGrantTypes = authorizationGrantTypes;
+    }
+
+    public void setRedirectUris(Set<String> redirectUris) {
+        this.redirectUris = redirectUris;
+    }
+
+    public void setPostLogoutRedirectUris(Set<String> postLogoutRedirectUris) {
+        this.postLogoutRedirectUris = postLogoutRedirectUris;
+    }
+
+    public void setScopes(Set<String> scopes) {
+        this.scopes = scopes;
+    }
+
+    public void setClientSettings(String clientSettings) {
+        this.clientSettings = clientSettings;
+    }
+
+    public void setTokenSettings(String tokenSettings) {
+        this.tokenSettings = tokenSettings;
+    }
 
     // Other fields from your stub if they don't fit into ClientSettings/TokenSettings
     // private String clientUri; (Part of ClientSettings)

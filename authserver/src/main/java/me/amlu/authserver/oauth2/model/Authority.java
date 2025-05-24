@@ -74,13 +74,13 @@ public class Authority implements GrantedAuthority {
         return this.id;
     }
 
+    public void setId(long id) {
+        this.id = id;
+    }
+
     @Override
     public String getAuthority() {
         return this.authority;
-    }
-
-    public void setId(long id) {
-        this.id = id;
     }
 
     public void setAuthority(String name) {

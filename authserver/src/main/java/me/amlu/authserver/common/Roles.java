@@ -19,6 +19,7 @@ public final class Roles {
     public static final String SCOPE_PROFILE = "profile";
     public static final String SCOPE_EMAIL = "email";
     public static final String SCOPE_ADDRESS = "address";
+
     private Roles() {
     } // Private constructor to prevent instantiation
 }

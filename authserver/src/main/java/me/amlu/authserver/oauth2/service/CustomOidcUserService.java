@@ -29,6 +29,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getFirstNameString;
+import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getLastNameString;
+
 @Service
 public class CustomOidcUserService extends OidcUserService {
     private static final Logger log = LoggerFactory.getLogger(CustomOidcUserService.class);
@@ -119,28 +122,12 @@ public class CustomOidcUserService extends OidcUserService {
     // Helper methods to extract names, can be expanded for provider-specific logic
     private String extractFirstName(Map<String, Object> attributes, String registrationId, String email) {
         String firstName = (String) attributes.get("given_name"); // Standard OIDC
-        if (!StringUtils.hasText(firstName) && "github".equalsIgnoreCase(registrationId)) {
-            String fullName = (String) attributes.get("name"); // GitHub often provides full name
-            if (StringUtils.hasText(fullName)) {
-                firstName = fullName.split(" ", 2)[0];
-            }
-        }
-        // Fallback if no first name can be derived
-        return StringUtils.hasText(firstName) ? firstName : email.split("@")[0];
+        return getFirstNameString(attributes, registrationId, email, firstName);
     }
 
     private String extractLastName(Map<String, Object> attributes, String registrationId) {
         String lastName = (String) attributes.get("family_name"); // Standard OIDC
-        if (!StringUtils.hasText(lastName) && "github".equalsIgnoreCase(registrationId)) {
-            String fullName = (String) attributes.get("name");
-            if (StringUtils.hasText(fullName)) {
-                String[] parts = fullName.split(" ", 2);
-                if (parts.length > 1) {
-                    lastName = parts[1];
-                }
-            }
-        }
-        return lastName; // Can be null
+        return getLastNameString(attributes, registrationId, lastName);
     }
 
     private String extractNickname(Map<String, Object> attributes, String registrationId) {
