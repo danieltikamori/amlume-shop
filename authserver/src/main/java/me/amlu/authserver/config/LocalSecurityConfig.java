@@ -88,7 +88,12 @@ import java.util.stream.Collectors;
 @EnableWebSecurity
 public class LocalSecurityConfig {
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(LocalSecurityConfig.class);
-
+    private final PersistentTokenRepository persistentTokenRepository;
+    private final ObjectMapper objectMapper;
+    private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
+    private final WebAuthNProperties webAuthNProperties;
+    private final DataSource dataSource;
+    private final PasswordEncoder passwordEncoder;
     // Inject secrets for OAuth2 client seeding from application-local.yml (which are loaded from Vault)
     @Value("${oauth2.clients.amlumeapi.secret}")
     private String amlumeapiClientSecret;
@@ -111,14 +116,6 @@ public class LocalSecurityConfig {
     @Value("${spring.initial-root-user.password}")
     private String initialRootUserPassword;
 
-    private final PersistentTokenRepository persistentTokenRepository;
-
-    private final ObjectMapper objectMapper;
-    private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
-    private final WebAuthNProperties webAuthNProperties;
-    private final DataSource dataSource;
-    private final PasswordEncoder passwordEncoder;
-
     public LocalSecurityConfig(ObjectMapper objectMapper,
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
                                WebAuthNProperties webAuthNProperties, PersistentTokenRepository persistentTokenRepository, DataSource dataSource, PasswordEncoder passwordEncoder) {
@@ -129,6 +126,7 @@ public class LocalSecurityConfig {
         this.dataSource = dataSource;
         this.passwordEncoder = passwordEncoder;
     }
+
 
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -166,6 +164,10 @@ public class LocalSecurityConfig {
         return http.build();
     }
 
+    // The JpaRegisteredClientRepositoryAdapter bean (defined as @Service)
+    // will be automatically picked up by Spring Authorization Server.
+    // No explicit InMemoryRegisteredClientRepository bean for client definitions is needed here.
+
     @Bean
     @Order(2)
     @DependsOn({"userDetailsService", "relyingPartyOperations"})
@@ -189,7 +191,18 @@ public class LocalSecurityConfig {
                 authorize -> authorize
                         .requestMatchers(new AntPathRequestMatcher("/images/*.png")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/line-awesome/**/*.svg")).permitAll()
-                        .requestMatchers("/login/**", "/webauthn/**", "/error").permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/webjars/**")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/css/**")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/js/**")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/img/**")).permitAll()
+                        .requestMatchers(
+                                "/",                 // Home page - MUST BE PERMITTED if it's the entry point
+                                "/login",            // Login page (GET and POST) - MUST BE PERMITTED
+                                "/webauthn/**",      // For passkeys
+                                "/error"             // Standard error page
+                        ).permitAll()
+                        // Secure other application paths
+                        .requestMatchers("/dashboard").authenticated()
                         .requestMatchers(new AntPathRequestMatcher("/api/profile/passkeys/**")).authenticated()
                         .requestMatchers(new AntPathRequestMatcher("/api/profile/**")).authenticated() // Secure profile endpoints
                         .requestMatchers(new AntPathRequestMatcher("/api/register/**")).permitAll() // Allow registration
@@ -212,8 +225,18 @@ public class LocalSecurityConfig {
 //                    // We can add other WebAuthn customizer settings here if needed
 //                })
                 .formLogin(formLogin -> formLogin
-                        .loginPage("/login") // Specify your custom login page if you have one
-                        .permitAll() // Allow access to the login page
+                                .loginPage("/login") // Specify your custom login page
+                                .loginProcessingUrl("/login")
+                                .permitAll() // Allow access to the login page path
+//                                .successHandler((request, response, auth) -> response.setStatus(200))
+//                                .failureHandler((request, response, ex) -> response.setStatus(401))
+                                // --- Explicitly configure success and failure URLs ---
+                                // Redirect to a simple success page or the root on success
+//                                .defaultSuccessUrl("/login?form_login_success=true", true) // Redirect to root after successful form login
+                                .defaultSuccessUrl("/dashboard", true)
+//                        .defaultSuccessUrl("/", true) // Redirect to root after successful form login
+                                // Redirect back to login page with error parameter on failure
+                                .failureUrl("/login?error=true")
                 )
                 .webAuthn(Customizer.withDefaults())
                 // --- Remember-Me Configuration ---
@@ -225,17 +248,26 @@ public class LocalSecurityConfig {
                                 .tokenValiditySeconds((int) Duration.ofDays(30).toSeconds()) // e.g., 30 days
                 )
                 .oauth2Login(oauth2Login -> oauth2Login
-                        .userInfoEndpoint(userInfo -> userInfo
-                                .oidcUserService(oidcUserService)
-                                .userService(oauth2UserService)
-                        )
-                        // Redirect to login page with success param. The 'true' flag forces the redirect, ignoring any saved request
-                        .defaultSuccessUrl("/login?oauth2_login_success", true)
-                );
+                                .loginPage("/login")
+                                .userInfoEndpoint(userInfo -> userInfo
+                                        .oidcUserService(oidcUserService)
+                                        .userService(oauth2UserService)
+                                )
+                                // Redirect to login page with success param. The 'true' flag forces the redirect, ignoring any saved request
+                                .defaultSuccessUrl("/dashboard", true)
+//                        .defaultSuccessUrl("/login?oauth2_login_success=true", true)
+//                                .failureUrl("/login?oauth2_error=true")
+                )
+                .logout(logout -> logout
+//                                .logoutSuccessUrl("/")
+                                .logoutSuccessUrl("/login?logout=true")
+                                .permitAll()
+                )
 
-        http.csrf(cfg -> cfg.ignoringRequestMatchers(
+                .csrf(cfg -> cfg.ignoringRequestMatchers(
+                        new AntPathRequestMatcher("/login", "POST"), // Only for testing. To ignore CSRF for GET and POST requests to /login
                 new AntPathRequestMatcher("/webauthn/**"),
-                new AntPathRequestMatcher("/login/webauthn"),
+//                new AntPathRequestMatcher("/login/webauthn"), // Covered by /webauthn/**
                 new AntPathRequestMatcher("/api/**") // If your API clients handle CSRF differently or are stateless
         ));
         // If your API is stateful and uses cookies, CSRF protection is important.
@@ -245,10 +277,6 @@ public class LocalSecurityConfig {
         // No explicit matcher needed here as it's the fallback chain
         return http.build();
     }
-
-    // The JpaRegisteredClientRepositoryAdapter bean (defined as @Service)
-    // will be automatically picked up by Spring Authorization Server.
-    // No explicit InMemoryRegisteredClientRepository bean for client definitions is needed here.
 
     @PostConstruct
     @Transactional // Ensure seeding is atomic
@@ -529,7 +557,9 @@ public class LocalSecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
-        config.addAllowedOrigin("http://127.0.0.1:8080"); // Consider making this more configurable
+        config.addAllowedOrigin("http://127.0.0.1:8080"); // amlume-shop
+        config.addAllowedOrigin("http://localhost:8080"); // amlume-shop
+        config.addAllowedOrigin("http://localhost:9000"); // authserver itself for some flows
         config.setAllowCredentials(true);
         source.registerCorsConfiguration("/**", config);
         return source;
@@ -663,20 +693,20 @@ public class LocalSecurityConfig {
             return this.rpId;
         }
 
-        public String getRpName() {
-            return this.rpName;
-        }
-
-        public Set<String> getAllowedOrigins() {
-            return this.allowedOrigins;
-        }
-
         public void setRpId(String rpId) {
             this.rpId = rpId;
         }
 
+        public String getRpName() {
+            return this.rpName;
+        }
+
         public void setRpName(String rpName) {
             this.rpName = rpName;
+        }
+
+        public Set<String> getAllowedOrigins() {
+            return this.allowedOrigins;
         }
 
         public void setAllowedOrigins(Set<String> allowedOrigins) {
@@ -702,6 +732,7 @@ public class LocalSecurityConfig {
             return other instanceof WebAuthNProperties;
         }
 
+        @Override
         public int hashCode() {
             final int PRIME = 59;
             int result = 1;
@@ -714,6 +745,7 @@ public class LocalSecurityConfig {
             return result;
         }
 
+        @Override
         public String toString() {
             return "LocalSecurityConfig.WebAuthNProperties(rpId=" + this.getRpId() + ", rpName=" + this.getRpName() + ", allowedOrigins=" + this.getAllowedOrigins() + ")";
         }
