@@ -47,6 +47,9 @@
         <commons-validator.version>1.9.0</commons-validator.version>
         <webauthn4j-core.version>0.29.1.RELEASE</webauthn4j-core.version>
         <selenium.version>4.32.0</selenium.version>
+        <google-api-client.version>2.8.0</google-api-client.version>
+        <jte.version>3.2.1</jte.version>
+        <maven-resources-plugin.version>3.3.1</maven-resources-plugin.version>
 
         <spring-cloud.version>2024.0.1</spring-cloud.version>
     </properties>
@@ -265,6 +268,16 @@
             <artifactId>flyway-mysql</artifactId> <!-- If using MySQL -->
         </dependency>
 
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client</artifactId>
+            <version>${google-api-client.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+        </dependency>
+
 
     </dependencies>
 
@@ -273,27 +286,46 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.14.0</version>
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <fork>true</fork>
+                    <parameters>true</parameters>
                     <encoding>UTF-8</encoding>
                     <compilerArgs>
+                        <arg>--should-stop=ifError=FLOW</arg>
                         <arg>-XDcompilePolicy=simple</arg>
+                        <!--                        If <fork>true</fork>:-->
                         <arg>-Xplugin:ErrorProne -XepOpt:NullAway:AnnotatedPackages=com.uber</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED</arg>
+                        <arg>-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED</arg>
+                        <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED</arg>
+                        <arg>-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED</arg>
                     </compilerArgs>
                     <annotationProcessorPaths>
-                        <path>
-                            <groupId>org.springframework.boot</groupId>
-                            <artifactId>spring-boot-configuration-processor</artifactId>
-                        </path>
+                        <!-- other annotation processors -->
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                        <path>
+
+                            <groupId>com.google.errorprone</groupId>
+                            <artifactId>error_prone_annotations</artifactId>
+                            <version>2.38.0</version>
                         </path>
                         <path>
                             <groupId>com.google.errorprone</groupId>
                             <artifactId>error_prone_core</artifactId>
-                            <version>2.23.0</version>
+                            <version>2.38.0</version>
                         </path>
                         <path>
                             <groupId>com.uber.nullaway</groupId>
