@@ -13,11 +13,11 @@ package me.amlu.authserver.user.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import me.amlu.authserver.oauth2.model.Authority;
+import me.amlu.authserver.passkey.model.PasskeyCredential;
 import me.amlu.authserver.user.model.vo.AccountStatus;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.model.vo.PhoneNumber;
-import me.amlu.authserver.passkey.model.PasskeyCredential;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.proxy.HibernateProxy;
@@ -53,14 +53,12 @@ public class User implements UserDetails {
     @Serial
     private static final long serialVersionUID = 1L;
 
+    @Column(name = "external_id", unique = true) // Ensure externalId is unique if used as a primary lookup
+    public String externalId; // User handle for WebAuthn.
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long id;
-
-    @Column(name = "external_id", unique = true) // Ensure externalId is unique if used as a primary lookup
-    public String externalId; // User handle for WebAuthn.
-
     @Column(name = "first_name", nullable = false, length = 127)
     private String firstName;
 
@@ -156,6 +154,7 @@ public class User implements UserDetails {
      * Static factory method to create a new, minimally initialized user instance.
      * Primarily for scenarios where an entity instance is needed before full population (e.g., by JPA or some repository logic).
      * For fully constructed users, prefer the builder.
+     *
      * @return A new user instance with default initializations.
      */
     public static User createNew() {
@@ -195,19 +194,21 @@ public class User implements UserDetails {
         Assert.isTrue(!lockDuration.isNegative() && !lockDuration.isZero(), "Lock duration must be positive.");
         this.accountStatus = this.accountStatus.lockUntil(Instant.now().plus(lockDuration));
     }
-    public void unlockAccount() { this.accountStatus = this.accountStatus.unlock(); }
-    public void enableAccount() { this.accountStatus = this.accountStatus.enable(); }
-    public void disableAccount() { this.accountStatus = this.accountStatus.disable(); }
-    public boolean isLoginAttemptsExceeded() { return this.accountStatus.getFailedLoginAttempts() >= AccountStatus.DEFAULT_MAX_FAILED_ATTEMPTS; }
 
+    public void unlockAccount() {
+        this.accountStatus = this.accountStatus.unlock();
+    }
 
-    /**
-     * Sets the external ID for the user.
-     * @param externalId The new external ID. Must not be null or blank.
-     */
-    public void setExternalId(String externalId) {
-        Assert.hasText(externalId, "External ID cannot be blank.");
-        this.externalId = externalId;
+    public void enableAccount() {
+        this.accountStatus = this.accountStatus.enable();
+    }
+
+    public void disableAccount() {
+        this.accountStatus = this.accountStatus.disable();
+    }
+
+    public boolean isLoginAttemptsExceeded() {
+        return this.accountStatus.getFailedLoginAttempts() >= AccountStatus.DEFAULT_MAX_FAILED_ATTEMPTS;
     }
 
     public void updateFirstName(String newFirstName) {
@@ -293,16 +294,6 @@ public class User implements UserDetails {
         if (authority != null && this.authorities != null) this.authorities.remove(authority);
     }
 
-    /**
-     * Replaces all existing authorities with the given set.
-     *
-     * @param newAuthorities The new set of authorities. If null or empty, authorities will be cleared.
-     */
-    public void setAuthorities(Set<Authority> newAuthorities) {
-        this.authorities.clear();
-        if (newAuthorities != null) this.authorities.addAll(newAuthorities);
-    }
-
     public void addPasskeyCredential(PasskeyCredential credential) {
         if (credential != null) {
             this.passkeyCredentials.add(credential);
@@ -317,21 +308,56 @@ public class User implements UserDetails {
         }
     }
 
-    // --- UserDetails Implementation ---
-
     @Override
+    @Transient
     public Collection<? extends GrantedAuthority> getAuthorities() {
         if (this.authorities == null) return Collections.emptySet();
         return this.authorities.stream()
                 .map(authority -> new SimpleGrantedAuthority(authority.getAuthority()))
                 .collect(Collectors.toSet());
     }
-    @Override public String getPassword() { return this.password != null ? this.password.getValue() : null; }
-    @Override public String getUsername() { return this.email != null ? this.email.getValue() : null; } // Email is the username
-    @Override public boolean isAccountNonExpired() { return this.accountStatus != null && this.accountStatus.isAccountNonExpired(); }
-    @Override public boolean isAccountNonLocked() { return this.accountStatus != null && this.accountStatus.isAccountNonLocked(); }
-    @Override public boolean isCredentialsNonExpired() { return this.accountStatus != null && this.accountStatus.isCredentialsNonExpired(); }
-    @Override public boolean isEnabled() { return this.accountStatus != null && this.accountStatus.isEnabled(); }
+
+    /**
+     * Replaces all existing authorities with the given set.
+     *
+     * @param newAuthorities The new set of authorities. If null or empty, authorities will be cleared.
+     */
+    public void setAuthorities(Set<Authority> newAuthorities) {
+        this.authorities.clear();
+        if (newAuthorities != null) this.authorities.addAll(newAuthorities);
+    }
+
+    // --- UserDetails Implementation ---
+
+    @Override
+    public String getPassword() {
+        return this.password != null ? this.password.getValue() : null;
+    }
+
+    @Override
+    public String getUsername() {
+        return this.email != null ? this.email.getValue() : null;
+    } // Email is the username
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return this.accountStatus != null && this.accountStatus.isAccountNonExpired();
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return this.accountStatus != null && this.accountStatus.isAccountNonLocked();
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return this.accountStatus != null && this.accountStatus.isCredentialsNonExpired();
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return this.accountStatus != null && this.accountStatus.isEnabled();
+    }
 
     // --- equals and hashCode ---
     @Override
@@ -353,13 +379,40 @@ public class User implements UserDetails {
         return Objects.hashCode(getId());
     }
 
-    // --- Getters ---
-    public Long getId() { return this.id; }
-    public String getExternalId() { return this.externalId; }
-    public String getFirstName() { return this.firstName; }
-    public String getLastName() { return this.lastName; }
-    public String getNickname() { return this.nickname; }
-    public EmailAddress getEmail() { return this.email; }
+    // --- Getters and Setters ---
+    public Long getId() {
+        return this.id;
+    }
+
+    public String getExternalId() {
+        return this.externalId;
+    }
+
+    /**
+     * Sets the external ID for the user.
+     *
+     * @param externalId The new external ID. Must not be null or blank.
+     */
+    public void setExternalId(String externalId) {
+        Assert.hasText(externalId, "External ID cannot be blank.");
+        this.externalId = externalId;
+    }
+
+    public String getFirstName() {
+        return this.firstName;
+    }
+
+    public String getLastName() {
+        return this.lastName;
+    }
+
+    public String getNickname() {
+        return this.nickname;
+    }
+
+    public EmailAddress getEmail() {
+        return this.email;
+    }
 
     public EmailAddress getBackupEmail() {
         return this.backupEmail;
@@ -368,15 +421,31 @@ public class User implements UserDetails {
     public String getProfilePictureUrl() {
         return this.profilePictureUrl;
     }
-    public PhoneNumber getMobileNumber() { return this.mobileNumber; }
-    public Set<PasskeyCredential> getPasskeyCredentials() { return Collections.unmodifiableSet(this.passkeyCredentials); }
-    public AccountStatus getAccountStatus() { return this.accountStatus; }
-    public Instant getCreatedAt() { return this.createdAt; }
-    public Instant getUpdatedAt() { return this.updatedAt; }
+
+    public PhoneNumber getMobileNumber() {
+        return this.mobileNumber;
+    }
+
+    public Set<PasskeyCredential> getPasskeyCredentials() {
+        return Collections.unmodifiableSet(this.passkeyCredentials);
+    }
+
+    public AccountStatus getAccountStatus() {
+        return this.accountStatus;
+    }
+
+    public Instant getCreatedAt() {
+        return this.createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return this.updatedAt;
+    }
 
     /**
      * Returns a displayable full name, preferring nickname if available,
      * otherwise concatenating first and last name.
+     *
      * @return A displayable full name.
      */
     @Transient // Not a persistent field, derived
@@ -462,23 +531,71 @@ public class User implements UserDetails {
         UserBuilder() {
         }
 
-        public UserBuilder id(Long id) { this.id = id; return this; }
-        public UserBuilder externalId(String externalId) { this.externalId = externalId; return this; }
-        public UserBuilder firstName(String firstName) { this.firstName = firstName; return this; }
-        public UserBuilder lastName(String lastName) { this.lastName = lastName; return this; }
-        public UserBuilder nickname(String nickname) { this.nickname = nickname; return this; }
-        public UserBuilder email(EmailAddress email) { this.email = email; return this; }
+        public UserBuilder id(Long id) {
+            this.id = id;
+            return this;
+        }
+
+        public UserBuilder externalId(String externalId) {
+            this.externalId = externalId;
+            return this;
+        }
+
+        public UserBuilder firstName(String firstName) {
+            this.firstName = firstName;
+            return this;
+        }
+
+        public UserBuilder lastName(String lastName) {
+            this.lastName = lastName;
+            return this;
+        }
+
+        public UserBuilder nickname(String nickname) {
+            this.nickname = nickname;
+            return this;
+        }
+
+        public UserBuilder email(EmailAddress email) {
+            this.email = email;
+            return this;
+        }
 
         public UserBuilder backupEmail(EmailAddress backupEmail) {
             this.backupEmail = backupEmail;
             return this;
         }
-        public UserBuilder mobileNumber(PhoneNumber mobileNumber) { this.mobileNumber = mobileNumber; return this; }
-        @JsonIgnore public UserBuilder password(HashedPassword password) { this.password = password; return this; }
-        public UserBuilder accountStatus(AccountStatus accountStatus) { this.accountStatus = accountStatus; return this; }
-        @JsonIgnore public UserBuilder createdAt(Instant createdAt) { this.createdAt = createdAt; return this; }
-        @JsonIgnore public UserBuilder updatedAt(Instant updatedAt) { this.updatedAt = updatedAt; return this; }
-        @JsonIgnore public UserBuilder authorities(Set<Authority> authorities) {
+
+        public UserBuilder mobileNumber(PhoneNumber mobileNumber) {
+            this.mobileNumber = mobileNumber;
+            return this;
+        }
+
+        @JsonIgnore
+        public UserBuilder password(HashedPassword password) {
+            this.password = password;
+            return this;
+        }
+
+        public UserBuilder accountStatus(AccountStatus accountStatus) {
+            this.accountStatus = accountStatus;
+            return this;
+        }
+
+        @JsonIgnore
+        public UserBuilder createdAt(Instant createdAt) {
+            this.createdAt = createdAt;
+            return this;
+        }
+
+        @JsonIgnore
+        public UserBuilder updatedAt(Instant updatedAt) {
+            this.updatedAt = updatedAt;
+            return this;
+        }
+
+        @JsonIgnore
+        public UserBuilder authorities(Set<Authority> authorities) {
             this.authorities$value = authorities;
             this.authorities$set = true;
             return this;
@@ -491,7 +608,7 @@ public class User implements UserDetails {
             }
             return new User(this.id, this.externalId, this.firstName, this.lastName, this.nickname,
                     this.email, this.backupEmail, this.mobileNumber,
-                            this.password, this.accountStatus, this.createdAt, this.updatedAt, authoritiesValue);
+                    this.password, this.accountStatus, this.createdAt, this.updatedAt, authoritiesValue);
         }
 
         @Override
