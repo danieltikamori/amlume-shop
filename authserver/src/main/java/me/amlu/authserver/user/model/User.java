@@ -24,10 +24,12 @@ import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.web.webauthn.api.Bytes;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.io.Serial;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -95,6 +97,17 @@ public class User implements UserDetails {
     private HashedPassword password;
 
     @Embedded
+    @Access(AccessType.FIELD)
+    @AttributeOverrides({
+            @AttributeOverride(name = "enabled", column = @Column(name = "enabled", nullable = false)),
+            @AttributeOverride(name = "failedLoginAttempts", column = @Column(name = "failed_login_attempts")),
+            @AttributeOverride(name = "lockoutExpirationTime", column = @Column(name = "lockout_expiration_time")),
+            @AttributeOverride(name = "accountNonExpired", column = @Column(name = "account_non_expired", nullable = false)),
+//            @AttributeOverride(name = "accountNonLocked", column = @Column(name = "account_non_locked", nullable = false)),
+            @AttributeOverride(name = "credentialsNonExpired", column = @Column(name = "credentials_non_expired", nullable = false)),
+//            @AttributeOverride(name = "lastLoginTime", column = @Column(name = "last_login_time")),
+//            @AttributeOverride(name = "lockedAt", column = @Column(name = "locked_at"))
+    })
     private AccountStatus accountStatus;
 
     @CreationTimestamp // Automatically set on creation
@@ -125,7 +138,7 @@ public class User implements UserDetails {
         Assert.notNull(email, "User email cannot be null.");
 
         this.id = id;
-        this.externalId = externalId;
+        this.externalId = (externalId != null && !externalId.isBlank()) ? externalId : User.generateWebAuthnUserHandle();
         this.firstName = firstName;
         this.lastName = lastName;
         this.nickname = nickname;
@@ -308,6 +321,19 @@ public class User implements UserDetails {
         }
     }
 
+    // Generate a random user handle for WebAuthn, externalId
+    public static String generateWebAuthnUserHandle() {
+        UUID uuid = UUID.randomUUID();
+        ByteBuffer bb = ByteBuffer.wrap(new byte[16]);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return new Bytes(bb.array()).toBase64UrlString(); // Use Base64URL
+    }
+
+    // In User.UserBuilder or constructor where externalId is set:
+    // this.externalId = User.generateWebAuthnUserHandle();
+
+
     @Override
     @Transient
     public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -466,23 +492,29 @@ public class User implements UserDetails {
         return sb.isEmpty() ? "" : sb.toString();
     }
 
-
     @Override
     public String toString() {
+        // For lazy collections, just indicate presence, or if they are null,
+        // rather than trying to get their size, which can trigger lazy loading.
+        String passkeyStatus = (passkeyCredentials == null) ? "null_collection" : "[passkey_credentials_present]";
+        // Authorities are EAGER, but being cautious is fine.
+        String authoritiesStatus = (authorities == null) ? "null_collection" : "[authorities_present_count:" + authorities.size() + "]";
+
+
         return "User{" +
                 "id=" + id +
                 ", externalId='" + externalId + '\'' +
                 ", firstName='" + firstName + '\'' +
                 ", lastName='" + lastName + '\'' +
                 ", nickname='" + nickname + '\'' +
-                ", email=" + email +
-                ", backupEmail=" + backupEmail +
-                ", mobileNumber=" + mobileNumber +
+                ", email=" + (email != null ? email.getValue() : "null") +
+                ", backupEmail=" + (backupEmail != null ? backupEmail.getValue() : "null") +
+                ", mobileNumber=" + (mobileNumber != null ? mobileNumber.e164Value() : "null") +
                 ", accountStatus=" + accountStatus +
                 ", createdAt=" + createdAt +
                 ", updatedAt=" + updatedAt +
-                ", authorities_count=" + (authorities != null ? authorities.size() : 0) +
-                ", passkeyCredentials_count=" + (passkeyCredentials != null ? passkeyCredentials.size() : 0) +
+                ", authorities_status=" + authoritiesStatus + // Changed to status
+                ", passkeyCredentials_status=" + passkeyStatus + // Changed to status
                 '}';
     }
 
