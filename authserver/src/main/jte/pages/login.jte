@@ -1,9 +1,15 @@
 @import me.amlu.authserver.view.helper.CsrfHiddenInput
 
-@param Boolean error = false
+<%--Changed from 'error' to avoid confusion with errorType--%>
+@param Boolean errorOccurred = false
+<%--This will hold "csrf_token_invalid", etc.--%>
+@param String errorType = null
+<%--For the generic "Invalid username or password"--%>
 @param String errorMessage = null
 @param String logoutMessage = null
+<%--Keep if used for other success scenarios--%>
 @param String formLoginSuccess = null
+<%--Keep if used for other success scenarios--%>
 @param String oauth2LoginSuccess = null
 @param CsrfHiddenInput csrfHiddenInput
 
@@ -17,14 +23,32 @@ content = @`
                 </h2>
             </div>
 
-            @if(error)
-                <div id="errorMessage" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
-                     role="alert">
-                    <span class="block sm:inline">${errorMessage != null ? errorMessage : "An error occurred during login."}</span>
+            @if(errorOccurred)
+                <div id="errorMessageDisplay"
+                     class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <span class="block sm:inline">
+                        @if("csrf_token_invalid".equals(errorType))
+                            Your session may have expired or the request was invalid. Please try logging in again.
+
+                        @elseif("session_expired_logout".equals(errorType))
+                            Your session expired before logout could complete. Please log in again.
+
+                        @elseif("access_denied".equals(errorType))
+                            You do not have permission to access the requested page.
+
+                        <%--                            This handles the generic form login error--%>
+                        @elseif(errorMessage != null)
+                            ${errorMessage}
+
+                        <%--                            Fallback if errorOccurred is true but no specific type or message from controller--%>
+                        @else
+                            An unspecified error occurred during login.
+                        @endif
+                    </span>
                 </div>
             @endif
             @if(logoutMessage != null)
-                <div id="logoutMessage"
+                <div id="logoutMessageDisplay"
                      class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded relative" role="alert">
                     <span class="block sm:inline">${logoutMessage}</span>
                 </div>
