@@ -495,7 +495,7 @@ public class LocalSecurityConfig {
                     .lastName("Admin")
                     .email(new EmailAddress(rootEmail))
                     .password(new HashedPassword(passwordEncoder.encode(rootPassword)))
-                    .externalId(UUID.randomUUID().toString())
+                    .externalId(User.generateWebAuthnUserHandle())
                     .build();
             rootUser.enableAccount(); // Ensure account is enabled
 
