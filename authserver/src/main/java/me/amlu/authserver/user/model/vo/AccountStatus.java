@@ -14,6 +14,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import org.springframework.util.Assert;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 
 /**
@@ -23,9 +25,12 @@ import java.time.Instant;
  */
 
 @Embeddable
-public class AccountStatus {
+public class AccountStatus implements Serializable {
 
-    public static final int DEFAULT_MAX_FAILED_ATTEMPTS = 5; // Example threshold
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    public static final int DEFAULT_MAX_FAILED_ATTEMPTS = 5; // Default threshold
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
