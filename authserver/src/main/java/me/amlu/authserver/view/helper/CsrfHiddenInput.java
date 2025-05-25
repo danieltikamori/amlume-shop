@@ -36,6 +36,12 @@ public class CsrfHiddenInput implements Content {
         this.csrfToken = csrfToken;
     }
 
+    // Getter for csrfToken, useful for JS if needed, though current JS reads from rendered input
+    public CsrfToken getCsrfToken() {
+        return csrfToken;
+    }
+
+
     /**
      * Writes a hidden HTML input field containing the CSRF token to the template output.
      * The generated input field will have the CSRF token's parameter name and value.
@@ -46,7 +52,7 @@ public class CsrfHiddenInput implements Content {
     @Override
     public void writeTo(TemplateOutput templateOutput) {
         if (this.csrfToken != null) {
-            templateOutput.writeContent("<input type=\"hidden\" name=\"%s\" value=\"%s\">"
+            templateOutput.writeContent("<input type=\"hidden\" name=\"%s\" value=\"%s\" id=\"_csrf_token_input\">" // Added an ID for easier JS selection
                     .formatted(csrfToken.getParameterName(), csrfToken.getToken()));
         }
     }
