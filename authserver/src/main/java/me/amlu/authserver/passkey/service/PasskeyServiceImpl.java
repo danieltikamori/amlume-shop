@@ -13,6 +13,8 @@ package me.amlu.authserver.passkey.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.webauthn4j.util.exception.WebAuthnException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import me.amlu.authserver.passkey.dto.GetPasskeyDetailResponse;
 import me.amlu.authserver.passkey.dto.PostPasskeyRegistrationRequest;
 import me.amlu.authserver.passkey.model.PasskeyCredential;
@@ -22,6 +24,7 @@ import me.amlu.authserver.user.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.webauthn.api.*;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialCreationOptionsRequest;
 import org.springframework.security.web.webauthn.management.RelyingPartyPublicKey;
@@ -33,25 +36,32 @@ import org.springframework.util.Assert;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.time.Duration;
 
 @Service
 public class PasskeyServiceImpl implements PasskeyService {
 
     private static final Logger log = LoggerFactory.getLogger(PasskeyServiceImpl.class);
+    public static final String PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR = "PASSKEY_REGISTRATION_OPTIONS";
+    public static final Duration PASSKEY_RELYING_PARTY_TIMEOUT = Duration.ofMillis(5000L);
+
 
     private final WebAuthnRelyingPartyOperations relyingPartyOperations;
     private final DbPublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository;
     private final PasskeyCredentialRepository passkeyCredentialRepository;
-    private final ObjectMapper objectMapper; // Inject ObjectMapper
+    private final ObjectMapper objectMapper;
+    private final HttpServletRequest httpServletRequest; // Inject HttpServletRequest
 
     public PasskeyServiceImpl(WebAuthnRelyingPartyOperations relyingPartyOperations,
                               DbPublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository,
                               PasskeyCredentialRepository passkeyCredentialRepository,
-                              ObjectMapper objectMapper) { // Add ObjectMapper
+                              ObjectMapper objectMapper,
+                              HttpServletRequest httpServletRequest) {
         this.relyingPartyOperations = relyingPartyOperations;
         this.publicKeyCredentialUserEntityRepository = publicKeyCredentialUserEntityRepository;
         this.passkeyCredentialRepository = passkeyCredentialRepository;
         this.objectMapper = objectMapper;
+        this.httpServletRequest = httpServletRequest;
     }
 
     @Override
@@ -79,6 +89,13 @@ public class PasskeyServiceImpl implements PasskeyService {
                                 .build())
                         .collect(Collectors.toList());
 
+        final Authentication currentAuthentication = SecurityContextHolder.getContext().getAuthentication();
+        if (currentAuthentication == null || !currentAuthentication.isAuthenticated()) {
+            // This should ideally not happen if the controller endpoint is secured
+            log.error("No authenticated Authentication object found in SecurityContext for user {}.", currentUser.getEmail().getValue());
+            throw new IllegalStateException("User is not properly authenticated in the security context.");
+        }
+
         // Implement PublicKeyCredentialCreationOptionsRequest directly
         PublicKeyCredentialCreationOptionsRequest request = new PublicKeyCredentialCreationOptionsRequest() {
             @Override
@@ -92,7 +109,7 @@ public class PasskeyServiceImpl implements PasskeyService {
 
                 // Return the current authentication if needed, otherwise null is fine for this flow
                 // return SecurityContextHolder.getContext().getAuthentication();
-                return null;
+                return currentAuthentication;
 
             }
 
@@ -121,14 +138,22 @@ public class PasskeyServiceImpl implements PasskeyService {
                 return Collections.emptyMap();
             }
 
-            public Long getTimeout() {
+            public Duration getTimeout() {
                 // RP-specific timeout for the ceremony
-                return null;
+
+                return PASSKEY_RELYING_PARTY_TIMEOUT; // 5 seconds by default, can be customized per RP;
             }
 
         };
 
-        return relyingPartyOperations.createPublicKeyCredentialCreationOptions(request);
+        PublicKeyCredentialCreationOptions options = relyingPartyOperations.createPublicKeyCredentialCreationOptions(request);
+
+        // --- Store options in session ---
+        HttpSession session = httpServletRequest.getSession(true); // Get or create session
+        session.setAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR, options);
+        log.debug("Stored PublicKeyCredentialCreationOptions in session for user {}", currentUser.getEmail().getValue());
+
+        return options;
     }
 
     @Override
@@ -139,6 +164,21 @@ public class PasskeyServiceImpl implements PasskeyService {
 
         Assert.notNull(currentUser.getExternalId(), "Current user must have an externalId (user handle).");
         Assert.hasText(registrationRequest.friendlyName(), "Friendly name for the passkey is required.");
+
+
+        // --- Retrieve options from session ---
+        HttpSession session = httpServletRequest.getSession(false); // Get existing session, don't create
+        if (session == null) {
+            log.error("No active HTTP session found during finishPasskeyRegistration for user {}. Cannot retrieve registration options.", currentUser.getEmail().getValue());
+            throw new IllegalStateException("Session expired or not found. Please restart the passkey registration process.");
+        }
+        final PublicKeyCredentialCreationOptions creationOptions = (PublicKeyCredentialCreationOptions) session.getAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR);
+        if (creationOptions == null) {
+            log.error("PublicKeyCredentialCreationOptions not found in session for user {}. Registration flow might be incorrect or session expired.", currentUser.getEmail().getValue());
+            throw new IllegalStateException("Passkey registration options not found in session. Please restart the registration process.");
+        }
+        session.removeAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR); // Clean up
+        log.debug("Retrieved and removed PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
 
         try {
             // Use Spring Security's API types for building the request
@@ -162,39 +202,27 @@ public class PasskeyServiceImpl implements PasskeyService {
                 }
             }
 
-            // Explicitly type the PublicKeyCredential builder
-            @SuppressWarnings("unchecked") final PublicKeyCredential<AuthenticatorAttestationResponse> credential = (PublicKeyCredential<AuthenticatorAttestationResponse>) PublicKeyCredential.builder()
-                    .id(registrationRequest.id())
-                    .rawId(Bytes.fromBase64(registrationRequest.rawId()))
-                    .response(attestationResponse)
-                    .type(PublicKeyCredentialType.valueOf(registrationRequest.type().toUpperCase().replace("-", "_")))
-                    .clientExtensionResults(clientExtOutputs)
-                    .authenticatorAttachment(registrationRequest.authenticatorAttachment() != null ?
-                            AuthenticatorAttachment.valueOf(registrationRequest.authenticatorAttachment().toUpperCase()) : null)
-                    .build();
+            // Store the fully constructed credential in a final variable to be used in the anonymous class
+            @SuppressWarnings("unchecked") final PublicKeyCredential<AuthenticatorAttestationResponse> finalCredential =
+                    (PublicKeyCredential<AuthenticatorAttestationResponse>) PublicKeyCredential.builder()
+                            .id(registrationRequest.id())
+                            .rawId(Bytes.fromBase64(registrationRequest.rawId()))
+                            .response(attestationResponse)
+                            .type(PublicKeyCredentialType.valueOf(registrationRequest.type().toUpperCase().replace("-", "_")))
+                            .clientExtensionResults(clientExtOutputs)
+                            .authenticatorAttachment(registrationRequest.authenticatorAttachment() != null ?
+                                    AuthenticatorAttachment.valueOf(registrationRequest.authenticatorAttachment().toUpperCase()) : null)
+                            .build();
 
             final Bytes userHandle = Bytes.fromBase64(currentUser.getExternalId()); // Defined once
 
             RelyingPartyRegistrationRequest relyingPartyRequest = new RelyingPartyRegistrationRequest() {
-                public PublicKeyCredential<AuthenticatorAttestationResponse> getPublicKeyCredential() {
-                    return credential;
-                }
 
-                public Bytes getUserEntityUserId() {
-                    return userHandle;
-                }
-
-                //            It is generally OK to return null from getCreationOptions() and getPublicKey() in your anonymous RelyingPartyRegistrationRequest implementation if your WebAuthnRelyingPartyOperations.registerCredential() implementation does not require or use these values.
-//
-//              Details:
-//              getCreationOptions():
-//
 //            This typically returns the PublicKeyCredentialCreationOptions used in the registration ceremony.
-//            If your registration flow does not require this (for example, if all necessary data is provided via other methods or is not needed for your backend logic), returning null is fine.
-//            If the method is called and expects a non-null value, you will get a NullPointerException.
                 @Override
                 public PublicKeyCredentialCreationOptions getCreationOptions() {
-                    return null;
+                    // --- Return retrieved options ---
+                    return creationOptions;
                 }
 
 //              getPublicKey():
@@ -210,7 +238,7 @@ public class PasskeyServiceImpl implements PasskeyService {
 //                        If you later add features that require these values, update the implementation accordingly.
                 @Override
                 public RelyingPartyPublicKey getPublicKey() {
-                    return null;
+                    return new RelyingPartyPublicKey(finalCredential, registrationRequest.friendlyName());
                 }
             };
 
@@ -237,9 +265,10 @@ public class PasskeyServiceImpl implements PasskeyService {
 
         } catch (WebAuthnException e) {
             log.error("WebAuthn finishRegistration failed for user: {}. Error: {}", currentUser.getEmail().getValue(), e.getMessage(), e);
-            throw e;
+            throw e; // Re-throw to be caught by controller and result in a 400
         } catch (Exception e) {
             log.error("Unexpected error during finishPasskeyRegistration for user: {}. Error: {}", currentUser.getEmail().getValue(), e.getMessage(), e);
+            // Wrap the original exception to preserve its stack trace
             throw new RuntimeException("Failed to finish passkey registration.", e);
         }
     }

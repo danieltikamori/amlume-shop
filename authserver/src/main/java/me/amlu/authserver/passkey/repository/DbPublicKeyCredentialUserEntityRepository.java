@@ -42,20 +42,30 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                 user.getId(), user.getEmail() != null ? user.getEmail().getValue() : "null");
 
         if (user.getExternalId() == null) {
-            log.error("User with internal id {} and email '{}' has a null externalId. Cannot map to PublicKeyCredentialUserEntity.",
+            log.error("USER_MAP_FAIL: User with internal id {} and email '{}' has a null externalId. Cannot map to PublicKeyCredentialUserEntity.",
                     user.getId(), user.getEmail() != null ? user.getEmail().getValue() : "null");
             return null;
         }
         if (user.getEmail() == null || !StringUtils.hasText(user.getEmail().getValue())) {
-            log.error("User with internal id {} and externalId '{}' has a null or blank email. Cannot map to PublicKeyCredentialUserEntity.name.",
+            log.error("USER_MAP_FAIL: User with internal id {} and externalId '{}' has a null or blank email. Cannot map to PublicKeyCredentialUserEntity.name.",
                     user.getId(), user.getExternalId());
             return null;
         }
 
-        ImmutablePublicKeyCredentialUserEntity.PublicKeyCredentialUserEntityBuilder
-                builder = ImmutablePublicKeyCredentialUserEntity.builder()
-                .id(Bytes.fromBase64(user.getExternalId()))
-                .name(user.getEmail().getValue()); // PublicKeyCredentialUserEntity.name is the User.email
+        Bytes userHandleBytes;
+        try {
+            // Assuming user.getExternalId() is Base64URL encoded string
+            userHandleBytes = Bytes.fromBase64(user.getExternalId());
+        } catch (IllegalArgumentException e) {
+            log.error("USER_MAP_FAIL: Failed to decode Base64URL externalId '{}' for user internal_id={}: {}",
+                    user.getExternalId(), user.getId(), e.getMessage(), e);
+            return null;
+        }
+
+        ImmutablePublicKeyCredentialUserEntity.PublicKeyCredentialUserEntityBuilder builder =
+                ImmutablePublicKeyCredentialUserEntity.builder()
+                        .id(userHandleBytes) // Use the successfully created Bytes object
+                        .name(user.getEmail().getValue());
 
         // Construct displayName for WebAuthn from firstName and lastName
         StringBuilder webAuthnDisplayName = new StringBuilder();
@@ -85,8 +95,7 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
         // If all are blank, PublicKeyCredentialUserEntity.displayName will be null.
 
         PublicKeyCredentialUserEntity mappedEntity = builder.build();
-
-        log.debug("mapUserToPublicKeyCredentialUserEntity: Mapped to PublicKeyCredentialUserEntity with id: {}, name: {}, displayName: {}",
+        log.debug("mapUserToPublicKeyCredentialUserEntity: Successfully MAPPED to PublicKeyCredentialUserEntity with id: {}, name: {}, displayName: {}",
                 mappedEntity.getId().toBase64UrlString(), mappedEntity.getName(), mappedEntity.getDisplayName());
 
         return mappedEntity;

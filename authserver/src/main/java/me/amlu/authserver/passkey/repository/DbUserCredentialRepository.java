@@ -147,6 +147,25 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         // credential.setUser(user); // Not AggregateReference for JPA
         credential.setFriendlyName(credentialRecord.getLabel());
         credential.setCredentialType(credentialRecord.getCredentialType().getValue());
+        setCredentialPasskeyAndRecord(credential, credentialRecord);
+        return credential;
+    }
+
+    private PasskeyCredential newPasskeyCredential(CredentialRecord credentialRecord, User user) {
+        PasskeyCredential credential = new PasskeyCredential();
+        credential.setUser(user); // Set the JPA User entity
+        credential.setUserHandle(user.getExternalId()); // Store the user handle used during registration
+        credential.setFriendlyName(credentialRecord.getLabel());
+        credential.setCredentialType(credentialRecord.getCredentialType().getValue());
+        // credentialRecord.getCredentialId() is Bytes, use its instance method toBase64UrlString()
+        credential.setCredentialId(credentialRecord.getCredentialId().toBase64UrlString());
+        // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
+        setCredentialPasskeyAndRecord(credential, credentialRecord);
+        // CreatedAt will be set by @CreationTimestamp
+        return credential;
+    }
+
+    private static void setCredentialPasskeyAndRecord(PasskeyCredential credential, CredentialRecord credentialRecord) {
         // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
         credential.setPublicKeyCose(credentialRecord.getPublicKey().getBytes());
         credential.setSignatureCount(credentialRecord.getSignatureCount());
@@ -160,32 +179,5 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         }
         credential.setLastUsedAt(credentialRecord.getLastUsed());
         // Created date should not change for an existing credential
-        // credential.setCreatedAt(credentialRecord.getCreated());
-        return credential;
-    }
-
-    private PasskeyCredential newPasskeyCredential(CredentialRecord credentialRecord, User user) {
-        PasskeyCredential credential = new PasskeyCredential();
-        credential.setUser(user); // Set the JPA User entity
-        credential.setUserHandle(user.getExternalId()); // Store the user handle used during registration
-        credential.setFriendlyName(credentialRecord.getLabel());
-        credential.setCredentialType(credentialRecord.getCredentialType().getValue());
-        // credentialRecord.getCredentialId() is Bytes, use its instance method toBase64UrlString()
-        credential.setCredentialId(credentialRecord.getCredentialId().toBase64UrlString());
-        // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
-        credential.setPublicKeyCose(credentialRecord.getPublicKey().getBytes());
-        credential.setSignatureCount(credentialRecord.getSignatureCount());
-        credential.setUvInitialized(credentialRecord.isUvInitialized());
-        credential.setTransports(credentialRecord.getTransports().stream().map(AuthenticatorTransport::getValue).collect(Collectors.joining(",")));
-        credential.setBackupEligible(credentialRecord.isBackupEligible());
-        credential.setBackupState(credentialRecord.isBackupState());
-        if (credentialRecord.getAttestationObject() != null) {
-            // credentialRecord.getAttestationObject() is Bytes, use its instance method getBytes()
-            credential.setAttestationObject(credentialRecord.getAttestationObject().getBytes());
-        }
-        credential.setLastUsedAt(credentialRecord.getLastUsed());
-        // CreatedAt will be set by @CreationTimestamp
-        // credential.setCreatedAt(credentialRecord.getCreated());
-        return credential;
     }
 }
