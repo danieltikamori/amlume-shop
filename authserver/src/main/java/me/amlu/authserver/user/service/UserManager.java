@@ -132,7 +132,7 @@ public class UserManager implements UserServiceInterface {
                 .email(emailVO)
                 .backupEmail(backupEmailVO)
                 .password(hashedPasswordVO) // Can be null
-                .externalId(UUID.randomUUID().toString()) // Must be generated as it needs to be populated.
+                .externalId(User.generateWebAuthnUserHandle()) // Generate external ID for WebAuthn credentials in a byte array. Must be generated as it needs to be populated.
                 .mobileNumber(phoneNumberVO)
                 .build();
         log.debug("Built new User entity for email: {}", email);
