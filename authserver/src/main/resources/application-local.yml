@@ -10,6 +10,10 @@ app:
       # or you can map it from Vault: ${authserver.security.truststore.password}
       password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
 
+gg:
+  jte:
+    developmentMode: true
+
 oauth2:
   clients:
     shopClient:
@@ -72,6 +76,10 @@ spring:
     password: ${spring.datasource.password}
     driverClassName: com.mysql.cj.jdbc.Driver
 
+  docker:
+    compose:
+      enabled: false # Disable Spring Boot's automatic Docker Compose management for local profile
+
   initial-root-user:
     email: ${ROOT_USER_EMAIL}
     password: ${ROOT_USER_PASSWORD}
@@ -91,9 +99,9 @@ spring:
           lob:
             non_contextual_creation: true
           time_zone: UTC
-  docker:
-    compose:
-      enabled: false # Disable Spring Boot's automatic Docker Compose management for local profile
+
+  main:
+    web-application-type: servlet # or reactive
 
   security:
     oauth2:
@@ -166,9 +174,25 @@ logging:
     org:
       springframework:
         #        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
-        security: ${SPRING_SECURITY_LOG_LEVEL:INFO} # Reduce default to INFO
+        security: TRACE
+        security.web.webauthn: TRACE
+        web: DEBUG
+        cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
+        #        security: ${SPRING_SECURITY_LOG_LEVEL:INFO} # Reduce default to INFO
         cloud.vault: DEBUG # Keep vault logging at DEBUG for setup
         vault.core: DEBUG
+    #    root: DEBUG
+    me.amlu.authserver: DEBUG
+  #    me.amlu.shop.amlume_shop: DEBUG
+  #    me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
+  #    me.amlu.shop.amlume_shop.service: DEBUG
+  #    me.amlu.shop.amlume_shop.controller: DEBUG
+  #    me.amlu.shop.amlume_shop.repository: DEBUG
+  #    me.amlu.shop.amlume_shop.util: DEBUG
+  #    me.amlu.shop.amlume_shop.exception: DEBUG
+  #    me.amlu.shop.amlume_shop.model: DEBUG
+  #    me.amlu.shop.amlume_shop.security: DEBUG
+  #    me.amlu.shop.amlume_shop.security.oauth2: DEBUG
   pattern:
     console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
 
