@@ -215,18 +215,27 @@ content = @`
                                 // Spring Security's default endpoint for assertion options.
                                 // It can optionally take 'username' in the request body if your RP requires it
                                 // to narrow down credentials.
+
+                                const formData = new URLSearchParams();
+                                formData.append('username', username);
+// If CSRF is NOT ignored for this path (e.g., if you didn't make change #1 or it's still needed),
+// you would also append the CSRF token here:
+// formData.append(csrfDetails.parameterName, csrfDetails.token);
+
                                 const optionsResponse = await fetch('/login/webauthn/authenticate/options', {
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/json',
+                                        'Content-Type': 'application/x-www-form-urlencoded',
+                                        // Keep sending the CSRF token in the header; it's good practice and
+                                        // CsrfFilter checks headers if the token isn't in parameters.
+                                        // If the path is correctly ignored by CSRF (due to fix #1), this header might not be strictly
+                                        // necessary for this specific call, but it doesn't hurt.
                                         [csrfDetails.headerName]: csrfDetails.token
                                     },
-                                    // Send username if your server-side options generation needs it
-                                    // Uncomment if username is needed for options
-                                    body: JSON.stringify({username: username})
+                                    // Send it as URL-encoded string
+                                    body: formData.toString()
                                 });
 
-// Inside the try block of the loginWithPasskeyButton event listener
                                 if (!optionsResponse.ok) {
                                     const errorData = await optionsResponse.json().catch(() => ({message: 'Failed to parse error response from options endpoint.'}));
                                     throw new Error(errorData.message || 'Failed to get passkey options: ' + optionsResponse.statusText);
