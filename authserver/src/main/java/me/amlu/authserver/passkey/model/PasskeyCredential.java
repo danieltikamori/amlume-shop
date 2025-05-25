@@ -11,6 +11,8 @@
 package me.amlu.authserver.passkey.model;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import me.amlu.authserver.user.model.User;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.proxy.HibernateProxy;
@@ -20,6 +22,8 @@ import java.util.Objects;
 
 @Entity
 @Table(name = "passkey_credentials")
+@Builder
+@AllArgsConstructor
 public class PasskeyCredential {
 
     /**
@@ -36,55 +40,96 @@ public class PasskeyCredential {
     @JoinColumn(name = "user_id", nullable = false) // Foreign key column in this table
     private User user;
 
-    @Column(name = "user_handle", nullable = false, length = 255) // User handle used during registration
+    /**
+     * The user handle (typically User.externalId as Base64URL) associated with this credential
+     * at the time of registration.
+     */
+    @Column(name = "user_handle", nullable = false, length = 255)
     private String userHandle;
 
-    @Column(name = "friendly_name", length = 255) // Renamed from label for clarity
+    /**
+     * A user-friendly name for this passkey (e.g., "My YubiKey", "Laptop Touch ID").
+     */
+    @Column(name = "friendly_name", length = 255)
     private String friendlyName;
 
-    @Column(name = "credential_type", length = 50) // e.g., "public-key"
+    /**
+     * The type of the credential, typically "public-key".
+     */
+    @Column(name = "credential_type", length = 50)
     private String credentialType;
 
+    /**
+     * The unique ID for this credential, provided by the authenticator (Base64URL encoded).
+     * This is used to identify the credential during authentication.
+     */
     @Column(name = "credential_id", nullable = false, unique = true, length = 512)
     // Raw Credential ID, often Base64URL string
     private String credentialId;
 
-    @Lob // For potentially large binary data (maps to BLOB or similar)
+    /**
+     * The COSE-encoded public key of the credential.
+     */
+    @Lob
     @Column(name = "public_key_cose", nullable = false)
     private byte[] publicKeyCose; // COSE-encoded public key
 
+    /**
+     * The signature counter, indicating how many times this credential has been used.
+     * Helps detect cloned authenticators.
+     */
     @Column(name = "signature_count", nullable = false)
     private Long signatureCount;
 
-    @Column(name = "uv_initialized") // User Verification Initialized
+    /**
+     * Indicates if User Verification (e.g., PIN, biometrics) was used during registration.
+     */
+    @Column(name = "uv_initialized")
     private Boolean uvInitialized;
 
-    @Column(name = "transports", length = 100) // Comma-separated list e.g., "internal,hybrid"
+    /**
+     * A comma-separated list of authenticator transports (e.g., "internal", "usb", "nfc", "ble", "hybrid").
+     */
+    @Column(name = "transports", length = 100)
     private String transports;
 
+    /**
+     * Indicates if the authenticator is eligible for backup (e.g., syncable passkeys).
+     */
     @Column(name = "backup_eligible")
     private Boolean backupEligible;
 
+    /**
+     * Indicates the current backup state of the authenticator.
+     */
     @Column(name = "backup_state")
     private Boolean backupState;
 
+    /**
+     * The attestation object received from the authenticator during registration.
+     * May not be stored long-term after initial processing.
+     */
     @Lob
     @Column(name = "attestation_object") // Often processed at registration and might not be stored long-term
     private byte[] attestationObject;
 
+    /**
+     * Timestamp of when this passkey was last used for authentication.
+     */
     @Column(name = "last_used_at")
-    private Instant lastUsedAt; // Renamed for consistency
+    private Instant lastUsedAt;
 
-    @CreationTimestamp // Automatically set on creation
+    /**
+     * Timestamp of when this passkey credential was created.
+     */
+    @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
-    private Instant createdAt; // Renamed for consistency
+    private Instant createdAt;
 
     // --- Constructors ---
     public PasskeyCredential() {
         // JPA requires a no-arg constructor
     }
-
-    // Consider adding a constructor with required fields if useful, or use a builder pattern
 
     // --- Getters and Setters ---
 
@@ -223,7 +268,7 @@ public class PasskeyCredential {
 
     @Override
     public final int hashCode() {
-        return Objects.hashCode(getId());
+        return Objects.hashCode(getId()); // Or Objects.hash(id) if id can be null for new entities before persist
     }
 
     @Override
@@ -233,7 +278,7 @@ public class PasskeyCredential {
                 ", userId=" + (user != null ? user.getId() : "null") + // Avoid N+1 if user is lazy and not loaded
                 ", userHandle='" + userHandle + '\'' +
                 ", friendlyName='" + friendlyName + '\'' +
-                ", credentialId='" + credentialId + '\'' +
+                ", credentialId='" + (credentialId != null ? credentialId.substring(0, Math.min(credentialId.length(), 10)) + "..." : "null") + '\'' + // Truncate for brevity
                 ", signatureCount=" + signatureCount +
                 ", createdAt=" + createdAt +
                 ", lastUsedAt=" + lastUsedAt +
