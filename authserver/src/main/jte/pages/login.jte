@@ -218,11 +218,21 @@ content = @`
 
                                 const formData = new URLSearchParams();
                                 formData.append('username', username);
-// If CSRF is NOT ignored for this path (e.g., if you didn't make change #1 or it's still needed),
-// you would also append the CSRF token here:
-// formData.append(csrfDetails.parameterName, csrfDetails.token);
+                                // If CSRF is NOT ignored for this path (e.g., if you didn't make change #1 or it's still needed),
+                                // you would also append the CSRF token here:
+                                // formData.append(csrfDetails.parameterName, csrfDetails.token);
 
-                                const optionsResponse = await fetch('/login/webauthn/authenticate/options', {
+                                // Path that Bitwarden prompted on (the diagnostic path)
+                                const optionsUrl = '/webauthn/authenticate/options';
+// Path for submitting the assertion (likely the Spring Security default)
+                                const assertionUrl = '/login/webauthn/authenticate';
+
+
+                                console.log('Requesting passkey options from: ' + optionsUrl + ' for username: ' + username);
+
+
+                                const optionsResponse = await fetch(optionsUrl, {
+                                    // const optionsResponse = await fetch('/webauthn/authenticate/options', {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/x-www-form-urlencoded',
@@ -237,11 +247,16 @@ content = @`
                                 });
 
                                 if (!optionsResponse.ok) {
-                                    const errorData = await optionsResponse.json().catch(() => ({message: 'Failed to parse error response from options endpoint.'}));
-                                    throw new Error(errorData.message || 'Failed to get passkey options: ' + optionsResponse.statusText);
+                                    const errorText = await optionsResponse.text(); // Get text for non-JSON errors
+                                    console.error("Options response error text:", errorText);
+                                    const errorData = JSON.parse(errorText || "{}"); // Try to parse, fallback to empty object
+                                    throw new Error(errorData.message || 'Failed to get passkey options: ' + optionsResponse.status + ' ' + optionsResponse.statusText);
+                                    // const errorData = await optionsResponse.json().catch(() => ({message: 'Failed to parse error response from options endpoint.'}));
+                                    // throw new Error(errorData.message || 'Failed to get passkey options: ' + optionsResponse.statusText);
                                 }
 
                                 const options = await optionsResponse.json();
+                                console.log("Received passkey options:", JSON.stringify(options).substring(0, 500) + "..."); // Log received options
 
                                 // WebAuthn API expects certain fields to be ArrayBuffer.
                                 // The server should send them as Base64URL encoded strings.
@@ -258,7 +273,10 @@ content = @`
                                 }
 
                                 // 2. Request Assertion from Authenticator
+                                console.log("Options being passed to navigator.credentials.get():", JSON.stringify(options, null, 2));
+
                                 const assertion = await navigator.credentials.get({publicKey: options});
+                                console.log("Assertion received from authenticator:", assertion);
 
                                 // 3. Send Assertion to Server for Verification
                                 // Prepare the assertion data to be sent to the server.
@@ -276,7 +294,9 @@ content = @`
                                     clientExtensionResults: assertion.getClientExtensionResults()
                                 };
 
-                                const verificationResponse = await fetch('/login/webauthn/authenticate', {
+                                console.log('Sending assertion to: ' + assertionUrl);
+                                const verificationResponse = await fetch(assertionUrl, {
+                                    // const verificationResponse = await fetch('/login/webauthn/authenticate', {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
