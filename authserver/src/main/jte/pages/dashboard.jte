@@ -10,7 +10,7 @@
 @param CsrfHiddenInput csrfHiddenInput
 @param List<GetPasskeyDetailResponse> passkeys = null
 
-@template.layout.default(
+@template.layout.default(csrfHiddenInput = csrfHiddenInput,
 content = @`
     <div class="min-h-screen bg-gray-100">
         <nav class="bg-white shadow-sm">
@@ -277,29 +277,29 @@ content = @`
                         const options = await optionsResponse.json();
 
                         // --- HELPER FUNCTION TO GET THE STRING TO DECODE ---
-                        function getStringValueForDecoding(fieldValue) {
-                            if (fieldValue && typeof fieldValue === 'object' && typeof fieldValue.bytes === 'string') {
-                                console.warn("Received object with .bytes property, extracting string:", fieldValue);
-                                return fieldValue.bytes;
-                            }
-                            // If it's already a string, or null/undefined, or a non-conformant object,
-                            // bufferDecode will handle it (expecting a string or throwing an error).
-                            return fieldValue;
-                        }
+                        // function getStringValueForDecoding(fieldValue) {
+                        //     if (fieldValue && typeof fieldValue === 'object' && typeof fieldValue.bytes === 'string') {
+                        //         console.warn("Received object with .bytes property, extracting string:", fieldValue);
+                        //         return fieldValue.bytes;
+                        //     }
+                        //     // If it's already a string, or null/undefined, or a non-conformant object,
+                        //     // bufferDecode will handle it (expecting a string or throwing an error).
+                        //     return fieldValue;
+                        // }
 
                         // --- END HELPER FUNCTION ---
 
                         // Decode challenge and user.id (user handle)
                         if (options.challenge) {
-                            options.challenge = bufferDecode(getStringValueForDecoding(options.challenge));
+                            options.challenge = bufferDecode(options.challenge);
                         }
                         if (options.user && options.user.id) {
-                            options.user.id = bufferDecode(getStringValueForDecoding(options.user.id));
+                            options.user.id = bufferDecode(options.user.id);
                         }
                         if (options.excludeCredentials) {
                             for (let cred of options.excludeCredentials) {
                                 if (cred.id) {
-                                    cred.id = bufferDecode(getStringValueForDecoding(cred.id));
+                                    cred.id = bufferDecode(cred.id);
                                 }
                             }
                         }
