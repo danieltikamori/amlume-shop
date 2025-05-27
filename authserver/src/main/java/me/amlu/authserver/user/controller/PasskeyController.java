@@ -29,11 +29,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.web.webauthn.api.AuthenticatorSelectionCriteria;
+import org.springframework.security.web.webauthn.api.AuthenticatorTransport;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
+// For .getValue()
+// For .getValue()
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.springframework.security.web.webauthn.api.ResidentKeyRequirement.*;
 
 /**
  * Controller for managing user passkeys (WebAuthn credentials).
@@ -75,7 +84,7 @@ public class PasskeyController {
      *                                 or for any other unexpected errors (500).
      */
     @PostMapping("/registration-options")
-    public ResponseEntity<PublicKeyCredentialCreationOptions> beginPasskeyRegistration(
+    public ResponseEntity<Map<String, Object>> beginPasskeyRegistration(
             @AuthenticationPrincipal User currentUser) {
         if (currentUser == null) {
             log.warn("Attempt to begin passkey registration without authentication.");
@@ -84,7 +93,11 @@ public class PasskeyController {
         try {
             log.debug("User {} requesting passkey registration options", currentUser.getEmail().getValue());
             PublicKeyCredentialCreationOptions options = passkeyService.beginPasskeyRegistration(currentUser);
-            return ResponseEntity.ok(options);
+
+            // Manually convert to a Map ensuring correct format for byte arrays and timeout
+            Map<String, Object> responseMap = convertCreationOptionsToMap(options);
+
+            return ResponseEntity.ok(responseMap);
         } catch (IllegalStateException e) {
             log.error("Error beginning passkey registration for user {}: {}", currentUser.getEmail().getValue(), e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
@@ -93,6 +106,125 @@ public class PasskeyController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not generate passkey registration options.", e);
         }
     }
+
+    private Map<String, Object> convertCreationOptionsToMap(PublicKeyCredentialCreationOptions options) {
+        Map<String, Object> map = new HashMap<>();
+
+        // RP Information
+        Map<String, String> rpMap = new HashMap<>();
+        rpMap.put("id", options.getRp().getId());
+        rpMap.put("name", options.getRp().getName());
+        map.put("rp", rpMap);
+
+        // User Information
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("name", options.getUser().getName());
+        userMap.put("displayName", options.getUser().getDisplayName());
+        userMap.put("id", options.getUser().getId().toBase64UrlString()); // Bytes to Base64URL String
+        map.put("user", userMap);
+
+        // Challenge
+        map.put("challenge", options.getChallenge().toBase64UrlString()); // Bytes to Base64URL String
+
+        // PubKeyCredParams (usually serializes fine, but ensure alg is just the number)
+        map.put("pubKeyCredParams", options.getPubKeyCredParams().stream()
+                .map(param -> {
+                    Map<String, Object> paramMap = new HashMap<>();
+                    paramMap.put("type", param.getType().getValue()); // e.g., "public-key"
+                    paramMap.put("alg", param.getAlg().getValue());   // e.g., -7
+                    return paramMap;
+                }).collect(Collectors.toList()));
+
+
+        // Timeout (convert Duration to milliseconds as per WebAuthn spec)
+        if (options.getTimeout() != null) {
+            map.put("timeout", options.getTimeout().toMillis());
+        }
+
+        // ExcludeCredentials
+        if (options.getExcludeCredentials() != null) {
+            map.put("excludeCredentials", options.getExcludeCredentials().stream()
+                    .map(desc -> {
+                        Map<String, Object> descMap = new HashMap<>();
+                        descMap.put("type", desc.getType().getValue());
+                        descMap.put("id", desc.getId().toBase64UrlString()); // Bytes to Base64URL String
+                        if (desc.getTransports() != null && !desc.getTransports().isEmpty()) {
+                            descMap.put("transports", desc.getTransports().stream()
+                                    .map(AuthenticatorTransport::getValue)
+                                    .collect(Collectors.toList()));
+                        }
+                        return descMap;
+                    }).collect(Collectors.toList()));
+        } else {
+            map.put("excludeCredentials", List.of());
+        }
+
+        // AuthenticatorSelection
+        if (options.getAuthenticatorSelection() != null) {
+            AuthenticatorSelectionCriteria authSelect = options.getAuthenticatorSelection();
+            Map<String, Object> authSelectMap = new HashMap<>();
+
+            if (authSelect.getAuthenticatorAttachment() != null) {
+                authSelectMap.put("authenticatorAttachment", authSelect.getAuthenticatorAttachment().getValue());
+            }
+
+            // Handle residentKey (enum) and derive requireResidentKey (boolean)
+            if (authSelect.getResidentKey() != null) {
+                String residentKeyStringValue = authSelect.getResidentKey().getValue();
+                authSelectMap.put("residentKey", residentKeyStringValue); // "discouraged", "preferred", "required"
+
+                // Derive the boolean 'requireResidentKey' based on the string value
+                switch (residentKeyStringValue) {
+                    case "required": // Compare the string value
+                        authSelectMap.put("requireResidentKey", true);
+                        break;
+                    case "preferred":
+                        // For "preferred", requireResidentKey is effectively false.
+                        authSelectMap.put("requireResidentKey", false);
+                        break;
+                    case "discouraged":
+                        authSelectMap.put("requireResidentKey", false);
+                        break;
+                    default:
+                        // This case should ideally not be reached if getResidentKey() always returns
+                        // one of the defined string values.
+                        log.warn("Unknown ResidentKeyRequirement value: {}", residentKeyStringValue);
+                        // Decide on a default for requireResidentKey or if an error should be thrown.
+                        // Setting to false is a safe default.
+                        authSelectMap.put("requireResidentKey", false);
+                        break;
+                }
+            } else {
+                // If residentKey property itself is not set on AuthenticatorSelectionCriteria,
+                // then requireResidentKey would also typically default to false or be omitted.
+                authSelectMap.put("requireResidentKey", false); // Optional: if you want to always include it
+            }
+
+            if (authSelect.getUserVerification() != null) {
+                authSelectMap.put("userVerification", authSelect.getUserVerification().getValue());
+            }
+
+            map.put("authenticatorSelection", authSelectMap);
+        }
+
+        // Attestation
+        if (options.getAttestation() != null) {
+            map.put("attestation", options.getAttestation().getValue());
+        }
+
+        // Extensions (usually serializes fine)
+        if (options.getExtensions() != null && options.getExtensions().getInputs() != null && !options.getExtensions().getInputs().isEmpty()) {
+            // Assuming "credProps" is the only relevant extension for now based on previous logs
+            // This might need to be more dynamic if other extensions are used.
+            if (options.getExtensions().getInputs().stream().anyMatch(ext -> "credProps".equals(ext.getExtensionId()) && Boolean.TRUE.equals(ext.getInput()))) {
+                map.put("extensions", Map.of("credProps", true)); // Simplified based on your log, adjust if more complex
+            }
+        }
+
+
+        return map;
+    }
+
 
     /**
      * Finishes the passkey registration process.
