@@ -28,7 +28,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.webauthn.api.AuthenticatorSelectionCriteria;
 import org.springframework.security.web.webauthn.api.AuthenticatorTransport;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
@@ -275,8 +277,18 @@ public class PasskeyController {
     @GetMapping
     public ResponseEntity<List<GetPasskeyDetailResponse>> listUserPasskeys(
             @AuthenticationPrincipal User currentUser) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        log.debug("/api/profile/passkeys called. Authentication object: {}", authentication);
+        if (authentication != null) {
+            log.debug("Principal type: {}, Principal value: {}",
+                    (authentication.getPrincipal() != null ? authentication.getPrincipal().getClass().getName() : "null"),
+                    authentication.getPrincipal());
+        } else {
+            log.warn("/api/profile/passkeys: No authentication object in SecurityContextHolder!");
+        }
+
         if (currentUser == null) {
-            log.warn("Attempt to list passkeys without authentication.");
+            log.warn("Attempt to list passkeys without authentication (currentUser is null).");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         log.debug("User {} listing their passkeys", currentUser.getEmail().getValue());
