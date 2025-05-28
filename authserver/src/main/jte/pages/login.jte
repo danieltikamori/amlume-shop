@@ -196,7 +196,7 @@ content = @`
                             };
                         } else {
                             console.warn("CSRF details from JTE were incomplete or null. Trying DOM fallback.");
-                        const csrfInput = document.getElementById('_csrf_token_input');
+                            const csrfInput = document.getElementById('_csrf_token_input');
                             if (csrfInput && csrfInput.name && csrfInput.value) {
                                 csrfParamName = csrfInput.name;
                                 csrfTokenValue = csrfInput.value;
@@ -214,7 +214,7 @@ content = @`
                                 } else {
                                     console.warn("CSRF Header Name could not be determined via meta tag for DOM fallback.");
                                 }
-                        }
+                            }
                         }
 
                         console.error('CSRF token details could not be fully determined from JTE or DOM!');
@@ -247,37 +247,33 @@ content = @`
                                 // It can optionally take 'username' in the request body if your RP requires it
                                 // to narrow down credentials.
 
-                                const formData = new URLSearchParams();
-                                formData.append('username', username);
-                                // If CSRF is NOT ignored for this path (e.g., if you didn't make change #1 or it's still needed),
-                                // you would also append the CSRF token here:
-                                // formData.append(csrfDetails.parameterName, csrfDetails.token);
-
                                 // Path that Bitwarden prompted on (the diagnostic path)
-                                // const optionsUrl = '/webauthn/authenticate/options'; // Your custom URL
-                                const optionsUrl = '/login/webauthn/options'; // Spring Security Default
+                                const optionsUrl = '/webauthn/authenticate/options'; // Your custom URL
+                                // const optionsUrl = '/login/webauthn/options'; // Spring Security Default
 
-// Path for submitting the assertion (likely the Spring Security default)
+                                // Path for submitting the assertion (likely the Spring Security default)
                                 // const assertionUrl = '/login/webauthn/authenticate'; // Your custom URL
                                 const assertionUrl = '/login/webauthn'; // Spring Security Default
 
 
-
                                 console.log('Requesting passkey options from: ' + optionsUrl + ' for username: ' + username);
 
+                                // --- OPTIONS REQUEST: Use x-www-form-urlencoded ---
+                                const formData = new URLSearchParams();
+                                formData.append('username', username);
+                                // The CSRF token is sent in the header, so not needed in the form body here
+                                // if your CsrfFilter is configured to read from the header primarily.
+                                // However, if CSRF protection for this path expects it in the body for POST form, add:
+                                // formData.append(csrfDetails.parameterName, csrfDetails.token);
 
                                 const optionsResponse = await fetch(optionsUrl, {
                                     // const optionsResponse = await fetch('/webauthn/authenticate/options', {
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/x-www-form-urlencoded',
-                                        // Keep sending the CSRF token in the header; it's good practice and
-                                        // CsrfFilter checks headers if the token isn't in parameters.
-                                        // If the path is correctly ignored by CSRF (due to fix #1), this header might not be strictly
-                                        // necessary for this specific call, but it doesn't hurt.
+                                        'Content-Type': 'application/x-www-form-urlencoded', // Correct for request.getParameter()
                                         [csrfDetails.headerName]: csrfDetails.token
                                     },
-                                    // Send it as URL-encoded string
+                                    // Send it as URL-encoded string (form data)
                                     body: formData.toString()
                                 });
 
@@ -303,6 +299,12 @@ content = @`
                                         throw new TypeError("Challenge has an unexpected format.");
                                     }
                                 }
+                                // if (options.challenge) {
+                                //     // *** ENSURE options.challenge IS RE-ASSIGNED ***
+                                //     options.challenge = bufferDecode(options.challenge);
+                                // } else {
+                                //     throw new Error("Challenge is missing in the options from the server.");
+                                // }
                                 if (options.allowCredentials) {
                                     for (let cred of options.allowCredentials) {
                                         if (cred.id) {
@@ -311,6 +313,22 @@ content = @`
                                             } else if (!(cred.id instanceof ArrayBuffer)) {
                                                 throw new TypeError("Credential ID has an unexpected format.");
                                             }
+                                        }
+                                    }
+                                }
+
+
+                                if (options.user && options.user.id) {
+                                    // *** ENSURE options.user.id IS RE-ASSIGNED ***
+                                    options.user.id = bufferDecode(options.user.id);
+                                }
+// It's good practice to check if options.user exists before trying to access options.user.id
+
+                                if (options.excludeCredentials) {
+                                    for (let cred of options.excludeCredentials) {
+                                        if (cred.id) {
+                                            // *** ENSURE cred.id IS RE-ASSIGNED ***
+                                            cred.id = bufferDecode(cred.id);
                                         }
                                     }
                                 }
