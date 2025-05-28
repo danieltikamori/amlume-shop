@@ -13,10 +13,7 @@ package me.amlu.authserver.config;
 import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.context.annotation.Profile;
+import org.springframework.context.annotation.*;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
@@ -25,6 +22,7 @@ import org.springframework.security.web.authentication.password.HaveIBeenPwnedRe
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialRpEntity;
+import org.springframework.security.web.webauthn.authentication.WebAuthnAuthenticationProvider;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;
 import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
@@ -88,14 +86,14 @@ public class CommonSecurityConfig {
      *
      * @param userEntities       {@link PublicKeyCredentialUserEntityRepository}
      * @param userCredentials    {@link UserCredentialRepository}
-     * @param webAuthNProperties {@link LocalSecurityConfig.WebAuthNProperties}
+     * @param webAuthNProperties {@link WebAuthNProperties}
      * @return {@link WebAuthnRelyingPartyOperations}
      */
     @Bean
     public WebAuthnRelyingPartyOperations relyingPartyOperations(
             PublicKeyCredentialUserEntityRepository userEntities,
             UserCredentialRepository userCredentials,
-            LocalSecurityConfig.WebAuthNProperties webAuthNProperties) { // Inject the properties bean
+            WebAuthNProperties webAuthNProperties) {
 
         if (webAuthNProperties.getAllowedOrigins() == null || webAuthNProperties.getAllowedOrigins().isEmpty()) {
             log.error("WebAuthn allowedOrigins is not configured or empty via WebAuthNProperties. Please check 'spring.security.webauthn.allowedOrigins'.");
@@ -109,6 +107,22 @@ public class CommonSecurityConfig {
                         .id(webAuthNProperties.getRpId())
                         .name(webAuthNProperties.getRpName()).build(),
                 webAuthNProperties.getAllowedOrigins());
+    }
+
+
+    @Bean
+    @DependsOn({"dbUserCredentialRepository", "dbPublicKeyCredentialUserEntityRepository", "relyingPartyOperations", "amlumeUserDetailsService"})
+    public WebAuthnAuthenticationProvider webAuthnAuthenticationProvider(
+            WebAuthnRelyingPartyOperations relyingPartyOperations, // Injected by Spring
+            @Qualifier("mainUserDetailsService") UserDetailsService userDetailsService // Injected by Spring (your AmlumeUserDetailsService)
+            // Note: UserCredentialRepository and PublicKeyCredentialUserEntityRepository are NOT passed to this constructor
+            // but are needed by the provider's internal logic, likely accessed via RelyingPartyOperations or UserDetailsService.
+    ) {
+        log.info("Creating WebAuthnAuthenticationProvider bean.");
+        return new WebAuthnAuthenticationProvider(
+                relyingPartyOperations,
+                userDetailsService // Pass your AmlumeUserDetailsService
+        );
     }
 
     // --- PasswordEncoder, CompromisedPasswordChecker ---
