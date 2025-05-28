@@ -114,23 +114,26 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public CredentialRecord findByCredentialId(Bytes credentialId) {
         log.info("findByCredentialId: id={}", credentialId.toBase64UrlString());
-        return credentialRepository.findByCredentialId(credentialId.toBase64UrlString())
+
+        return credentialRepository.findByCredentialIdWithUser(credentialId.toBase64UrlString())
                 .map(cred -> {
-                    User user = cred.getUser(); // Get user directly from PasskeyCredential
-                    if (user == null || !StringUtils.hasText(user.getExternalId())) {
+                    User user = cred.getUser(); // 'user' is now fully initialized
+                    if (user == null || !StringUtils.hasText(user.getExternalId())) { // Check if user or externalId is null/empty
                         log.error("PasskeyCredential with id {} is missing a valid associated user or user externalId.", cred.getId());
-                        return null; // Or throw exception
+                        return null;
                     }
-                    // User.externalId is a Base64URL string, Bytes.fromBase64 handles this
                     return toCredentialRecord(cred, Bytes.fromBase64(user.getExternalId()));
                 })
                 .orElse(null);
     }
 
     @Override
-    public List<CredentialRecord> findByUserId(Bytes userHandle) { // Parameter name changed for clarity (userHandle is externalId)
+    @Transactional(readOnly = true)
+    public List<CredentialRecord> findByUserId(Bytes userHandle) {
+        // ... (this method remains the same, but ensure it's also transactional)
         log.info("findByUserId (userHandle): {}", userHandle.toBase64UrlString());
 
         return userRepository.findByExternalId(userHandle.toBase64UrlString())

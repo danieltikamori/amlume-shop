@@ -12,6 +12,8 @@ package me.amlu.authserver.passkey.repository;
 
 import me.amlu.authserver.passkey.model.PasskeyCredential;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +27,15 @@ public interface PasskeyCredentialRepository extends JpaRepository<PasskeyCreden
      * @return An Optional containing the PasskeyCredential if found, or empty otherwise.
      */
     Optional<PasskeyCredential> findByCredentialId(String credentialId);
+
+    /**
+     * Finds a PasskeyCredential by its unique credential ID, eagerly fetching the associated User.
+     *
+     * @param credentialId The credential ID.
+     * @return An Optional containing the PasskeyCredential with its User initialized, or empty otherwise.
+     */
+    @Query("SELECT pc FROM PasskeyCredential pc JOIN FETCH pc.user WHERE pc.credentialId = :credentialId")
+    Optional<PasskeyCredential> findByCredentialIdWithUser(@Param("credentialId") String credentialId);
 
     /**
      * Finds all PasskeyCredentials associated with a given user ID.
