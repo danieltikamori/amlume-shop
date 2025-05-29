@@ -287,54 +287,77 @@ content = @`
                                 }
 
                                 const options = await optionsResponse.json();
-                                console.log("Received passkey options:", JSON.stringify(options).substring(0, 500) + "..."); // Log received options
+                                console.log("Received passkey options:", JSON.stringify(options).substring(0, 500) + "...");
 
-                                // WebAuthn API expects certain fields to be ArrayBuffer.
-                                // The server should send them as Base64URL encoded strings.
-                                // We need to decode them.
-                                if (options.challenge) {
-                                    if (typeof options.challenge === 'string' || (typeof options.challenge === 'object' && options.challenge.bytes)) {
-                                        options.challenge = bufferDecode(options.challenge);
-                                    } else if (!(options.challenge instanceof ArrayBuffer)) {
-                                        throw new TypeError("Challenge has an unexpected format.");
+                                // Helper to ensure a field is an ArrayBuffer, decoding if it's a string
+                                function ensureArrayBuffer(value, fieldNameForLogging) {
+                                    let result;
+                                    if (typeof value === 'string') {
+                                        console.debug('Decoding ' + fieldNameForLogging + ' from string...');
+                                        result = bufferDecode(value);
+                                    } else if (value && typeof value === 'object' && typeof value.bytes === 'string') {
+                                        // Handle Spring Security's Bytes class if it's passed as {bytes: "base64string"}
+                                        console.debug('Decoding ' + fieldNameForLogging + ' from {bytes: ...} object...');
+                                        result = bufferDecode(value.bytes);
+                                    } else if (value instanceof ArrayBuffer) {
+                                        console.debug(fieldNameForLogging + ' is already an ArrayBuffer.');
+                                        result = value; // Already an ArrayBuffer
+                                    } else if (value === null || typeof value === 'undefined') {
+                                        console.debug(fieldNameForLogging + ' is null or undefined, passing through.');
+                                        result = value; // Pass through null/undefined
+                                    } else {
+                                        // If it's none of the above, it's an unexpected format
+                                        console.error(fieldNameForLogging + ' has an unexpected format:', value, "Type:", typeof value);
+                                        throw new TypeError(fieldNameForLogging + ' has an unexpected format and cannot be processed into an ArrayBuffer.');
                                     }
+                                    // Log the type and length if it's an ArrayBuffer
+                                    const resultTypeString = (result instanceof ArrayBuffer) ? 'ArrayBuffer(length: ' + result.byteLength + ')' : 'Type: ' + (typeof result);
+                                    console.debug('ensureArrayBuffer for ' + fieldNameForLogging + ' returning:', result, resultTypeString);
+                                    return result;
                                 }
-                                // if (options.challenge) {
-                                //     // *** ENSURE options.challenge IS RE-ASSIGNED ***
-                                //     options.challenge = bufferDecode(options.challenge);
-                                // } else {
-                                //     throw new Error("Challenge is missing in the options from the server.");
-                                // }
-                                if (options.allowCredentials) {
-                                    for (let cred of options.allowCredentials) {
-                                        if (cred.id) {
-                                            if (typeof cred.id === 'string' || (typeof cred.id === 'object' && cred.id.bytes)) {
-                                                cred.id = bufferDecode(cred.id);
-                                            } else if (!(cred.id instanceof ArrayBuffer)) {
-                                                throw new TypeError("Credential ID has an unexpected format.");
+
+                                try {
+                                    options.challenge = ensureArrayBuffer(options.challenge, "options.challenge");
+
+                                    if (options.user && typeof options.user.id !== 'undefined') { // Check if user.id exists
+                                        options.user.id = ensureArrayBuffer(options.user.id, "options.user.id");
+                                    }
+
+                                    if (options.allowCredentials) {
+                                        options.allowCredentials.forEach((cred, index) => {
+                                            if (typeof cred.id !== 'undefined') { // Check if cred.id exists
+                                                cred.id = ensureArrayBuffer(cred.id, 'options.allowCredentials[' + index + '].id');
                                             }
-                                        }
+                                        });
                                     }
-                                }
-
-
-                                if (options.user && options.user.id) {
-                                    // *** ENSURE options.user.id IS RE-ASSIGNED ***
-                                    options.user.id = bufferDecode(options.user.id);
-                                }
-// It's good practice to check if options.user exists before trying to access options.user.id
-
-                                if (options.excludeCredentials) {
-                                    for (let cred of options.excludeCredentials) {
-                                        if (cred.id) {
-                                            // *** ENSURE cred.id IS RE-ASSIGNED ***
-                                            cred.id = bufferDecode(cred.id);
-                                        }
+                                    // Note: excludeCredentials also contains 'id' fields that need similar treatment if present
+                                    if (options.excludeCredentials) {
+                                        options.excludeCredentials.forEach((cred, index) => {
+                                            if (typeof cred.id !== 'undefined') { // Check if cred.id exists
+                                                cred.id = ensureArrayBuffer(cred.id, 'options.excludeCredentials[' + index + '].id');
+                                            }
+                                        });
                                     }
+                                } catch (e) {
+                                    console.error("Error processing WebAuthn options before calling navigator.credentials.get():", e);
+                                    showPasskeyMessage("Error preparing passkey options: " + e.message, true);
+                                    return; // Stop execution
                                 }
+
 
                                 // 2. Request Assertion from Authenticator
-                                console.log("Options being passed to navigator.credentials.get():", JSON.stringify(options, null, 2));
+                                // Custom stringifier for logging to show ArrayBuffer type instead of {}
+                                const logFriendlyStringify = (key, value) => {
+                                    if (value instanceof ArrayBuffer) {
+                                        return 'ArrayBuffer(' + value.byteLength + ' bytes)';
+                                    }
+                                    return value;
+                                };
+                                console.log("Options being passed to navigator.credentials.get():", JSON.stringify(options, logFriendlyStringify, 2));
+                                console.log("IMMEDIATELY BEFORE navigator.credentials.get(), options.challenge is:", options.challenge,
+                                    (options.challenge instanceof ArrayBuffer ? '(is ArrayBuffer, length: ' + options.challenge.byteLength + ')' : '(not ArrayBuffer, type: ' + (typeof options.challenge) + ')')
+                                );
+
 
                                 const assertion = await navigator.credentials.get({publicKey: options});
                                 console.log("Assertion received from authenticator:", assertion);
@@ -422,7 +445,6 @@ content = @`
                                     const errorData = await verificationResponse.json().catch(() => ({message: 'Failed to parse error response from authenticate endpoint.'}));
                                     throw new Error(errorData.message || 'Passkey verification failed: ' + verificationResponse.statusText);
                                 }
-
                             } catch (err) {
                                 console.error('Passkey login error:', err);
                                 showPasskeyMessage(err.message || 'Passkey login failed. Please try again or use another method.', true);
