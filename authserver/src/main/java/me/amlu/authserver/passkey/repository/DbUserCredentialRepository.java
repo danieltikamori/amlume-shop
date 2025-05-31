@@ -99,7 +99,7 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                     PasskeyCredential passkeyToSave = credentialRepository.findByCredentialId(credentialRecord.getCredentialId().toBase64UrlString())
                             .map(existingCredential -> {
                                 log.debug("Updating existing PasskeyCredential with id: {}", existingCredential.getId());
-                                return updatePasskeyCredential(existingCredential, credentialRecord, user);
+                                return updatePasskeyCredential(existingCredential, credentialRecord);
                             })
                             .orElseGet(() -> {
                                 log.debug("Creating new PasskeyCredential for user: {}", user.getId());
@@ -145,7 +145,7 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                 .orElseGet(List::of);
     }
 
-    private PasskeyCredential updatePasskeyCredential(PasskeyCredential credential, CredentialRecord credentialRecord, User user) {
+    private PasskeyCredential updatePasskeyCredential(PasskeyCredential credential, CredentialRecord credentialRecord) {
         // User should already be set and correct for an existing credential
         // credential.setUser(user); // Not AggregateReference for JPA
         credential.setFriendlyName(credentialRecord.getLabel());
