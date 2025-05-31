@@ -39,15 +39,15 @@ public class AuthenticationEvents {
     public void handleAuthenticationSuccess(AuthenticationSuccessEvent event) {
         Object principal = event.getAuthentication().getPrincipal();
         String username = null;
-        if (principal instanceof UserDetails) {
-            username = ((UserDetails) principal).getUsername();
-        } else if (principal instanceof String) {
-            username = (String) principal;
+        if (principal instanceof UserDetails userDetails) { // Apply pattern matching
+            username = userDetails.getUsername();
+        } else if (principal instanceof String strPrincipal) { // Apply pattern matching, use different variable name
+            username = strPrincipal;
         }
+
 
         if (username != null) {
             userService.handleSuccessfulLogin(username);
         }
     }
 }
-    
