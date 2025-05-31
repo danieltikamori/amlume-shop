@@ -25,11 +25,19 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-// In a new RegistrationController.java or similar within authserver
+/**
+ * Controller for handling user registration requests.
+ * Provides an endpoint for creating new user accounts.
+ */
 @RestController
 @RequestMapping("/api/register") // Or /api/users
 public class RegistrationController {
+
+    /**
+     * Logger for the RegistrationController class.
+     */
     private static final Logger log = LoggerFactory.getLogger(RegistrationController.class);
+
 
     private final UserManager userManager;
 
@@ -37,6 +45,13 @@ public class RegistrationController {
         this.userManager = userManager;
     }
 
+    /**
+     * Handles user registration requests.
+     * Creates a new user account based on the provided registration details.
+     *
+     * @param request The registration request containing user details.
+     * @return A ResponseEntity with status 201 Created on successful registration, or an appropriate error status.
+     */
     @PostMapping
     public ResponseEntity<Void> registerUser(@Valid @RequestBody RegistrationRequest request) {
         try {
@@ -62,7 +77,19 @@ public class RegistrationController {
         // Add other exception handling as needed
     }
 
-    // Define a RegistrationRequest DTO
+    /**
+     * Data Transfer Object (DTO) for user registration requests.
+     * Contains the necessary fields for creating a new user account.
+     *
+     * @param firstName The user's first name (required).
+     * @param lastName The user's last name (optional).
+     * @param nickname The user's nickname (optional).
+     * @param email The user's primary email address, used for login (required and must be a valid email format).
+     * @param password The user's password (required).
+     * @param mobileNumber The user's mobile number (optional).
+     * @param defaultRegion The user's default region, potentially used for phone number parsing (optional).
+     * @param backupEmail The user's backup email address (optional and must be a valid email format).
+     */
     public record RegistrationRequest(
             @NotBlank String firstName,
             String lastName, // Optional
