@@ -389,11 +389,14 @@ public class User implements UserDetails {
     @Override
     public final boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null) return false;
-        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
-        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        if (o == null) return false; // Keep this check
+        // Error Prone suggests instanceof for the general class check,
+        // but for Hibernate proxies, getting the effective class is a common pattern.
+        // Let's apply pattern matching where appropriate for the HibernateProxy check.
+        Class<?> oEffectiveClass = o instanceof HibernateProxy hibernateProxy ? hibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        Class<?> thisEffectiveClass = this instanceof HibernateProxy hibernateProxy ? hibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
-        User user = (User) o;
+        User user = (User) o; // Safe cast after class check
         return getId() != null && Objects.equals(getId(), user.getId());
     }
 
