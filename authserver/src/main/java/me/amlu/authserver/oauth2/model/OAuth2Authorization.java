@@ -159,8 +159,8 @@ public class OAuth2Authorization {
     public final boolean equals(Object o) {
         if (this == o) return true;
         if (o == null) return false;
-        Class<?> oEffectiveClass = o instanceof HibernateProxy ? ((HibernateProxy) o).getHibernateLazyInitializer().getPersistentClass() : o.getClass();
-        Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass() : this.getClass();
+        Class<?> oEffectiveClass = o instanceof HibernateProxy hibernateProxy ? hibernateProxy.getHibernateLazyInitializer().getPersistentClass() : o.getClass();
+        Class<?> thisEffectiveClass = this instanceof HibernateProxy hibernateProxy ? hibernateProxy.getHibernateLazyInitializer().getPersistentClass() : this.getClass();
         if (thisEffectiveClass != oEffectiveClass) return false;
         OAuth2Authorization that = (OAuth2Authorization) o;
         return getId() != null && Objects.equals(getId(), that.getId());
@@ -168,7 +168,10 @@ public class OAuth2Authorization {
 
     @Override
     public final int hashCode() {
-        return this instanceof HibernateProxy ? ((HibernateProxy) this).getHibernateLazyInitializer().getPersistentClass().hashCode() : getClass().hashCode();
+        // Consistent with ID-based equals.
+        // For new (transient) entities, Objects.hashCode(null) is 0.
+        // Once persisted, the ID is used.
+        return Objects.hashCode(getId());
     }
 
     public String getId() {
@@ -443,6 +446,7 @@ public class OAuth2Authorization {
         this.deviceCodeMetadata = deviceCodeMetadata;
     }
 
+    @Override
     public String toString() {
         return "OAuth2Authorization(id=" + this.getId() + ", registeredClientId=" + this.getRegisteredClientId() + ", principalName=" + this.getPrincipalName() + ", authorizationGrantType=" + this.getAuthorizationGrantType() + ", authorizedScopes=" + this.getAuthorizedScopes() + ", attributes=" + this.getAttributes() + ", state=" + this.getState() + ", authorizationCodeValue=" + this.getAuthorizationCodeValue() + ", authorizationCodeIssuedAt=" + this.getAuthorizationCodeIssuedAt() + ", authorizationCodeExpiresAt=" + this.getAuthorizationCodeExpiresAt() + ", authorizationCodeMetadata=" + this.getAuthorizationCodeMetadata() + ", accessTokenValue=" + this.getAccessTokenValue() + ", accessTokenIssuedAt=" + this.getAccessTokenIssuedAt() + ", accessTokenExpiresAt=" + this.getAccessTokenExpiresAt() + ", accessTokenMetadata=" + this.getAccessTokenMetadata() + ", accessTokenType=" + this.getAccessTokenType() + ", accessTokenScopes=" + this.getAccessTokenScopes() + ", oidcIdTokenValue=" + this.getOidcIdTokenValue() + ", oidcIdTokenIssuedAt=" + this.getOidcIdTokenIssuedAt() + ", oidcIdTokenExpiresAt=" + this.getOidcIdTokenExpiresAt() + ", oidcIdTokenMetadata=" + this.getOidcIdTokenMetadata() + ", oidcIdTokenClaims=" + this.getOidcIdTokenClaims() + ", refreshTokenValue=" + this.getRefreshTokenValue() + ", refreshTokenIssuedAt=" + this.getRefreshTokenIssuedAt() + ", refreshTokenExpiresAt=" + this.getRefreshTokenExpiresAt() + ", refreshTokenMetadata=" + this.getRefreshTokenMetadata() + ", userCodeValue=" + this.getUserCodeValue() + ", userCodeIssuedAt=" + this.getUserCodeIssuedAt() + ", userCodeExpiresAt=" + this.getUserCodeExpiresAt() + ", userCodeMetadata=" + this.getUserCodeMetadata() + ", deviceCodeValue=" + this.getDeviceCodeValue() + ", deviceCodeIssuedAt=" + this.getDeviceCodeIssuedAt() + ", deviceCodeExpiresAt=" + this.getDeviceCodeExpiresAt() + ", deviceCodeMetadata=" + this.getDeviceCodeMetadata() + ")";
     }
@@ -660,6 +664,7 @@ public class OAuth2Authorization {
             return new OAuth2Authorization(this.id, this.registeredClientId, this.principalName, this.authorizationGrantType, this.authorizedScopes, this.attributes, this.state, this.authorizationCodeValue, this.authorizationCodeIssuedAt, this.authorizationCodeExpiresAt, this.authorizationCodeMetadata, this.accessTokenValue, this.accessTokenIssuedAt, this.accessTokenExpiresAt, this.accessTokenMetadata, this.accessTokenType, this.accessTokenScopes, this.oidcIdTokenValue, this.oidcIdTokenIssuedAt, this.oidcIdTokenExpiresAt, this.oidcIdTokenMetadata, this.oidcIdTokenClaims, this.refreshTokenValue, this.refreshTokenIssuedAt, this.refreshTokenExpiresAt, this.refreshTokenMetadata, this.userCodeValue, this.userCodeIssuedAt, this.userCodeExpiresAt, this.userCodeMetadata, this.deviceCodeValue, this.deviceCodeIssuedAt, this.deviceCodeExpiresAt, this.deviceCodeMetadata);
         }
 
+        @Override
         public String toString() {
             return "OAuth2Authorization.OAuth2AuthorizationBuilder(id=" + this.id + ", registeredClientId=" + this.registeredClientId + ", principalName=" + this.principalName + ", authorizationGrantType=" + this.authorizationGrantType + ", authorizedScopes=" + this.authorizedScopes + ", attributes=" + this.attributes + ", state=" + this.state + ", authorizationCodeValue=" + this.authorizationCodeValue + ", authorizationCodeIssuedAt=" + this.authorizationCodeIssuedAt + ", authorizationCodeExpiresAt=" + this.authorizationCodeExpiresAt + ", authorizationCodeMetadata=" + this.authorizationCodeMetadata + ", accessTokenValue=" + this.accessTokenValue + ", accessTokenIssuedAt=" + this.accessTokenIssuedAt + ", accessTokenExpiresAt=" + this.accessTokenExpiresAt + ", accessTokenMetadata=" + this.accessTokenMetadata + ", accessTokenType=" + this.accessTokenType + ", accessTokenScopes=" + this.accessTokenScopes + ", oidcIdTokenValue=" + this.oidcIdTokenValue + ", oidcIdTokenIssuedAt=" + this.oidcIdTokenIssuedAt + ", oidcIdTokenExpiresAt=" + this.oidcIdTokenExpiresAt + ", oidcIdTokenMetadata=" + this.oidcIdTokenMetadata + ", oidcIdTokenClaims=" + this.oidcIdTokenClaims + ", refreshTokenValue=" + this.refreshTokenValue + ", refreshTokenIssuedAt=" + this.refreshTokenIssuedAt + ", refreshTokenExpiresAt=" + this.refreshTokenExpiresAt + ", refreshTokenMetadata=" + this.refreshTokenMetadata + ", userCodeValue=" + this.userCodeValue + ", userCodeIssuedAt=" + this.userCodeIssuedAt + ", userCodeExpiresAt=" + this.userCodeExpiresAt + ", userCodeMetadata=" + this.userCodeMetadata + ", deviceCodeValue=" + this.deviceCodeValue + ", deviceCodeIssuedAt=" + this.deviceCodeIssuedAt + ", deviceCodeExpiresAt=" + this.deviceCodeExpiresAt + ", deviceCodeMetadata=" + this.deviceCodeMetadata + ")";
         }
