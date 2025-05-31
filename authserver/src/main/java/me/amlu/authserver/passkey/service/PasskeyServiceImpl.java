@@ -34,9 +34,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.time.Duration;
 
 @Service
 public class PasskeyServiceImpl implements PasskeyService {
@@ -52,6 +52,15 @@ public class PasskeyServiceImpl implements PasskeyService {
     private final ObjectMapper objectMapper;
     private final HttpServletRequest httpServletRequest; // Inject HttpServletRequest
 
+    /**
+     * Constructs a new PasskeyServiceImpl.
+     *
+     * @param relyingPartyOperations                  The WebAuthn relying party operations.
+     * @param publicKeyCredentialUserEntityRepository The repository for PublicKeyCredentialUserEntity.
+     * @param passkeyCredentialRepository             The repository for PasskeyCredential.
+     * @param objectMapper                            The ObjectMapper for JSON processing.
+     * @param httpServletRequest                      The current HttpServletRequest.
+     */
     public PasskeyServiceImpl(WebAuthnRelyingPartyOperations relyingPartyOperations,
                               DbPublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository,
                               PasskeyCredentialRepository passkeyCredentialRepository,
@@ -64,6 +73,12 @@ public class PasskeyServiceImpl implements PasskeyService {
         this.httpServletRequest = httpServletRequest;
     }
 
+    /**
+     * Initiates the passkey registration process for a given user.
+     *
+     * @param currentUser The user for whom to begin registration.
+     * @return The PublicKeyCredentialCreationOptions to be sent to the client.
+     */
     @Override
     @Transactional(readOnly = true) // Typically read-only, no state change here
     public PublicKeyCredentialCreationOptions beginPasskeyRegistration(User currentUser) {
@@ -122,15 +137,16 @@ public class PasskeyServiceImpl implements PasskeyService {
             }
 
             public AuthenticatorSelectionCriteria getAuthenticatorSelection() {
-                // Return null for RP defaults, or customize
-                // Example: return AuthenticatorSelectionCriteria.builder().userVerification(UserVerificationRequirement.PREFERRED).build();
-                return null;
+                return AuthenticatorSelectionCriteria.builder()
+                        .userVerification(UserVerificationRequirement.PREFERRED) // Try PREFERRED, REQUIRED, or DISCOURAGED
+                        .residentKey(ResidentKeyRequirement.PREFERRED) // Try PREFERRED or REQUIRED for discoverable credentials
+//                         .authenticatorAttachment(AuthenticatorAttachment.CROSS_PLATFORM) // Optional: be specific if needed
+                        // .authenticatorAttachment(AuthenticatorAttachment.PLATFORM_OR_CROSS_PLATFORM) // Optional: be specific if needed
+                        .build();
             }
 
             public AttestationConveyancePreference getAttestation() {
-                // Return null for RP defaults, or customize
-                // Example: return AttestationConveyancePreference.DIRECT;
-                return null;
+                return AttestationConveyancePreference.NONE; // Explicitly NONE, or try DIRECT if issues persist
             }
 
             public Map<String, Object> getExtensions() {
@@ -156,6 +172,12 @@ public class PasskeyServiceImpl implements PasskeyService {
         return options;
     }
 
+    /**
+     * Completes the passkey registration process using the response from the client.
+     *
+     * @param currentUser         The user completing the registration.
+     * @param registrationRequest The request containing the client's response data.
+     */
     @Override
     @Transactional
     public void finishPasskeyRegistration(User currentUser, PostPasskeyRegistrationRequest registrationRequest) {
@@ -208,17 +230,15 @@ public class PasskeyServiceImpl implements PasskeyService {
                             .id(registrationRequest.id())
                             .rawId(Bytes.fromBase64(registrationRequest.rawId()))
                             .response(attestationResponse)
-                            .type(PublicKeyCredentialType.valueOf(registrationRequest.type().toUpperCase().replace("-", "_")))
+                            .type(PublicKeyCredentialType.valueOf(registrationRequest.type().toUpperCase(Locale.ROOT).replace("-", "_")))
                             .clientExtensionResults(clientExtOutputs)
                             .authenticatorAttachment(registrationRequest.authenticatorAttachment() != null ?
-                                    AuthenticatorAttachment.valueOf(registrationRequest.authenticatorAttachment().toUpperCase()) : null)
+                                    AuthenticatorAttachment.valueOf(registrationRequest.authenticatorAttachment().toUpperCase(Locale.ROOT)) : null)
                             .build();
-
-            final Bytes userHandle = Bytes.fromBase64(currentUser.getExternalId()); // Defined once
 
             RelyingPartyRegistrationRequest relyingPartyRequest = new RelyingPartyRegistrationRequest() {
 
-//            This typically returns the PublicKeyCredentialCreationOptions used in the registration ceremony.
+                //            This typically returns the PublicKeyCredentialCreationOptions used in the registration ceremony.
                 @Override
                 public PublicKeyCredentialCreationOptions getCreationOptions() {
                     // --- Return retrieved options ---
@@ -273,6 +293,12 @@ public class PasskeyServiceImpl implements PasskeyService {
         }
     }
 
+    /**
+     * Lists all passkeys registered for the current user.
+     *
+     * @param currentUser The user whose passkeys are to be listed.
+     * @return A list of GetPasskeyDetailResponse objects.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<GetPasskeyDetailResponse> listUserPasskeys(User currentUser) {
@@ -283,6 +309,12 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Deletes a specific passkey for the current user.
+     *
+     * @param currentUser        The user requesting the deletion.
+     * @param credentialIdString The ID of the passkey to delete.
+     */
     @Override
     @Transactional
     public void deleteUserPasskey(User currentUser, String credentialIdString) {
@@ -307,6 +339,12 @@ public class PasskeyServiceImpl implements PasskeyService {
         log.info("Successfully deleted passkey ID: {} for user: {}", credentialIdString, currentUser.getEmail().getValue());
     }
 
+    /**
+     * Maps a PasskeyCredential entity to a GetPasskeyDetailResponse DTO.
+     *
+     * @param credential The PasskeyCredential entity.
+     * @return The corresponding GetPasskeyDetailResponse DTO.
+     */
     private GetPasskeyDetailResponse mapToPasskeyDetailDto(PasskeyCredential credential) {
         return new GetPasskeyDetailResponse(
                 credential.getCredentialId(),
@@ -319,6 +357,12 @@ public class PasskeyServiceImpl implements PasskeyService {
         );
     }
 
+    /**
+     * Parses a comma-separated string of authenticator transports into a Set of AuthenticatorTransport enums.
+     *
+     * @param transportsString The string containing transports.
+     * @return A Set of AuthenticatorTransport enums.
+     */
     // Returns Set<AuthenticatorTransport> for API objects
     private Set<AuthenticatorTransport> parseTransportsToAuthenticatorTransportSet(String transportsString) {
         if (transportsString == null || transportsString.isEmpty()) {
@@ -330,7 +374,7 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .map(s -> {
                     try {
                         // Normalize common variations like "cross-platform" to "CROSS_PLATFORM"
-                        return AuthenticatorTransport.valueOf(s.toUpperCase().replace("-", "_"));
+                        return AuthenticatorTransport.valueOf(s.toUpperCase(Locale.ROOT).replace("-", "_"));
                     } catch (IllegalArgumentException e) {
                         log.warn("Unknown authenticator transport string: '{}'. Ignoring.", s);
                         return null; // Will be filtered out by Objects::nonNull if added
@@ -340,6 +384,12 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Parses a comma-separated string of authenticator transports into a Set of String representations.
+     *
+     * @param transportsString The string containing transports.
+     * @return A Set of String representations of transports.
+     */
     // Returns Set<String> for DTO mapping
     private Set<String> parseTransportsToStringSet(String transportsString) {
         if (transportsString == null || transportsString.isEmpty()) {
@@ -351,6 +401,12 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Parses a comma-separated string of authenticator transports into a List of AuthenticatorTransport enums.
+     *
+     * @param transportsString The string containing transports.
+     * @return A List of AuthenticatorTransport enums.
+     */
     private List<AuthenticatorTransport> parseTransportsList(String transportsString) {
         if (transportsString == null || transportsString.isEmpty()) {
             return Collections.emptyList();
@@ -361,7 +417,7 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .map(s -> {
                     try {
                         // Normalize common variations like "cross-platform" to "CROSS_PLATFORM"
-                        return AuthenticatorTransport.valueOf(s.toUpperCase().replace("-", "_"));
+                        return AuthenticatorTransport.valueOf(s.toUpperCase(Locale.ROOT).replace("-", "_"));
                     } catch (IllegalArgumentException e) {
                         log.warn("Unknown authenticator transport string: '{}'. Ignoring.", s);
                         return null; // Will be filtered out by Objects::nonNull if added
