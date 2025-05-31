@@ -15,6 +15,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import me.amlu.authserver.security.util.AuthenticationHelperService;
 import me.amlu.authserver.user.dto.ChangePasswordRequest;
 import me.amlu.authserver.user.dto.GetUserProfileResponse;
 import me.amlu.authserver.user.dto.UpdateUserProfileRequest;
@@ -25,7 +26,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.bind.annotation.*;
@@ -39,16 +40,19 @@ public class ProfileController {
     private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
     private final UserManager userManager;
     private final HttpServletResponse response;
+    private final AuthenticationHelperService authenticationHelperService;
 
-    public ProfileController(UserManager userManager, HttpServletResponse response) {
+    public ProfileController(UserManager userManager, HttpServletResponse response, AuthenticationHelperService authenticationHelperService) {
         this.userManager = userManager;
         this.response = response;
+        this.authenticationHelperService = authenticationHelperService;
     }
 
-    @GetMapping // Maps to GET /api/profile
-    public ResponseEntity<GetUserProfileResponse> getCurrentUserProfile(@AuthenticationPrincipal User currentUser) {
+    @GetMapping
+    public ResponseEntity<GetUserProfileResponse> getCurrentUserProfile(Authentication authentication) {
+        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
-            log.warn("Attempt to get profile without authentication.");
+            log.warn("Attempt to get profile without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         log.debug("User {} fetching their profile.", currentUser.getEmail().getValue());
@@ -68,11 +72,11 @@ public class ProfileController {
 
     @PutMapping // Maps to PUT /api/profile
     public ResponseEntity<GetUserProfileResponse> updateUserProfile(
-            @AuthenticationPrincipal User currentUser,
+            Authentication authentication,
             @Valid @RequestBody UpdateUserProfileRequest request) {
-
+        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
-            log.warn("Attempt to update profile without authentication.");
+            log.warn("Attempt to update profile without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         log.info("User {} attempting to update profile. Request: {}", currentUser.getEmail().getValue(), request);
@@ -123,11 +127,11 @@ public class ProfileController {
 
     @PostMapping("/change-password")
     public ResponseEntity<Void> changePassword(
-            @AuthenticationPrincipal User currentUser,
+            Authentication authentication,
             @Valid @RequestBody ChangePasswordRequest request) {
-
+        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
-            log.warn("Attempt to change password without authentication.");
+            log.warn("Attempt to change password without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         log.info("User {} attempting to change password.", currentUser.getEmail().getValue());
@@ -151,11 +155,11 @@ public class ProfileController {
 
     @DeleteMapping // Maps to DELETE /api/profile
     public ResponseEntity<Void> deleteCurrentUserAccount(
-            @AuthenticationPrincipal User currentUser,
-            HttpServletRequest request) { // Inject HttpServletRequest
-
+            Authentication authentication,
+            HttpServletRequest request) {
+        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
-            log.warn("Attempt to delete account without authentication.");
+            log.warn("Attempt to delete account without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         // Capture details before potential session invalidation or user object becoming detached
@@ -172,10 +176,14 @@ public class ProfileController {
             try {
                 request.logout();
                 log.info("User {} (ID: {}) successfully logged out from current HTTP session after account deletion.", userEmail, userId);
-
-                SecurityContextLogoutHandler logoutHandler = new SecurityContextLogoutHandler();
-                logoutHandler.logout(request, response, SecurityContextHolder.getContext().getAuthentication());
-                log.info("User {} (ID: {}) successfully logged out via SecurityContextLogoutHandler.", userEmail, userId);
+                // SecurityContextLogoutHandler is usually part of Spring Security's LogoutFilter
+                // Calling it directly might be redundant if LogoutFilter is already configured and active.
+                // However, if you want to be absolutely sure:
+                Authentication authInContext = SecurityContextHolder.getContext().getAuthentication();
+                if (authInContext != null) { // Check if authentication still exists
+                    new SecurityContextLogoutHandler().logout(request, response, authInContext);
+                    log.info("User {} (ID: {}) explicitly logged out via SecurityContextLogoutHandler.", userEmail, userId);
+                }
             } catch (ServletException e) {
                 log.error("Error during HTTP session logout for user {} (ID: {}) after account deletion: {}", userEmail, userId, e.getMessage(), e);
                 // The account is deleted, but session logout failed.
