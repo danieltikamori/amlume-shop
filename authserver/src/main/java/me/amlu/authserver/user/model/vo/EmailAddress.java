@@ -133,6 +133,7 @@ public class EmailAddress implements Serializable {
         return this.value;
     }
 
+    @Override
     public boolean equals(final Object o) {
         if (o == this) return true;
         if (!(o instanceof EmailAddress other)) return false;
@@ -146,6 +147,7 @@ public class EmailAddress implements Serializable {
         return other instanceof EmailAddress;
     }
 
+    @Override
     public int hashCode() {
         final int PRIME = 59;
         int result = 1;

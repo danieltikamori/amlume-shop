@@ -53,6 +53,7 @@ public class HashedPassword implements Serializable {
         return this.value;
     }
 
+    @Override
     public boolean equals(final Object o) {
         if (o == this) return true;
         if (!(o instanceof HashedPassword other)) return false;
@@ -66,6 +67,7 @@ public class HashedPassword implements Serializable {
         return other instanceof HashedPassword;
     }
 
+    @Override
     public int hashCode() {
         final int PRIME = 59;
         int result = 1;
