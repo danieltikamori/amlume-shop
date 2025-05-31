@@ -34,7 +34,8 @@ public class AmlumeUsernamePwdAuthenticationProvider implements AuthenticationPr
         String pwd = authentication.getCredentials().toString();
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
         if (passwordEncoder.matches(pwd, userDetails.getPassword())) {
-            return new UsernamePasswordAuthenticationToken(username, pwd, userDetails.getAuthorities());
+            // Set the UserDetails object (your User entity) as the principal
+            return new UsernamePasswordAuthenticationToken(userDetails, pwd, userDetails.getAuthorities());
         } else {
             throw new BadCredentialsException("Invalid password!");
         }
@@ -42,7 +43,7 @@ public class AmlumeUsernamePwdAuthenticationProvider implements AuthenticationPr
 
     @Override
     public boolean supports(Class<?> authentication) {
-        return (UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication));
+        return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
     }
 
 }
