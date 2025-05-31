@@ -109,6 +109,21 @@ public class EmailAddress implements Serializable {
         return domain;
     }
 
+    /**
+     * Email validation using Apache Commons EmailValidator
+     *
+     * @param emailValue email address to validate
+     * @return true if valid, false otherwise
+     */
+    public static boolean isValid(String emailValue) {
+        if (emailValue == null) {
+            return false;
+        }
+        // return true if emailValue matches your validation pattern, false otherwise
+        return validator.isValid(emailValue);
+    }
+
+
     @Override
     public String toString() {
         return value;
