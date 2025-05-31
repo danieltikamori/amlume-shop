@@ -53,12 +53,14 @@ public class Authority implements GrantedAuthority {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Authority otherAuthority = (Authority) o;
-        // For entities, equality is often based on ID if persisted,
-        // or business key (like 'authority' here if it's guaranteed unique and stable before persistence)
+        if (!(o instanceof Authority otherAuthority)) return false; // Use instanceof and pattern variable
+        // Class<?> oEffectiveClass = o instanceof HibernateProxy ? ... // Not strictly needed if Authority is not proxied often, but safe
+        // Class<?> thisEffectiveClass = this instanceof HibernateProxy ? ...
+        // if (thisEffectiveClass != oEffectiveClass) return false;
+        // Authority otherAuthority = (Authority) o;
         return Objects.equals(this.authority, otherAuthority.authority);
     }
+
 
     @Override
     public int hashCode() {
