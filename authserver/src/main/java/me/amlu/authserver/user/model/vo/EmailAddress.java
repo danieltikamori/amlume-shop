@@ -17,6 +17,7 @@ import org.springframework.util.Assert;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.Locale;
 import java.util.Objects;
 
 
@@ -45,7 +46,13 @@ public class EmailAddress implements Serializable {
         Assert.hasText(address, "Email address cannot be null or empty.");
 
         // Normalize to lowercase for consistent comparisons and storage.
-        String normalizedAddress = address.trim().toLowerCase();
+//        Explanation: toLowerCase() without a Locale uses the system's default locale,
+//        which can lead to unexpected behavior if the default locale has unusual case-mapping rules
+//        (e.g., Turkish 'i').
+//        For programmatic case conversion where consistency is key (like normalizing email addresses),
+//        Locale.ROOT (locale-insensitive) or Locale.US (common for ASCII-dominant data) is preferred.
+//        Ascii.toLowerCase from Guava is also an option if you only expect ASCII.
+        String normalizedAddress = address.trim().toLowerCase(Locale.ROOT);
 
         // Use Apache Commons EmailValidator
         if (!validator.isValid(normalizedAddress)) {
