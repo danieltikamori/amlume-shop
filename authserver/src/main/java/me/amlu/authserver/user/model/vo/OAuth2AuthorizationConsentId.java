@@ -52,6 +52,7 @@ public class OAuth2AuthorizationConsentId implements Serializable {
         this.principalName = principalName;
     }
 
+    @Override
     public boolean equals(final Object o) {
         if (o == this) return true;
         if (!(o instanceof OAuth2AuthorizationConsentId other)) return false;
@@ -69,6 +70,7 @@ public class OAuth2AuthorizationConsentId implements Serializable {
         return other instanceof OAuth2AuthorizationConsentId;
     }
 
+    @Override
     public int hashCode() {
         final int PRIME = 59;
         int result = 1;
