@@ -48,6 +48,9 @@ public class CommonSecurityConfig {
     // http.userDetailsService(myUserDetailsService)
 
     /**
+     * Returns the primary {@link UserDetailsService} for the application.
+     * This service is responsible for loading user-specific data.
+     *
      * @param userRepository {@link UserRepository}
      * @return {@link UserDetailsService}
      */
