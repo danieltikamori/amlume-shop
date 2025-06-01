@@ -8,29 +8,14 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.controller;
+package me.amlu.authserver.exceptions;
 
-import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-
-@Controller
-public class LoginController {
-
-    @GetMapping("/login")
-    public String login(HttpServletRequest request, Model model, String error, String logout) {
-
-        if (error != null) {
-            model.addAttribute("error", true);
-            model.addAttribute("errorMessage", "Invalid username or password");
-        }
-
-        return "pages/login";
+public class EncryptionException extends RuntimeException {
+    public EncryptionException(String message, Throwable cause) {
+        super(message, cause);
     }
 
-    @GetMapping("/")
-    public String home() {
-        return "pages/home";
+    public EncryptionException(String message) {
+        super(message);
     }
 }
