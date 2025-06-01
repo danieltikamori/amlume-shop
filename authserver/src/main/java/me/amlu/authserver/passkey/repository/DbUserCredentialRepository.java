@@ -28,6 +28,10 @@ import java.util.stream.Collectors;
 
 @Component // Ensure this is a Spring managed bean
 public class DbUserCredentialRepository implements UserCredentialRepository {
+
+    /**
+     * Logger for this class.
+     */
     private static final Logger log = org.slf4j.LoggerFactory.getLogger(DbUserCredentialRepository.class);
 
     private final PasskeyCredentialRepository credentialRepository;
@@ -38,6 +42,13 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         this.userRepository = userRepository;
     }
 
+    /**
+     * Converts a {@link PasskeyCredential} entity to a {@link CredentialRecord} API object.
+     *
+     * @param credential The {@link PasskeyCredential} entity to convert.
+     * @param userHandle The user handle associated with the credential.
+     * @return The converted {@link CredentialRecord}.
+     */
     private static CredentialRecord toCredentialRecord(PasskeyCredential credential, Bytes userHandle) {
         // log.info("toCredentialRecord: credentialId={}, userHandle={}", credential.getCredentialId(), userHandle.toBase64UrlString());
         ImmutableCredentialRecord.ImmutableCredentialRecordBuilder
@@ -68,6 +79,12 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         return builder.build();
     }
 
+    /**
+     * Converts a comma-separated string of transports to a {@link Set} of {@link AuthenticatorTransport}.
+     *
+     * @param transports The comma-separated string of transports.
+     * @return A {@link Set} of {@link AuthenticatorTransport}.
+     */
     private static Set<AuthenticatorTransport> asTransportSet(String transports) {
         if (transports == null || transports.isEmpty()) {
             return Collections.emptySet(); // Return empty set, not Set.of() which is for non-empty
@@ -79,6 +96,12 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                 .collect(Collectors.toSet());
     }
 
+    /**
+     * Deletes a {@link CredentialRecord} by its credential ID.
+     * This method is transactional.
+     *
+     * @param credentialId The ID of the credential to delete.
+     */
     @Override
     @Transactional
     public void delete(Bytes credentialId) {
@@ -87,6 +110,12 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                 .ifPresent(credentialRepository::delete);
     }
 
+    /**
+     * Saves a {@link CredentialRecord}. If a credential with the same ID exists, it is updated; otherwise, a new one is created.
+     * This method is transactional.
+     *
+     * @param credentialRecord The {@link CredentialRecord} to save.
+     */
     @Override
     @Transactional
     public void save(CredentialRecord credentialRecord) {
@@ -113,6 +142,13 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                         credentialRecord.getUserEntityUserId().toBase64UrlString()));
     }
 
+    /**
+     * Finds a {@link CredentialRecord} by its credential ID.
+     * This method is transactional and read-only.
+     *
+     * @param credentialId The ID of the credential to find.
+     * @return The found {@link CredentialRecord}, or {@code null} if not found or if the associated user is invalid.
+     */
     @Override
     @Transactional(readOnly = true)
     public CredentialRecord findByCredentialId(Bytes credentialId) {
@@ -130,6 +166,13 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                 .orElse(null);
     }
 
+    /**
+     * Finds all {@link CredentialRecord}s associated with a given user handle.
+     * This method is transactional and read-only.
+     *
+     * @param userHandle The user handle to search for.
+     * @return A {@link List} of {@link CredentialRecord}s associated with the user, or an empty list if the user is not found.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<CredentialRecord> findByUserId(Bytes userHandle) {
@@ -145,6 +188,13 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                 .orElseGet(List::of);
     }
 
+    /**
+     * Updates an existing {@link PasskeyCredential} entity with data from a {@link CredentialRecord}.
+     *
+     * @param credential       The existing {@link PasskeyCredential} entity.
+     * @param credentialRecord The {@link CredentialRecord} containing the updated data.
+     * @return The updated {@link PasskeyCredential} entity.
+     */
     private PasskeyCredential updatePasskeyCredential(PasskeyCredential credential, CredentialRecord credentialRecord) {
         // User should already be set and correct for an existing credential
         // credential.setUser(user); // Not AggregateReference for JPA
@@ -154,6 +204,13 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         return credential;
     }
 
+    /**
+     * Creates a new {@link PasskeyCredential} entity from a {@link CredentialRecord} and a {@link User}.
+     *
+     * @param credentialRecord The {@link CredentialRecord} containing the data for the new credential.
+     * @param user             The {@link User} associated with the new credential.
+     * @return The newly created {@link PasskeyCredential} entity.
+     */
     private PasskeyCredential newPasskeyCredential(CredentialRecord credentialRecord, User user) {
         PasskeyCredential credential = new PasskeyCredential();
         credential.setUser(user); // Set the JPA User entity
@@ -168,6 +225,12 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
         return credential;
     }
 
+    /**
+     * Sets the common fields of a {@link PasskeyCredential} entity from a {@link CredentialRecord}.
+     *
+     * @param credential       The {@link PasskeyCredential} entity to update.
+     * @param credentialRecord The {@link CredentialRecord} containing the data.
+     */
     private static void setCredentialPasskeyAndRecord(PasskeyCredential credential, CredentialRecord credentialRecord) {
         // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
         credential.setPublicKeyCose(credentialRecord.getPublicKey().getBytes());
