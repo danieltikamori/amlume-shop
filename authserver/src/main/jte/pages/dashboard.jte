@@ -304,20 +304,53 @@ content = @`
                             }
                         }
 
+                        console.log("Options being passed to navigator.credentials.create():", JSON.stringify(options, (key, value) => {
+                            if (value instanceof ArrayBuffer) {
+                                return 'ArrayBuffer(length:' + value.byteLength + ')'; // More informative for ArrayBuffers
+                            }
+                            return value;
+                        }, 2));
+                        console.log("options.challenge (raw):", options.challenge);
+                        console.log("options.user.id (raw):", options.user.id);
+                        if (options.excludeCredentials && options.excludeCredentials.length > 0) {
+                            console.log("options.excludeCredentials[0].id (raw):", options.excludeCredentials[0].id);
+                        }
+
                         // 2. Create credential with browser
                         const credential = await navigator.credentials.create({publicKey: options});
+
+                        // Log individual parts for debugging
+                        console.log("Friendly Name:", friendlyName.trim());
+                        console.log("Credential.id (string):", credential.id);
+                        console.log("Credential.rawId (ArrayBuffer):", credential.rawId);
+                        let encodedRawId = bufferEncode(credential.rawId);
+                        console.log("Encoded RawId:", encodedRawId);
+                        console.log("Credential.type (string):", credential.type);
+                        console.log("Credential.response.clientDataJSON (ArrayBuffer):", credential.response.clientDataJSON);
+                        let encodedClientDataJSON = bufferEncode(credential.response.clientDataJSON);
+                        console.log("Encoded ClientDataJSON:", encodedClientDataJSON);
+                        console.log("Credential.response.attestationObject (ArrayBuffer):", credential.response.attestationObject);
+                        let encodedAttestationObject = bufferEncode(credential.response.attestationObject);
+                        console.log("Encoded AttestationObject:", encodedAttestationObject);
+                        console.log("Credential.authenticatorAttachment (string/null):", credential.authenticatorAttachment);
+                        let clientExtensions = credential.getClientExtensionResults();
+                        console.log("Credential.getClientExtensionResults (object):", clientExtensions);
+
 
                         // 3. Send new credential to server
                         const registrationRequest = {
                             friendlyName: friendlyName.trim(),
-                            id: credential.id,
-                            rawId: bufferEncode(credential.rawId),
-                            type: credential.type,
-                            clientDataJSON: bufferEncode(credential.response.clientDataJSON),
-                            attestationObject: bufferEncode(credential.response.attestationObject),
-                            authenticatorAttachment: credential.authenticatorAttachment,
-                            clientExtensionResults: credential.getClientExtensionResults()
+                            id: credential.id, // Should be a Base64URL string
+                            rawId: encodedRawId,
+                            type: credential.type, // Should be "public-key"
+                            clientDataJSON: encodedClientDataJSON,
+                            attestationObject: encodedAttestationObject,
+                            authenticatorAttachment: credential.authenticatorAttachment, // string or null
+                            clientExtensionResults: clientExtensions // Should be a simple object
                         };
+
+                        const jsonPayload = JSON.stringify(registrationRequest);
+                        console.log("JSON payload being sent to server for passkey registration:", jsonPayload); // <--- ADD THIS LOG
 
                         const finishResponse = await fetch('/api/profile/passkeys', {
                             method: 'POST',
@@ -325,19 +358,24 @@ content = @`
                                 'Content-Type': 'application/json',
                                 [csrfDetails.headerName]: csrfDetails.token
                             },
-                            body: JSON.stringify(registrationRequest)
+                            body: jsonPayload // Use the pre-stringified payload
                         });
 
                         if (!finishResponse.ok) {
-                            const errorData = await finishResponse.json().catch(() => ({message: 'Failed to parse error response from finish registration endpoint.'}));
-
+                            let errorData;
+                            try {
+                                errorData = await finishResponse.json();
+                            } catch (e) {
+                                errorData = {message: await finishResponse.text() || 'Failed to parse error response from finish registration endpoint.'};
+                            }
+                            console.error("Finish registration error response:", errorData);
                             throw new Error(errorData.message || 'Failed to save passkey: ' + finishResponse.status + ' ' + finishResponse.statusText);
                         }
 
                         showDashboardMessage('Passkey registered successfully!', false);
                         loadPasskeys();
                     } catch (err) {
-                        console.error('Error registering passkey:', err);
+                        console.error('Error registering passkey:', err, err.stack);
                         showDashboardMessage(err.message || 'Passkey registration failed. Please try again.', true);
                     }
                 });
