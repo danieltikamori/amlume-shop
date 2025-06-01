@@ -13,6 +13,7 @@ package me.amlu.authserver.passkey.model;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import me.amlu.authserver.security.util.EncryptedByteArrayConverter;
 import me.amlu.authserver.user.model.User;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.proxy.HibernateProxy;
@@ -69,9 +70,11 @@ public class PasskeyCredential {
 
     /**
      * The COSE-encoded public key of the credential.
+     * Encrypted before stored in the database.
      */
     @Lob
     @Column(name = "public_key_cose", nullable = false)
+    @Convert(converter = EncryptedByteArrayConverter.class)
     private byte[] publicKeyCose; // COSE-encoded public key
 
     /**
@@ -108,9 +111,11 @@ public class PasskeyCredential {
     /**
      * The attestation object received from the authenticator during registration.
      * May not be stored long-term after initial processing.
+     * Encrypted before stored in the database.
      */
     @Lob
     @Column(name = "attestation_object") // Often processed at registration and might not be stored long-term
+    @Convert(converter = EncryptedByteArrayConverter.class)
     private byte[] attestationObject;
 
     /**
