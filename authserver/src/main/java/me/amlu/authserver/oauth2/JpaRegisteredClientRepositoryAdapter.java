@@ -20,7 +20,6 @@ import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
-import org.springframework.security.oauth2.server.authorization.client.RegisteredClient.Builder;
 import org.springframework.security.oauth2.server.authorization.jackson2.OAuth2AuthorizationServerJackson2Module;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
@@ -91,21 +90,23 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
                 .map(AuthorizationGrantType::new)
                 .collect(Collectors.toSet());
 
-        Builder builder = org.springframework.security.oauth2.server.authorization.client.RegisteredClient.withId(entity.getId())
-                .clientId(entity.getClientId())
-                .clientIdIssuedAt(entity.getClientIdIssuedAt())
-                .clientSecret(entity.getClientSecret()) // Secret is already hashed if stored hashed
-                .clientSecretExpiresAt(entity.getClientSecretExpiresAt())
-                .clientName(entity.getClientName())
-                .clientAuthenticationMethods(methods -> methods.addAll(clientAuthenticationMethods))
-                .authorizationGrantTypes(grantTypes -> grantTypes.addAll(authorizationGrantTypes))
-                .redirectUris(uris -> uris.addAll(entity.getRedirectUris()))
-                .postLogoutRedirectUris(uris -> {
-                    if (entity.getPostLogoutRedirectUris() != null) {
-                        uris.addAll(entity.getPostLogoutRedirectUris());
-                    }
-                })
-                .scopes(scopes -> scopes.addAll(entity.getScopes()));
+        org.springframework.security.oauth2.server.authorization.client.RegisteredClient.Builder builder =
+                org.springframework.security.oauth2.server.authorization.client.RegisteredClient.withId(entity.getId())
+
+                        .clientId(entity.getClientId())
+                        .clientIdIssuedAt(entity.getClientIdIssuedAt())
+                        .clientSecret(entity.getClientSecret()) // Secret is already hashed if stored hashed
+                        .clientSecretExpiresAt(entity.getClientSecretExpiresAt())
+                        .clientName(entity.getClientName())
+                        .clientAuthenticationMethods(methods -> methods.addAll(clientAuthenticationMethods))
+                        .authorizationGrantTypes(grantTypes -> grantTypes.addAll(authorizationGrantTypes))
+                        .redirectUris(uris -> uris.addAll(entity.getRedirectUris()))
+                        .postLogoutRedirectUris(uris -> {
+                            if (entity.getPostLogoutRedirectUris() != null) {
+                                uris.addAll(entity.getPostLogoutRedirectUris());
+                            }
+                        })
+                        .scopes(scopes -> scopes.addAll(entity.getScopes()));
 
         Map<String, Object> clientSettingsMap = parseMap(entity.getClientSettings());
         builder.clientSettings(ClientSettings.withSettings(clientSettingsMap).build());
