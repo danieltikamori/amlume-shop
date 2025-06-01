@@ -76,6 +76,17 @@ import static me.amlu.shop.amlume_shop.commons.Constants.*;
  * @see RequiresAuthentication
  * @see TokenValidationService
  */
+
+/**
+ * Aspect responsible for handling authentication based on the @RequiresAuthentication annotation.
+ * It extracts a Bearer token, validates it using TokenValidationService,
+ * fetches the user, sets the SecurityContext, and applies resilience patterns (Circuit Breaker and Retry).
+ * <p>
+ * This aspect is ordered first to ensure authentication is performed before other security checks like role authorization.
+ *
+ * @see RequiresAuthentication
+ * @see TokenValidationService
+ */
 @Aspect
 @Component
 @Order(1) // Ensure authentication check runs before other aspects like role checks
@@ -123,7 +134,7 @@ public class AuthenticationAspect {
 
     // --- Resilience Configuration ---
 
-    // Resilience4j Circuit Breaker Config (Remains the same)
+    // Resilience4j Circuit Breaker Config
     private CircuitBreakerConfig createCircuitBreakerConfig() {
         return CircuitBreakerConfig.custom()
                 .failureRateThreshold(50)
@@ -210,7 +221,7 @@ public class AuthenticationAspect {
         recordAuthenticationAttempt(className, methodName);
 
         try {
-            // 1. Extract Token
+            // 1. Extract Token from HttpServletRequest
             String token = extractBearerToken();
             if (token == null) {
                 throw new UnauthorizedException("Authorization header missing or invalid");
@@ -247,7 +258,7 @@ public class AuthenticationAspect {
                                     return loadedUser;
 
                                 } catch (TokenValidationFailureException | SignatureException e) {
-                                    log.warn("Token validation failed during attempt {}: {}", context.getRetryCount() + 1, e.getMessage());
+                                    log.warn("Token validation failed during attempt {}: {}", context.getRetryCount() + 1, e.getMessage(), e);
                                     throw new UnauthorizedException("Invalid or expired token", e); // Rethrow as Unauthorized
                                 } catch (Exception e) {
                                     // Handle other potential errors during validation/user fetch
@@ -280,7 +291,7 @@ public class AuthenticationAspect {
         } catch (CircuitBreakerOpenException e) {
             log.error("Circuit breaker is open for authentication. Failing fast.", e);
             recordAuthenticationFailure(startTime, className, methodName, "circuit_breaker_open");
-            throw new UnauthorizedException("Authentication service unavailable", e); // Or a 503 Service Unavailable
+            throw new UnauthorizedException("Authentication service unavailable", e); // Consider a 503 Service Unavailable response
         } catch (UnauthorizedException e) {
             log.warn("Authentication failed for {}.{}: {}", className, methodName, e.getMessage());
             recordAuthenticationFailure(startTime, className, methodName, "unauthorized");
@@ -289,7 +300,7 @@ public class AuthenticationAspect {
                 throw new UnauthorizedException(requiresAuthenticationAnnotation.message(), e);
             }
             throw e; // Rethrow standard UnauthorizedException
-        } catch (Throwable e) { // Catch throwable for joinPoint.proceed()
+        } catch (Throwable e) { // Catch Throwable to ensure all exceptions from the advised method are handled
             log.error("Unexpected error during authenticated method execution: {}.{}", className, methodName, e);
             recordAuthenticationFailure(startTime, className, methodName, "unexpected_error");
             throw e; // Rethrow the original exception from the method
@@ -352,7 +363,7 @@ public class AuthenticationAspect {
     @ExceptionHandler(AuthenticationException.class) // Spring Security's base exception
     public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex) {
         log.error("Authentication failed: {}", ex.getMessage());
-        meterRegistry.counter("authentication.handler.failures", "type", "auth_exception").increment();
+        meterRegistry.counter("authentication.handler.failures", "type", "authentication_exception").increment();
         return createErrorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
@@ -360,7 +371,7 @@ public class AuthenticationAspect {
     public ResponseEntity<ErrorResponse> handleUnauthorizedException(UnauthorizedException ex) {
         log.warn("Authorization failed: {}", ex.getMessage()); // Log as WARN for authorization issues
         meterRegistry.counter("authentication.handler.failures", "type", "unauthorized").increment();
-        return createErrorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        return createErrorResponse(HttpStatus.UNAUTHORIZED, ex.getMessage()); // Return 401 for unauthorized
     }
 
     @ExceptionHandler(Exception.class) // Generic fallback
@@ -371,19 +382,27 @@ public class AuthenticationAspect {
     }
 
     private ResponseEntity<ErrorResponse> createErrorResponse(HttpStatus status, String detail) {
+        // Ensure the status code is appropriate for the error type.
+        // For generic exceptions, INTERNAL_SERVER_ERROR (500) is usually correct.
+        // For AuthenticationException and UnauthorizedException, UNAUTHORIZED (401) is correct.
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR; // Default to 500 if status is null
+        }
+
+        HttpStatus finalStatus = status;
         return ResponseEntity
                 .status(status)
                 .body(new ErrorResponse() {
                     @NotNull
                     @Override
                     public HttpStatusCode getStatusCode() {
-                        return status;
+                        return finalStatus;
                     }
 
                     @NotNull
                     @Override
                     public ProblemDetail getBody() {
-                        return ProblemDetail.forStatusAndDetail(status, detail);
+                        return ProblemDetail.forStatusAndDetail(finalStatus, detail);
                     }
                 });
     }
