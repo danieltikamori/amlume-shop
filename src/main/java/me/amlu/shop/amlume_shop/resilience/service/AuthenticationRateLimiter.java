@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.resilience.service;
 
 import io.lettuce.core.cluster.PartitionException;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
@@ -44,6 +45,7 @@ public class AuthenticationRateLimiter implements AuthenticationRateLimitInterfa
      * @param clientIp The IP address of the client.
      * @throws RateLimitExceededException If the rate limit is hit
      */
+    @Timed(value = "shopapp.auth-ratelimit.ip-ratelimit", description = "Time taken to perform rate limit check for givenIP address")
     public void verifyIpRateLimit(String clientIp)
             throws RateLimitExceededException {
 
@@ -57,6 +59,7 @@ public class AuthenticationRateLimiter implements AuthenticationRateLimitInterfa
      * @param username The username of the client.
      * @throws RateLimitExceededException If the rate limit is hit
      */
+    @Timed(value = "shopapp.auth-ratelimit.username-ratelimit", description = "Time taken to perform rate limit check for given username")
     public void verifyUsernameRateLimit(String username)
             throws RateLimitExceededException {
 

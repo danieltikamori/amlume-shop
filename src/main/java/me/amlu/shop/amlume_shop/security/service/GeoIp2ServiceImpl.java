@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.security.service;
 
 import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
+import io.micrometer.core.annotation.Timed;
 import me.amlu.shop.amlume_shop.security.model.GeoLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
     }
 
     @Override
+    @Timed(value = "shopapp.geolocation.lookup-asn", description = "Time taken to lookup ASN")
     public AsnResponse lookupAsn(String ip) {
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
@@ -44,7 +46,7 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
     }
 
     @Override
-    // Removed 'throws GeoIpLookupException'
+    @Timed(value = "shopapp.geolocation.lookup-location", description = "Time taken to lookup location")
     public Optional<GeoLocation> lookupLocation(String ip) {
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);

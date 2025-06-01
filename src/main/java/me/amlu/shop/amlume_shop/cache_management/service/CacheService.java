@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.cache_management.service;
 
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,7 @@ public class CacheService {
      * @param <T>          Type of the cached item.
      * @return The cached or newly loaded item.
      */
+    @Timed(value = "shopapp.cache.getOrCache", description = "Time taken to get or cache data")
     public <T> T getOrCache(String cacheName, String key, Supplier<T> dataSupplier) {
         Cache cache = cacheManager.getCache(cacheName);
         if (cache == null) {
@@ -78,6 +80,42 @@ public class CacheService {
         }
     }
 
+    /**
+     * Invalidates a single cache entry.
+     *
+     * @param cacheName Name of the cache.
+     * @param key       Cache key.
+     * @param ttl       Time-to-live for the cache entry.
+     */
+    @Timed(value = "shopapp.cache.invalidate", description = "Time taken to invalidate cache entry")
+    public void invalidate(String cacheName, String key, Duration ttl) {
+        Cache cache = cacheManager.getCache(cacheName);
+        if (cache != null) {
+            try {
+                cache.evict(key);
+                // Keep custom counter if you want specific 'manual' invalidation tracking
+                meterRegistry.counter("cache.manual.invalidations", "cache", cacheName, "type", "single").increment();
+                log.debug("Cache entry invalidated - cache: {}, key: {}", cacheName, key);
+                redisTemplate.expire(cacheName, ttl);
+            } catch (Exception e) {
+                // Log error for manual invalidation failure
+                meterRegistry.counter("cache.manual.invalidations.errors", "cache", cacheName, "type", "single").increment();
+                log.error("Failed to invalidate cache entry - cache: {}, key: {}", cacheName, key, e);
+                // Decide if this should be a fatal exception
+                // throw new CacheOperationException.CacheInvalidationException("Failed to invalidate cache entry", e);
+            }
+        } else {
+            log.warn("Attempted to invalidate key '{}' in non-existent cache: {}", key, cacheName);
+        }
+    }
+
+    /**
+     * Invalidates a single cache entry.
+     *
+     * @param cacheName Name of the cache.
+     * @param key       Cache key.
+     */
+    @Timed(value = "shopapp.cache.invalidate", description = "Time taken to invalidate cache entry")
     public void invalidate(String cacheName, String key) {
         Cache cache = cacheManager.getCache(cacheName);
         if (cache != null) {
@@ -98,6 +136,12 @@ public class CacheService {
         }
     }
 
+    /**
+     * Invalidates all entries in a cache.
+     *
+     * @param cacheName Name of the cache.
+     */
+    @Timed(value = "shopapp.cache.invalidateall", description = "Time taken to invalidate all cache entries")
     public void invalidateAll(String cacheName) {
         Cache cache = cacheManager.getCache(cacheName);
         if (cache != null) {

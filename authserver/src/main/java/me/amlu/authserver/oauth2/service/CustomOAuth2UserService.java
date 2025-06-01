@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.oauth2.service;
 
+import io.micrometer.core.annotation.Timed;
 import jakarta.annotation.Nullable;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.user.model.User;
@@ -80,6 +81,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
      */
     @Override
     @Transactional
+    @Timed(value = "authserver.oauth2service.loaduser", description = "Time taken to load OAuth2 user")
     public OAuth2User loadUser(OAuth2UserRequest userRequest) throws OAuth2AuthenticationException {
         log.info(">>> CustomOAuth2UserService: Attempting to load user for registrationId: {}", userRequest.getClientRegistration().getRegistrationId());
         OAuth2User oauth2User = super.loadUser(userRequest);

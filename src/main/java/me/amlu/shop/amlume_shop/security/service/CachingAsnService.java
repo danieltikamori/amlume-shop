@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.security.service;
 
+import io.micrometer.core.annotation.Timed;
 import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.security.config.properties.AsnProperties; // Import properties
 import me.amlu.shop.amlume_shop.security.repository.AsnRepository;
@@ -63,6 +64,7 @@ public class CachingAsnService {
      */
     @Cacheable(value = Constants.ASN_CACHE, key = "#ip", unless = "#result == null")
     @Transactional(readOnly = true) // Read-only by default for the lookup part
+    @Timed(value = "shopapp.asn.lookup", longTask = true, extraTags = {"ip"}, description = "Time taken to look up the ASN for an IP address.")
     public String getAsnWithCaching(String ip) {
         log.debug("Cache miss for ASN lookup for IP: {}. Checking database.", ip);
 

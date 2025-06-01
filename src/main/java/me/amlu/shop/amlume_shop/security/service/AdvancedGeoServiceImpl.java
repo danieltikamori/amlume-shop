@@ -12,6 +12,8 @@ package me.amlu.shop.amlume_shop.security.service;
 
 // REMOVED: import com.codahale.metrics.MetricRegistry;
 // REMOVED: import com.codahale.metrics.Timer;
+
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry; // ADDED: Micrometer MeterRegistry
 import com.maxmind.geoip2.exception.GeoIp2Exception;
 import me.amlu.shop.amlume_shop.cache_management.config.ValkeyCacheConfig;
@@ -120,7 +122,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         Assert.hasText(userId, "User ID must not be blank");
 
         try {
-            // CHANGED: Use Micrometer meterRegistry to get the Timer and call recordCallable
+            // Use Micrometer meterRegistry to get the Timer and call recordCallable
             return meterRegistry.timer("geo.verification").recordCallable(() -> {
                 GeoLocation currentLocation = maxMindGeoService.getGeoLocation(ip); // Can return GeoLocation.unknown()
                 GeoLocationHistory history = getOrCreateHistory(userId);
@@ -208,7 +210,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
             return Objects.requireNonNullElseGet(history, GeoLocationHistory::new);
         } catch (Cache.ValueRetrievalException e) {
             // This exception wraps loader exceptions
-            log.error("Error retrieving/loading location history for user {}. Returning new history.", userId, e.getCause() != null ? e.getCause() : e);
+            log.error("Error retrieving/loading location history for user {}. Returning new history.", userId, e);
             return new GeoLocationHistory(); // Fallback
         } catch (Exception e) {
             // Catch other potential cache interaction errors
@@ -226,6 +228,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
      * @return A GeoVerificationResult with risk assessment and alerts.
      */
     @Override
+    @Timed(value = "shopapp.geo.analyzeLocation", longTask = true, extraTags = {"userId"}, description = "Time taken to analyze the geographic location associated with an IP address for a given user.")
     public GeoVerificationResult analyzeLocation(GeoLocation currentLocation,
                                                  GeoLocationHistory history,
                                                  String userId) {

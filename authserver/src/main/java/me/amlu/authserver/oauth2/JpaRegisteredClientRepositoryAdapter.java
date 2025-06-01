@@ -13,6 +13,7 @@ package me.amlu.authserver.oauth2;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.Module;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.oauth2.model.RegisteredClient;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.repository.RegisteredClientRepository;
@@ -63,6 +64,7 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
 
     @Override
     @Transactional
+    @Timed(value = "authserver.clientrepo.save", description = "Time taken to save registered client")
     public void save(org.springframework.security.oauth2.server.authorization.client.RegisteredClient registeredClient) {
         Assert.notNull(registeredClient, "registeredClient cannot be null");
         this.jpaRepository.save(toEntity(registeredClient));
@@ -70,6 +72,7 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
 
     @Override
     @Transactional(readOnly = true)
+    @Timed(value = "authserver.clientrepo.findbyid", description = "Time taken to find client by ID")
     public org.springframework.security.oauth2.server.authorization.client.RegisteredClient findById(String id) {
         Assert.hasText(id, "id cannot be empty");
         return this.jpaRepository.findById(id).map(this::toRegisteredClient).orElse(null);
@@ -77,6 +80,7 @@ public class JpaRegisteredClientRepositoryAdapter implements org.springframework
 
     @Override
     @Transactional(readOnly = true)
+    @Timed(value = "authserver.clientrepo.findbyclientid", description = "Time taken to find client by client ID")
     public org.springframework.security.oauth2.server.authorization.client.RegisteredClient findByClientId(String clientId) {
         Assert.hasText(clientId, "clientId cannot be empty");
         return this.jpaRepository.findByClientId(clientId).map(this::toRegisteredClient).orElse(null);

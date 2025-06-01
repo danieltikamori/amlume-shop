@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.oauth2.service;
 
+import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
@@ -46,6 +47,7 @@ public class CustomOidcUserService extends OidcUserService {
 
     @Override
     @Transactional
+    @Timed(value = "authserver.oidcservice.loaduser", description = "Time taken to load OIDC user")
     public OidcUser loadUser(OidcUserRequest userRequest) throws OAuth2AuthenticationException {
         OidcUser oidcUser = super.loadUser(userRequest);
         Map<String, Object> attributes = oidcUser.getAttributes();

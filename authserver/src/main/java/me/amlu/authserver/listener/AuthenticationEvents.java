@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.listener;
 
+import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.user.service.UserServiceInterface;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
@@ -28,6 +29,7 @@ public class AuthenticationEvents {
     }
 
     @EventListener
+    @Timed(value = "authserver.event.authfailure", description = "Time taken to handle auth failure event")
     public void handleAuthenticationFailure(AuthenticationFailureBadCredentialsEvent event) {
         String username = event.getAuthentication().getName();
         if (username != null) {
@@ -36,6 +38,7 @@ public class AuthenticationEvents {
     }
 
     @EventListener
+    @Timed(value = "authserver.event.authsuccess", description = "Time taken to handle auth success event")
     public void handleAuthenticationSuccess(AuthenticationSuccessEvent event) {
         Object principal = event.getAuthentication().getPrincipal();
         String username = null;

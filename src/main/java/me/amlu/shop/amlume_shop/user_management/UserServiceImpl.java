@@ -10,6 +10,7 @@
 
 package me.amlu.shop.amlume_shop.user_management;
 
+import io.micrometer.core.annotation.Timed;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
 import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -307,6 +309,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     // Caching the current user can be tricky due to keying and potential staleness.
     // Often better to fetch when necessary or cache specific, less volatile data.
     // @Cacheable(value = CURRENT_USER_CACHE, key = "authentication.name") // Key needs context
+    @Timed(value = "shopapp.userservice.currentuser", extraTags = {"method", "getCurrentUser"}, description = "Time taken to get current user")
     public User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -421,6 +424,9 @@ public class UserServiceImpl implements UserService, UserDetailsService {
      */
     @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#result.userId") // Evict based on updated user's ID
     @Override
+    @Transactional
+    @PreAuthorize("hasRole('ROLE_USER')") // REALLYNECESSARY? Check if it is necessary to be authenticated user
+    @Timed(value = "shopapp.userservice.updateUserProfile", extraTags = {"method", "updateUserProfile"}, description = "Time taken to update user profile")
     public User updateUserProfile(Long userId, @Valid UserProfileUpdateRequest profileRequest) {
         Assert.notNull(userId, "User ID must not be null");
         Assert.notNull(profileRequest, "Profile request cannot be null");

@@ -13,6 +13,7 @@ package me.amlu.authserver.passkey.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.webauthn4j.util.exception.WebAuthnException;
+import io.micrometer.core.annotation.Timed;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import me.amlu.authserver.passkey.dto.GetPasskeyDetailResponse;
@@ -91,6 +92,7 @@ public class PasskeyServiceImpl implements PasskeyService {
      */
     @Override
     @Transactional(readOnly = true) // Typically read-only, no state change here
+    @Timed(value = "authserver.passkey.service.begin", description = "Time taken to begin passkey registration")
     public PublicKeyCredentialCreationOptions beginPasskeyRegistration(User currentUser) {
         log.info("Beginning passkey registration for user: {}", currentUser.getEmail().getValue());
         Assert.notNull(currentUser.getExternalId(), "Current user must have an externalId (user handle) for WebAuthn registration.");
@@ -207,6 +209,7 @@ public class PasskeyServiceImpl implements PasskeyService {
      */
     @Override
     @Transactional
+    @Timed(value = "authserver.passkey.service", description = "Time taken to finish passkey registration")
     public void finishPasskeyRegistration(User currentUser, PostPasskeyRegistrationRequest registrationRequest) {
         log.info("Finishing passkey registration for user: {} with friendlyName: {}",
                 currentUser.getEmail().getValue(), registrationRequest.friendlyName());
@@ -328,6 +331,7 @@ public class PasskeyServiceImpl implements PasskeyService {
      */
     @Override
     @Transactional(readOnly = true)
+    @Timed(value = "authserver.passkey.service.list", description = "Time taken to list user passkeys")
     public List<GetPasskeyDetailResponse> listUserPasskeys(User currentUser) {
         log.debug("Listing passkeys for user: {}", currentUser.getEmail().getValue());
         return passkeyCredentialRepository.findByUserId(currentUser.getId())
@@ -344,6 +348,7 @@ public class PasskeyServiceImpl implements PasskeyService {
      */
     @Override
     @Transactional
+    @Timed(value = "authserver.passkey.service.delete", description = "Time taken to delete user passkey")
     public void deleteUserPasskey(User currentUser, String credentialIdString) {
         log.info("Attempting to delete passkey with ID: {} for user: {}", credentialIdString, currentUser.getEmail().getValue());
 

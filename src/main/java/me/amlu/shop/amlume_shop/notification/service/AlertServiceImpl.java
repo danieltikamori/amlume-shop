@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.notification.service;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.Timer;
+import io.micrometer.core.annotation.Timed;
 import me.amlu.shop.amlume_shop.security.enums.AlertSeverityEnum;
 import me.amlu.shop.amlume_shop.security.model.SecurityAlert;
 import me.amlu.shop.amlume_shop.service.EnvironmentService;
@@ -44,6 +45,7 @@ public class AlertServiceImpl implements AlertService {
     }
 
     @Override
+    @Timed(value = "shopapp.alertservice.sendAlert", description = "Time taken to send a security alert")
     public void sendAlert(SecurityAlert alert) {
         try (Timer.Context timerContext = alertTimer.time()) {
             if (alert == null) {
@@ -74,6 +76,7 @@ public class AlertServiceImpl implements AlertService {
 //    }
 
     @Override
+    @Timed(value = "shopapp.alertservice.send-alerts-security-team", description = "Time taken to send security alerts to the security team")
     public void alertSecurityTeam(SecurityAlert alert) {
         try (Timer.Context timerContext = alertTimer.time()) {
             if (alert == null) {

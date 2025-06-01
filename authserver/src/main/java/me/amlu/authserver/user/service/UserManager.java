@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.user.service;
 
+import io.micrometer.core.annotation.Timed;
 import jakarta.persistence.EntityNotFoundException;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.repository.OAuth2AuthorizationConsentRepository;
@@ -56,6 +57,7 @@ public class UserManager implements UserServiceInterface {
     }
 
     @Override
+    @Timed(value = "authserver.usermanager.failedlogin", description = "Time taken to handle failed login attempt")
     public void handleFailedLogin(String usernameEmail) {
         log.debug("Handling failed login attempt for username/email: {}", usernameEmail);
         User user = userRepository.findByEmail_Value(usernameEmail)
@@ -78,6 +80,7 @@ public class UserManager implements UserServiceInterface {
 
     // Method called by authentication success handler
     @Override
+    @Timed(value = "authserver.usermanager.successfullogin", description = "Time taken to handle successful login")
     public void handleSuccessfulLogin(String usernameEmail) {
         log.debug("Handling successful login for username/email: {}", usernameEmail);
         userRepository.findByEmail_Value(usernameEmail).ifPresent(user -> {
@@ -95,6 +98,7 @@ public class UserManager implements UserServiceInterface {
 
     @Transactional
     @Override
+    @Timed(value = "authserver.usermanager.create", description = "Time taken to create user")
     public User createUser(String firstName, String lastName, String nickname,
                            String email, String rawPassword, String mobileNumber,
                            String defaultRegion, String backupEmailRaw) { // ADDED backupEmailRaw
@@ -154,6 +158,7 @@ public class UserManager implements UserServiceInterface {
     @Transactional
     @Override
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
+    @Timed(value = "authserver.usermanager.updateprofile", description = "Time taken to update user profile")
     public User updateUserProfile(Long userId, String newFirstName, String newLastName,
                                   String newNickname, String newMobileNumber, String defaultRegion,
                                   String newBackupEmail) { // ADDED newBackupEmail
@@ -242,6 +247,7 @@ public class UserManager implements UserServiceInterface {
     @Override
     @Transactional
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')") // Or based on who can change password
+    @Timed(value = "authserver.usermanager.changepassword", description = "Time taken to change user password")
     public void changeUserPassword(Long userId, String newRawPassword) {
         log.info("Attempting to change password for userId: {}", userId);
         // DO NOT log newRawPassword
@@ -301,6 +307,7 @@ public class UserManager implements UserServiceInterface {
     @PreAuthorize("hasAnyRole('ROLE_USER')")
     @Transactional
     @Override
+    @Timed(value = "authserver.usermanager.deleteaccount", description = "Time taken to delete user account")
     public void deleteUserAccount(Long userId) {
         log.info("Attempting to delete account for userId: {}", userId);
         User user = userRepository.findById(userId)

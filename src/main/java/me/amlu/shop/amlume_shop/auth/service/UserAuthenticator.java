@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.auth.service;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.retry.annotation.Retry;
+import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -110,7 +111,7 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
     // Use the name defined in properties/ResilienceConfig
     @Override
     @Transactional // Keep transaction if local pre-flight checks involve DB (e.g., rate limiting)
-    // CHANGED: Return type is now void
+    @Timed(value = "shopapp.auth.register.call", description = "Time taken for shop-app to call authserver registration")
     public void register(@Valid UserRegistrationRequest request, String ipAddress)
             throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
 

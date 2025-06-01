@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.user.service;
 
+import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
@@ -33,6 +34,7 @@ public class AmlumeUserDetailsService implements UserDetailsService {
 
     @Override
     @Transactional(readOnly = true) // Good practice for read-only database operations
+    @Timed(value = "authserver.userdetailsservice.load", description = "Time taken to load user by username")
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         LOGGER.info("Loading user by username (email): {}", username);
         User user = userRepository.findByEmail_Value(username)

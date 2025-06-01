@@ -22,6 +22,7 @@ import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
+import me.amlu.authserver.oauth2.service.JwtCustomizationService;
 import me.amlu.authserver.security.CustomAccessDeniedHandler;
 import me.amlu.authserver.security.CustomWebAuthnRelyingPartyOperations;
 import me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler;
@@ -120,6 +121,8 @@ public class LocalSecurityConfig {
     private final OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService;
     private final OAuth2AuthorizedClientService authorizedClientService; // Remove?
     private final CustomWebAuthnRelyingPartyOperations relyingPartyOperations;
+    private final JwtCustomizationService jwtCustomizationService;
+
 
     // Inject secrets for OAuth2 client seeding from application-local.yml (which are loaded from Vault)
     @Value("${oauth2.clients.amlumeapi.secret}")
@@ -170,7 +173,7 @@ public class LocalSecurityConfig {
                                CustomWebAuthnRelyingPartyOperations relyingPartyOperations,
                                @Qualifier("customOidcUserService") OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService,
                                @Qualifier("customOAuth2UserService") OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService,
-                               OAuth2AuthorizedClientService authorizedClientService
+                               OAuth2AuthorizedClientService authorizedClientService, JwtCustomizationService jwtCustomizationService
     ) {
         this.objectMapper = objectMapper;
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
@@ -184,6 +187,7 @@ public class LocalSecurityConfig {
         this.oidcUserService = oidcUserService;
         this.oauth2UserService = oauth2UserService;
         this.authorizedClientService = authorizedClientService;
+        this.jwtCustomizationService = jwtCustomizationService;
     }
 
 
@@ -809,45 +813,13 @@ public class LocalSecurityConfig {
 
     /**
      * Customizes the claims included in the issued JWT access tokens.
-     * Adds roles, user ID, and user profile information for user-based grants.
+     * Delegates the customization logic to {@link JwtCustomizationService}.
      *
-     * @param userRepository The repository for accessing user information.
+     * @return The OAuth2TokenCustomizer for JWT tokens.
      */
     @Bean
-    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer(UserRepository userRepository) {
-        return (context) -> {
-            if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
-                context.getClaims().claims((claims) -> {
-                    // String principalName = context.getPrincipal().getName();
-                    if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
-                        Set<String> roles = context.getRegisteredClient().getScopes();
-                        claims.put("roles", roles);
-                    } else { // For user-based grants
-                        //  When you are creating JWT claims,
-                        //  you are explicitly removing the ROLE_ prefix.
-                        //  This means if a user has the authority "ROLE_ADMIN",
-                        //  the JWT roles claim will contain "ADMIN".
-                        //  This is a common practice to make the claims cleaner.
-                        Set<String> roles = AuthorityUtils.authorityListToSet(context.getPrincipal().getAuthorities())
-                                .stream()
-                                .map(r -> r.replaceFirst("^ROLE_", ""))
-                                .collect(Collectors.collectingAndThen(Collectors.toSet(), Collections::unmodifiableSet));
-                        claims.put("roles", roles);
-
-                        // Add user_id and full_name if the principal is a UserDetails representing your User
-                        Object principal = context.getPrincipal().getPrincipal(); // Get the actual principal object
-                        if (principal instanceof User appUser) { // Check if it's your User class
-                            putClaims(claims, appUser);
-                        } else if (context.getPrincipal().getName() != null) {
-                            // Fallback for other UserDetails implementations or if principal is just username string
-                            userRepository.findByEmail_Value(context.getPrincipal().getName()).ifPresent(user -> {
-                                putClaims(claims, user);
-                            });
-                        }
-                    }
-                });
-            }
-        };
+    public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
+        return jwtCustomizationService::customizeToken;
     }
 
     /**

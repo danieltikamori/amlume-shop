@@ -22,6 +22,9 @@ import com.slack.api.model.block.SectionBlock;
 import com.slack.api.model.block.composition.MarkdownTextObject;
 import com.slack.api.model.block.composition.PlainTextObject;
 import com.slack.api.model.block.element.ButtonElement;
+import io.micrometer.core.annotation.Timed;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.mail.internet.MimeMessage;
 import me.amlu.shop.amlume_shop.exceptions.NotificationSendingFailedException;
 import me.amlu.shop.amlume_shop.notification.dto.CreateEmailAttachmentRequest;
@@ -46,6 +49,8 @@ public class UserNotificationService {
     @Value("${slack.channel}") // Less sensitive, but could still be in config props
     private String slackChannel;
 
+    // TODO: MONITORING - Add counters for each notification type. Failed emails, failed Slack messages, etc.
+    // Consider adding resilience for the notification service and adding a health check to check the status of the notification service.
     // TODO: SECURITY - Move Slack token to Vault (e.g., secret/amlume-shop/slack)
     //       and inject via a dedicated @ConfigurationProperties bean (e.g., NotificationProperties)
     //       populated by Spring Cloud Vault instead of using @Value.
@@ -53,7 +58,7 @@ public class UserNotificationService {
     private String slackToken;
 
     // TODO: SECURITY - Move Mail credentials (if password isn't handled by Spring Boot Mail starter)
-    //       to Vault (e.g., secret/amlume-shop/email) and inject via @ConfigurationProperties
+    //       to Vault (e.g., secret/amlume-shop/userEmail) and inject via @ConfigurationProperties
     //       populated by Spring Cloud Vault instead of using @Value. Username might be less sensitive.
     @Value("${spring.mail.username}")
     private String emailFrom;
@@ -63,11 +68,23 @@ public class UserNotificationService {
     private final JavaMailSender emailSender;
     private final MethodsClient slackClient;
 
-    public UserNotificationService(JavaMailSender emailSender, MethodsClient slackClient) {
+
+    private final Counter emailSuccessCounter;
+    private final Counter emailFailureCounter;
+    private final Counter slackSuccessCounter;
+    private final Counter slackFailureCounter;
+
+
+    public UserNotificationService(JavaMailSender emailSender, MethodsClient slackClient, MeterRegistry meterRegistry, Counter emailSuccessCounter, Counter emailFailureCounter, Counter slackSuccessCounter, Counter slackFailureCounter) {
         this.emailSender = emailSender;
         this.slackClient = slackClient;
+        this.emailSuccessCounter = meterRegistry.counter("shopapp.notification.email", "status", "success");
+        this.emailFailureCounter = meterRegistry.counter("shopapp.notification.email", "status", "failure");
+        this.slackSuccessCounter = meterRegistry.counter("shopapp.notification.slack", "status", "success");
+        this.slackFailureCounter = meterRegistry.counter("shopapp.notification.slack", "status", "failure");
     }
 
+    @Timed(value = "shopapp.notificationservice.sendNotification", description = "Time taken to send a notification for a user")
     public void sendNotification(CreateNotificationRequest request) throws NotificationSendingFailedException {
         // Add specific handling based on notification type
         switch (request.type()) {
@@ -101,9 +118,11 @@ public class UserNotificationService {
             message.setText(request.message());
 
             emailSender.send(mimeMessage);
+            emailSuccessCounter.increment();
             log.info("Email notification sent successfully to: {}", request.recipientEmail());
         } catch (MailException e) {
-            log.error("Failed to send email notification", e);
+            log.error("Failed to send userEmail notification", e);
+            emailFailureCounter.increment();
             throw new NotificationSendingFailedException("Email sending failed", e);
         }
     }
@@ -127,11 +146,13 @@ public class UserNotificationService {
             }
 
             emailSender.send(mimeMessage);
-            log.info("Rich email sent successfully to: {}", request.recipientEmail());
+            emailSuccessCounter.increment();
+            log.info("Rich userEmail sent successfully to: {}", request.recipientEmail());
 
         } catch (MessagingException | MailException | jakarta.mail.MessagingException e) {
-            log.error("Failed to send rich email notification", e);
-            throw new NotificationSendingFailedException("Rich email sending failed", e);
+            log.error("Failed to send rich userEmail notification", e);
+            emailFailureCounter.increment();
+            throw new NotificationSendingFailedException("Rich userEmail sending failed", e);
         }
     }
 
@@ -149,11 +170,15 @@ public class UserNotificationService {
 
             if (!response.isOk()) {
                 log.error("Failed to send Slack message: {}", response.getError());
+                slackFailureCounter.increment();
                 throw new NotificationSendingFailedException("Slack message sending failed: " + response.getError(), new Exception());
             }
 
+            slackSuccessCounter.increment();
+//            log.info("Slack message sent successfully to: {}", slackChannel);
         } catch (SlackApiException | IOException e) {
             log.error("Error sending Slack message: ", e);
+            slackFailureCounter.increment();
             throw new NotificationSendingFailedException("Failed to send Slack message", e);
         }
     }
