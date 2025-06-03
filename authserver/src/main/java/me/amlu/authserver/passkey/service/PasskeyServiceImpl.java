@@ -39,7 +39,6 @@ import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Service
 /**
  * Service implementation for managing passkey (WebAuthn) operations.
  * This service handles the initiation and completion of passkey registration,
@@ -47,14 +46,16 @@ import java.util.stream.Collectors;
  * It interacts with Spring Security's WebAuthn components and custom repositories
  * for managing passkey credentials and user entities.
  */
+@Service
 public class PasskeyServiceImpl implements PasskeyService {
 
     private static final Logger log = LoggerFactory.getLogger(PasskeyServiceImpl.class);
-    public static final String PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR = "PASSKEY_REGISTRATION_OPTIONS";
+    public static final String PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR = "PASSKEY_REGISTRATION_OPTIONS_JSON";
+
     /**
      * The timeout duration for WebAuthn relying party operations, must be in milliseconds.
      */
-    public static final Duration PASSKEY_RELYING_PARTY_TIMEOUT = Duration.ofMillis(5000L);
+    public static final Duration PASSKEY_RELYING_PARTY_TIMEOUT = Duration.ofMillis(120000L);
 
 
     private final WebAuthnRelyingPartyOperations relyingPartyOperations;
@@ -193,10 +194,16 @@ public class PasskeyServiceImpl implements PasskeyService {
 
         PublicKeyCredentialCreationOptions options = relyingPartyOperations.createPublicKeyCredentialCreationOptions(request);
 
-        // --- Store options in session ---
-        HttpSession session = httpServletRequest.getSession(true); // Get or create session
-        session.setAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR, options);
-        log.debug("Stored PublicKeyCredentialCreationOptions in session for user {}", currentUser.getEmail().getValue());
+        // --- Store options in session AS JSON STRING ---
+        HttpSession session = httpServletRequest.getSession(true);
+        try {
+            String optionsJson = objectMapper.writeValueAsString(options);
+            session.setAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR, optionsJson);
+            log.debug("Stored PublicKeyCredentialCreationOptions (as JSON) in session for user {}", currentUser.getEmail().getValue());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize PublicKeyCredentialCreationOptions to JSON for session storage for user {}", currentUser.getEmail().getValue(), e);
+            throw new IllegalStateException("Could not serialize passkey options for session", e);
+        }
 
         return options;
     }
@@ -217,20 +224,34 @@ public class PasskeyServiceImpl implements PasskeyService {
         Assert.notNull(currentUser.getExternalId(), "Current user must have an externalId (user handle).");
         Assert.hasText(registrationRequest.friendlyName(), "Friendly name for the passkey is required.");
 
-
-        // --- Retrieve options from session ---
+        // --- Retrieve options from session (AS JSON STRING) ---
         HttpSession session = httpServletRequest.getSession(false); // Get existing session, don't create
         if (session == null) {
             log.error("No active HTTP session found during finishPasskeyRegistration for user {}. Cannot retrieve registration options.", currentUser.getEmail().getValue());
             throw new IllegalStateException("Session expired or not found. Please restart the passkey registration process.");
         }
-        final PublicKeyCredentialCreationOptions creationOptions = (PublicKeyCredentialCreationOptions) session.getAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR);
-        if (creationOptions == null) {
-            log.error("PublicKeyCredentialCreationOptions not found in session for user {}. Registration flow might be incorrect or session expired.", currentUser.getEmail().getValue());
+
+        String optionsJson = (String) session.getAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR);
+        if (optionsJson == null) {
+            log.error("PublicKeyCredentialCreationOptions (JSON) not found in session for user {}. Registration flow might be incorrect or session expired.", currentUser.getEmail().getValue());
             throw new IllegalStateException("Passkey registration options not found in session. Please restart the registration process.");
         }
         session.removeAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR); // Clean up
         log.debug("Retrieved and removed PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
+
+        // Logs to confirm that the ObjectMapper is the same instance as in LocalSecurityConfig
+        log.info("ObjectMapper instance in PasskeyServiceImpl: {} (Hash: {})", objectMapper, System.identityHashCode(objectMapper));
+        log.info("PasskeyServiceImpl - Registered module IDs: {}", objectMapper.getRegisteredModuleIds());
+
+        final PublicKeyCredentialCreationOptions creationOptions;
+        try {
+            // Deserialize JSON string back to object
+            creationOptions = objectMapper.readValue(optionsJson, PublicKeyCredentialCreationOptions.class);
+            log.debug("Retrieved and deserialized PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to deserialize PublicKeyCredentialCreationOptions from JSON in session for user {}", currentUser.getEmail().getValue(), e);
+            throw new IllegalStateException("Could not deserialize passkey options from session", e);
+        }
 
         try {
             // Use Spring Security's API types for building the request
