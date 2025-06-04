@@ -11,7 +11,7 @@
    package me.amlu.authserver.config;
 
    import org.springframework.boot.context.properties.ConfigurationProperties;
-   import org.springframework.stereotype.Component; // Make it a Spring component
+   import org.springframework.stereotype.Component;
 
    import java.util.Collections;
    import java.util.Objects;
@@ -25,6 +25,16 @@
        private Set<String> allowedOrigins = Collections.singleton("http://localhost:8080");
 
        public WebAuthNProperties() {
+       }
+
+       public WebAuthNProperties(String rpId, String rpName, Set<String> allowedOrigins) {
+           this.rpId = rpId;
+           this.rpName = rpName;
+           this.allowedOrigins = allowedOrigins;
+       }
+
+       public static WebAuthNPropertiesBuilder builder() {
+           return new WebAuthNPropertiesBuilder();
        }
 
        public String getRpId() {
@@ -87,5 +97,37 @@
        @Override
        public String toString() {
            return "WebAuthNProperties(rpId=" + this.getRpId() + ", rpName=" + this.getRpName() + ", allowedOrigins=" + this.getAllowedOrigins() + ")";
+       }
+
+       public static class WebAuthNPropertiesBuilder {
+           private String rpId;
+           private String rpName;
+           private Set<String> allowedOrigins;
+
+           WebAuthNPropertiesBuilder() {
+           }
+
+           public WebAuthNPropertiesBuilder rpId(String rpId) {
+               this.rpId = rpId;
+               return this;
+           }
+
+           public WebAuthNPropertiesBuilder rpName(String rpName) {
+               this.rpName = rpName;
+               return this;
+           }
+
+           public WebAuthNPropertiesBuilder allowedOrigins(Set<String> allowedOrigins) {
+               this.allowedOrigins = allowedOrigins;
+               return this;
+           }
+
+           public WebAuthNProperties build() {
+               return new WebAuthNProperties(this.rpId, this.rpName, this.allowedOrigins);
+           }
+
+           public String toString() {
+               return "WebAuthNProperties.WebAuthNPropertiesBuilder(rpId=" + this.rpId + ", rpName=" + this.rpName + ", allowedOrigins=" + this.allowedOrigins + ")";
+           }
        }
    }
