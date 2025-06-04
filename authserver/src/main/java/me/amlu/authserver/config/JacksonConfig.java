@@ -20,7 +20,7 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.webauthn4j.converter.jackson.WebAuthnJSONModule;
 import com.webauthn4j.converter.util.ObjectConverter;
-import me.amlu.authserver.config.jackson.mixin.webauthn.MyWebauthnMixins;
+import me.amlu.authserver.config.jackson.mixin.webauthn.CustomWebauthnMixins;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.UserMixin;
 import me.amlu.authserver.user.model.vo.AccountStatus;
@@ -90,7 +90,7 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
      *     <ul>
      *       <li>For application domain models ({@code User}, {@code EmailAddress}, {@code AccountStatus})
      *           to control their serialization/deserialization.</li>
-     *       <li>For Spring Security WebAuthn API types (via {@link MyWebauthnMixins}). These are
+     *       <li>For Spring Security WebAuthn API types (via {@link CustomWebauthnMixins}). These are
      *           essential for robust serialization of WebAuthn objects (e.g.,
      *           {@code PublicKeyCredentialCreationOptions}) when stored in the HTTP session,
      *           addressing potential issues with default serializers.</li>
@@ -188,27 +188,27 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         // when they are stored in the HTTP session. Default serializers might not always handle
         // the complexities of these objects correctly for session purposes.
         log.debug("Registering custom mixins for Spring Security WebAuthn API types (MyWebauthnMixins)...");
-        objectMapper.addMixIn(PublicKeyCredentialCreationOptions.class, MyWebauthnMixins.PublicKeyCredentialCreationOptionsMixIn.class);
-        objectMapper.addMixIn(ImmutablePublicKeyCredentialUserEntity.class, MyWebauthnMixins.PublicKeyCredentialUserEntityMixIn.class); // For the immutable variant
-        objectMapper.addMixIn(PublicKeyCredentialUserEntity.class, MyWebauthnMixins.PublicKeyCredentialUserEntityMixIn.class); // And the interface
-        objectMapper.addMixIn(PublicKeyCredentialRpEntity.class, MyWebauthnMixins.PublicKeyCredentialRpEntityMixIn.class);
-        objectMapper.addMixIn(PublicKeyCredentialParameters.class, MyWebauthnMixins.PublicKeyCredentialParametersMixIn.class);
+        objectMapper.addMixIn(PublicKeyCredentialCreationOptions.class, CustomWebauthnMixins.PublicKeyCredentialCreationOptionsMixIn.class);
+        objectMapper.addMixIn(ImmutablePublicKeyCredentialUserEntity.class, CustomWebauthnMixins.PublicKeyCredentialUserEntityMixIn.class); // For the immutable variant
+        objectMapper.addMixIn(PublicKeyCredentialUserEntity.class, CustomWebauthnMixins.PublicKeyCredentialUserEntityMixIn.class); // And the interface
+        objectMapper.addMixIn(PublicKeyCredentialRpEntity.class, CustomWebauthnMixins.PublicKeyCredentialRpEntityMixIn.class);
+        objectMapper.addMixIn(PublicKeyCredentialParameters.class, CustomWebauthnMixins.PublicKeyCredentialParametersMixIn.class);
 //          objectMapper.addMixIn(PublicKeyCredentialType.class, PublicKeyCredentialTypeMixIn.class);
 //          objectMapper.addMixIn(COSEAlgorithmIdentifier.class, COSEAlgorithmIdentifierMixIn.class);
-        objectMapper.addMixIn(AuthenticatorSelectionCriteria.class, MyWebauthnMixins.AuthenticatorSelectionCriteriaMixIn.class);
+        objectMapper.addMixIn(AuthenticatorSelectionCriteria.class, CustomWebauthnMixins.AuthenticatorSelectionCriteriaMixIn.class);
 //          objectMapper.addMixIn(AttestationConveyancePreference.class, AttestationConveyancePreferenceMixIn.class);
 //          objectMapper.addMixIn(AuthenticatorAttachment.class, AuthenticatorAttachmentMixIn.class);
 //          objectMapper.addMixIn(ResidentKeyRequirement.class, ResidentKeyRequirementMixIn.class);
 //          objectMapper.addMixIn(UserVerificationRequirement.class, UserVerificationRequirementMixIn.class);
 
-        objectMapper.addMixIn(PublicKeyCredentialRequestOptions.class, MyWebauthnMixins.PublicKeyCredentialRequestOptionsMixIn.class);
-        objectMapper.addMixIn(ImmutableAuthenticationExtensionsClientInputs.class, MyWebauthnMixins.AuthenticationExtensionsClientInputsMixIn.class); // For immutable variant
-        objectMapper.addMixIn(AuthenticationExtensionsClientInputs.class, MyWebauthnMixins.AuthenticationExtensionsClientInputsMixIn.class); // And the interface
-        objectMapper.addMixIn(AuthenticationExtensionsClientInput.class, MyWebauthnMixins.AuthenticationExtensionsClientInputMixIn.class);
-        objectMapper.addMixIn(PublicKeyCredentialDescriptor.class, MyWebauthnMixins.PublicKeyCredentialDescriptorMixIn.class);
+        objectMapper.addMixIn(PublicKeyCredentialRequestOptions.class, CustomWebauthnMixins.PublicKeyCredentialRequestOptionsMixIn.class);
+        objectMapper.addMixIn(ImmutableAuthenticationExtensionsClientInputs.class, CustomWebauthnMixins.AuthenticationExtensionsClientInputsMixIn.class); // For immutable variant
+        objectMapper.addMixIn(AuthenticationExtensionsClientInputs.class, CustomWebauthnMixins.AuthenticationExtensionsClientInputsMixIn.class); // And the interface
+        objectMapper.addMixIn(AuthenticationExtensionsClientInput.class, CustomWebauthnMixins.AuthenticationExtensionsClientInputMixIn.class);
+        objectMapper.addMixIn(PublicKeyCredentialDescriptor.class, CustomWebauthnMixins.PublicKeyCredentialDescriptorMixIn.class);
 //          objectMapper.addMixIn(AuthenticatorTransport.class, AuthenticatorTransportMixIn.class);
-        objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.class, MyWebauthnMixins.CredProtectAuthenticationExtensionsClientInputMixIn.class);
-        objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.CredProtect.class, MyWebauthnMixins.CredProtectMixIn.class);
+        objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.class, CustomWebauthnMixins.CredProtectAuthenticationExtensionsClientInputMixIn.class);
+        objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.CredProtect.class, CustomWebauthnMixins.CredProtectMixIn.class);
         // The commented-out mixins from ObjectMapperFactory are for enums/simple types that
         // Spring Security's WebauthnJackson2Module should already handle.
         // If issues arise with these specific types, they can be uncommented and their mixins implemented.
