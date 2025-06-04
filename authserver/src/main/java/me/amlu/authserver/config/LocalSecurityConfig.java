@@ -837,7 +837,8 @@ public class LocalSecurityConfig {
         claims.put("email", appUser.getEmail().getValue());
     }
 
-    /**
+    /*
+     * @Deprecated
      * Registers Jackson modules required for WebAuthn serialization/deserialization
      * with the application's ObjectMapper.
      * This is crucial for handling WebAuthn-related JSON data correctly.
@@ -853,18 +854,35 @@ public class LocalSecurityConfig {
      * <p>
      * Note: username column length should be sufficient for your usernames (emails). VARCHAR(255) is usually safe for emails.
      */
-    @PostConstruct
-    public void registerWebAuthnJacksonModules() {
-        ObjectConverter objectConverter = new ObjectConverter(); // From webauthn4j
-        // Register webauthn4j's module (for underlying types if Spring types delegate)
-        this.objectMapper.registerModule(new WebAuthnJSONModule(objectConverter));
-        log.info("Registered WebAuthnJSONModule (from webauthn4j) with Spring's ObjectMapper.");
+//    @PostConstruct
+//    public void registerWebAuthnJacksonModules() {
+//        log.info("LocalSecurityConfig: Operating on ObjectMapper instance: {} (Hash: {})",
+//                this.objectMapper, System.identityHashCode(this.objectMapper));
+//        log.info("LocalSecurityConfig - Registered module IDs BEFORE (in LocalSecurityConfig's PostConstruct): {}",
+//                this.objectMapper.getRegisteredModuleIds());
+//
+//        // All module registration is now centralized in JacksonConfig.java.
+//        // This method is likely operating on the @Primary ObjectMapper injected by Spring.
+//        // Re-registering modules here is redundant if JacksonConfig.java is comprehensive.
+//        // It's safer to remove these lines to ensure a single point of configuration.
+//
+//        // ObjectConverter objectConverter = new ObjectConverter();
+//        // this.objectMapper.registerModule(new WebAuthnJSONModule(objectConverter));
+//        // log.info("Registered WebAuthnJSONModule (from webauthn4j) via LocalSecurityConfig.");
+//
+//        // this.objectMapper.registerModule(new WebauthnJackson2Module());
+//        // log.info("Registered WebauthnJackson2Module (from Spring Security) via LocalSecurityConfig.");
+//
+//        // ClassLoader classLoader = LocalSecurityConfig.class.getClassLoader();
+//        // List<com.fasterxml.jackson.databind.Module> securityModules = org.springframework.security.jackson2.SecurityJackson2Modules.getModules(classLoader);
+//        // this.objectMapper.registerModules(securityModules);
+//        // log.info("Registered core Spring Security Jackson modules via LocalSecurityConfig.");
+//
+//        log.info("LocalSecurityConfig - Registered module IDs AFTER (in LocalSecurityConfig's PostConstruct): {}",
+//                this.objectMapper.getRegisteredModuleIds());
+//        log.warn("Review: Jackson module registration in LocalSecurityConfig @PostConstruct might be redundant if JacksonConfig.java provides the @Primary ObjectMapper.");
+//    }
 
-        // CRITICAL: Register Spring Security's own WebAuthn Jackson module
-        // This module should know how to serialize Spring's WebAuthn API wrapper types correctly.
-        this.objectMapper.registerModule(new WebauthnJackson2Module());
-        log.info("Registered WebauthnJackson2Module (from Spring Security) with Spring's ObjectMapper.");
-    }
 }
 
 /*
