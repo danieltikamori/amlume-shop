@@ -25,6 +25,7 @@ import me.amlu.authserver.user.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.webauthn.api.*;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialCreationOptionsRequest;
@@ -124,6 +125,8 @@ public class PasskeyServiceImpl implements PasskeyService {
             throw new IllegalStateException("User is not properly authenticated in the security context.");
         }
 
+        final User finalCurrentUser = currentUser;
+
         // Implement PublicKeyCredentialCreationOptionsRequest directly
         PublicKeyCredentialCreationOptionsRequest request = new PublicKeyCredentialCreationOptionsRequest() {
             @Override
@@ -150,12 +153,29 @@ public class PasskeyServiceImpl implements PasskeyService {
             }
 
             public AuthenticatorSelectionCriteria getAuthenticatorSelection() {
-                return AuthenticatorSelectionCriteria.builder()
-                        .userVerification(UserVerificationRequirement.PREFERRED) // Try PREFERRED, REQUIRED, or DISCOURAGED
-                        .residentKey(ResidentKeyRequirement.PREFERRED) // Try PREFERRED or REQUIRED for discoverable credentials
-//                         .authenticatorAttachment(AuthenticatorAttachment.CROSS_PLATFORM) // Optional: be specific if needed
-                        // .authenticatorAttachment(AuthenticatorAttachment.PLATFORM_OR_CROSS_PLATFORM) // Optional: be specific if needed
-                        .build();
+                AuthenticatorSelectionCriteria.AuthenticatorSelectionCriteriaBuilder builder = AuthenticatorSelectionCriteria.builder()
+                        .residentKey(ResidentKeyRequirement.PREFERRED); // Generally good for passkeys
+
+                // Check user roles from finalCurrentUser
+                boolean isPrivilegedUser = finalCurrentUser.getAuthorities().stream()
+                        .map(GrantedAuthority::getAuthority) // Assuming the User.getAuthorities() returns Spring's GrantedAuthority
+                        .anyMatch(roleName -> "ROLE_ADMIN".equals(roleName) || "ROLE_SUPER_ADMIN".equals(roleName)); // Add other sensitive roles
+
+                if (isPrivilegedUser) {
+                    log.debug("Privileged user ({}): Applying stricter authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
+                    builder.userVerification(UserVerificationRequirement.REQUIRED); // Require PIN/Biometric for admins
+                    // Optionally, you could restrict attachment for admins if desired:
+                    // builder.authenticatorAttachment(AuthenticatorAttachment.PLATFORM);
+                    // Or keep it flexible if they might use synced passkeys from a trusted device.
+                } else {
+                    log.debug("Standard user ({}): Applying preferred authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
+                    builder.userVerification(UserVerificationRequirement.PREFERRED);
+                    // For common users, omitting authenticatorAttachment (or setting it to null/ANY)
+                    // allows the browser to offer all suitable authenticators, including synced ones
+                    // like Google Account passkeys, which is convenient.
+                    // builder.authenticatorAttachment(null); // Explicitly allow any
+                }
+                return builder.build();
             }
 
             /**
@@ -245,6 +265,9 @@ public class PasskeyServiceImpl implements PasskeyService {
 
         final PublicKeyCredentialCreationOptions creationOptions;
         try {
+            // Log TOBEDELETED
+            log.info("JSON from sessionto be deserializedL: {}", optionsJson);
+
             // Deserialize JSON string back to object
             creationOptions = objectMapper.readValue(optionsJson, PublicKeyCredentialCreationOptions.class);
             log.debug("Retrieved and deserialized PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
