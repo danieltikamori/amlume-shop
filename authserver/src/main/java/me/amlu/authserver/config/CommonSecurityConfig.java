@@ -11,6 +11,10 @@
 package me.amlu.authserver.config;
 
 import me.amlu.authserver.oauth2.service.JpaUserDetailsService;
+import me.amlu.authserver.passkey.repository.DbPublicKeyCredentialUserEntityRepository;
+import me.amlu.authserver.passkey.repository.DbUserCredentialRepository;
+import me.amlu.authserver.passkey.service.PasskeyServiceImpl;
+import me.amlu.authserver.security.CustomWebAuthnRelyingPartyOperations;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
@@ -21,12 +25,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
-import org.springframework.security.web.webauthn.api.PublicKeyCredentialRpEntity;
 import org.springframework.security.web.webauthn.authentication.WebAuthnAuthenticationProvider;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;
 import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
-import org.springframework.security.web.webauthn.management.Webauthn4JRelyingPartyOperations;
 
 @Profile("!test")
 @Configuration
@@ -87,16 +89,19 @@ public class CommonSecurityConfig {
      * In Spring Security, the “relaying party parameter” is defined by defining a bean for WebAuthnRelyingPartyOperations.
      * You’ll need an ID (which is essentially your domain), name, and allowed origin (URL).
      *
-     * @param userEntities       {@link PublicKeyCredentialUserEntityRepository}
-     * @param userCredentials    {@link UserCredentialRepository}
-     * @param webAuthNProperties {@link WebAuthNProperties}
+     * @param userRepository                            {@link UserRepository}
+     * @param dbPublicKeyCredentialUserEntityRepository {@link PublicKeyCredentialUserEntityRepository}
+     * @param dbUserCredentialRepository                {@link UserCredentialRepository}
+     * @param webAuthNProperties                        {@link WebAuthNProperties}
      * @return {@link WebAuthnRelyingPartyOperations}
      */
     @Bean
     public WebAuthnRelyingPartyOperations relyingPartyOperations(
-            PublicKeyCredentialUserEntityRepository userEntities,
-            UserCredentialRepository userCredentials,
-            WebAuthNProperties webAuthNProperties) {
+            UserRepository userRepository,
+            DbPublicKeyCredentialUserEntityRepository dbPublicKeyCredentialUserEntityRepository,
+            DbUserCredentialRepository dbUserCredentialRepository, // Use the concrete type for injection
+            WebAuthNProperties webAuthNProperties
+    ) {
 
         if (webAuthNProperties.getAllowedOrigins() == null || webAuthNProperties.getAllowedOrigins().isEmpty()) {
             log.error("WebAuthn allowedOrigins is not configured or empty via WebAuthNProperties. Please check 'spring.security.webauthn.allowedOrigins'.");
@@ -105,11 +110,60 @@ public class CommonSecurityConfig {
         log.info("Configuring WebAuthnRelyingPartyOperations with rpId: '{}', rpName: '{}', allowedOrigins: {}",
                 webAuthNProperties.getRpId(), webAuthNProperties.getRpName(), webAuthNProperties.getAllowedOrigins());
 
-        return new Webauthn4JRelyingPartyOperations(userEntities, userCredentials,
-                PublicKeyCredentialRpEntity.builder()
-                        .id(webAuthNProperties.getRpId())
-                        .name(webAuthNProperties.getRpName()).build(),
-                webAuthNProperties.getAllowedOrigins());
+        CustomWebAuthnRelyingPartyOperations operations = new CustomWebAuthnRelyingPartyOperations(
+                userRepository,
+                dbPublicKeyCredentialUserEntityRepository,
+                dbUserCredentialRepository,
+                webAuthNProperties
+        );
+
+        // --- Explicitly set the defaults for registration options ---
+
+        // --- Use setCustomizeCreationOptions (More aligned with Spring Security's API) ---
+        // This customizer is applied *after* Webauthn4JRelyingPartyOperations has already
+        // populated the builder using its WebAuthnManager and the input request.
+        // This is good for overriding or ensuring specific values.
+        operations.setCustomizeCreationOptions(builder -> {
+            log.debug("Customizing PublicKeyCredentialCreationOptions.PublicKeyCredentialCreationOptionsBuilder...");
+
+            // Example: Ensure timeout is always your application's default if not set by request
+            // The builder here is org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions.PublicKeyCredentialCreationOptionsBuilder
+            // It doesn't have a direct getTimeout() to check current value before setting.
+            // So, this will effectively override.
+            builder.timeout(PasskeyServiceImpl.PASSKEY_RELYING_PARTY_TIMEOUT);
+
+            // Ensure attestation is INDIRECT OR NONE as some devices (like Apple devices) may not provide the required data if DIRECT is set
+            builder.attestation(org.springframework.security.web.webauthn.api.AttestationConveyancePreference.INDIRECT); // NONE is default, less secure
+
+            // Disabled as we implemented role-based conditional selection in PasskeyServiceImpl,
+            // the builder below would overwrite/override the implementation.
+            // Ensure authenticator selection is as desired
+//            builder.authenticatorSelection(
+//                    org.springframework.security.web.webauthn.api.AuthenticatorSelectionCriteria.builder()
+//                            .userVerification(org.springframework.security.web.webauthn.api.UserVerificationRequirement.PREFERRED)
+//                            .residentKey(org.springframework.security.web.webauthn.api.ResidentKeyRequirement.PREFERRED)
+////                            .authenticatorAttachment(org.springframework.security.web.webauthn.api.AuthenticatorAttachment.CROSS_PLATFORM) // CROSS_PLATFORM - USB or other roaming devices Or PLATFORM device bound (Windows Hello, Touch ID, Face ID), more secure, but less flexible
+//                            .build()
+//            );
+
+            // Example: Ensure extensions are empty
+            // Inside the setCustomizeCreationOptions lambda in CommonSecurityConfig.java
+
+// Corrected and recommended way for empty extensions:
+            builder.extensions(new org.springframework.security.web.webauthn.api.ImmutableAuthenticationExtensionsClientInputs());
+//            builder.extensions(new org.springframework.security.web.webauthn.api.ImmutableAuthenticationExtensionsClientInputs((Collections.emptyMap()));
+
+            log.info("Applied customizations to PublicKeyCredentialCreationOptions builder: timeout={}, attestation={}, authNSelection, extensions.",
+                    PasskeyServiceImpl.PASSKEY_RELYING_PARTY_TIMEOUT,
+                    org.springframework.security.web.webauthn.api.AttestationConveyancePreference.INDIRECT
+//                    org.springframework.security.web.webauthn.api.AttestationConveyancePreference.NONE // Default, less secure but more flexible
+            );
+        });
+        log.info("CustomWebAuthnRelyingPartyOperations configured with setCustomizeCreationOptions.");
+
+
+        log.info("CustomWebAuthnRelyingPartyOperations bean fully configured.");
+        return operations;
     }
 
 
