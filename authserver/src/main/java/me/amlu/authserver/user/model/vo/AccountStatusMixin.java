@@ -11,6 +11,8 @@
 package me.amlu.authserver.user.model.vo;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
@@ -19,7 +21,10 @@ import java.time.Instant;
  * Jackson Mixin for the {@link AccountStatus} value object.
  * This mixin provides a constructor annotated with {@link JsonCreator} to guide Jackson
  * during deserialization, especially when dealing with Spring Security's type allowlisting.
+ * It also ignores unknown properties (like 'accountNonLocked' from old session data)
+ * and prevents serialization of the derived 'accountNonLocked' property.
  */
+@JsonIgnoreProperties(ignoreUnknown = true) // Ignore unknown properties during deserialization
 public abstract class AccountStatusMixin {
 
     /**
@@ -45,4 +50,10 @@ public abstract class AccountStatusMixin {
     ) {
         // Mixin constructors are abstract and don't have bodies.
     }
+
+    // To prevent 'accountNonLocked' (derived from isAccountNonLocked())
+    // from being serialized into new session data.
+    @JsonIgnore
+    public abstract boolean isAccountNonLocked();
 }
+
