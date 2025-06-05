@@ -67,7 +67,7 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
     // }
 
     @Override
-    public void setBeanClassLoader(@NonNull ClassLoader classLoader) { // Add @NonNull here
+    public void setBeanClassLoader(@NonNull ClassLoader classLoader) {
         this.classLoader = classLoader;
     }
 
@@ -116,8 +116,7 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
      */
     @Bean
     @Primary // Mark this as the primary ObjectMapper
-    public ObjectMapper objectMapper() { // Removed boolean parameters
-
+    public ObjectMapper objectMapper() {
         ObjectMapper objectMapper = new ObjectMapper();
 
         // --- Serialization Features ---
@@ -173,8 +172,8 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
 //        log.debug("Registered WebauthnJackson2Module (from Spring Security).");
 
 
-        // --- Register Mixin for your custom User class ---
-        // This tells Jackson that your User class is safe to deserialize and how to handle it.
+        // --- Register Mixin for custom User class ---
+        // This tells Jackson that the User class is safe to deserialize and how to handle it.
         objectMapper.addMixIn(User.class, UserMixin.class);
         log.debug("Registered mixin for application's User model.");
         objectMapper.addMixIn(EmailAddress.class, EmailAddressMixin.class);
@@ -209,6 +208,8 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
 //          objectMapper.addMixIn(AuthenticatorTransport.class, AuthenticatorTransportMixIn.class);
         objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.class, CustomWebauthnMixins.CredProtectAuthenticationExtensionsClientInputMixIn.class);
         objectMapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.CredProtect.class, CustomWebauthnMixins.CredProtectMixIn.class);
+        objectMapper.addMixIn(Bytes.class, CustomWebauthnMixins.BytesMixIn.class);
+
         // The commented-out mixins from ObjectMapperFactory are for enums/simple types that
         // Spring Security's WebauthnJackson2Module should already handle.
         // If issues arise with these specific types, they can be uncommented and their mixins implemented.
