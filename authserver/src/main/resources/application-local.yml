@@ -1,18 +1,36 @@
 app:
+  security:
+    encryption:
+      # Generate a strong, random Base64 encoded key (16, 24, or 32 bytes decoded)
+      # Example for AES-256 (32 bytes = 256 bits):
+      # Generate with: openssl rand -base64 32
+      passkey-data-key: ${APP_PASSKEY_ENCRYPTION_KEY} # Load from .env, which is seeded to Vault
   ssl:
     trust-store:
       # Use 'file:' for filesystem or 'classpath:' if packaged in JAR
-      path: classpath:config/central-truststore.jks # <-- CHANGE HERE
+      path: classpath:config/central-truststore.jks
       #      path: file:./config/central-truststore.jks
       # LOAD SECURELY! Use environment variable for the password.
       # Password for the truststore, to be loaded from Vault if sensitive
-      # For now, assuming APP_CENTRAL_TRUSTSTORE_PASSWORD is an env var Spring Boot picks up
+      # For now, assuming AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD is an env var Spring Boot picks up
       # or you can map it from Vault: ${authserver.security.truststore.password}
-      password: ${APP_CENTRAL_TRUSTSTORE_PASSWORD}
+      password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
 
+# JTE - server-side rendering
 gg:
   jte:
     developmentMode: true
+
+# Spring Actuator - metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics # Expose prometheus and metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 
 oauth2:
   clients:
@@ -62,6 +80,16 @@ spring:
       # You can be more specific if needed:
       - "optional:vault://secret/authserver/local"
 
+  data:
+    redis:
+      # For local development, authserver runs on host, Valkey in Docker
+      host: ${VALKEY_HOST_LOCAL:localhost}
+      port: ${VALKEY_PORT_LOCAL:6379} # The port mapped in docker-compose.override.yml
+      password: ${VALKEY_PASSWORD}    # Ensure this is in authserver's .env or Vault
+      ssl:
+        enabled: true # Assuming your Valkey is configured for TLS as per docker-compose healthcheck
+        bundle: central-truststore-for-redis # Reference the SSL bundle defined in ssl
+  #        bundle: redis-client-mtls-bundle # for tls-auth-clients yes in valkey.conf
 
   datasource:
     # Credentials will be overridden by Vault if keys like 'spring.datasource.username' and
@@ -100,8 +128,20 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
+  mail:
+    host=smtp-relay.brevo.com
+    port=587
+    username=your_brevo_email@example.com
+    password=your_brevo_smtp_password
+    properties.mail.smtp.auth=true
+    properties.mail.smtp.starttls.enable=true
+
   main:
     web-application-type: servlet # or reactive
+
+  #  mvc:
+  #    pathmatch:
+  #      matching-strategy: ant_path_matcher
 
   security:
     oauth2:
@@ -133,12 +173,14 @@ spring:
             client-id: ${spring.security.oauth2.client.registration.google.client-id} # Matches key in Vault
             client-secret: ${spring.security.oauth2.client.registration.google.client-secret} # Matches key in Vault
             scope: openid, profile, email
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            redirect-uri: "https://localhost:9000/login/oauth2/code/{registrationId}" # Default pattern
           github:
             client-id: ${spring.security.oauth2.client.registration.github.client-id} # Matches key in Vault
             client-secret: ${spring.security.oauth2.client.registration.github.client-secret} # Matches key in Vault
             scope: read:user, user:email # Ensure 'user:email' for primary email
-            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            redirect-uri: "https://localhost:9000/login/oauth2/code/{registrationId}" # Default pattern
         # provider: # Often auto-discovered for OIDC, or common providers are pre-configured
         #   google:
         #     issuer-uri: https://accounts.google.com
@@ -150,7 +192,8 @@ spring:
       rpId: localhost
       allowedOrigins:
         - "http://localhost:8080" # amlume-shop
-        - "http://localhost:9000" # authserver itself if its UI uses WebAuthn
+        #        - "http://localhost:9000" # authserver itself if its UI uses WebAuthn
+        - "https://localhost:9000" # authserver itself if its UI uses WebAuthn
         # Replace with the URL of the application. Notice: this _MUST_ be an HTTPS URL with a valid certificate
 
 #    client:
@@ -165,9 +208,92 @@ spring:
 #        amlumeauth:
 #          issuer-uri: http://localhost:9000
 
+  # --- Spring Session Configuration ---
+  session:
+    #    store-type: redis
+    timeout: 30m # Example: 30 minutes session timeout
+    redis:
+      # Namespace to keep authserver sessions separate if sharing Redis instance
+      namespace: "authserver:session:amlume"
+      #      namespace: "amlume:authserver:session"
+      #      repository-type: default # default or indexed, uses RedisIndexedSessionRepository. Or use annotation-based SessionRepository
+      # flush-mode: ON_SAVE # Default, saves on every change
+      # save-mode: ON_SET_ATTRIBUTE # Default is ON_SET_ATTRIBUTE. ALWAYS ensures session attributes are persisted. ON_GET_ATTRIBUTE is less performant, as it saves on every request.
+      # time-to-live: 30m # Default
+
+
+  ssl: # This is where bundles are defined
+    bundle:
+      jks: # Or jks if your central-truststore is directly usable as a JKS bundle for Redis
+        central-truststore-for-redis: # A unique name for this bundle
+          truststore:
+            location: ${app.ssl.trust-store.path} # e.g., classpath:config/central-truststore.jks
+            password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
+            type: PKCS12 # PKCS12 if your truststore is .p12. or JKS
+
+  # --- Virtual Threads ---
+  threads:
+    virtual:
+      enabled: true
 
 server:
   port: ${AS_SERVER_PORT:9000}
+  #  connection-timeout: 30s
+  #  context-path: /authserver
+  error:
+    whitelabel:
+      enabled: true # For production, disable Spring Boot's default error page
+    path: /user-error
+    include-exception: true
+  #    include-stacktrace: always
+  #    include-message: always
+  ssl:
+    enabled: true
+    key-store: classpath:keystore.p12 # Path to your keystore
+    key-store-password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
+    key-alias: localhost # Alias of your key in the keystore
+    key-store-type: PKCS12 # Or JKS, etc.
+    protocols: TLSv1.2,TLSv1.3 #Or just TLS
+
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css,image/svg+xml
+    min-response-size: 1024 # Compress responses larger than 1KB
+    # For Brotli (if your server setup supports it and you prefer it over Gzip)
+    brotli:
+      enabled: true
+
+  max-http-request-header-size: 16KB # Default is 8KB, which is too small for some headers
+  tomcat:
+    max-swallow-size: 2MB # The maximum size of a request body. Default is 1MB
+    max-http-form-post-size: 2MB # The maximum size of the whole post-request.
+    accesslog:
+      enabled: true
+      pattern: "%h %l %t %r %s %b %D %S"
+      #      directory: /logs # User must have write access
+      directory: ./target/tomcat-access-logs # or an absolute path user have write access
+      file-date-format: yyyy-MM-dd
+      prefix: access_log
+      suffix: .log
+
+  servlet:
+    session:
+      cookie:
+        name: AMLUAUTHJSESSIONID # Custom session cookie name for authserver
+        http-only: true
+        secure: true # True because you are using HTTPS
+        same-site: Lax # Good default for security and usability
+        # max-age: 1800s # Optional: aligns with spring.session.timeout if needed
+
+# --- Valkey Connection (Used by ValkeyConfigProperties in ValkeyCacheConfig) ---
+#valkey:
+#  host: localhost # Connect to host machine's port mapped from Docker
+#  port: 6379
+#  password: ${VALKEY_PASSWORD:your-valkey-password} # LOAD SECURELY (Env Var preferred)
+#  ssl:
+#    enabled: true # Set to true if using SSL/TLS
+#    # We will configure the truststore programmatically using app.ssl.trust-store.*
+#    # Remove the specific valkey.ssl.truststore properties if you added them previously
 
 logging:
   level:
@@ -175,14 +301,22 @@ logging:
       springframework:
         #        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
         security: TRACE
+        security.web.util.matcher: TRACE
         security.web.webauthn: TRACE
+        security.web.webauthn.client: TRACE
+        security.web.webauthn.client.registration: TRACE
+        security.web.webauthn.client.registration.oauth2: TRACE
+
         web: DEBUG
         cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
         #        security: ${SPRING_SECURITY_LOG_LEVEL:INFO} # Reduce default to INFO
         cloud.vault: DEBUG # Keep vault logging at DEBUG for setup
         vault.core: DEBUG
     #    root: DEBUG
+    com.webauthn4j: TRACE
     me.amlu.authserver: DEBUG
+    me.amlu.authserver.config.LocalSecurityConfig: TRACE
+    me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler: DEBUG
   #    me.amlu.shop.amlume_shop: DEBUG
   #    me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
   #    me.amlu.shop.amlume_shop.service: DEBUG
