@@ -24,6 +24,7 @@ import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
 import me.amlu.authserver.user.model.User;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -62,7 +63,7 @@ public class PasskeyServiceImpl implements PasskeyService {
     private final WebAuthnRelyingPartyOperations relyingPartyOperations;
     private final DbPublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository;
     private final PasskeyCredentialRepository passkeyCredentialRepository;
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper webAuthnApiMapper;
     private final HttpServletRequest httpServletRequest; // Inject HttpServletRequest
 
     /**
@@ -71,18 +72,18 @@ public class PasskeyServiceImpl implements PasskeyService {
      * @param relyingPartyOperations                  The WebAuthn relying party operations.
      * @param publicKeyCredentialUserEntityRepository The repository for PublicKeyCredentialUserEntity.
      * @param passkeyCredentialRepository             The repository for PasskeyCredential.
-     * @param objectMapper                            The ObjectMapper for JSON processing.
+     * @param webAuthnApiMapper                       The ObjectMapper for JSON processing.
      * @param httpServletRequest                      The current HttpServletRequest.
      */
     public PasskeyServiceImpl(WebAuthnRelyingPartyOperations relyingPartyOperations,
                               DbPublicKeyCredentialUserEntityRepository publicKeyCredentialUserEntityRepository,
                               PasskeyCredentialRepository passkeyCredentialRepository,
-                              ObjectMapper objectMapper,
+                              @Qualifier("webAuthnApiMapper") ObjectMapper webAuthnApiMapper,
                               HttpServletRequest httpServletRequest) {
         this.relyingPartyOperations = relyingPartyOperations;
         this.publicKeyCredentialUserEntityRepository = publicKeyCredentialUserEntityRepository;
         this.passkeyCredentialRepository = passkeyCredentialRepository;
-        this.objectMapper = objectMapper;
+        this.webAuthnApiMapper = webAuthnApiMapper;
         this.httpServletRequest = httpServletRequest;
     }
 
@@ -217,9 +218,18 @@ public class PasskeyServiceImpl implements PasskeyService {
         // --- Store options in session AS JSON STRING ---
         HttpSession session = httpServletRequest.getSession(true);
         try {
-            String optionsJson = objectMapper.writeValueAsString(options);
+            log.info("PasskeyServiceImpl.beginPasskeyRegistration: Using webAuthnApiMapper (Hash: {}), Registered Module IDs: {}",
+                    System.identityHashCode(this.webAuthnApiMapper),
+                    this.webAuthnApiMapper.getRegisteredModuleIds());
+
+            String optionsJson = webAuthnApiMapper.writeValueAsString(options); // <<< USE webAuthnApiMapper HERE
+
+            // +++ DIAGNOSTIC LOGGING +++
+            log.info("PasskeyServiceImpl.beginPasskeyRegistration: Serialized PublicKeyCredentialCreationOptions JSON for session (using webAuthnApiMapper): {}", optionsJson);
+            // ++++++++++++++++++++++++++++++++++++
+
             session.setAttribute(PASSKEY_REGISTRATION_OPTIONS_SESSION_ATTR, optionsJson);
-            log.debug("Stored PublicKeyCredentialCreationOptions (as JSON) in session for user {}", currentUser.getEmail().getValue());
+            log.debug("Stored PublicKeyCredentialCreationOptions (as JSON using webAuthnApiMapper) in session for user {}", currentUser.getEmail().getValue());
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize PublicKeyCredentialCreationOptions to JSON for session storage for user {}", currentUser.getEmail().getValue(), e);
             throw new IllegalStateException("Could not serialize passkey options for session", e);
@@ -260,16 +270,16 @@ public class PasskeyServiceImpl implements PasskeyService {
         log.debug("Retrieved and removed PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
 
         // Logs to confirm that the ObjectMapper is the same instance as in LocalSecurityConfig
-        log.info("ObjectMapper instance in PasskeyServiceImpl: {} (Hash: {})", objectMapper, System.identityHashCode(objectMapper));
-        log.info("PasskeyServiceImpl - Registered module IDs: {}", objectMapper.getRegisteredModuleIds());
+        log.info("ObjectMapper instance in PasskeyServiceImpl (for deserializing session options): webAuthnApiMapper (Hash: {})", System.identityHashCode(this.webAuthnApiMapper));
+        log.info("webAuthnApiMapper - Registered module IDs: {}", this.webAuthnApiMapper.getRegisteredModuleIds());
 
         final PublicKeyCredentialCreationOptions creationOptions;
         try {
             // Log TOBEDELETED
-            log.info("JSON from sessionto be deserializedL: {}", optionsJson);
+            log.info("JSON from session to be deserialized (using webAuthnApiMapper): {}", optionsJson);
 
             // Deserialize JSON string back to object
-            creationOptions = objectMapper.readValue(optionsJson, PublicKeyCredentialCreationOptions.class);
+            creationOptions = webAuthnApiMapper.readValue(optionsJson, PublicKeyCredentialCreationOptions.class);
             log.debug("Retrieved and deserialized PublicKeyCredentialCreationOptions from session for user {}", currentUser.getEmail().getValue());
         } catch (JsonProcessingException e) {
             log.error("Failed to deserialize PublicKeyCredentialCreationOptions from JSON in session for user {}", currentUser.getEmail().getValue(), e);
@@ -290,8 +300,8 @@ public class PasskeyServiceImpl implements PasskeyService {
                 try {
                     // Convert Map<String, Object> to JSON string, then deserialize to the target type
                     // This relies on WebAuthnJSONModule being registered with the ObjectMapper
-                    String extensionsJson = objectMapper.writeValueAsString(registrationRequest.clientExtensionResults());
-                    clientExtOutputs = objectMapper.readValue(extensionsJson, ImmutableAuthenticationExtensionsClientOutputs.class);
+                    String extensionsJson = webAuthnApiMapper.writeValueAsString(registrationRequest.clientExtensionResults());
+                    clientExtOutputs = webAuthnApiMapper.readValue(extensionsJson, ImmutableAuthenticationExtensionsClientOutputs.class);
                 } catch (JsonProcessingException e) {
                     log.warn("Failed to process clientExtensionResults for user {}: {}. Proceeding without extensions.", currentUser.getEmail().getValue(), e.getMessage());
                     // Decide if this is a hard error or if registration can proceed without extensions
