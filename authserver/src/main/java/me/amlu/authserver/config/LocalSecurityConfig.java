@@ -277,6 +277,14 @@ public class LocalSecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/css/**"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/js/**"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/img/**"),
+//                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/**"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/favicon.ico"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/favicon-96x96.png"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/favicon.svg"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/apple-touch-icon.png"),
+                                PathPatternRequestMatcher.withDefaults().matcher("/favicons/site.webmanifest"),
+
+
 
                                 // Public pages and essential endpoints
                                 PathPatternRequestMatcher.withDefaults().matcher("/"),
