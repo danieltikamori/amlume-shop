@@ -11,9 +11,15 @@
 package me.amlu.authserver.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.type.WritableTypeId;
+import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import me.amlu.authserver.config.jackson.mixin.DurationMixin;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import me.amlu.authserver.config.jackson.module.CustomJavaTimeModule;
@@ -29,6 +35,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.security.jackson2.SecurityJackson2Modules;
 import org.springframework.security.web.webauthn.jackson.WebauthnJackson2Module;
 
+import java.io.IOException;
 import java.time.Duration;
 
 /**
@@ -41,10 +48,10 @@ public class WebAuthnJacksonConfig implements BeanClassLoaderAware {
 
     private static final Logger log = LoggerFactory.getLogger(WebAuthnJacksonConfig.class);
 
-    private ClassLoader classLoader; // Field to store the ClassLoader
+    private ClassLoader classLoader;
 
     @Override
-    public void setBeanClassLoader(@NonNull ClassLoader classLoader) { // Use @NonNull
+    public void setBeanClassLoader(@NonNull ClassLoader classLoader) {
         this.classLoader = classLoader;
     }
 
@@ -70,43 +77,56 @@ public class WebAuthnJacksonConfig implements BeanClassLoaderAware {
         webAuthnMapper.activateDefaultTyping(
                 sessionPolymorphicTypeValidator,
                 ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY
+                JsonTypeInfo.As.PROPERTY // Or your preferred mechanism
         );
         log.info("webAuthnSessionObjectMapper: Activated default typing.");
 
-        // 2. Register Spring Security modules.
-        // The copy from primaryObjectMapper likely already has these.
-        // Re-registering ensures they are present if the copy logic changes or if primaryObjectMapper is minimal.
-        // WebauthnJackson2Module's DurationSerializer (outputs long) will be overridden for Duration.
-        // Use this.classLoader which is set by Spring via BeanClassLoaderAware
+        // 2. Register Spring Security modules (including WebauthnJackson2Module)
+        // Their serializers might be overridden by subsequent modules for specific types.
         SecurityJackson2Modules.getModules(this.classLoader).forEach(webAuthnMapper::registerModule);
-        // If WebauthnJackson2Module is not picked up by getModules, register it explicitly:
+        // Explicitly register WebauthnJackson2Module if not found by the above (as per your logs)
         if (SecurityJackson2Modules.getModules(this.classLoader).stream().noneMatch(m -> m instanceof WebauthnJackson2Module)) {
-            log.info("webAuthnSessionObjectMapper: Explicitly registering WebauthnJackson2Module as it was not found in SecurityJackson2Modules.getModules()");
+            log.info("webAuthnSessionObjectMapper: Explicitly registering WebauthnJackson2Module as it was not found by SecurityJackson2Modules.getModules().");
             webAuthnMapper.registerModule(new WebauthnJackson2Module());
         }
-        log.info("webAuthnSessionObjectMapper: Ensured Spring Security modules are registered.");
+        log.info("webAuthnSessionObjectMapper: Ensured Spring Security modules (including WebauthnJackson2Module) are registered.");
 
-        // 3. Register CustomJavaTimeModule.
-        // If this module provides a DurationSerializer that outputs a string,
-        // it should take precedence over WebauthnJackson2Module's due to later registration.
-        webAuthnMapper.registerModule(new CustomJavaTimeModule());
-        log.info("webAuthnSessionObjectMapper: Registered CustomJavaTimeModule.");
+        // 3. Register standard JavaTimeModule AFTER WebauthnJackson2Module.
+        // Its DurationSerializer respects WRITE_DURATIONS_AS_TIMESTAMPS and should override
+        // the one from WebauthnJackson2Module for Duration.class.
+        webAuthnMapper.registerModule(new JavaTimeModule());
+        log.info("webAuthnSessionObjectMapper: Registered standard JavaTimeModule.");
 
-        // 4. CRITICAL: Ensure Duration is serialized as a STRING (ISO-8601).
-        // This makes it compatible with Jackson's default typing mechanism.
-        // This configuration explicitly tells the active JavaTimeModule (or CustomJavaTimeModule)
-        // to serialize Duration as a string.
+        // 4. Configure Duration serialization to STRING (ISO-8601) for JavaTimeModule.
+        // This is a general instruction for JavaTimeModule.
         webAuthnMapper.configure(SerializationFeature.WRITE_DURATIONS_AS_TIMESTAMPS, false);
-        log.info("webAuthnSessionObjectMapper: Configured WRITE_DURATIONS_AS_TIMESTAMPS=false to ensure Duration serializes as String.");
+        log.info("webAuthnSessionObjectMapper: Configured WRITE_DURATIONS_AS_TIMESTAMPS=false (intended for JavaTimeModule).");
 
-        // 5. The DurationMixin might add @JsonTypeInfo to Duration for this mapper,
-        // or provide custom serializer/deserializer that are type-aware.
-        // This is important if the string representation alone isn't enough for default typing.
-        webAuthnMapper.addMixIn(Duration.class, DurationMixin.class);
-        log.info("webAuthnSessionObjectMapper: Added DurationMixin for Duration.class.");
+        // 5. Force String serialization for Duration with a custom SimpleModule registered LAST,
+        //    AND ensure it correctly handles serializeWithType.
+        SimpleModule explicitDurationModule = new SimpleModule("ExplicitDurationWithTypeModule");
+        explicitDurationModule.addSerializer(Duration.class, new JsonSerializer<Duration>() {
+            @Override
+            public void serialize(Duration value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+                if (value == null) {
+                    gen.writeNull();
+                } else {
+                    gen.writeString(value.toString()); // e.g., "PT120S"
+                }
+            }
 
-        // The second call to activateDefaultTyping was redundant and has been removed.
+            @Override
+            public void serializeWithType(Duration value, JsonGenerator gen, SerializerProvider serializers,
+                                          com.fasterxml.jackson.databind.jsontype.TypeSerializer typeSer) throws IOException {
+                // This method is called when default typing is active for Duration.
+                // We write the type information then the value as a string.
+                WritableTypeId typeId = typeSer.writeTypePrefix(gen, typeSer.typeId(value, Duration.class, JsonToken.VALUE_STRING));
+                serialize(value, gen, serializers); // Write the duration as a string using the method above
+                typeSer.writeTypeSuffix(gen, typeId);
+            }
+        });
+        webAuthnMapper.registerModule(explicitDurationModule);
+        log.info("webAuthnSessionObjectMapper: Registered custom ExplicitDurationWithTypeModule to force String serialization for Duration and handle serializeWithType.");
 
         log.info("Configured specialized WebAuthn ObjectMapper for session serialization (Hash: {})",
                 System.identityHashCode(webAuthnMapper));

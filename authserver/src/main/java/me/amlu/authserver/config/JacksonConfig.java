@@ -24,7 +24,9 @@ import com.fasterxml.jackson.datatype.jdk8.Jdk8Module;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.webauthn4j.converter.jackson.WebAuthnJSONModule;
 import com.webauthn4j.converter.util.ObjectConverter;
+import me.amlu.authserver.config.jackson.mixin.DurationMixin;
 import me.amlu.authserver.config.jackson.mixin.webauthn.CustomWebauthnMixins;
+import me.amlu.authserver.config.jackson.module.CustomJavaTimeModule;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.UserMixin;
 import me.amlu.authserver.user.model.vo.AccountStatus;
@@ -179,6 +181,9 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         objectMapperInstance.registerModule(new Jdk8Module());
         log.debug("Registered Jdk8Module for JDK 8 types like Optional.");
 
+        // Custom Java Time module with specialized Duration handling
+        objectMapperInstance.registerModule(new CustomJavaTimeModule());
+
         // --- Spring Security Modules ---
         // These are crucial for serializing/deserializing SecurityContext, Authentication, UserDetails,
         // and Spring Security's WebAuthn types (e.g., PublicKeyCredentialCreationOptions) if they are
@@ -220,6 +225,8 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         log.debug("Registered mixin for application's EmailAddress VO.");
         objectMapperInstance.addMixIn(AccountStatus.class, AccountStatusMixin.class);
         log.debug("Registered mixin for application's AccountStatus VO.");
+        objectMapperInstance.addMixIn(Duration.class, DurationMixin.class);
+        log.debug("Registered mixin for java.time.Duration.");
 
         // --- Custom WebAuthn Mixins for Spring Security API Types ---
         // These mixins are often necessary for robust serialization/deserialization of Spring Security's
@@ -310,15 +317,16 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         objectMapperInstance.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
 
         // --- Deserialization Features ---
-        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, true);
+        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES, true); // Strict primitive parsing
         objectMapperInstance.configure(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS, true);
         objectMapperInstance.configure(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY, true);
+        objectMapperInstance.configure(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY, true); // Accept single values as arrays
 
         // Determines whether encountering unknown properties (ones for which there is no
         // field or setter in the POJO) should result in a JsonMappingException.
         // Setting to 'true' provides stricter parsing. For session data, this is often a good default.
         // Set to 'false' if you need to be more lenient with incoming JSON (e.g., from external APIs).
-        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, true);
+        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         log.debug("Configured DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES to true (strict).");
 
         // Determines whether encountering properties that have been explicitly marked as ignorable
@@ -347,7 +355,7 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         // - If 'false' is absolutely required (e.g., due to an external system sending trailing newlines
         //   that cannot be fixed at the source), this decision and its mitigation strategies
         //   (e.g., ensuring no downstream processing of the raw input) must be thoroughly documented.
-        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, false); // Changed to false as per input
+        objectMapperInstance.configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, false); // Changed to false as per input. Allow trailing tokens
         log.warn("DeserializationFeature.FAIL_ON_TRAILING_TOKENS has been set to false. " +
                 "This allows Jackson to ignore extra content after the main JSON document. " +
                 "This can mask malformed JSON and may have security implications. " +
@@ -376,15 +384,45 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         }
         */
 
+        // Register WebAuthn API mixins
+        registerWebAuthnMixins(objectMapperInstance);
+
         log.info("Primary ObjectMapper configured with: JSR310, Jdk8, Spring Security (Core, OAuth2, WebAuthn), " +
                 "WebAuthn4j, custom application mixins, and custom WebAuthn API mixins for session serialization.");
         return objectMapperInstance;
     }
 
+    /**
+     * Creates a custom PolymorphicTypeValidator for session serialization.
+     * This validator is used by the primary ObjectMapper to ensure safe deserialization
+     * of polymorphic types.
+     *
+     * @return A configured PolymorphicTypeValidator for session serialization
+     */
     @Bean
+    @Qualifier("customSessionPolymorphicTypeValidator")
     public PolymorphicTypeValidator customSessionPolymorphicTypeValidator() {
+        log.info("Creating customSessionPolymorphicTypeValidator bean");
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
                 // Allow common Java utility types
+                // Standard Java types
+                .allowIfBaseType("java.util.")
+                .allowIfBaseType("java.time.")
+                .allowIfBaseType("java.lang.")
+                .allowIfSubType(java.util.Date.class) // If you use java.util.Date
+                .allowIfSubType(java.time.Instant.class) // For Java Time API
+                .allowIfSubType(java.time.Duration.class)
+
+                // Collections and Maps
+                .allowIfSubType(java.util.ArrayList.class)
+                .allowIfSubType(java.util.LinkedList.class)
+                .allowIfSubType(java.util.HashSet.class)
+                .allowIfSubType(java.util.LinkedHashSet.class)
+                .allowIfSubType(java.util.TreeSet.class)
+                .allowIfSubType(java.util.HashMap.class)
+                .allowIfSubType(java.util.LinkedHashMap.class)
+                .allowIfSubType(java.util.TreeMap.class)
+                .allowIfSubType(java.util.concurrent.ConcurrentHashMap.class)
                 .allowIfBaseType(java.util.Collection.class)
                 .allowIfBaseType(java.util.Map.class)
                 .allowIfSubType(java.util.ArrayList.class) // Specific common collections
@@ -392,10 +430,15 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
                 .allowIfSubType(java.util.HashSet.class)
                 .allowIfSubType(java.util.LinkedHashMap.class)
                 .allowIfSubType(java.util.HashMap.class)
-                .allowIfSubType(java.util.Date.class) // If you use java.util.Date
-                .allowIfSubType(java.time.Instant.class) // For Java Time API
 
                 // Allow Spring Security core types
+                // Spring Security framework types
+                .allowIfBaseType("org.springframework.security.")
+                .allowIfSubType(org.springframework.security.core.context.SecurityContextImpl.class)
+                .allowIfSubType(org.springframework.security.authentication.UsernamePasswordAuthenticationToken.class)
+                .allowIfSubType(org.springframework.security.core.authority.SimpleGrantedAuthority.class)
+                .allowIfSubType(org.springframework.security.authentication.AnonymousAuthenticationToken.class)
+                .allowIfSubType(org.springframework.security.authentication.RememberMeAuthenticationToken.class)
                 .allowIfSubType("org.springframework.security.core.")
                 .allowIfSubType("org.springframework.security.authentication.")
                 .allowIfSubType("org.springframework.security.web.authentication.WebAuthenticationDetails")
@@ -418,12 +461,40 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
                 .allowIfSubType("me.amlu.authserver.user.model.vo.")
                 .allowIfSubType("me.amlu.authserver.oauth2.model.") // For Authority, etc.
                 .allowIfSubType("me.amlu.authserver.passkey.model.") // If PasskeyCredential or related are in session
+                .allowIfSubType(me.amlu.authserver.user.model.User.class)
+                .allowIfSubType(me.amlu.authserver.user.model.vo.EmailAddress.class)
+                .allowIfSubType(me.amlu.authserver.oauth2.model.Authority.class)
+                .allowIfSubType(me.amlu.authserver.passkey.model.PasskeyCredential.class)
+                .allowIfBaseType("me.amlu.authserver.")
+
+                // Session-specific types
+                .allowIfSubType(org.springframework.security.web.savedrequest.SavedRequest.class)
+                .allowIfSubType(org.springframework.security.web.savedrequest.DefaultSavedRequest.class)
+                .allowIfSubType(org.springframework.security.web.savedrequest.SavedCookie.class)
+                .allowIfSubType(org.springframework.security.web.csrf.DefaultCsrfToken.class)
+                .allowIfSubType(org.springframework.security.web.authentication.WebAuthenticationDetails.class)
+                .allowIfSubType(org.springframework.security.web.authentication.rememberme.PersistentRememberMeToken.class)
+                .allowIfSubType(org.springframework.security.web.authentication.switchuser.SwitchUserGrantedAuthority.class)
+                .allowIfSubType(org.springframework.security.oauth2.core.OAuth2AccessToken.class)
+                .allowIfSubType(org.springframework.security.oauth2.core.OAuth2RefreshToken.class)
+                .allowIfSubType(org.springframework.security.oauth2.core.oidc.OidcIdToken.class)
+                .allowIfSubType(org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser.class)
+                .allowIfSubType(org.springframework.security.oauth2.core.user.DefaultOAuth2User.class)
+                .allowIfBaseType("org.springframework.security.oauth2.client.")
+
+                // WebAuthn types
+                .allowIfBaseType("com.webauthn4j.")
+                .allowIfBaseType("com.webauthn4j.springframework.security.")
+                .allowIfBaseType("org.springframework.security.web.webauthn.")
+                .allowIfSubType(org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions.class)
+                .allowIfSubType(org.springframework.security.web.webauthn.api.PublicKeyCredentialRequestOptions.class)
 
                 // Add any other packages or specific classes you store in the session
                 // For extreme debugging, you could temporarily use:
                 // .allowIfSubType(Object.class) // VERY PERMISSIVE - NOT FOR PRODUCTION
                 .build();
         log.info("Configured customSessionPolymorphicTypeValidator: {}", ptv);
+        log.info("Configured customSessionPolymorphicTypeValidator with java.time.Duration: {}", ptv);
         return ptv;
     }
 
@@ -527,5 +598,37 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
 //        log.info("Configured 'webAuthnApiMapper' for client-side WebAuthn JSON serialization.");
         log.info("Configured 'webAuthnApiMapper' with WebauthnJackson2Module first, then custom Bytes serializer.");
         return mapper;
+    }
+
+    /**
+     * Registers all WebAuthn API mixins with the ObjectMapper.
+     * These mixins ensure proper serialization/deserialization of WebAuthn objects,
+     * particularly when stored in HTTP sessions.
+     *
+     * @param mapper The ObjectMapper to register mixins with
+     */
+    private void registerWebAuthnMixins(ObjectMapper mapper) {
+        // Register mixins for WebAuthn API types
+        mapper.addMixIn(Bytes.class, CustomWebauthnMixins.WebauthnBytesMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialCreationOptions.class, CustomWebauthnMixins.PublicKeyCredentialCreationOptionsMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialRpEntity.class, CustomWebauthnMixins.PublicKeyCredentialRpEntityMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialUserEntity.class, CustomWebauthnMixins.PublicKeyCredentialUserEntityMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialParameters.class, CustomWebauthnMixins.PublicKeyCredentialParametersMixIn.class);
+        mapper.addMixIn(AuthenticatorSelectionCriteria.class, CustomWebauthnMixins.AuthenticatorSelectionCriteriaMixIn.class);
+        mapper.addMixIn(AttestationConveyancePreference.class, CustomWebauthnMixins.AttestationConveyancePreferenceMixIn.class);
+        mapper.addMixIn(ResidentKeyRequirement.class, CustomWebauthnMixins.ResidentKeyRequirementMixIn.class);
+        mapper.addMixIn(UserVerificationRequirement.class, CustomWebauthnMixins.UserVerificationRequirementMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialRequestOptions.class, CustomWebauthnMixins.PublicKeyCredentialRequestOptionsMixIn.class);
+        mapper.addMixIn(AuthenticatorAttachment.class, CustomWebauthnMixins.AuthenticatorAttachmentMixIn.class);
+        mapper.addMixIn(AuthenticationExtensionsClientInputs.class, CustomWebauthnMixins.AuthenticationExtensionsClientInputsMixIn.class);
+        mapper.addMixIn(AuthenticationExtensionsClientInput.class, CustomWebauthnMixins.AuthenticationExtensionsClientInputMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialDescriptor.class, CustomWebauthnMixins.PublicKeyCredentialDescriptorMixIn.class);
+        mapper.addMixIn(PublicKeyCredentialType.class, CustomWebauthnMixins.PublicKeyCredentialTypeMixIn.class);
+        mapper.addMixIn(COSEAlgorithmIdentifier.class, CustomWebauthnMixins.COSEAlgorithmIdentifierMixIn.class);
+        mapper.addMixIn(AuthenticatorTransport.class, CustomWebauthnMixins.AuthenticatorTransportMixIn.class);
+        mapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.class, CustomWebauthnMixins.CredProtectAuthenticationExtensionsClientInputMixIn.class);
+        mapper.addMixIn(CredProtectAuthenticationExtensionsClientInput.CredProtect.class, CustomWebauthnMixins.CredProtectMixIn.class);
+
+        log.info("Registered all WebAuthn API mixins with ObjectMapper");
     }
 }
