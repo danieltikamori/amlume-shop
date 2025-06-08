@@ -18,6 +18,7 @@ import org.springframework.security.web.webauthn.api.*;
 import org.springframework.security.web.webauthn.api.CredProtectAuthenticationExtensionsClientInput.CredProtect;
 import org.springframework.security.web.webauthn.api.CredProtectAuthenticationExtensionsClientInput.CredProtect.ProtectionPolicy;
 
+import java.io.Serializable;
 import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
@@ -49,6 +50,7 @@ public class CustomWebauthnMixins {
      */
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     public static abstract class PublicKeyCredentialCreationOptionsMixIn {
+
         @JsonCreator
         public PublicKeyCredentialCreationOptionsMixIn(
                 @JsonProperty("rp") PublicKeyCredentialRpEntity rp,
@@ -68,6 +70,18 @@ public class CustomWebauthnMixins {
             // timeout can be null
             // excludeCredentials, authenticatorSelection, attestation, extensions can be null
         }
+    }
+
+    @com.fasterxml.jackson.databind.annotation.JsonDeserialize(
+            builder = org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions.PublicKeyCredentialCreationOptionsBuilder.class
+    )
+    public abstract static class PublicKeyCredentialCreationOptionsDeserializationMixin implements Serializable {
+        // This annotation tells Jackson to use the specified builder class for deserialization.
+        // Jackson will then try to match JSON properties to methods on this builder.
+        // The builder's build() method will be called to construct the final object.
+        // Note: The actual builder class is PublicKeyCredentialCreationOptions.PublicKeyCredentialCreationOptionsBuilder
+
+//        private static final long serialVersionUID = 1L; // Add if the target class is Serializable and you want to control versioning
     }
 
     /**
@@ -124,10 +138,10 @@ public class CustomWebauthnMixins {
         public AuthenticatorSelectionCriteriaMixIn(
                 @JsonProperty("authenticatorAttachment") AuthenticatorAttachment authenticatorAttachment,
                 @JsonProperty("residentKey") ResidentKeyRequirement residentKey,
-                @JsonProperty("userVerification") UserVerificationRequirement userVerification
+                @JsonProperty("userVerification") UserVerificationRequirement userVerification,
+                @JsonProperty("requireResidentKey") Boolean requireResidentKey // Older field, keep for compatibility if necessary
         ) {
             // authenticatorAttachment, residentKey, userVerification can be null
-
         }
     }
 
@@ -207,6 +221,13 @@ public class CustomWebauthnMixins {
      */
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     public static abstract class AuthenticationExtensionsClientInputsMixIn {
+        // If ImmutableAuthenticationExtensionsClientInputs is the concrete class,
+        // and it has a suitable constructor or factory method, you can add a @JsonCreator here.
+        // Often, for interfaces/abstract classes, Jackson relies on @JsonTypeInfo or specific deserializers.
+        // If it's truly immutable with no public constructor/factory Jackson can use,
+        // this might remain problematic without a custom deserializer.
+        // However, Spring's WebauthnJackson2Module should provide one.
+        // This mixin is more about guiding if needed, or if you use a custom concrete class.
         @JsonCreator
         public AuthenticationExtensionsClientInputsMixIn(
                 @JsonProperty("inputs") List<?> inputs
@@ -314,5 +335,29 @@ public class CustomWebauthnMixins {
             Objects.requireNonNull(credProtectionPolicy, "credProtectionPolicy cannot be null");
         }
     }
-}
 
+    // MIXIN for org.springframework.security.web.webauthn.api.Bytes
+    public static abstract class BytesMixIn {
+        /**
+         * Creator to handle deserialization of Bytes when it's represented in JSON
+         * as an object like {"bytes": "base64encodedstring"}.
+         * This structure appears in your session data for the 'challenge'.
+         */
+        @JsonCreator
+        public static Bytes fromObjectWithBytesProperty(@JsonProperty("bytes") String base64Value) {
+            if (base64Value == null) {
+                // Or throw new IllegalArgumentException("Missing 'bytes' field for Bytes deserialization");
+                // Depending on whether a null challenge is ever valid. For WebAuthn, challenge is typically non-null.
+//                return null;
+                throw new IllegalArgumentException("Missing 'bytes' field for Bytes deserialization");
+
+            }
+            return Bytes.fromBase64(base64Value);
+        }
+
+        // It's also good practice to ensure serialization uses toBase64() if not already handled.
+        // The WebauthnJackson2Module's BytesSerializer should do this, but @JsonValue provides a strong hint.
+        // @com.fasterxml.jackson.annotation.JsonValue
+        // public abstract String toBase64(); // Or toBase64Url() depending on Spring Security's serializer's choice
+    }
+}

@@ -18,17 +18,22 @@
 
 package me.amlu.authserver.user.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.webauthn4j.util.exception.WebAuthnException;
 import jakarta.validation.Valid;
 import me.amlu.authserver.passkey.dto.GetPasskeyDetailResponse;
 import me.amlu.authserver.passkey.dto.PostPasskeyRegistrationRequest;
 import me.amlu.authserver.passkey.service.PasskeyService;
+import me.amlu.authserver.passkey.service.WebAuthnSessionService;
 import me.amlu.authserver.security.util.AuthenticationHelperService;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialCreationOptions;
@@ -56,16 +61,28 @@ public class PasskeyController {
 
     private final PasskeyService passkeyService;
     private final AuthenticationHelperService authenticationHelperService;
-
+    private final ObjectMapper webAuthnApiMapper;
+    private final WebAuthnSessionService webAuthnSessionService;
+    
     /**
      * Constructs a new PasskeyController.
      *
      * @param passkeyService The service responsible for passkey logic.
      * @param userRepository The repository for user data.
+     * @param authenticationHelperService The service for authentication helper functions.
+     * @param webAuthnApiMapper The ObjectMapper configured for WebAuthn API serialization.
+     * @param webAuthnSessionService The service for managing WebAuthn objects in the session.
      */
-    public PasskeyController(PasskeyService passkeyService, UserRepository userRepository, AuthenticationHelperService authenticationHelperService) {
+    public PasskeyController(
+            PasskeyService passkeyService,
+            UserRepository userRepository,
+            AuthenticationHelperService authenticationHelperService,
+            @Qualifier("webAuthnApiMapper") ObjectMapper webAuthnApiMapper,
+            WebAuthnSessionService webAuthnSessionService) {
         this.passkeyService = passkeyService;
         this.authenticationHelperService = authenticationHelperService;
+        this.webAuthnApiMapper = webAuthnApiMapper;
+        this.webAuthnSessionService = webAuthnSessionService;
     }
 
     /**
@@ -80,23 +97,32 @@ public class PasskeyController {
      *                                 or for any other unexpected errors (500).
      */
     @PostMapping("/registration-options")
-    public ResponseEntity<PublicKeyCredentialCreationOptions> beginPasskeyRegistration(Authentication authentication) { // Changed parameter
+    public ResponseEntity<String> beginPasskeyRegistration(Authentication authentication) { // Changed parameter
         User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve User
         if (currentUser == null) {
             log.warn("Attempt to begin passkey registration without resolvable authenticated user.");
             // Consider throwing ResponseStatusException for cleaner error handling if preferred
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON).body("{\"error\":\"User not authenticated\"}");
         }
         try {
             log.debug("User {} requesting passkey registration options", currentUser.getEmail().getValue());
             PublicKeyCredentialCreationOptions options = passkeyService.beginPasskeyRegistration(currentUser);
 
-            // Let Spring MVC's Jackson message converters handle serialization
-            return ResponseEntity.ok(options);
+            // Store options in session using our specialized session service
+            webAuthnSessionService.storeCreationOptions(options);
+
+            // Serialize with the dedicated WebAuthn API mapper
+            String optionsJsonForClient = webAuthnApiMapper.writeValueAsString(options);
+
+            log.debug("Serialized PublicKeyCredentialCreationOptions for client: {}", optionsJsonForClient);
+            return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(optionsJsonForClient);
 
         } catch (IllegalStateException e) {
             log.error("Error beginning passkey registration for user {}: {}", currentUser.getEmail().getValue(), e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (JsonProcessingException e) {
+            log.error("Error serializing passkey registration options for user {}: {}", currentUser.getEmail().getValue(), e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not prepare passkey registration options.", e);
         } catch (Exception e) {
             log.error("Unexpected error beginning passkey registration for user {}: {}", currentUser.getEmail().getValue(), e.getMessage(), e);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not generate passkey registration options.", e);
@@ -129,7 +155,22 @@ public class PasskeyController {
         try {
             log.debug("User {} finishing passkey registration with friendly name: {}",
                     currentUser.getEmail().getValue(), registrationRequest.friendlyName());
+
+            // Get the stored options from session
+            PublicKeyCredentialCreationOptions options = webAuthnSessionService.getCreationOptions();
+            if (options == null) {
+                log.warn("No stored WebAuthn creation options found in session for user {}",
+                        currentUser.getEmail().getValue());
+                throw new IllegalStateException("Registration session expired or invalid. Please start registration again.");
+            }
+
+            // Finish registration with the stored options
             passkeyService.finishPasskeyRegistration(currentUser, registrationRequest);
+
+            // Clear options from session after successful registration
+            webAuthnSessionService.clearOptions();
+
+            log.info("Successfully registered passkey for user: {}", currentUser.getEmail().getValue());
             return ResponseEntity.status(HttpStatus.CREATED).build();
         } catch (IllegalArgumentException | IllegalStateException e) {
             log.warn("Invalid request finishing passkey registration for user {}: {}", currentUser.getEmail().getValue(), e.getMessage());

@@ -472,36 +472,38 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         mapper.registerModule(javaTimeModule);
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // Keep dates as ISO strings
 
-        // 2. Spring Security's WebAuthn module (should handle most API objects)
+        // 2. Spring Security's WebAuthn module - REGISTER IT EARLY
+        // This module provides the core serializers/deserializers for WebAuthn API types,
+        // including the deserializer for PublicKeyCredentialCreationOptions.
         mapper.registerModule(new WebauthnJackson2Module());
-        log.info("webAuthnApiMapper: Registered WebauthnJackson2Module.");
+        log.info("webAuthnApiMapper: Registered WebauthnJackson2Module (FIRST for WebAuthn types).");
 
-        // 3. Explicit Mixins to ensure plain values for client-side WebAuthn API,
-        //    overriding any verbose serialization that WebauthnJackson2Module might still produce
-        //    for these specific types when not used with default typing.
-
-        // 3. Explicit Custom Serializer for Bytes.class to ensure plain string output
-        //    This will take precedence for serializing any object that is an instance of Bytes.
+        // 3. Register EXPLICIT Bytes Handling Module AFTER WebauthnJackson2Module
+        // This custom serializer for Bytes.class will override the one from WebauthnJackson2Module
+        // FOR SERIALIZATION ONLY, ensuring plain string output.
+        // The deserializer for Bytes from WebauthnJackson2Module (expecting plain string) should still be used.
         JsonSerializer<Bytes> explicitBytesSerializer = new JsonSerializer<Bytes>() {
             @Override
             public void serialize(Bytes value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
                 if (value == null) {
                     gen.writeNull();
                 } else {
-                    gen.writeString(value.toBase64UrlString()); // Use the interface method
+                    // Use the toBase64UrlString() method as confirmed by the Javadoc for o.s.s.w.w.api.Bytes
+                    gen.writeString(value.toBase64UrlString());
                 }
             }
         };
-        SimpleModule explicitBytesHandlingModule = new SimpleModule("ExplicitBytesHandlingModule");
-        explicitBytesHandlingModule.addSerializer(Bytes.class, explicitBytesSerializer);
-        mapper.registerModule(explicitBytesHandlingModule);
-        log.info("Registered ExplicitBytesHandlingModule with direct Bytes.class serializer on webAuthnApiMapper.");
+        // Using a more specific name for the module to avoid potential clashes if "ExplicitBytesHandlingModule" is used elsewhere.
+        SimpleModule explicitBytesSerializerModule = new SimpleModule("ExplicitBytesSerializerModuleForWebAuthnApi");
+        explicitBytesSerializerModule.addSerializer(Bytes.class, explicitBytesSerializer);
+        mapper.registerModule(explicitBytesSerializerModule);
+        log.info("webAuthnApiMapper: Registered ExplicitBytesSerializerModule (AFTER WebauthnJackson2Module to override Bytes serialization).");
 
-        // Remove previous mixin attempts for Bytes to avoid conflicts with the explicit serializer
-        // mapper.removeMixIn(Bytes.class); // If addMixIn was used before, ensure it's not active for Bytes.class
-        // mapper.removeMixIn(Base64EncodedBytes.class); // And for any concrete types
-//        mapper.addMixIn(Bytes.class, SpringBytesMixin.class);
-//        mapper.addMixIn(PublicKeyCredentialCreationOptions.class, SpringBytesMixin.class); // Concrete class used by Spring Security
+
+        // 4. Explicit Mixins to ensure plain values for client-side WebAuthn API,
+        //    overriding any verbose serialization that WebauthnJackson2Module might still produce
+        //    for these specific types when not used with default typing.
+
 
         mapper.addMixIn(PublicKeyCredentialType.class, SpringWebAuthnEnumWrapperMixin.class);
         mapper.addMixIn(AttestationConveyancePreference.class, SpringWebAuthnEnumWrapperMixin.class);
@@ -510,17 +512,20 @@ public class JacksonConfig implements BeanClassLoaderAware { // Implement BeanCl
         mapper.addMixIn(ResidentKeyRequirement.class, SpringWebAuthnEnumWrapperMixin.class);
         mapper.addMixIn(COSEAlgorithmIdentifier.class, SpringCOSEAlgorithmIdentifierMixin.class);
 
+        mapper.addMixIn(PublicKeyCredentialCreationOptions.class, CustomWebauthnMixins.PublicKeyCredentialCreationOptionsDeserializationMixin.class);
+        log.info("webAuthnApiMapper: Added explicit deserialization mixin for PublicKeyCredentialCreationOptions.");
+        log.info("webAuthnApiMapper: Registered other specific WebAuthn API type mixins for serialization.");
 
-        // 4. General settings for client-facing JSON
+        // 5. General settings for client-facing JSON
         mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL); // Exclude null fields
         mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES); // Be lenient on input if ever used for deserialization
         mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
 
-        // 5. Ensure NO default typing is active for this mapper
+        // 6. Ensure NO default typing is active for this mapper
         mapper.deactivateDefaultTyping();
 
 //        log.info("Configured 'webAuthnApiMapper' for client-side WebAuthn JSON serialization.");
-        log.info("Configured 'webAuthnApiMapper' with explicit Bytes serializer for plain string output.");
+        log.info("Configured 'webAuthnApiMapper' with WebauthnJackson2Module first, then custom Bytes serializer.");
         return mapper;
     }
 }

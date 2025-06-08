@@ -10,9 +10,13 @@
 
 package me.amlu.authserver.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +24,8 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.security.jackson2.SecurityJackson2Modules;
+import org.springframework.security.web.webauthn.jackson.WebauthnJackson2Module;
 import org.springframework.session.MapSession;
 import org.springframework.session.config.SessionRepositoryCustomizer;
 import org.springframework.session.data.redis.*;
@@ -53,7 +59,9 @@ public class SessionConfig {
     private static final Logger log = LoggerFactory.getLogger(SessionConfig.class);
 
     // Inject the primary ObjectMapper configured in JacksonConfig
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper primaryObjectMapper;
+    private final PolymorphicTypeValidator sessionPolymorphicTypeValidator;
+    private final ClassLoader classLoader;
 
     /**
      * Injects the {@code spring.session.secure-cookie} property value.
@@ -69,12 +77,15 @@ public class SessionConfig {
      * The ObjectMapper is typically provided by {@link JacksonConfig} and is used for
      * serializing session attributes to JSON.
      *
-     * @param objectMapper The primary {@link ObjectMapper} instance.
+     * @param primaryObjectMapper The primary {@link ObjectMapper} instance.
      */
-    public SessionConfig(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
-        log.info("SessionConfig initialized with ObjectMapper (Hash: {}). 'spring.session.secure-cookie' is set to: {}",
-                System.identityHashCode(this.objectMapper), this.useSecureCookie);
+    public SessionConfig(ObjectMapper primaryObjectMapper,
+                         @Qualifier("customSessionPolymorphicTypeValidator") PolymorphicTypeValidator sessionPolymorphicTypeValidator) { // Inject primary ObjectMapper
+        this.primaryObjectMapper = primaryObjectMapper;
+        this.sessionPolymorphicTypeValidator = sessionPolymorphicTypeValidator;
+        this.classLoader = getClass().getClassLoader();
+        log.info("SessionConfig initialized with primary ObjectMapper (Hash: {}) and PTV. 'spring.session.secure-cookie' is set to: {}",
+                System.identityHashCode(this.primaryObjectMapper), this.useSecureCookie);
     }
 
     /**
@@ -91,9 +102,21 @@ public class SessionConfig {
      */
     @Bean
     public RedisSerializer<Object> springSessionDefaultRedisSerializer() {
-        log.info("Creating 'springSessionDefaultRedisSerializer' bean using the primary ObjectMapper (Hash: {}).",
-                System.identityHashCode(this.objectMapper));
-        return new GenericJackson2JsonRedisSerializer(this.objectMapper);
+        ObjectMapper sessionObjectMapper = primaryObjectMapper.copy();
+
+        // Use the injected PTV
+        sessionObjectMapper.activateDefaultTyping(this.sessionPolymorphicTypeValidator, ObjectMapper.DefaultTyping.NON_FINAL, JsonTypeInfo.As.PROPERTY);
+
+        // Explicitly register WebauthnJackson2Module to ensure WebAuthn objects are properly handled
+        sessionObjectMapper.registerModule(new WebauthnJackson2Module());
+
+        // Register all Spring Security modules to ensure comprehensive security object handling
+        SecurityJackson2Modules.getModules(this.classLoader)
+                .forEach(sessionObjectMapper::registerModule);
+
+        log.info("Creating 'springSessionDefaultRedisSerializer' bean using a dedicated ObjectMapper (Hash: {}) with default typing enabled for session attributes.",
+                System.identityHashCode(sessionObjectMapper));
+        return new GenericJackson2JsonRedisSerializer(sessionObjectMapper);
     }
 
     /**
@@ -107,7 +130,7 @@ public class SessionConfig {
      *   <li><b>HttpOnly:</b> {@code true} (prevents client-side script access, mitigating XSS).</li>
      *   <li><b>Secure:</b> Configured by {@code spring.session.secure-cookie} property (defaults to {@code true}).
      *       When true, the cookie is only sent over HTTPS. For local development over HTTP,
-     *       set {@code spring.session.secure-cookie=false} in your local application properties.</li>
+     *       set {@code spring.session.secure-cookie=false} in the local application properties.</li>
      *   <li><b>SameSite:</b> {@code Lax} (provides a balance between security and usability for cross-site requests).
      *       Consider "Strict" for higher security if "Lax" behavior is not needed.</li>
      *   <li><b>DomainNamePattern:</b> {@code ^.+?\\.(\\w+\\.[a-z]+)$}. This pattern attempts to set the cookie
@@ -128,7 +151,7 @@ public class SessionConfig {
     @Bean
     public CookieSerializer cookieSerializer() {
         DefaultCookieSerializer serializer = new DefaultCookieSerializer();
-        serializer.setCookieName("AMLUAUTHJSESSIONID"); // Matches your application.yml
+        serializer.setCookieName("AMLUAUTHJSESSIONID"); // Matches the application.yml
         serializer.setCookiePath("/");
         serializer.setUseHttpOnlyCookie(true); // Security: Mitigate XSS
 
@@ -203,6 +226,8 @@ public class SessionConfig {
          */
         @Override
         public MapSession apply(String sessionId, Map<String, Object> map) {
+            // TEMPORARY debugging
+            log.debug("SafeRedisSessionMapper - Session ID: '{}', Map: '{}'", sessionId, map);
             try {
                 return this.delegate.apply(sessionId, map);
             } catch (IllegalStateException ex) {
