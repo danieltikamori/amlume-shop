@@ -88,8 +88,19 @@ spring:
       password: ${VALKEY_PASSWORD}    # Ensure this is in authserver's .env or Vault
       ssl:
         enabled: true # Assuming your Valkey is configured for TLS as per docker-compose healthcheck
-        bundle: central-truststore-for-redis # Reference the SSL bundle defined in ssl
-  #        bundle: redis-client-mtls-bundle # for tls-auth-clients yes in valkey.conf
+        #        bundle: central-truststore-for-redis # Reference the SSL bundle defined in ssl
+        bundle: redis-client-mtls-bundle # for tls-auth-clients yes in valkey.conf
+      # Configure Redis connection pool
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+      # Configure Redis client options
+      client-type: lettuce
+      connect-timeout: 5000ms
+      timeout: 10000ms
 
   datasource:
     # Credentials will be overridden by Vault if keys like 'spring.datasource.username' and
@@ -112,6 +123,18 @@ spring:
     email: ${ROOT_USER_EMAIL}
     password: ${ROOT_USER_PASSWORD}
 
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-empty-string-as-null-object: true
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    mapper:
+      accept-case-insensitive-properties: true
+    property-naming-strategy: SNAKE_CASE
+    time-zone: UTC
   # --- JPA / Hibernate ---
   # Disable open-in-view for performance
   jpa:
@@ -220,16 +243,39 @@ spring:
       # flush-mode: ON_SAVE # Default, saves on every change
       # save-mode: ON_SET_ATTRIBUTE # Default is ON_SET_ATTRIBUTE. ALWAYS ensures session attributes are persisted. ON_GET_ATTRIBUTE is less performant, as it saves on every request.
       # time-to-live: 30m # Default
-
+      configure-action: none # Disable auto-configuration to use our custom config
+    # Configure session cookie
+    secure-cookie: true # Set to false for local HTTP development if needed
+    cookie:
+      name: AMLUAUTHJSESSIONID
+      http-only: true
+      secure: true
+      same-site: lax
+      max-age: 7200s # 2 hours
 
   ssl: # This is where bundles are defined
     bundle:
-      jks: # Or jks if your central-truststore is directly usable as a JKS bundle for Redis
-        central-truststore-for-redis: # A unique name for this bundle
-          truststore:
-            location: ${app.ssl.trust-store.path} # e.g., classpath:config/central-truststore.jks
-            password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
+      jks: # pkcs12 Or jks if your central-truststore is directly usable as a JKS bundle for Redis
+        redis-client-mtls-bundle:
+          key.alias: authservervalkeyclient                                  # Alias used when creating the client keystore
+          keystore:
+            location: classpath:config/authserver-valkey-client-keystore.p12 # Path to your NEW client keystore
+            #            password: your_central_truststore_password
+            password: ${AUTHSERVER_VALKEY_CLIENT_KEYSTORE_PASSWORD}         # Password for this new client keystore
+            type: PKCS12 # PKCS12 Or JKS, etc.
+          truststore: # This is to trust Valkey's SERVER certificate
+            location: classpath:config/authserver-valkey-truststore.p12
+            #          location: ${app.ssl.trust-store.path} # e.g., classpath:config/central-truststore.jks
+            #            password: your_central_truststore_password
+            password: ${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}
             type: PKCS12 # PKCS12 if your truststore is .p12. or JKS
+
+  #         authserver-https-bundle:
+  #           keystore:
+  #             location: classpath:config/authserver-server-keystore.p12
+  #             password: your_central_truststore_password # Or placeholder
+  #             alias: authserverhttps
+  #             type: PKCS12
 
   # --- Virtual Threads ---
   threads:
@@ -249,9 +295,11 @@ server:
   #    include-message: always
   ssl:
     enabled: true
-    key-store: classpath:keystore.p12 # Path to your keystore
-    key-store-password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
-    key-alias: localhost # Alias of your key in the keystore
+    #     bundle: authserver-https-bundle # This bundle would also be defined under spring.ssl.bundle.jks
+    key-store: classpath:config/authserver-server-keystore.p12 # Path to your keystore
+    #    key-store-password: your_central_truststore_password
+    key-store-password: ${AUTHSERVER_SERVER_KEYSTORE_PASSWORD} # modify the vault-seeder accordingly
+    key-alias: authserverhttps # Alias used during P12 creation
     key-store-type: PKCS12 # Or JKS, etc.
     protocols: TLSv1.2,TLSv1.3 #Or just TLS
 
@@ -285,20 +333,14 @@ server:
         same-site: Lax # Good default for security and usability
         # max-age: 1800s # Optional: aligns with spring.session.timeout if needed
 
-# --- Valkey Connection (Used by ValkeyConfigProperties in ValkeyCacheConfig) ---
-#valkey:
-#  host: localhost # Connect to host machine's port mapped from Docker
-#  port: 6379
-#  password: ${VALKEY_PASSWORD:your-valkey-password} # LOAD SECURELY (Env Var preferred)
-#  ssl:
-#    enabled: true # Set to true if using SSL/TLS
-#    # We will configure the truststore programmatically using app.ssl.trust-store.*
-#    # Remove the specific valkey.ssl.truststore properties if you added them previously
-
 logging:
   level:
+    io.netty: DEBUG # Or TRACE for even more detail
+    javax.net.ssl: DEBUG # For JVM-level SSL debugging
     org:
       springframework:
+        boot.autoconfigure.ssl: DEBUG # or TRACE
+        boot.ssl: DEBUG # or TRACE
         #        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
         security: TRACE
         security.web.util.matcher: TRACE
@@ -306,6 +348,8 @@ logging:
         security.web.webauthn.client: TRACE
         security.web.webauthn.client.registration: TRACE
         security.web.webauthn.client.registration.oauth2: TRACE
+        session: DEBUG # Add this to see Spring Session details
+        data.redis: DEBUG # Add this to see Redis operations
 
         web: DEBUG
         cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
@@ -314,6 +358,7 @@ logging:
         vault.core: DEBUG
     #    root: DEBUG
     com.webauthn4j: TRACE
+    io.lettuce.core.protocol.ConnectionWatchdog: TRACE
     me.amlu.authserver: DEBUG
     me.amlu.authserver.config.LocalSecurityConfig: TRACE
     me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler: DEBUG
