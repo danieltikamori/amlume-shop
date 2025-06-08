@@ -1,9 +1,11 @@
 # docker-compose.override.yml (Local Development Overrides)
 # Overrides base config for local development. Assumes Spring Boot runs outside Docker.
 
+# IMPORTANT: everytime .env and seeder scripts are updated, run `docker compose build` to pick up changes (rebuilds images).
+
 # Usage:
 # To run locally:
-#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder vault-seeder-authserver redisinsight
 
 # To stop locally:
 #  docker compose -f docker-compose.yaml -f docker-compose.override.yml down --volumes --remove-orphans
@@ -32,8 +34,7 @@ services:
     networks:
       - amlume-shop-network
 
-# --- Auth Database (Local Dev) ---
-# Define the mysql-auth service for local development
+  # --- Auth Database (Local Dev) ---
   mysql-auth:
     container_name: mysql-auth-dev # Specific dev name
     # Inherits image from base docker-compose.yaml
@@ -103,10 +104,21 @@ services:
     command: ["valkey-server", "/etc/valkey/valkey.conf"] # Use config file
     # ports: # Only expose if absolutely needed for direct external access
     #   - "6379:6379" # Valkey default TLS port is often 6379
+    ports:
+      # This line is CRITICAL for authserver (running on host) to connect:
+      # It maps port 6379 of the Valkey container to port ${VALKEY_PORT_LOCAL} (default 6379) on your host machine.
+      - "${VALKEY_PORT_LOCAL:-6379}:6379"
     volumes:
       - ./docker/valkey/config/valkey.conf:/etc/valkey/valkey.conf:ro
       - ./certificates/valkey:/certs:ro # Mount certs for TLS
       - valkey_data:/data # Persist data locally if needed
+    environment:
+      # If your valkey.conf doesn't set the password, or if the image uses env vars for it:
+      # VALKEY_PASSWORD: ${VALKEY_PASSWORD} # Usually password is set in valkey.conf via 'requirepass'
+      # Ensure VALKEY_PASSWORD in your .env matches the one in valkey.conf
+      # The healthcheck below uses ${VALKEY_PASSWORD} from the .env file passed to the container.
+      # So, if valkey.conf sets the password, this env var for the container is mainly for the healthcheck.
+      VALKEY_PASSWORD: ${VALKEY_PASSWORD} # Make it available for healthcheck
     healthcheck:
       # Adjust password and flags if needed, ensure redis-cli is available and supports TLS
       test: ["CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "--insecure", "-a", "${VALKEY_PASSWORD}", "ping"]
@@ -158,8 +170,48 @@ services:
     networks:
       - amlume-shop-network
 
-# Use this command to run locally:
-#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder
+  # --- RedisInsight Service ---
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: redisinsight-dev # Specific dev name
+    restart: always
+    depends_on:
+      valkey-cache: # Depends on your Valkey/Redis service
+        condition: service_healthy # Wait for valkey-cache to be healthy
+    #      graph:
+    #        condition: service_healthy
+    #      search:
+    #        condition: service_healthy
+    #      timeseries:
+    #        condition: service_healthy
+    ports:
+      # You can use an environment variable from your .env or a fixed port
+      - "${INSIGHT_PORT:-8001}:8001"
+    networks:
+      - amlume-shop-network # Ensure it's on the same network as Valkey
+    volumes:
+      - redisinsight_data:/db # Persist RedisInsight data (e.g., connection configs)
+      # The example used /data/redisinsight:/data, but RedisInsight's Docker Hub page suggests /db for persistence.
+
+  # --- RedisGraph, RedisSearch, and RedisTimeSeries Services ---
+
+  #  graph:
+  #    image: redislabs/redisgraph
+  #    ports:
+  #      - ${GRAPH_PORT}:6379
+  #    restart: always
+  #
+  #  search:
+  #    image: redislabs/redisearch:latest
+  #    ports:
+  #      - ${SEARCH_PORT}:6379
+  #    restart: always
+  #
+  #  timeseries:
+  #    image: redislabs/redistimeseries
+  #    ports:
+  #      - ${TIMESERIES_PORT}:6379
+  #    restart: always
 
   # --- Disable App Services for Local Development ---
   # These services run outside Docker locally
@@ -179,6 +231,7 @@ volumes:
   mysql-shop-logs: {}
   mysql-backups: {}
   valkey_data: {}
+  redisinsight_data: { } # Added volume for RedisInsight
   # Add vault_config and vault_data if needed by prod but not base
   vault_config: {}
   vault_data: {}
