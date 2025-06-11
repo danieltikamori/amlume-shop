@@ -31,6 +31,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByBackupEmail_ValueAndIdNot(String backupEmail, Long id);
 
+    Optional<User> findByEmail_ValueAndDeletedAtIsNull(String email);
+
+    Optional<User> findByIdAndDeletedAtIsNull(Long id);
+
 
     // Optional<User> findByName(String username); // REMOVED as 'name' field is replaced by firstName/lastName
 

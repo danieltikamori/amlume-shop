@@ -26,11 +26,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -45,15 +47,17 @@ public class UserManager implements UserServiceInterface {
     private final PasskeyCredentialRepository passkeyCredentialRepository;
     private final OAuth2AuthorizationRepository oauth2AuthorizationRepository;
     private final OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository;
+    private final PersistentTokenRepository persistentTokenRepository;
 
 
-    public UserManager(UserRepository userRepository, PasswordEncoder passwordEncoder, AuthorityRepository authorityRepository, PasskeyCredentialRepository passkeyCredentialRepository, OAuth2AuthorizationRepository oauth2AuthorizationRepository, OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository) {
+    public UserManager(UserRepository userRepository, PasswordEncoder passwordEncoder, AuthorityRepository authorityRepository, PasskeyCredentialRepository passkeyCredentialRepository, OAuth2AuthorizationRepository oauth2AuthorizationRepository, OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository, PersistentTokenRepository persistentTokenRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authorityRepository = authorityRepository;
         this.passkeyCredentialRepository = passkeyCredentialRepository;
         this.oauth2AuthorizationRepository = oauth2AuthorizationRepository;
         this.oauth2AuthorizationConsentRepository = oauth2AuthorizationConsentRepository;
+        this.persistentTokenRepository = persistentTokenRepository;
     }
 
     @Override
@@ -87,7 +91,7 @@ public class UserManager implements UserServiceInterface {
             if (user.getAccountStatus().getFailedLoginAttempts() > 0 ||
                     !user.getAccountStatus().isAccountNonLocked()) {
                 log.info("Resetting login failures for user {} (ID: {}).", usernameEmail, user.getId());
-                user.resetLoginFailures();
+                user.recordSuccessfulLogin(); // This also reset login failures count
                 userRepository.save(user);
                 log.debug("Saved user {} (ID: {}) after successful login and failure reset.", usernameEmail, user.getId());
             } else {
@@ -333,6 +337,13 @@ public class UserManager implements UserServiceInterface {
 
         // 4. Finally, deleting the User entity
         // This will also cascade delete related entities if configured in User (e.g., user_authorities join table)
+
+        // RememberMe - Remove/invalidate user token
+        persistentTokenRepository.removeUserTokens(principalName);
+        log.debug("Removed persistent tokens for user: {}", principalName);
+
+        user.setDeletedAt(Instant.now()); // Or set a boolean flag
+        user.disableAccount();
         log.debug("Deleting user entity for userId: {}", userId);
         userRepository.delete(user);
 

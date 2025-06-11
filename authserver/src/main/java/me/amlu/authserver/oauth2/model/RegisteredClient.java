@@ -11,6 +11,7 @@
 package me.amlu.authserver.oauth2.model;
 
 import jakarta.persistence.*;
+import me.amlu.authserver.model.AbstractAuditableEntity;
 
 import java.time.Instant;
 import java.util.Set;
@@ -24,7 +25,7 @@ import java.util.Set;
         @Index(name = "idx_client_secret_expires_at", columnList = "client_secret_expires_at"),
 
 })
-public class RegisteredClient {
+public class RegisteredClient extends AbstractAuditableEntity {
 
     @Id
     @Column(length = 100)

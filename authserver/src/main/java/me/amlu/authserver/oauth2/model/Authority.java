@@ -11,13 +11,14 @@
 package me.amlu.authserver.oauth2.model;
 
 import jakarta.persistence.*;
+import me.amlu.authserver.model.AbstractAuditableEntity;
 import org.springframework.security.core.GrantedAuthority;
 
 import java.util.Objects;
 
 @Entity
 @Table(name = "authorities") // Ensure table name matches your DB schema if it exists
-public class Authority implements GrantedAuthority {
+public class Authority extends AbstractAuditableEntity implements GrantedAuthority {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;

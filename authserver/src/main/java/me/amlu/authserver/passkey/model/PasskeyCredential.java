@@ -13,6 +13,7 @@ package me.amlu.authserver.passkey.model;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import me.amlu.authserver.model.AbstractAuditableEntity;
 import me.amlu.authserver.security.util.EncryptedByteArrayConverter;
 import me.amlu.authserver.user.model.User;
 import org.hibernate.annotations.CreationTimestamp;
@@ -25,7 +26,7 @@ import java.util.Objects;
 @Table(name = "passkey_credentials")
 @Builder
 @AllArgsConstructor
-public class PasskeyCredential {
+public class PasskeyCredential extends AbstractAuditableEntity {
 
     /**
      * The unique identifier for the passkey credential.

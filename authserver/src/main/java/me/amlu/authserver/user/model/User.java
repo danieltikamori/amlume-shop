@@ -12,6 +12,7 @@ package me.amlu.authserver.user.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import me.amlu.authserver.model.AbstractAuditableEntity;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.passkey.model.PasskeyCredential;
 import me.amlu.authserver.user.model.vo.AccountStatus;
@@ -19,8 +20,12 @@ import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.model.vo.PhoneNumber;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.proxy.HibernateProxy;
+import org.springframework.data.annotation.CreatedBy;
+import org.springframework.data.annotation.LastModifiedBy;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -50,13 +55,22 @@ import java.util.stream.Collectors;
         @Index(name = "idx_updated_at", columnList = "updated_at"),
         @Index(name = "idx_external_id", columnList = "external_id")
 })
-public class User implements UserDetails {
+@SQLDelete(sql = "UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE user_id = ?")
+// @Where(clause = "deleted_at IS NULL") // Hibernate 5/6 specific, filters SELECTs
+// For JPA standard filtering, you'd typically handle this in repository queries or specifications.
+// However, @Where is very convenient if using Hibernate.
+// If you want to use a boolean flag:
+// @SQLDelete(sql = "UPDATE users SET deleted = true WHERE user_id = ?")
+// @Where(clause = "deleted = false")
+// private boolean deleted = false;
+public class User extends AbstractAuditableEntity implements UserDetails {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Column(name = "external_id", unique = true) // Ensure externalId is unique if used as a primary lookup
-    public String externalId; // User handle for WebAuthn.
+    @Column(name = "external_id", unique = true, updatable = false, nullable = false)
+    // Ensure externalId is unique if used as a primary lookup
+    private final String externalId; // User handle for WebAuthn.
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
@@ -80,7 +94,7 @@ public class User implements UserDetails {
     })
     private EmailAddress backupEmail;
 
-    @Column(name = "profile_picture_url", length = 2046, unique = true)
+    @Column(name = "profile_picture_url", length = 2046)
     private String profilePictureUrl;
 
     @Embedded
@@ -110,18 +124,21 @@ public class User implements UserDetails {
     })
     private AccountStatus accountStatus;
 
-    @CreationTimestamp // Automatically set on creation
-    @Column(name = "created_at", nullable = false, updatable = false) // Standard auditing field
-    @JsonIgnore
-    private Instant createdAt;
+    /**
+     * Last time this user logged in
+     */
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
 
-    @UpdateTimestamp
-    @Column(name = "updated_at", nullable = false)
-    @JsonIgnore
-    private Instant updatedAt;
+    /**
+     * Last time this user was deleted
+     * Soft delete - The user is still in the database, but is marked as deleted
+     */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
 
     // Ensure 'authorities' set is initialized by the builder
-    @ManyToMany(fetch = FetchType.EAGER)
+    @ManyToMany(fetch = FetchType.LAZY)
     // EAGER can be acceptable if the number of roles per user is small and always needed. LAZY is generally safer for performance.
     @JoinTable(
             name = "user_authorities",
@@ -132,13 +149,14 @@ public class User implements UserDetails {
     // Exclude from default toString to avoid issues with lazy loading or verbosity
     private Set<Authority> authorities = new HashSet<>(); // Initialize to avoid NullPointerExceptions
 
-    private User(Long id, String externalId, String firstName, String lastName, String nickname, EmailAddress email, EmailAddress backupEmail, PhoneNumber mobileNumber,
-                 HashedPassword password, AccountStatus accountStatus, Instant createdAt, Instant updatedAt, Set<Authority> authorities) {
+    private User(Long id, String externalIdParam, String firstName, String lastName, String nickname, EmailAddress email, EmailAddress backupEmail, PhoneNumber mobileNumber,
+                 HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities) {
         Assert.hasText(firstName, "User first name cannot be empty.");
         Assert.notNull(email, "User email cannot be null.");
 
         this.id = id;
-        this.externalId = (externalId != null && !externalId.isBlank()) ? externalId : User.generateWebAuthnUserHandle();
+        // Use the parameter if provided and valid, otherwise generate a new one.
+        this.externalId = (externalIdParam != null && !externalIdParam.isBlank()) ? externalIdParam : User.generateWebAuthnUserHandle();
         this.firstName = firstName;
         this.lastName = lastName;
         this.nickname = nickname;
@@ -147,8 +165,6 @@ public class User implements UserDetails {
         this.mobileNumber = mobileNumber;
         this.password = password;
         this.accountStatus = (accountStatus != null) ? accountStatus : AccountStatus.initial();
-        this.createdAt = createdAt; // Will be set by @CreationTimestamp if new and null
-        this.updatedAt = updatedAt; // Will be set by @UpdateTimestamp
         this.authorities = authorities != null ? new HashSet<>(authorities) : new HashSet<>(); // Defensive copy
         this.passkeyCredentials = new HashSet<>(); // Ensure initialized
     }
@@ -158,6 +174,9 @@ public class User implements UserDetails {
      */
     protected User() {
         // Initialize collections to prevent NullPointerExceptions if JPA creates instance
+        // Initialize externalId with a generated value.
+        // This ensures the 'final' field contract is met even when JPA uses this constructor.
+        this.externalId = User.generateWebAuthnUserHandle();
         this.authorities = new HashSet<>();
         this.passkeyCredentials = new HashSet<>();
         this.accountStatus = AccountStatus.initial(); // Sensible default for JPA-created instances
@@ -200,6 +219,30 @@ public class User implements UserDetails {
 
     public void resetLoginFailures() {
         this.accountStatus = this.accountStatus.resetLoginFailures();
+    }
+
+    /**
+     * * Locks the account for a specified duration.
+     * The duration must be positive and non-negative.
+     * The account is locked until the specified duration has passed since the current time.
+     *
+     * @param lockDuration The duration for which the account should be locked.
+     * @throws IllegalArgumentException If the lockDuration is null, negative, or zero.
+     */
+    public void lockAccountFor(Duration lockDuration) {
+        Assert.notNull(lockDuration, "Lock duration cannot be null.");
+        Assert.isTrue(!lockDuration.isNegative() && !lockDuration.isZero(), "Lock duration must be positive.");
+        this.accountStatus = this.accountStatus.lockUntil(Instant.now().plus(lockDuration));
+        // @UpdateTimestamp will handle updatedAt
+    }
+
+    /**
+     * Records a successful login attempt.
+     * Also resets login failures count.
+     */
+    public void recordSuccessfulLogin() {
+        this.lastLoginAt = Instant.now();
+        this.accountStatus = this.accountStatus.resetLoginFailures(); // Also reset failures
     }
 
     public void lockAccount(Duration lockDuration) {
@@ -417,14 +460,17 @@ public class User implements UserDetails {
         return this.externalId;
     }
 
-    /**
-     * Sets the external ID for the user.
-     *
-     * @param externalId The new external ID. Must not be null or blank.
-     */
-    public void setExternalId(String externalId) {
-        Assert.hasText(externalId, "External ID cannot be blank.");
-        this.externalId = externalId;
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    @Transient
+    public boolean isDeleted() {
+        return this.deletedAt != null;
     }
 
     public String getFirstName() {
@@ -461,14 +507,6 @@ public class User implements UserDetails {
 
     public AccountStatus getAccountStatus() {
         return this.accountStatus;
-    }
-
-    public Instant getCreatedAt() {
-        return this.createdAt;
-    }
-
-    public Instant getUpdatedAt() {
-        return this.updatedAt;
     }
 
     /**
@@ -514,8 +552,6 @@ public class User implements UserDetails {
                 ", backupEmail=" + (backupEmail != null ? backupEmail.getValue() : "null") +
                 ", mobileNumber=" + (mobileNumber != null ? mobileNumber.e164Value() : "null") +
                 ", accountStatus=" + accountStatus +
-                ", createdAt=" + createdAt +
-                ", updatedAt=" + updatedAt +
                 ", authorities_status=" + authoritiesStatus + // Changed to status
                 ", passkeyCredentials_status=" + passkeyStatus + // Changed to status
                 '}';
@@ -534,8 +570,6 @@ public class User implements UserDetails {
                 .mobileNumber(this.mobileNumber)
                 .password(this.password)
                 .accountStatus(this.accountStatus)
-                .createdAt(this.createdAt)
-                .updatedAt(this.updatedAt)
                 .authorities(new HashSet<>(this.authorities));
         // externalId and displayName are not part of the private constructor,
         // so they are not set by this toBuilder() directly into the builder's fields
@@ -554,8 +588,6 @@ public class User implements UserDetails {
         private PhoneNumber mobileNumber;
         private HashedPassword password;
         private AccountStatus accountStatus;
-        private Instant createdAt;
-        private Instant updatedAt;
         private Set<Authority> authorities$value;
         private boolean authorities$set;
 
@@ -618,18 +650,6 @@ public class User implements UserDetails {
         }
 
         @JsonIgnore
-        public UserBuilder createdAt(Instant createdAt) {
-            this.createdAt = createdAt;
-            return this;
-        }
-
-        @JsonIgnore
-        public UserBuilder updatedAt(Instant updatedAt) {
-            this.updatedAt = updatedAt;
-            return this;
-        }
-
-        @JsonIgnore
         public UserBuilder authorities(Set<Authority> authorities) {
             this.authorities$value = authorities;
             this.authorities$set = true;
@@ -643,7 +663,7 @@ public class User implements UserDetails {
             }
             return new User(this.id, this.externalId, this.firstName, this.lastName, this.nickname,
                     this.email, this.backupEmail, this.mobileNumber,
-                    this.password, this.accountStatus, this.createdAt, this.updatedAt, authoritiesValue);
+                    this.password, this.accountStatus, authoritiesValue);
         }
 
         @Override
@@ -658,8 +678,6 @@ public class User implements UserDetails {
                     ", mobileNumber=" + this.mobileNumber +
                     ", password=" + (password != null ? "[PROTECTED]" : "null") +
                     ", accountStatus=" + this.accountStatus +
-                    ", createdAt=" + this.createdAt +
-                    ", updatedAt=" + this.updatedAt +
                     ", authorities$value=" + this.authorities$value + ")";
         }
     }
