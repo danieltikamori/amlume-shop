@@ -34,7 +34,6 @@ import org.springframework.util.StringUtils;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 
 @Service
 @Transactional
@@ -103,23 +102,29 @@ public class UserManager implements UserServiceInterface {
     @Transactional
     @Override
     @Timed(value = "authserver.usermanager.create", description = "Time taken to create user")
-    public User createUser(String firstName, String lastName, String nickname,
+    public User createUser(String givenName, String middleName, String surname, String nickname,
                            String email, String rawPassword, String mobileNumber,
-                           String defaultRegion, String backupEmailRaw) { // ADDED backupEmailRaw
-        log.info("Attempting to create user: email={}, backupEmail={}, firstName={}", email, backupEmailRaw, firstName);
+                           String defaultRegion, String recoveryEmailRaw) { // ADDED middleName and changed to recoveryEmailRaw
+        log.info("Attempting to create user: email={}, recoveryEmail={}, givenName={}", email, recoveryEmailRaw, givenName);
 
         EmailAddress emailVO = new EmailAddress(email);
-        EmailAddress backupEmailVO = StringUtils.hasText(backupEmailRaw) ? new EmailAddress(backupEmailRaw) : null; // Process backup email
+        EmailAddress recoveryEmailVO = StringUtils.hasText(recoveryEmailRaw) ? new EmailAddress(recoveryEmailRaw) : null; // Process recovery email
+
+        // Check for primary email and recovery email equality
+        if (recoveryEmailVO != null && recoveryEmailVO.equals(emailVO)) {
+            log.warn("Recovery email {} cannot be the same as the primary email {} for new user.", recoveryEmailRaw, email);
+            throw new IllegalArgumentException("Recovery email cannot be the same as the primary email.");
+        }
 
         // Check for primary email conflict
         if (userRepository.existsByEmail_Value(email)) {
             log.warn("Primary email {} already exists.", email);
             throw new DataIntegrityViolationException("User with this primary email already exists.");
         }
-        // Check for backup email conflict if provided and if it should be unique
-        if (backupEmailVO != null && userRepository.existsByBackupEmail_Value(backupEmailVO.getValue())) {
-            log.warn("Backup email {} already exists.", backupEmailVO.getValue());
-            throw new DataIntegrityViolationException("User with this backup email already exists.");
+        // Check for recovery email conflict if provided and if it should be unique
+        if (recoveryEmailVO != null && userRepository.existsByRecoveryEmail_Value(recoveryEmailVO.getValue())) {
+            log.warn("Recovery email {} already exists.", recoveryEmailVO.getValue());
+            throw new DataIntegrityViolationException("User with this recovery email already exists.");
         }
 
 
@@ -134,11 +139,12 @@ public class UserManager implements UserServiceInterface {
         log.debug("Processed phone number for new user {}: {}", email, (phoneNumberVO != null ? phoneNumberVO.e164Value() : "N/A"));
 
         User newUser = User.builder()
-                .firstName(firstName)
-                .lastName(lastName)
+                .givenName(givenName)
+                .middleName(middleName) // Include optional middle name
+                .surname(surname)
                 .nickname(nickname)
                 .email(emailVO)
-                .backupEmail(backupEmailVO)
+                .recoveryEmail(recoveryEmailVO) // Using the new recoveryEmail method
                 .password(hashedPasswordVO) // Can be null
                 .externalId(User.generateWebAuthnUserHandle()) // Generate external ID for WebAuthn credentials in a byte array. Must be generated as it needs to be populated.
                 .mobileNumber(phoneNumberVO)
@@ -152,9 +158,9 @@ public class UserManager implements UserServiceInterface {
         log.debug("Assigned default authorities (if found) to new user: {}", email);
 
         User savedUser = userRepository.save(newUser);
-        log.info("Successfully created and saved user: email={}, backupEmail={}, userId={}",
+        log.info("Successfully created and saved user: email={}, recoveryEmail={}, userId={}",
                 savedUser.getEmail().getValue(),
-                (savedUser.getBackupEmail() != null ? savedUser.getBackupEmail().getValue() : "N/A"),
+                (savedUser.getRecoveryEmail() != null ? savedUser.getRecoveryEmail().getValue() : "N/A"),
                 savedUser.getId());
         return savedUser;
     }
@@ -163,16 +169,17 @@ public class UserManager implements UserServiceInterface {
     @Override
     @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')")
     @Timed(value = "authserver.usermanager.updateprofile", description = "Time taken to update user profile")
-    public User updateUserProfile(Long userId, String newFirstName, String newLastName,
+    public User updateUserProfile(Long userId, String newGivenName, String newMiddleName, String newSurname,
                                   String newNickname, String newMobileNumber, String defaultRegion,
-                                  String newBackupEmail) { // ADDED newBackupEmail
-        log.info("Attempting to update profile for userId: {}. Updates: firstName={}, lastName={}, nickname={}, mobileNumber={}, backupEmail={}",
+                                  String newRecoveryEmail) { // ADDED newMiddleName and changed to newRecoveryEmail
+        log.info("Attempting to update profile for userId: {}. Updates: givenName={}, middleName={}, surname={}, nickname={}, mobileNumber={}, recoveryEmail={}",
                 userId,
-                (StringUtils.hasText(newFirstName) ? newFirstName : "[NO_CHANGE]"),
-                (newLastName != null ? (newLastName.isEmpty() ? "[CLEAR]" : newLastName) : "[NO_CHANGE]"),
+                (StringUtils.hasText(newGivenName) ? newGivenName : "[NO_CHANGE]"),
+                (newMiddleName != null ? (newMiddleName.isEmpty() ? "[CLEAR]" : newMiddleName) : "[NO_CHANGE]"),
+                (newSurname != null ? (newSurname.isEmpty() ? "[CLEAR]" : newSurname) : "[NO_CHANGE]"),
                 (newNickname != null ? (newNickname.isEmpty() ? "[CLEAR]" : newNickname) : "[NO_CHANGE]"),
                 (newMobileNumber != null ? newMobileNumber : "[NO_CHANGE]"),
-                (newBackupEmail != null ? (newBackupEmail.isEmpty() ? "[CLEAR]" : newBackupEmail) : "[NO_CHANGE]")
+                (newRecoveryEmail != null ? (newRecoveryEmail.isEmpty() ? "[CLEAR]" : newRecoveryEmail) : "[NO_CHANGE]")
         );
 
         User user = userRepository.findById(userId)
@@ -183,18 +190,28 @@ public class UserManager implements UserServiceInterface {
         log.debug("Found user for profile update: userId={}", userId);
 
         boolean updated = false;
-        if (StringUtils.hasText(newFirstName) && !newFirstName.equals(user.getFirstName())) {
-            user.updateFirstName(newFirstName);
-            log.debug("Updated firstName for userId: {}", userId);
+        if (StringUtils.hasText(newGivenName) && !newGivenName.equals(user.getGivenName())) {
+            user.updateGivenName(newGivenName);
+            log.debug("Updated givenName for userId: {}", userId);
             updated = true;
         }
-        // Allow clearing lastName and nickname by passing null or empty string
-        if (newLastName != null) { // Check for null to differentiate from not wanting to update
-            String currentLastName = user.getLastName();
-            String targetLastName = newLastName.isEmpty() ? null : newLastName;
-            if (!Objects.equals(currentLastName, targetLastName)) {
-                user.updateLastName(targetLastName);
-                log.debug("Updated lastName for userId: {}", userId);
+        // Allow clearing middleName by passing null or empty string
+        if (newMiddleName != null) {
+            String currentMiddleName = user.getMiddleName();
+            String targetMiddleName = newMiddleName.isEmpty() ? null : newMiddleName;
+            if (!Objects.equals(currentMiddleName, targetMiddleName)) {
+                user.updateMiddleName(targetMiddleName);
+                log.debug("Updated middleName for userId: {}", userId);
+                updated = true;
+            }
+        }
+        // Allow clearing surname and nickname by passing null or empty string
+        if (newSurname != null) { // Check for null to differentiate from not wanting to update
+            String currentSurname = user.getSurname();
+            String targetSurname = newSurname.isEmpty() ? null : newSurname;
+            if (!Objects.equals(currentSurname, targetSurname)) {
+                user.updateSurname(targetSurname);
+                log.debug("Updated surname for userId: {}", userId);
                 updated = true;
             }
         }
@@ -217,22 +234,22 @@ public class UserManager implements UserServiceInterface {
             }
         }
 
-        // Update backup email
-        if (newBackupEmail != null) { // If an update attempt for backupEmail is made
-            EmailAddress newBackupEmailVO = StringUtils.hasText(newBackupEmail) ? new EmailAddress(newBackupEmail) : null;
-            if (!Objects.equals(user.getBackupEmail(), newBackupEmailVO)) {
-                // Check for conflict if new backup email is not null and different from primary email
-                if (newBackupEmailVO != null && newBackupEmailVO.equals(user.getEmail())) {
-                    log.warn("Attempt to set backup email same as primary email for userId: {}", userId);
-                    throw new IllegalArgumentException("Backup email cannot be the same as the primary email.");
+        // Update recovery email
+        if (newRecoveryEmail != null) { // If an update attempt for recoveryEmail is made
+            EmailAddress newRecoveryEmailVO = StringUtils.hasText(newRecoveryEmail) ? new EmailAddress(newRecoveryEmail) : null;
+            if (!Objects.equals(user.getRecoveryEmail(), newRecoveryEmailVO)) {
+                // Check for conflict if new recovery email is not null and different from primary email
+                if (newRecoveryEmailVO != null && newRecoveryEmailVO.equals(user.getEmail())) {
+                    log.warn("Attempt to set recovery email same as primary email for userId: {}", userId);
+                    throw new IllegalArgumentException("Recovery email cannot be the same as the primary email.");
                 }
-                // Check for conflict with other users' backup emails if backupEmail is unique
-                if (newBackupEmailVO != null && userRepository.existsByBackupEmail_ValueAndIdNot(newBackupEmailVO.getValue(), userId)) {
-                    log.warn("Backup email {} already in use by another user.", newBackupEmailVO.getValue());
-                    throw new DataIntegrityViolationException("This backup email is already in use.");
+                // Check for conflict with other users' recovery emails if recoveryEmail is unique
+                if (newRecoveryEmailVO != null && userRepository.existsByRecoveryEmail_ValueAndIdNot(newRecoveryEmailVO.getValue(), userId)) {
+                    log.warn("Recovery email {} already in use by another user.", newRecoveryEmailVO.getValue());
+                    throw new DataIntegrityViolationException("This recovery email is already in use.");
                 }
-                user.updateBackupEmail(newBackupEmailVO);
-                log.debug("Updated backupEmail for userId: {}", userId);
+                user.updateRecoveryEmail(newRecoveryEmailVO); // Using the new method name
+                log.debug("Updated recoveryEmail for userId: {}", userId);
                 updated = true;
             }
         }

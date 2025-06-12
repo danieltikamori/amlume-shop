@@ -12,7 +12,7 @@ package me.amlu.authserver.user.dto;
 
 import java.util.Set;
 
-public record GetUserResponse(String userIdSubject, String firstName, String lastName, String nickname, String email,
+public record GetUserResponse(String userIdSubject, String givenName, String surname, String nickname, String email,
                               String mobileNumber, Set<String> roles) {
 //    private String userIdSubject; // Could be email or a UUID, not the internal DB ID
 

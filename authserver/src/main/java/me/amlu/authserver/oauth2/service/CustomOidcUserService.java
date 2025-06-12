@@ -30,8 +30,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getFirstNameString;
-import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getLastNameString;
+import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getGivenNameString;
+import static me.amlu.authserver.oauth2.service.CustomOAuth2UserService.getSurnameString;
 
 @Service
 public class CustomOidcUserService extends OidcUserService {
@@ -61,8 +61,9 @@ public class CustomOidcUserService extends OidcUserService {
         }
 
         // Extract profile information, attempting standard OIDC claims first
-        String firstName = extractFirstName(attributes, registrationId, email);
-        String lastName = extractLastName(attributes, registrationId);
+        String givenName = extractGivenName(attributes, registrationId, email);
+        String middleName = extractMiddleName(attributes, registrationId);
+        String surname = extractSurname(attributes, registrationId);
         String nickname = extractNickname(attributes, registrationId); // Nickname might be 'login' for GitHub
         String pictureUrl = (String) attributes.get("picture");
 
@@ -73,8 +74,9 @@ public class CustomOidcUserService extends OidcUserService {
             log.info("No local user found for email '{}' from provider '{}'. Provisioning new user.", email, registrationId);
             User.UserBuilder newUserBuilder = User.builder()
                     .email(new EmailAddress(email))
-                    .firstName(firstName)
-                    .lastName(lastName)
+                    .givenName(givenName)
+                    .middleName(middleName)
+                    .surname(surname)
                     .nickname(nickname)
                     .externalId(User.generateWebAuthnUserHandle());
             // The Password field in User entity is nullable, so no local password is set for OIDC users.
@@ -90,13 +92,18 @@ public class CustomOidcUserService extends OidcUserService {
             log.debug("Found existing local user ID {} for email '{}' from provider '{}'. Checking for updates.", localUser.getId(), email, registrationId);
 
             boolean updated = false;
-            if (StringUtils.hasText(firstName) && !Objects.equals(firstName, localUser.getFirstName())) {
-                localUser.updateFirstName(firstName);
+            if (StringUtils.hasText(givenName) && !Objects.equals(givenName, localUser.getGivenName())) {
+                localUser.updateGivenName(givenName);
                 updated = true;
             }
-            // For lastName and nickname, allow them to be set to null if the provider clears them
-            if (!Objects.equals(lastName, localUser.getLastName())) {
-                localUser.updateLastName(lastName); // User.updateLastName should handle null
+            // Middle name is optional
+            if (!Objects.equals(middleName, localUser.getMiddleName())) {
+                localUser.updateMiddleName(middleName);
+                updated = true;
+            }
+            // For surname and nickname, allow them to be set to null if the provider clears them
+            if (!Objects.equals(surname, localUser.getSurname())) {
+                localUser.updateSurname(surname); // User.updateSurname should handle null
                 updated = true;
             }
             if (!Objects.equals(nickname, localUser.getNickname())) {
@@ -123,14 +130,31 @@ public class CustomOidcUserService extends OidcUserService {
     }
 
     // Helper methods to extract names, can be expanded for provider-specific logic
-    private String extractFirstName(Map<String, Object> attributes, String registrationId, String email) {
-        String firstName = (String) attributes.get("given_name"); // Standard OIDC
-        return getFirstNameString(attributes, registrationId, email, firstName);
+    private String extractGivenName(Map<String, Object> attributes, String registrationId, String email) {
+        String givenName = (String) attributes.get("given_name"); // Standard OIDC
+        return getGivenNameString(attributes, registrationId, email, givenName);
     }
 
-    private String extractLastName(Map<String, Object> attributes, String registrationId) {
-        String lastName = (String) attributes.get("family_name"); // Standard OIDC
-        return getLastNameString(attributes, registrationId, lastName);
+    private String extractMiddleName(Map<String, Object> attributes, String registrationId) {
+        String middleName = (String) attributes.get("middle_name"); // Standard OIDC
+
+        // If middle name is not available directly, try to extract from full name
+        if (!StringUtils.hasText(middleName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name");
+            if (StringUtils.hasText(fullName)) {
+                String[] parts = fullName.split(" ", 3);
+                if (parts.length == 3) {
+                    middleName = parts[1];
+                }
+            }
+        }
+
+        return middleName;
+    }
+
+    private String extractSurname(Map<String, Object> attributes, String registrationId) {
+        String surname = (String) attributes.get("family_name"); // Standard OIDC
+        return getSurnameString(attributes, registrationId, surname);
     }
 
     private String extractNickname(Map<String, Object> attributes, String registrationId) {

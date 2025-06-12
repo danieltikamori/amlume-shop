@@ -101,8 +101,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 throw new OAuth2AuthenticationException("Unable to derive email from provider " + userRequest.getClientRegistration().getRegistrationId());
             }
 
-            String firstName = extractFirstName(attributes, userRequest.getClientRegistration().getRegistrationId(), emailToUse);
-            String lastName = extractLastName(attributes, userRequest.getClientRegistration().getRegistrationId());
+            String givenName = extractGivenName(attributes, userRequest.getClientRegistration().getRegistrationId(), emailToUse);
+            String middleName = extractMiddleName(attributes, userRequest.getClientRegistration().getRegistrationId());
+            String surname = extractSurname(attributes, userRequest.getClientRegistration().getRegistrationId());
             String nickname = extractNickname(attributes, userRequest.getClientRegistration().getRegistrationId());
 
             Optional<User> userOptional = userRepository.findByEmail_Value(emailToUse);
@@ -111,8 +112,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 log.info("No local user found for email '{}' from provider '{}'. Provisioning new user.", emailToUse, userRequest.getClientRegistration().getRegistrationId());
                 User.UserBuilder newUserBuilder = User.builder()
                         .email(new EmailAddress(emailToUse))
-                        .firstName(firstName)
-                        .lastName(lastName)
+                        .givenName(givenName)
+                        .middleName(middleName)
+                        .surname(surname)
                         .nickname(nickname)
                         .externalId(User.generateWebAuthnUserHandle());
 
@@ -126,12 +128,16 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                 log.debug("Found existing local user ID {} for email '{}' from provider '{}'. Checking for updates.", localUser.getId(), emailToUse, userRequest.getClientRegistration().getRegistrationId());
 
                 boolean updated = false;
-                if (StringUtils.hasText(firstName) && !Objects.equals(firstName, localUser.getFirstName())) {
-                    localUser.updateFirstName(firstName);
+                if (StringUtils.hasText(givenName) && !Objects.equals(givenName, localUser.getGivenName())) {
+                    localUser.updateGivenName(givenName);
                     updated = true;
                 }
-                if (!Objects.equals(lastName, localUser.getLastName())) {
-                    localUser.updateLastName(lastName);
+                if (!Objects.equals(middleName, localUser.getMiddleName())) {
+                    localUser.updateMiddleName(middleName);
+                    updated = true;
+                }
+                if (!Objects.equals(surname, localUser.getSurname())) {
+                    localUser.updateSurname(surname);
                     updated = true;
                 }
                 if (!Objects.equals(nickname, localUser.getNickname())) {
@@ -224,84 +230,109 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
      * Extracts the user's first name from the provider attributes.
      * Attempts to use standard OIDC claims first, then common alternatives, and finally
      * falls back to parsing the full name or using the email prefix if necessary.
-     * @param attributes The user attributes from the provider.
+     *
+     * @param attributes     The user attributes from the provider.
      * @param registrationId The registration ID of the OAuth2 client.
-     * @param email The email address of the user.
+     * @param email          The email address of the user.
      * @return The extracted first name.
      */
-    private String extractFirstName(Map<String, Object> attributes, String registrationId, String email) {
-        String firstName = (String) attributes.get("given_name"); // Standard OIDC, might not be present for plain OAuth2
-        if (!StringUtils.hasText(firstName)) {
-            firstName = (String) attributes.get("first_name"); // Common alternative
+    private String extractGivenName(Map<String, Object> attributes, String registrationId, String email) {
+        String givenName = (String) attributes.get("given_name"); // Standard OIDC, might not be present for plain OAuth2
+        if (!StringUtils.hasText(givenName)) {
+            givenName = (String) attributes.get("given_name"); // Common alternative
         }
-        return getFirstNameString(attributes, registrationId, email, firstName);
+        return getGivenNameString(attributes, registrationId, email, givenName);
+    }
+
+    private String extractMiddleName(Map<String, Object> attributes, String registrationId) {
+        String middleName = (String) attributes.get("middle_name"); // Standard OIDC
+
+        // If middle name is not available directly, try to extract from full name
+        if (!StringUtils.hasText(middleName) && "github".equalsIgnoreCase(registrationId)) {
+            String fullName = (String) attributes.get("name");
+            if (StringUtils.hasText(fullName)) {
+                String[] parts = fullName.split(" ", 3);
+                if (parts.length == 3) {
+                    middleName = parts[1];
+                }
+            }
+        }
+
+        return middleName;
     }
 
     /**
      * Helper method to derive the first name string.
-     * @param attributes The user attributes from the provider.
+     *
+     * @param attributes     The user attributes from the provider.
      * @param registrationId The registration ID of the OAuth2 client.
-     * @param email The email address of the user.
-     * @param firstName The initially extracted first name.
+     * @param email          The email address of the user.
+     * @param givenName      The initially extracted first name.
      * @return The final determined first name string.
      */
-    static String getFirstNameString(Map<String, Object> attributes, String registrationId, String email, String firstName) {
-        if (!StringUtils.hasText(firstName) && "github".equalsIgnoreCase(registrationId)) {
+    static String getGivenNameString(Map<String, Object> attributes, String registrationId, String email, String givenName) {
+        if (!StringUtils.hasText(givenName) && "github".equalsIgnoreCase(registrationId)) {
             String fullName = (String) attributes.get("name");
             if (StringUtils.hasText(fullName)) {
-                firstName = fullName.split(" ", 2)[0];
+                givenName = fullName.split(" ", 3)[0]; // Split into 3 parts: given name, middle name, surname
             }
         }
 
-        if (StringUtils.hasText(firstName)) {
-            return firstName;
+        if (StringUtils.hasText(givenName)) {
+            return givenName;
         } else {
             int atIndex = email.indexOf('@');
             return (atIndex != -1) ? email.substring(0, atIndex) : email; // Fallback to full email if no '@'
         }
-
     }
 
     /**
      * Extracts the user's last name from the provider attributes.
      * Attempts to use standard OIDC claims first, then common alternatives, and finally
      * falls back to parsing the full name if necessary.
-     * @param attributes The user attributes from the provider.
+     *
+     * @param attributes     The user attributes from the provider.
      * @param registrationId The registration ID of the OAuth2 client.
      * @return The extracted last name, or null if not found.
      */
-    private String extractLastName(Map<String, Object> attributes, String registrationId) {
-        String lastName = (String) attributes.get("family_name");
-        if (!StringUtils.hasText(lastName)) {
-            lastName = (String) attributes.get("last_name");
+    private String extractSurname(Map<String, Object> attributes, String registrationId) {
+        String surname = (String) attributes.get("family_name");
+        if (!StringUtils.hasText(surname)) {
+            surname = (String) attributes.get("surname");
         }
-        return getLastNameString(attributes, registrationId, lastName);
+        return getSurnameString(attributes, registrationId, surname);
     }
 
     /**
      * Helper method to derive the last name string.
-     * @param attributes The user attributes from the provider.
+     *
+     * @param attributes     The user attributes from the provider.
      * @param registrationId The registration ID of the OAuth2 client.
-     * @param lastName The initially extracted last name.
+     * @param surname        The initially extracted last name.
      * @return The final determined last name string, or null.
      */
     @Nullable
-    static String getLastNameString(Map<String, Object> attributes, String registrationId, String lastName) {
-        if (!StringUtils.hasText(lastName) && "github".equalsIgnoreCase(registrationId)) {
+    static String getSurnameString(Map<String, Object> attributes, String registrationId, String surname) {
+        if (!StringUtils.hasText(surname) && "github".equalsIgnoreCase(registrationId)) {
             String fullName = (String) attributes.get("name");
             if (StringUtils.hasText(fullName)) {
-                String[] parts = fullName.split(" ", 2);
-                if (parts.length > 1) {
-                    lastName = parts[1];
+                String[] parts = fullName.split(" ", 3);
+                if (parts.length == 3) {
+                    // If we have 3 parts, the last one is the surname
+                    surname = parts[2];
+                } else if (parts.length == 2) {
+                    // If we have 2 parts, the last one is the surname
+                    surname = parts[1];
                 }
             }
         }
-        return lastName;
+        return surname;
     }
 
     /**
      * Extracts the user's nickname from the provider attributes.
-     * @param attributes The user attributes from the provider.
+     *
+     * @param attributes     The user attributes from the provider.
      * @param registrationId The registration ID of the OAuth2 client.
      * @return The extracted nickname, or null if not found.
      */
@@ -315,9 +346,10 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     /**
      * Simple record to map the response structure from GitHub's /user/emails API endpoint.
-     * @param email The email address.
-     * @param primary Indicates if this is the primary email.
-     * @param verified Indicates if the email address is verified.
+     *
+     * @param email      The email address.
+     * @param primary    Indicates if this is the primary email.
+     * @param verified   Indicates if the email address is verified.
      * @param visibility The visibility setting for the email address.
      */
     private record GitHubEmail(String email, Boolean primary, Boolean verified, String visibility) {

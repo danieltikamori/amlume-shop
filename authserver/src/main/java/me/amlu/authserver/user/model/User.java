@@ -32,6 +32,7 @@ import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 import java.io.Serial;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,7 +47,7 @@ import java.util.stream.Collectors;
         @UniqueConstraint(columnNames = "external_id")
 }, indexes = {
         @Index(name = "idx_email", columnList = "email"),
-        @Index(name = "idx_backup_email", columnList = "backup_email"),
+        @Index(name = "idx_recovery_email", columnList = "recovery_email_encrypted"),
         @Index(name = "idx_nickname", columnList = "nickname"),
         @Index(name = "idx_mobile_number", columnList = "mobile_number"),
         @Index(name = "idx_created_at", columnList = "created_at"),
@@ -61,24 +62,29 @@ import java.util.stream.Collectors;
 // @SQLDelete(sql = "UPDATE users SET deleted = true WHERE user_id = ?")
 // @Where(clause = "deleted = false")
 // private boolean deleted = false;
-public class User extends AbstractAuditableEntity implements UserDetails {
+public class User extends AbstractAuditableEntity implements UserDetails, Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
-    @Column(name = "external_id", unique = true, updatable = false, nullable = false)
-    // Ensure externalId is unique if used as a primary lookup
-    private final String externalId; // User handle for WebAuthn.
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "user_id")
     private Long id;
-    @Column(name = "first_name", nullable = false, length = 127)
-    private String firstName;
 
-    @Column(name = "last_name", columnDefinition = "BYTEA") // Change to BYTEA
+    @Column(name = "external_id", unique = true, updatable = false, nullable = false)
+    // Ensure externalId is unique if used as a primary lookup
+    private final String externalId; // User handle for WebAuthn.
+
+    @Column(name = "given_name", nullable = false, length = 127)
+    private String givenName;
+
+    @Column(name = "middle_Name", nullable = true, length = 127)
+    private String middleName;
+
+    @Column(name = "surname", columnDefinition = "BYTEA") // Change to BYTEA
     @Convert(converter = EncryptedStringConverter.class)    // Apply converter
-    private String lastName;
+    private String surname;
 
     @Column(name = "nickname", length = 127) // Nullable, user-defined display name
     private String nickname;
@@ -90,10 +96,10 @@ public class User extends AbstractAuditableEntity implements UserDetails {
     @Embedded
     @AttributeOverrides({
             // Change column name to reflect encryption and type to BYTEA for PostgreSQL
-            @AttributeOverride(name = "value", column = @Column(name = "backup_email_encrypted", columnDefinition = "BYTEA", unique = true, nullable = true))
+            @AttributeOverride(name = "value", column = @Column(name = "recovery_email_encrypted", columnDefinition = "BYTEA", unique = true, nullable = true))
     })
     @Convert(converter = EncryptedEmailAddressConverter.class) // Apply the converter
-    private EmailAddress backupEmail;
+    private EmailAddress recoveryEmail; // Renamed from recoveryEmail to better reflect its purpose
 
     @Column(name = "profile_picture_url", length = 2046)
     private String profilePictureUrl;
@@ -152,19 +158,20 @@ public class User extends AbstractAuditableEntity implements UserDetails {
     // Exclude from default toString to avoid issues with lazy loading or verbosity
     private Set<Authority> authorities = new HashSet<>(); // Initialize to avoid NullPointerExceptions
 
-    private User(Long id, String externalIdParam, String firstName, String lastName, String nickname, EmailAddress email, EmailAddress backupEmail, PhoneNumber mobileNumber,
+    private User(Long id, String externalIdParam, String givenName, String middleName, String surname, String nickname, EmailAddress email, EmailAddress recoveryEmail, PhoneNumber mobileNumber,
                  HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities) {
-        Assert.hasText(firstName, "User first name cannot be empty.");
+        Assert.hasText(givenName, "User first name cannot be empty.");
         Assert.notNull(email, "User email cannot be null.");
 
         this.id = id;
         // Use the parameter if provided and valid, otherwise generate a new one.
         this.externalId = (externalIdParam != null && !externalIdParam.isBlank()) ? externalIdParam : User.generateWebAuthnUserHandle();
-        this.firstName = firstName;
-        this.lastName = lastName;
+        this.givenName = givenName;
+        this.middleName = middleName;
+        this.surname = surname;
         this.nickname = nickname;
         this.email = email;
-        this.backupEmail = backupEmail;
+        this.recoveryEmail = recoveryEmail;
         this.mobileNumber = mobileNumber;
         this.password = password;
         this.accountStatus = (accountStatus != null) ? accountStatus : AccountStatus.initial();
@@ -270,14 +277,18 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         return this.accountStatus.getFailedLoginAttempts() >= AccountStatus.DEFAULT_MAX_FAILED_ATTEMPTS;
     }
 
-    public void updateFirstName(String newFirstName) {
-        Assert.hasText(newFirstName, "User first name cannot be blank.");
-        this.firstName = newFirstName;
+    public void updateGivenName(String newGivenName) {
+        Assert.hasText(newGivenName, "User given name cannot be blank.");
+        this.givenName = newGivenName;
     }
 
-    public void updateLastName(String newLastName) {
-        // lastName can be null or blank if allowed by business rules
-        this.lastName = newLastName;
+    public void updateMiddleName(String newMiddleName) {
+        this.middleName = newMiddleName;
+    }
+
+    public void updateSurname(String newSurname) {
+        // surname can be null or blank if allowed by business rules
+        this.surname = newSurname;
     }
 
     public void updateNickname(String newNickname) {
@@ -290,9 +301,9 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         this.email = newEmail;
     }
 
-    public void updateBackupEmail(EmailAddress newBackupEmail) {
+    public void updateRecoveryEmail(EmailAddress newRecoveryEmail) {
         // Can be null to clear it
-        this.backupEmail = newBackupEmail;
+        this.recoveryEmail = newRecoveryEmail;
     }
 
     public void updateProfilePictureUrl(String pictureUrl) {
@@ -463,25 +474,16 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         return this.externalId;
     }
 
-    public Instant getDeletedAt() {
-        return deletedAt;
+    public String getGivenName() {
+        return this.givenName;
     }
 
-    public void setDeletedAt(Instant deletedAt) {
-        this.deletedAt = deletedAt;
+    public String getMiddleName() {
+        return this.middleName;
     }
 
-    @Transient
-    public boolean isDeleted() {
-        return this.deletedAt != null;
-    }
-
-    public String getFirstName() {
-        return this.firstName;
-    }
-
-    public String getLastName() {
-        return this.lastName;
+    public String getSurname() {
+        return this.surname;
     }
 
     public String getNickname() {
@@ -492,8 +494,17 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         return this.email;
     }
 
+    public EmailAddress getRecoveryEmail() {
+        return this.recoveryEmail;
+    }
+
+    /**
+     * @deprecated Use {@link #getRecoveryEmail()} instead.
+     * This method is kept for backward compatibility.
+     */
+    @Deprecated
     public EmailAddress getBackupEmail() {
-        return this.backupEmail;
+        return getRecoveryEmail();
     }
 
     public String getProfilePictureUrl() {
@@ -524,16 +535,35 @@ public class User extends AbstractAuditableEntity implements UserDetails {
             return this.nickname;
         }
         StringBuilder sb = new StringBuilder();
-        if (StringUtils.hasText(this.firstName)) {
-            sb.append(this.firstName);
+        if (StringUtils.hasText(this.givenName)) {
+            sb.append(this.givenName);
         }
-        if (StringUtils.hasText(this.lastName)) {
+        if (StringUtils.hasText(this.middleName)) {
             if (!sb.isEmpty()) {
                 sb.append(" ");
             }
-            sb.append(this.lastName);
+            sb.append(this.middleName);
+        }
+        if (StringUtils.hasText(this.surname)) {
+            if (!sb.isEmpty()) {
+                sb.append(" ");
+            }
+            sb.append(this.surname);
         }
         return sb.isEmpty() ? "" : sb.toString();
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
+    public void setDeletedAt(Instant deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
+    @Transient
+    public boolean isDeleted() {
+        return this.deletedAt != null;
     }
 
     @Override
@@ -548,11 +578,12 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         return "User{" +
                 "id=" + id +
                 ", externalId='" + externalId + '\'' +
-                ", firstName='" + firstName + '\'' +
-                ", lastName='" + lastName + '\'' +
+                ", givenName='" + givenName + '\'' +
+                ", middleName='" + middleName + '\'' +
+                ", surname='" + surname + '\'' +
                 ", nickname='" + nickname + '\'' +
                 ", email=" + (email != null ? email.getValue() : "null") +
-                ", backupEmail=" + (backupEmail != null ? backupEmail.getValue() : "null") +
+                ", recoveryEmail=" + (recoveryEmail != null ? recoveryEmail.getValue() : "null") +
                 ", mobileNumber=" + (mobileNumber != null ? mobileNumber.e164Value() : "null") +
                 ", accountStatus=" + accountStatus +
                 ", authorities_status=" + authoritiesStatus + // Changed to status
@@ -565,11 +596,12 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         return new UserBuilder()
                 .id(this.id)
                 .externalId(this.externalId)
-                .firstName(this.firstName)
-                .lastName(this.lastName)
+                .givenName(this.givenName)
+                .middleName(this.middleName)
+                .surname(this.surname)
                 .nickname(this.nickname)
                 .email(this.email)
-                .backupEmail(this.backupEmail)
+                .backupEmail(this.recoveryEmail)
                 .mobileNumber(this.mobileNumber)
                 .password(this.password)
                 .accountStatus(this.accountStatus)
@@ -583,8 +615,9 @@ public class User extends AbstractAuditableEntity implements UserDetails {
     public static class UserBuilder {
         private Long id;
         private String externalId;
-        private String firstName;
-        private String lastName;
+        private String givenName;
+        private String middleName;
+        private String surname;
         private String nickname;
         private EmailAddress email;
         private EmailAddress backupEmail;
@@ -611,13 +644,18 @@ public class User extends AbstractAuditableEntity implements UserDetails {
             return this;
         }
 
-        public UserBuilder firstName(String firstName) {
-            this.firstName = firstName;
+        public UserBuilder givenName(String givenName) {
+            this.givenName = givenName;
             return this;
         }
 
-        public UserBuilder lastName(String lastName) {
-            this.lastName = lastName;
+        public UserBuilder middleName(String middleName) {
+            this.middleName = middleName;
+            return this;
+        }
+
+        public UserBuilder surname(String surname) {
+            this.surname = surname;
             return this;
         }
 
@@ -631,9 +669,17 @@ public class User extends AbstractAuditableEntity implements UserDetails {
             return this;
         }
 
-        public UserBuilder backupEmail(EmailAddress backupEmail) {
-            this.backupEmail = backupEmail;
+        public UserBuilder backupEmail(EmailAddress recoveryEmail) {
+            this.backupEmail = recoveryEmail;
             return this;
+        }
+
+        /**
+         * @param recoveryEmail The recovery email address for the user
+         * @return This builder for method chaining
+         */
+        public UserBuilder recoveryEmail(EmailAddress recoveryEmail) {
+            return backupEmail(recoveryEmail);
         }
 
         public UserBuilder mobileNumber(PhoneNumber mobileNumber) {
@@ -664,7 +710,7 @@ public class User extends AbstractAuditableEntity implements UserDetails {
             if (!this.authorities$set) {
                 authoritiesValue = User.$default$authorities();
             }
-            return new User(this.id, this.externalId, this.firstName, this.lastName, this.nickname,
+            return new User(this.id, this.externalId, this.givenName, this.middleName, this.surname, this.nickname,
                     this.email, this.backupEmail, this.mobileNumber,
                     this.password, this.accountStatus, authoritiesValue);
         }
@@ -673,11 +719,12 @@ public class User extends AbstractAuditableEntity implements UserDetails {
         public String toString() {
             return "User.UserBuilder(id=" + this.id +
                     ", externalId=" + this.externalId +
-                    ", firstName=" + this.firstName +
-                    ", lastName=" + this.lastName +
+                    ", givenName=" + this.givenName +
+                    ", middleName=" + this.middleName +
+                    ", surname=" + this.surname +
                     ", nickname=" + this.nickname +
                     ", email=" + this.email +
-                    ", backupEmail=" + this.backupEmail +
+                    ", recoveryEmail=" + this.backupEmail +
                     ", mobileNumber=" + this.mobileNumber +
                     ", password=" + (password != null ? "[PROTECTED]" : "null") +
                     ", accountStatus=" + this.accountStatus +

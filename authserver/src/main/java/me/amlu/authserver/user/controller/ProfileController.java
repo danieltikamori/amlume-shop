@@ -60,11 +60,12 @@ public class ProfileController {
         GetUserProfileResponse responseDto = new GetUserProfileResponse(
                 currentUser.getId(),
                 currentUser.getExternalId(),
-                currentUser.getFirstName(),
-                currentUser.getLastName(),
+                currentUser.getGivenName(),
+                currentUser.getMiddleName(),
+                currentUser.getSurname(),
                 currentUser.getNickname(),
                 currentUser.getEmail() != null ? currentUser.getEmail().getValue() : null,
-                currentUser.getBackupEmail() != null ? currentUser.getBackupEmail().getValue() : null,
+                currentUser.getRecoveryEmail() != null ? currentUser.getBackupEmail().getValue() : null,
                 currentUser.getMobileNumber() != null ? currentUser.getMobileNumber().e164Value() : null
         );
         return ResponseEntity.ok(responseDto);
@@ -87,22 +88,24 @@ public class ProfileController {
             // which is acceptable if numbers are expected in E.164 or libphonenumber can infer.
             User updatedUser = userManager.updateUserProfile(
                     currentUser.getId(),
-                    request.firstName(),
-                    request.lastName(),
+                    request.givenName(),
+                    request.middleName(),
+                    request.surname(),
                     request.nickname(),
                     request.mobileNumber(),
                     null, // defaultRegion - not provided by this DTO
-                    request.backupEmail()
+                    request.recoveryEmail()
             );
 
             GetUserProfileResponse responseDto = new GetUserProfileResponse(
                     updatedUser.getId(),
                     updatedUser.getExternalId(),
-                    updatedUser.getFirstName(),
-                    updatedUser.getLastName(),
+                    updatedUser.getGivenName(),
+                    updatedUser.getMiddleName(),
+                    updatedUser.getSurname(),
                     updatedUser.getNickname(),
                     updatedUser.getEmail() != null ? updatedUser.getEmail().getValue() : null,
-                    updatedUser.getBackupEmail() != null ? updatedUser.getBackupEmail().getValue() : null,
+                    updatedUser.getRecoveryEmail() != null ? updatedUser.getBackupEmail().getValue() : null,
                     updatedUser.getMobileNumber() != null ? updatedUser.getMobileNumber().e164Value() : null
             );
             log.info("User {} profile updated successfully.", currentUser.getEmail().getValue());

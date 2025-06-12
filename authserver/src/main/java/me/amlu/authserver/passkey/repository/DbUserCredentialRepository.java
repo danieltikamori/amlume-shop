@@ -136,8 +136,8 @@ public class DbUserCredentialRepository implements UserCredentialRepository {
                             });
 
                     credentialRepository.save(passkeyToSave);
-                    log.info("Saved PasskeyCredential: userFirstName={}, externalId={}, passkeyFriendlyName={}",
-                            user.getFirstName(), user.getExternalId(), passkeyToSave.getFriendlyName());
+                    log.info("Saved PasskeyCredential: userGivenName={}, externalId={}, passkeyFriendlyName={}",
+                            user.getGivenName(), user.getExternalId(), passkeyToSave.getFriendlyName());
                 }, () -> log.warn("User not found with externalId: {}. Cannot save PasskeyCredential.",
                         credentialRecord.getUserEntityUserId().toBase64UrlString()));
     }

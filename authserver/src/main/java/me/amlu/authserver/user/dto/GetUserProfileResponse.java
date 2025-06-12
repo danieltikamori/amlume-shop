@@ -17,11 +17,12 @@ package me.amlu.authserver.user.dto;
 public record GetUserProfileResponse(
         Long id,
         String externalId, // User handle for WebAuthn
-        String firstName,
-        String lastName,    // Can be null
-        String nickname,    // Can be null
+        String givenName,
+        String middleName, // Can be null
+        String surname,    // Can be null
+        String nickname,   // Can be null
         String email,
-        String backupEmail, // Can be null
+        String recoveryEmail, // Can be null
         String mobileNumber // String representation. Can be null
 ) {
 }

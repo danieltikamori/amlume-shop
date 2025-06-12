@@ -16,24 +16,28 @@ import jakarta.validation.constraints.Size;
 // e.g., import me.amlu.shop.amlume_shop.security.config.Phone;
 
 public record UpdateUserProfileRequest(
-        // If firstName is provided, it will be updated.
-        // User.updateFirstName() contains an Assert.hasText() for validation.
+        // If givenName is provided, it will be updated.
+        // User.updateGivenName() contains an Assert.hasText() for validation.
         // Max length can be defined here as a DTO-level check.
-        @Size(max = 50, message = "First name cannot exceed 50 characters.")
-        String firstName,
+        @Size(max = 127, message = "First name cannot exceed 127 characters.")
+        String givenName,
 
-        // If lastName is provided (can be an empty string to clear, or null for no change).
-        @Size(max = 50, message = "Last name cannot exceed 50 characters.")
-        String lastName,
+        // If middleName is provided (can be an empty string to clear, or null for no change).
+        @Size(max = 127, message = "Middle name cannot exceed 127 characters.")
+        String middleName,
+
+        // If surname is provided (can be an empty string to clear, or null for no change).
+        @Size(max = 127, message = "Last name cannot exceed 127 characters.")
+        String surname,
 
         // If nickname is provided (can be an empty string to clear, or null for no change).
         @Size(max = 50, message = "Nickname cannot exceed 50 characters.")
         String nickname,
 
-        // If backupEmail is provided (can be an empty string to clear, or null for no change).
-        @Email(message = "Invalid backup email format.")
-        @Size(max = 255, message = "Backup email cannot exceed 255 characters.")
-        String backupEmail,
+        // If recoveryEmail is provided (can be an empty string to clear, or null for no change).
+        @Email(message = "Invalid recovery email format.")
+        @Size(max = 255, message = "Recovery email cannot exceed 255 characters.")
+        String recoveryEmail,
 
         // Accept mobile number as a String. Validation will occur in the service layer
         // when converting to the PhoneNumber VO, or via a custom @Phone annotation if adapted for String.

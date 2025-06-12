@@ -15,6 +15,7 @@ import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.webauthn.api.Bytes;
 import org.springframework.security.web.webauthn.api.ImmutablePublicKeyCredentialUserEntity;
 import org.springframework.security.web.webauthn.api.PublicKeyCredentialUserEntity;
@@ -69,16 +70,22 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                         .id(userHandleBytes) // Use the successfully created Bytes object
                         .name(user.getEmail().getValue());
 
-        // Construct displayName for WebAuthn from firstName and lastName
+        // Construct displayName for WebAuthn from givenName, middleName, and surname
         StringBuilder webAuthnDisplayName = new StringBuilder();
-        if (StringUtils.hasText(user.getFirstName())) {
-            webAuthnDisplayName.append(user.getFirstName());
+        if (StringUtils.hasText(user.getGivenName())) {
+            webAuthnDisplayName.append(user.getGivenName());
         }
-        if (StringUtils.hasText(user.getLastName())) {
+        if (StringUtils.hasText(user.getMiddleName())) {
             if (!webAuthnDisplayName.isEmpty()) {
                 webAuthnDisplayName.append(" ");
             }
-            webAuthnDisplayName.append(user.getLastName());
+            webAuthnDisplayName.append(user.getMiddleName());
+        }
+        if (StringUtils.hasText(user.getSurname())) {
+            if (!webAuthnDisplayName.isEmpty()) {
+                webAuthnDisplayName.append(" ");
+            }
+            webAuthnDisplayName.append(user.getSurname());
         }
 
         // If nickname is preferred for display and available, use it. Otherwise, use concatenated first/last.
@@ -104,36 +111,47 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
     }
 
     /**
-     * Parses a full name string into first name and last name.
+     * Parses a full name string into first name, middle name, and last name.
      *
      * @param fullName The full name string.
-     * @return A String array where [0] is firstName and [1] is lastName (can be null).
+     * @return A String array where [0] is givenName, [1] is middleName, and [2] is surname (can be null).
      */
     private static String[] parseFullName(String fullName) {
-        // Use these 2 logs if encounter frequent parsing issues
-
+        // Use these logs if encounter frequent parsing issues
         // log.debug("parseFullName: Input fullName='{}'", fullName);
 
-
-        String[] parts = new String[2]; // [0] = firstName, [1] = lastName
+        String[] parts = new String[3]; // [0] = givenName, [1] = middleName, [2] = surname
         if (!StringUtils.hasText(fullName)) {
-            return parts; // Both null
+            return parts; // All null
         }
+
         String trimmedFullName = fullName.trim();
-        int firstSpace = trimmedFullName.indexOf(' ');
-        if (firstSpace != -1) {
-            parts[0] = trimmedFullName.substring(0, firstSpace);
-            parts[1] = trimmedFullName.substring(firstSpace + 1).trim();
-            if (!StringUtils.hasText(parts[1])) {
-                parts[1] = null;
+        String[] nameParts = trimmedFullName.split(" ");
+
+        if (nameParts.length == 1) {
+            // Only given name
+            parts[0] = nameParts[0];
+        } else if (nameParts.length == 2) {
+            // Given name and surname
+            parts[0] = nameParts[0];
+            parts[2] = nameParts[1];
+        } else if (nameParts.length >= 3) {
+            // Given name, middle name(s), and surname
+            parts[0] = nameParts[0];
+
+            // Middle part - combine all middle names
+            StringBuilder middleName = new StringBuilder();
+            for (int i = 1; i < nameParts.length - 1; i++) {
+                if (i > 1) middleName.append(" ");
+                middleName.append(nameParts[i]);
             }
-        } else {
-            parts[0] = trimmedFullName;
-            // parts[1] remains null
+            parts[1] = middleName.toString();
+
+            // Last part is surname
+            parts[2] = nameParts[nameParts.length - 1];
         }
 
-        // log.debug("parseFullName: Output parts=[{}, {}]", parts[0], parts[1]);
-
+        // log.debug("parseFullName: Output parts=[{}, {}, {}]", parts[0], parts[1], parts[2]);
         return parts;
     }
 
@@ -189,11 +207,14 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                     // The email (existingUser.getEmail()) should NOT be changed by webAuthnUserEntity.getName() here.
                     if (StringUtils.hasText(displayNameFromWebAuthnEntity) && !displayNameFromWebAuthnEntity.equals(existingUser.getDisplayableFullName())) {
                         String[] nameParts = parseFullName(displayNameFromWebAuthnEntity);
-                        if (!Objects.equals(nameParts[0], existingUser.getFirstName())) {
-                            existingUser.updateFirstName(nameParts[0]);
+                        if (!Objects.equals(nameParts[0], existingUser.getGivenName())) {
+                            existingUser.updateGivenName(nameParts[0]);
                         }
-                        if (!Objects.equals(nameParts[1], existingUser.getLastName())) {
-                            existingUser.updateLastName(nameParts[1]);
+                        if (!Objects.equals(nameParts[1], existingUser.getMiddleName())) {
+                            existingUser.updateMiddleName(nameParts[1]);
+                        }
+                        if (!Objects.equals(nameParts[2], existingUser.getSurname())) {
+                            existingUser.updateSurname(nameParts[2]);
                         }
                     }
                     // Ensure the nameFromWebAuthnEntity (which could be the GitHub ID) does not overwrite a valid email.
@@ -234,15 +255,42 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                                     // This links the WebAuthn-generated externalId to the existing email-based user.
                                     if (!externalIdFromWebAuthnEntity.equals(userByEmail.getExternalId())) {
                                         log.warn("User with email '{}' (ID: {}) found, but has different/null externalId ('{}'). " +
-                                                        "Updating externalId to '{}' from WebAuthn flow.",
-                                                nameFromWebAuthnEntity, userByEmail.getId(), userByEmail.getExternalId(), externalIdFromWebAuthnEntity);
-                                        userByEmail.setExternalId(externalIdFromWebAuthnEntity); // Ensure User.setExternalId exists and is appropriate
+                                                        "Cannot update externalId as it's final. Creating a new user with the WebAuthn externalId.",
+                                                nameFromWebAuthnEntity, userByEmail.getId(), userByEmail.getExternalId());
+
+                                        // Create a new user with the same properties but with the new externalId
+                                        User newUser = User.builder()
+                                                .givenName(userByEmail.getGivenName())
+                                                .middleName(userByEmail.getMiddleName())
+                                                .surname(userByEmail.getSurname())
+                                                .nickname(userByEmail.getNickname())
+                                                .email(userByEmail.getEmail())
+                                                .backupEmail(userByEmail.getBackupEmail())
+                                                .mobileNumber(userByEmail.getMobileNumber())
+                                                .accountStatus(userByEmail.getAccountStatus())
+                                                .externalId(externalIdFromWebAuthnEntity)
+                                                .build();
+
+                                        // Copy authorities from the original user
+                                        userByEmail.getAuthorities().stream()
+                                                .map(GrantedAuthority::getAuthority)
+                                                .forEach(authorityName ->
+                                                        authorityRepository.findByAuthority(authorityName)
+                                                                .ifPresent(newUser::assignAuthority)
+                                                );
+
+                                        // Delete the old user
+                                        userRepository.delete(userByEmail);
+
+                                        // Return the new user
+                                        return newUser;
                                     }
                                     // Update display name if necessary
                                     if (StringUtils.hasText(displayNameFromWebAuthnEntity) && !displayNameFromWebAuthnEntity.equals(userByEmail.getDisplayableFullName())) {
                                         String[] nameParts = parseFullName(displayNameFromWebAuthnEntity);
-                                        userByEmail.updateFirstName(nameParts[0]);
-                                        userByEmail.updateLastName(nameParts[1]);
+                                        userByEmail.updateGivenName(nameParts[0]);
+                                        userByEmail.updateMiddleName(nameParts[1]); // Middle name is optional
+                                        userByEmail.updateSurname(nameParts[2]);
                                     }
                                     return userByEmail;
                                 })
@@ -250,18 +298,20 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                                     // No user with this email. Create a new user (passkey-first).
                                     log.info("Creating new user with email: {} (from WebAuthn entity name) and externalId: {}", nameFromWebAuthnEntity, externalIdFromWebAuthnEntity);
                                     String[] nameParts = parseFullName(displayNameFromWebAuthnEntity);
-                                    String newFirstName;
+                                    String newGivenName;
                                     if (StringUtils.hasText(nameParts[0])) {
-                                        newFirstName = nameParts[0];
+                                        newGivenName = nameParts[0];
                                     } else {
                                         int atIndex = nameFromWebAuthnEntity.indexOf('@');
-                                        newFirstName = (atIndex != -1) ? nameFromWebAuthnEntity.substring(0, atIndex) : nameFromWebAuthnEntity;
+                                        newGivenName = (atIndex != -1) ? nameFromWebAuthnEntity.substring(0, atIndex) : nameFromWebAuthnEntity;
                                     }
-                                    String newLastName = nameParts[1];
+                                    String newMiddleName = nameParts[1]; // Middle name is optional
+                                    String newSurname = nameParts[2];
 
                                     User newUser = User.builder()
-                                            .firstName(newFirstName)
-                                            .lastName(newLastName)
+                                            .givenName(newGivenName)
+                                            .middleName(newMiddleName) // Include optional middle name
+                                            .surname(newSurname)
                                             .email(new EmailAddress(nameFromWebAuthnEntity))
                                             .externalId(externalIdFromWebAuthnEntity)
                                             .build();

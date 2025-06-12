@@ -27,21 +27,21 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByEmail_Value(String email);
 
-    boolean existsByBackupEmail_Value(String backupEmail);
+    boolean existsByRecoveryEmail_Value(String recoveryEmail);
 
-    boolean existsByBackupEmail_ValueAndIdNot(String backupEmail, Long id);
+    boolean existsByRecoveryEmail_ValueAndIdNot(String recoveryEmail, Long id);
 
     Optional<User> findByEmail_ValueAndDeletedAtIsNull(String email);
 
     Optional<User> findByIdAndDeletedAtIsNull(Long id);
 
 
-    // Optional<User> findByName(String username); // REMOVED as 'name' field is replaced by firstName/lastName
+    // Optional<User> findByName(String username); // REMOVED as 'name' field is replaced by givenName/surname
 
     // Consider adding if needed:
-    // Optional<User> findByFirstNameAndLastName(String firstName, String lastName);
-    // List<User> findByFirstName(String firstName);
-    // List<User> findByLastName(String lastName);
+    // Optional<User> findBygivenNameAndSurname(String givenName, String surname);
+    // List<User> findBygivenName(String givenName);
+    // List<User> findBySurname(String surname);
     // Optional<User> findByNickname(String nickname);
 
 //    Optional<User> findByMobileNumber(String mobileNumber); // This would be findByMobileNumberE164Value

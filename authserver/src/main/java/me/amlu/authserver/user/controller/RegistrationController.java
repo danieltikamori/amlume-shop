@@ -57,18 +57,19 @@ public class RegistrationController {
         try {
             // You might want to return a UserProfileResponse DTO or just 201 Created
             userManager.createUser(
-                    request.firstName(),
-                    request.lastName(),
+                    request.givenName(),
+                    request.middleName(),
+                    request.surname(),
                     request.nickname(),
                     request.email(), // PRIMARY LOGIN email
                     request.password(),
                     request.mobileNumber(),
                     request.defaultRegion(),
-                    request.backupEmail()
+                    request.recoveryEmail()
             );
             return ResponseEntity.status(HttpStatus.CREATED).build();
         } catch (DataIntegrityViolationException e) {
-            log.warn("Registration attempt for already existing email or backup email: {} / {}", request.email(), request.backupEmail());
+            log.warn("Registration attempt for already existing email or backup email: {} / {}", request.email(), request.recoveryEmail());
             throw new ResponseStatusException(HttpStatus.CONFLICT, "User with this email or backup email already exists.");
         } catch (IllegalArgumentException e) {
             log.warn("Invalid registration request: {}", e.getMessage());
@@ -81,24 +82,26 @@ public class RegistrationController {
      * Data Transfer Object (DTO) for user registration requests.
      * Contains the necessary fields for creating a new user account.
      *
-     * @param firstName The user's first name (required).
-     * @param lastName The user's last name (optional).
+     * @param givenName The user's first name (required).
+     * @param middleName The user's middle name (optional).
+     * @param surname The user's last name (optional).
      * @param nickname The user's nickname (optional).
      * @param email The user's primary email address, used for login (required and must be a valid email format).
      * @param password The user's password (required).
      * @param mobileNumber The user's mobile number (optional).
      * @param defaultRegion The user's default region, potentially used for phone number parsing (optional).
-     * @param backupEmail The user's backup email address (optional and must be a valid email format).
+     * @param recoveryEmail The user's recovery email address (optional and must be a valid email format).
      */
     public record RegistrationRequest(
-            @NotBlank String firstName,
-            String lastName, // Optional
+            @NotBlank String givenName,
+            String middleName, // Optional
+            String surname, // Optional
             String nickname, // Optional
             @NotBlank @Email String email, // PRIMARY LOGIN email
             @NotBlank String password, // Consider password complexity rules
             String mobileNumber, // Optional
             String defaultRegion, // Optional, for phone number parsing
-            @Email String backupEmail // Optional backup email
+            @Email String recoveryEmail // Optional recovery email
     ) {
     }
 }

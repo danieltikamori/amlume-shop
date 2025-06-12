@@ -90,8 +90,8 @@ public class JwtCustomizationService {
      */
     private void putUserSpecificClaims(Map<String, Object> claims, User appUser) {
         claims.put("user_id_numeric", appUser.getId());
-        claims.put("given_name", appUser.getFirstName());
-        claims.put("family_name", appUser.getLastName());
+        claims.put("given_name", appUser.getGivenName());
+        claims.put("family_name", appUser.getSurname());
         claims.put("full_name", appUser.getDisplayableFullName());
         claims.put("nickname", appUser.getNickname());
         claims.put("email", appUser.getEmail().getValue()); // Ensure email is consistently added
