@@ -15,17 +15,15 @@ import jakarta.persistence.*;
 import me.amlu.authserver.model.AbstractAuditableEntity;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.passkey.model.PasskeyCredential;
+import me.amlu.authserver.security.util.EncryptedEmailAddressConverter;
+import me.amlu.authserver.security.util.EncryptedPhoneNumberConverter;
+import me.amlu.authserver.security.util.EncryptedStringConverter;
 import me.amlu.authserver.user.model.vo.AccountStatus;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.model.vo.PhoneNumber;
-import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLDelete;
-import org.hibernate.annotations.UpdateTimestamp;
 import org.hibernate.proxy.HibernateProxy;
-import org.springframework.data.annotation.CreatedBy;
-import org.springframework.data.annotation.LastModifiedBy;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -78,7 +76,8 @@ public class User extends AbstractAuditableEntity implements UserDetails {
     @Column(name = "first_name", nullable = false, length = 127)
     private String firstName;
 
-    @Column(name = "last_name", length = 255) // Nullable
+    @Column(name = "last_name", columnDefinition = "BYTEA") // Change to BYTEA
+    @Convert(converter = EncryptedStringConverter.class)    // Apply converter
     private String lastName;
 
     @Column(name = "nickname", length = 127) // Nullable, user-defined display name
@@ -90,15 +89,19 @@ public class User extends AbstractAuditableEntity implements UserDetails {
 
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "value", column = @Column(name = "backup_email", unique = true, nullable = true)) // Nullable, maybe not unique globally
+            // Change column name to reflect encryption and type to BYTEA for PostgreSQL
+            @AttributeOverride(name = "value", column = @Column(name = "backup_email_encrypted", columnDefinition = "BYTEA", unique = true, nullable = true))
     })
+    @Convert(converter = EncryptedEmailAddressConverter.class) // Apply the converter
     private EmailAddress backupEmail;
 
     @Column(name = "profile_picture_url", length = 2046)
     private String profilePictureUrl;
 
     @Embedded
-    @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number", length = 20, unique = true))
+    // Change column name to reflect encryption and type to BYTEA for PostgreSQL
+    @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number_encrypted", columnDefinition = "BYTEA", length = 20, unique = true))
+    @Convert(converter = EncryptedPhoneNumberConverter.class) // Apply the converter
     private PhoneNumber mobileNumber;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
