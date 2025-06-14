@@ -30,7 +30,8 @@ public class AccountStatus implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    public static final int DEFAULT_MAX_FAILED_ATTEMPTS = 5; // Default threshold
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
 
     @Column(name = "enabled", nullable = false)
     private boolean enabled;
@@ -56,6 +57,7 @@ public class AccountStatus implements Serializable {
         this.lockoutExpirationTime = lockoutExpirationTime;
         this.accountNonExpired = accountNonExpired;
         this.credentialsNonExpired = credentialsNonExpired;
+        this.emailVerified = false; // Default to unverified
     }
 
     public AccountStatus() {
@@ -63,7 +65,16 @@ public class AccountStatus implements Serializable {
 
     // Factory method for a new, default account status
     public static AccountStatus initial() {
-        return new AccountStatus(true, 0, null, true, true);
+        AccountStatus status = new AccountStatus(true, 0, null, true, true);
+        status.emailVerified = false; // Explicitly set to false for clarity
+        return status;
+    }
+
+    // Factory method for a new account with verified email
+    public static AccountStatus initialVerified() {
+        AccountStatus status = new AccountStatus(true, 0, null, true, true);
+        status.emailVerified = true;
+        return status;
     }
 
     // --- Behavioral methods for the VO itself ---
@@ -96,6 +107,24 @@ public class AccountStatus implements Serializable {
         // Disabling an account might also imply locking it indefinitely,
         // but 'enabled' is the primary flag here.
         return new AccountStatus(false, this.failedLoginAttempts, this.lockoutExpirationTime, this.accountNonExpired, this.credentialsNonExpired);
+    }
+
+    // --- Methods for Email ---
+
+    public AccountStatus verifyEmail() {
+        AccountStatus status = new AccountStatus(this.enabled, this.failedLoginAttempts, this.lockoutExpirationTime, this.accountNonExpired, this.credentialsNonExpired);
+        status.emailVerified = true;
+        return status;
+    }
+
+    public AccountStatus unverifyEmail() {
+        AccountStatus status = new AccountStatus(this.enabled, this.failedLoginAttempts, this.lockoutExpirationTime, this.accountNonExpired, this.credentialsNonExpired);
+        status.emailVerified = false;
+        return status;
+    }
+
+    public boolean isEmailVerified() {
+        return this.emailVerified;
     }
 
     // --- Methods for UserDetails compatibility ---

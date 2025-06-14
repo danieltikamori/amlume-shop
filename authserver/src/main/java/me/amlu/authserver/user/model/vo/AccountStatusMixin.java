@@ -42,7 +42,8 @@ public abstract class AccountStatusMixin {
             @JsonProperty("failedLoginAttempts") int failedLoginAttempts,
             @JsonProperty("lockoutExpirationTime") Instant lockoutExpirationTime,
             @JsonProperty("accountNonExpired") boolean accountNonExpired,
-            @JsonProperty("credentialsNonExpired") boolean credentialsNonExpired
+            @JsonProperty("credentialsNonExpired") boolean credentialsNonExpired,
+            @JsonProperty("emailVerified") boolean emailVerified
             // Note: Other fields like lastLoginTime or derived properties (e.g., accountNonLocked)
             // are typically not part of the core constructor for deserialization if they are
             // managed by behavior or are transient. This constructor should match the
