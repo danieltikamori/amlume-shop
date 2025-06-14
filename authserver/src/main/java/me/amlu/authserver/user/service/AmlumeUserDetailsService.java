@@ -15,6 +15,7 @@ import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -49,6 +50,13 @@ public class AmlumeUserDetailsService implements UserDetailsService {
         // Its getUsername() method should return the email.
         // And the account status methods (isAccountNonExpired, etc.) should be correctly implemented.
         LOGGER.info("User found: {}, Enabled: {}, AccountNonLocked: {}", user.getUsername(), user.isEnabled(), user.isAccountNonLocked());
-        return user; // Return the User entity directly
+
+        // Build Spring Security UserDetails object with roles/authorities
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getUsername())
+                .password(user.getPassword()) // Hashed password
+                .roles(user.getAuthorities().stream().map(GrantedAuthority::getAuthority).toArray(String[]::new))
+                .build();
+//        return user; // Return the User entity directly
     }
 }
