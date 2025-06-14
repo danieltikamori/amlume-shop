@@ -10,8 +10,6 @@
 
 package me.amlu.authserver.exceptions;
 
-import me.amlu.shop.amlume_shop.exceptions.BaseException;
-
 public class SecurityValidationException extends BaseException {
     public SecurityValidationException(String message) {
         super(message);

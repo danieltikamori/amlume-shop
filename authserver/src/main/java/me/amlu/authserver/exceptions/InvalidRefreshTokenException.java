@@ -10,8 +10,6 @@
 
 package me.amlu.authserver.exceptions;
 
-import me.amlu.shop.amlume_shop.exceptions.BaseException;
-
 import java.io.Serial;
 
 public class InvalidRefreshTokenException extends BaseException {

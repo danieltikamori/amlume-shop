@@ -11,7 +11,7 @@
 package me.amlu.authserver.exceptions;
 
 import lombok.Getter;
-import me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants;
+import me.amlu.authserver.common.TokenConstants;
 
 // Constants as enum for better organization and type safety
 @Getter

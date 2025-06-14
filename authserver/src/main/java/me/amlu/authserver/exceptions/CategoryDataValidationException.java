@@ -10,7 +10,6 @@
 
 package me.amlu.authserver.exceptions;
 
-import me.amlu.shop.amlume_shop.exceptions.BaseException;
 
 public class CategoryDataValidationException extends BaseException {
     public CategoryDataValidationException(String message) {
