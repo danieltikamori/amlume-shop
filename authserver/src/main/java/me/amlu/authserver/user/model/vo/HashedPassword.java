@@ -12,11 +12,20 @@ package me.amlu.authserver.user.model.vo;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.Assert;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
+
+import static me.amlu.authserver.common.Constants.PASSWORD_FIELD_LENGTH;
+import static me.amlu.authserver.common.SecurityConstants.*;
 
 /**
  * Includes validation
@@ -31,7 +40,8 @@ public class HashedPassword implements Serializable {
     // The column definition will be in the User entity via @AttributeOverride
     // or if the column name in User matches this field name.
     // For clarity, we'll use the @AttributeOverride in User.
-    @Column(name = "password_value", length = 128) // Example, if not overridden, but User will override to "password"
+    @Column(name = "password", length = PASSWORD_FIELD_LENGTH)
+    // If not overridden, but User will override to "password"
     private String value;
 
     public HashedPassword(String hashedPasswordValue) {
@@ -39,6 +49,53 @@ public class HashedPassword implements Serializable {
         // Optionally, add a check for a common prefix if your hashes always start with one (e.g., "{bcrypt}")
         // Assert.isTrue(hashedPasswordValue.startsWith("{bcrypt}"), "Hashed password must be in a recognized format");
         this.value = hashedPasswordValue;
+    }
+
+    public boolean passwordMatches(String rawPassword) {
+        if (rawPassword == null || rawPassword.trim().isEmpty() || value == null) {
+            return false; // Consider this case as not matching for security
+        }
+
+        try {
+            // Create encoders for supported formats
+            Map<String, PasswordEncoder> encoders = new HashMap<>();
+            encoders.put("bcrypt", new BCryptPasswordEncoder());
+            encoders.put("argon2", new Argon2PasswordEncoder(
+                    ARGON2_SALT_LENGTH,
+                    ARGON2_HASH_LENGTH,
+                    ARGON2_PARALLELISM,
+                    ARGON2_MEMORY,
+                    ARGON2_ITERATIONS
+            ));
+
+            // Default encoder for new passwords
+            String defaultEncoderId = "argon2";
+
+            // Handle Spring Security's {id}hash format
+            if (value.startsWith("{")) {
+                DelegatingPasswordEncoder delegatingEncoder = new DelegatingPasswordEncoder(defaultEncoderId, encoders);
+                return delegatingEncoder.matches(rawPassword, value);
+            }
+            // Handle raw format without {id} prefix
+            else if (value.startsWith("$")) {
+                // BCrypt format
+                if (value.startsWith("$2")) {
+                    return encoders.get("bcrypt").matches(rawPassword, value);
+                }
+                // Argon2 format
+                else if (value.startsWith("$argon2")) {
+                    return encoders.get("argon2").matches(rawPassword, value);
+                }
+            }
+
+            // If we get here, try with the default encoder as a fallback
+            return encoders.get(defaultEncoderId).matches(rawPassword, value);
+
+        } catch (Exception e) {
+            // Log the error for debugging
+            System.err.println("Error during password matching: " + e.getMessage());
+            return false;
+        }
     }
 
     public HashedPassword() {
