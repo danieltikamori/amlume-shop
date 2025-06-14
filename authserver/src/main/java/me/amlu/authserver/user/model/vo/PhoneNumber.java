@@ -16,6 +16,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.lang.NonNull;
 import org.springframework.util.StringUtils;
 
 import java.io.Serial;
@@ -146,6 +147,7 @@ public record PhoneNumber(
      * @return The E.164 string representation of the phone number, or empty string.
      */
     @Override
+    @NonNull
     public String toString() {
         return this.e164Value != null ? this.e164Value : "";
     }
