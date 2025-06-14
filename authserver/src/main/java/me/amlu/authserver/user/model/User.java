@@ -39,6 +39,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static me.amlu.authserver.common.SecurityConstants.MAX_LOGIN_ATTEMPTS;
+
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "email"),
@@ -140,6 +142,12 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     private Instant lastLoginAt;
 
     /**
+     * Last time this user changed their password
+     */
+    @Column(name = "last_password_change_date")
+    private Instant lastPasswordChangeDate;
+
+    /**
      * Last time this user was deleted
      * Soft delete - The user is still in the database, but is marked as deleted
      */
@@ -157,6 +165,10 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @JsonIgnore
     // Exclude from default toString to avoid issues with lazy loading or verbosity
     private Set<Authority> authorities = new HashSet<>(); // Initialize to avoid NullPointerExceptions
+
+    @Version
+    @Column(name = "version")
+    private int version;
 
     private User(Long id, String externalIdParam, String givenName, String middleName, String surname, String nickname, EmailAddress email, EmailAddress recoveryEmail, PhoneNumber mobileNumber,
                  HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities) {
@@ -223,6 +235,15 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
 
     // --- Behavioral Methods for Account Status ---
 
+    /**
+     * Records a successful login attempt.
+     * Also resets login failures count.
+     */
+    public void recordSuccessfulLogin() {
+        this.lastLoginAt = Instant.now();
+        this.accountStatus = this.accountStatus.resetLoginFailures(); // Also reset failures
+    }
+
     public void recordLoginFailure() {
         this.accountStatus = this.accountStatus.recordLoginFailure();
     }
@@ -246,15 +267,6 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         // @UpdateTimestamp will handle updatedAt
     }
 
-    /**
-     * Records a successful login attempt.
-     * Also resets login failures count.
-     */
-    public void recordSuccessfulLogin() {
-        this.lastLoginAt = Instant.now();
-        this.accountStatus = this.accountStatus.resetLoginFailures(); // Also reset failures
-    }
-
     public void lockAccount(Duration lockDuration) {
         Assert.notNull(lockDuration, "Lock duration cannot be null.");
         Assert.isTrue(!lockDuration.isNegative() && !lockDuration.isZero(), "Lock duration must be positive.");
@@ -274,7 +286,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     }
 
     public boolean isLoginAttemptsExceeded() {
-        return this.accountStatus.getFailedLoginAttempts() >= AccountStatus.DEFAULT_MAX_FAILED_ATTEMPTS;
+        return this.accountStatus.getFailedLoginAttempts() >= MAX_LOGIN_ATTEMPTS;
     }
 
     public void updateGivenName(String newGivenName) {
@@ -326,6 +338,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         // For now, assume changePassword means setting one.
         Objects.requireNonNull(newHashedPassword, "New hashed password for changePassword cannot be null.");
         this.password = newHashedPassword;
+        this.lastPasswordChangeDate = Instant.now();
         // @UpdateTimestamp will handle updatedAt
     }
 
@@ -553,8 +566,20 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return sb.isEmpty() ? "" : sb.toString();
     }
 
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public Instant getLastPasswordChangeDate() {
+        return lastPasswordChangeDate;
+    }
+
     public Instant getDeletedAt() {
         return deletedAt;
+    }
+
+    public int getVersion() {
+        return version;
     }
 
     public void setDeletedAt(Instant deletedAt) {
