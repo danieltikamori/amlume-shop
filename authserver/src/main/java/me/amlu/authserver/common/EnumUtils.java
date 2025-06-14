@@ -109,7 +109,10 @@ public final class EnumUtils {
         }
 
         try {
-            Enum.valueOf(enumClass, value.toUpperCase());
+            // Assign the result to a variable, even if it's not used further.
+            // This satisfies the Error Prone check.
+            @SuppressWarnings("unused") // Suppress "unused" warning for this specific variable
+            T enumConstant = Enum.valueOf(enumClass, value.toUpperCase());
             return true;
         } catch (IllegalArgumentException e) {
             return false;
