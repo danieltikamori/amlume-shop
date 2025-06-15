@@ -11,6 +11,9 @@
 package me.amlu.authserver.security;
 
 import io.micrometer.core.annotation.Timed;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -21,13 +24,16 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-@Component
+@Component("amlumeUsernamePwdAuthenticationProvider") // Ensure this bean name is consistent if used elsewhere
 public class AmlumeUsernamePwdAuthenticationProvider implements AuthenticationProvider {
 
+    private static final Logger log = LoggerFactory.getLogger(AmlumeUsernamePwdAuthenticationProvider.class); // Add logger
     private final UserDetailsService userDetailsService;
     private final PasswordEncoder passwordEncoder;
 
-    public AmlumeUsernamePwdAuthenticationProvider(UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
+    public AmlumeUsernamePwdAuthenticationProvider(
+            @Qualifier("amlumeUserDetailsService") UserDetailsService userDetailsService, // Specify by bean name
+            PasswordEncoder passwordEncoder) {
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
     }
@@ -37,6 +43,7 @@ public class AmlumeUsernamePwdAuthenticationProvider implements AuthenticationPr
     public Authentication authenticate(Authentication authentication) throws AuthenticationException {
         String username = authentication.getName();
         String pwd = authentication.getCredentials().toString();
+        // This will now correctly call AmlumeUserDetailsService
         UserDetails userDetails = userDetailsService.loadUserByUsername(username);
         if (passwordEncoder.matches(pwd, userDetails.getPassword())) {
             // Set the UserDetails object (your User entity) as the principal
@@ -50,5 +57,4 @@ public class AmlumeUsernamePwdAuthenticationProvider implements AuthenticationPr
     public boolean supports(Class<?> authentication) {
         return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
     }
-
 }
