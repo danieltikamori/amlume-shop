@@ -11,8 +11,11 @@
 package me.amlu.authserver.user.service;
 
 import io.micrometer.core.annotation.Timed;
+import me.amlu.authserver.oauth2.model.Authority;
+import me.amlu.authserver.passkey.model.PasskeyCredential;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.GrantedAuthority;
@@ -22,7 +25,12 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Service
+import java.util.ArrayList; // For iterating over a copy
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
+@Service // Default bean name will be "amlumeUserDetailsService"
 public class AmlumeUserDetailsService implements UserDetailsService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AmlumeUserDetailsService.class);
@@ -34,29 +42,70 @@ public class AmlumeUserDetailsService implements UserDetailsService {
     }
 
     @Override
-    @Transactional(readOnly = true) // Good practice for read-only database operations
+    @Transactional(readOnly = true)
     @Timed(value = "authserver.userdetailsservice.load", description = "Time taken to load user by username")
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         LOGGER.info("Loading user by username (email): {}", username);
-        User user = userRepository.findByEmail_Value(username)
+        User user = userRepository.findByEmail_Value(username) // Uses @EntityGraph for authorities and passkeyCredentials
                 .orElseThrow(() -> {
                     LOGGER.warn("User details not found for the user (email): {}", username);
                     return new UsernameNotFoundException("User details not found for the user: " + username);
                 });
 
-        // The User entity itself implements UserDetails.
-        // Its getAuthorities() method should return Collection<? extends GrantedAuthority>.
-        // Its getPassword() method should return the hashed password.
-        // Its getUsername() method should return the email.
-        // And the account status methods (isAccountNonExpired, etc.) should be correctly implemented.
-        LOGGER.info("User found: {}, Enabled: {}, AccountNonLocked: {}", user.getUsername(), user.isEnabled(), user.isAccountNonLocked());
+        // Unproxy the user entity itself
+        User unproxiedUser = (User) Hibernate.unproxy(user);
 
-        // Build Spring Security UserDetails object with roles/authorities
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getUsername())
-                .password(user.getPassword()) // Hashed password
-                .roles(user.getAuthorities().stream().map(GrantedAuthority::getAuthority).toArray(String[]::new))
-                .build();
-//        return user; // Return the User entity directly
+        // --- Explicitly initialize and de-proxy the authorities collection ---
+        Hibernate.initialize(unproxiedUser.getAuthorities()); // Ensures the collection proxy is initialized
+        Set<Authority> deProxiedAuthorities = new HashSet<>();
+        Collection<? extends GrantedAuthority> authoritiesToIterate = unproxiedUser.getAuthorities();
+
+        if (authoritiesToIterate != null && !authoritiesToIterate.isEmpty()) {
+            for (GrantedAuthority grantedAuth : authoritiesToIterate) {
+                if (grantedAuth instanceof Authority auth) { // Use pattern variable
+                    Authority unproxiedAuth = (Authority) Hibernate.unproxy(auth);
+                    // Authority.permissions is EAGER, so they should be loaded with unproxiedAuth.
+                    deProxiedAuthorities.add(unproxiedAuth);
+                } else {
+                    LOGGER.warn("Skipping authority of type {} as it's not an instance of me.amlu.authserver.oauth2.model.Authority",
+                            grantedAuth.getClass().getName());
+                }
+            }
+        }
+        // Replace the original collection
+        unproxiedUser.setAuthorities(deProxiedAuthorities); // Replace with the de-proxied set
+
+        // --- Explicitly initialize and de-proxy the passkeyCredentials collection ---
+        // EntityGraph should have loaded them. This ensures elements are not proxies.
+        Hibernate.initialize(unproxiedUser.getPasskeyCredentials()); // Initialize the collection from the unproxiedUser
+        Set<PasskeyCredential> deProxiedPasskeys = new HashSet<>();
+        // Iterate over a copy because getPasskeyCredentials() returns an unmodifiable set
+        if (unproxiedUser.getPasskeyCredentials() != null && !unproxiedUser.getPasskeyCredentials().isEmpty()) {
+            for (PasskeyCredential pkc : new ArrayList<>(unproxiedUser.getPasskeyCredentials())) {
+                PasskeyCredential unproxiedPkc = (PasskeyCredential) Hibernate.unproxy(pkc);
+                // If PasskeyCredential had its own LAZY associations that are needed in session,
+                // initialize and de-proxy them here. For now, assume PasskeyCredential is simple enough.
+                deProxiedPasskeys.add(unproxiedPkc);
+            }
+        }
+        unproxiedUser.setPasskeyCredentials(deProxiedPasskeys); // Replace with the de-proxied set
+
+        LOGGER.info("User found: {}, Authorities loaded: {}, Passkeys loaded: {}, Enabled: {}, AccountNonLocked: {}",
+                unproxiedUser.getUsername(),
+                unproxiedUser.getAuthorities() != null ? unproxiedUser.getAuthorities().size() : "null",
+                unproxiedUser.getPasskeyCredentials() != null ? unproxiedUser.getPasskeyCredentials().size() : "null",
+                unproxiedUser.isEnabled(),
+                unproxiedUser.isAccountNonLocked());
+
+        // OLD: Creating a new Spring Security User object
+        // return org.springframework.security.core.userdetails.User.builder()
+        //         .username(user.getUsername())
+        //         .password(user.getPassword()) // Hashed password
+        //         .roles(user.getAuthorities().stream().map(GrantedAuthority::getAuthority).toArray(String[]::new)) // This would use the modified User.getAuthorities()
+        //         .build();
+
+        // NEW: Return the custom User entity directly, as it implements UserDetails
+        // and its getAuthorities() method now returns the custom Authority objects.
+        return unproxiedUser; // Return the fully processed User object
     }
 }
