@@ -14,6 +14,10 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import me.amlu.authserver.config.jackson.serializer.DurationDeserializer;
+import me.amlu.authserver.config.jackson.serializer.DurationSerializer;
 import org.springframework.security.web.webauthn.api.*;
 import org.springframework.security.web.webauthn.api.CredProtectAuthenticationExtensionsClientInput.CredProtect;
 import org.springframework.security.web.webauthn.api.CredProtectAuthenticationExtensionsClientInput.CredProtect.ProtectionPolicy;
@@ -37,12 +41,17 @@ public class CustomWebauthnMixins {
      */
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     public static abstract class WebauthnBytesMixIn {
-        @JsonCreator
-        public WebauthnBytesMixIn(
-                @JsonProperty("bytes") byte[] bytes
-        ) {
-            Objects.requireNonNull(bytes, "bytes cannot be null");
-        }
+        // No @JsonCreator here.
+        // Jackson, with default typing, will use WebauthnJackson2Module's BytesSerializer (outputs string)
+        // and BytesDeserializer (expects string for the value part).
+        // The @JsonValue on Bytes.toBase64UrlString() is key.
+
+//        @JsonCreator
+//        public WebauthnBytesMixIn(
+//                @JsonProperty("bytes") byte[] bytes
+//        ) {
+//            Objects.requireNonNull(bytes, "bytes cannot be null");
+//        }
     }
 
     /**
@@ -50,6 +59,14 @@ public class CustomWebauthnMixins {
      */
     @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "@class")
     public static abstract class PublicKeyCredentialCreationOptionsMixIn {
+
+        // Ensure this uses the string-based DurationSerializer that handles serializeWithType
+        @JsonSerialize(using = DurationSerializer.class)
+        public abstract Duration getTimeout();
+
+        // Optional: if we also need custom deserialization for this field
+        @JsonDeserialize(using = DurationDeserializer.class)
+        public abstract void setTimeout(Duration timeout);
 
         @JsonCreator
         public PublicKeyCredentialCreationOptionsMixIn(
