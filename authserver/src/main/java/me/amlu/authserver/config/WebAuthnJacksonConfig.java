@@ -12,17 +12,14 @@ package me.amlu.authserver.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.core.type.WritableTypeId;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import me.amlu.authserver.config.jackson.mixin.DurationMixin;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import me.amlu.authserver.config.jackson.module.CustomJavaTimeModule;
+import me.amlu.authserver.config.jackson.mixin.DurationMixin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.BeanClassLoaderAware;
@@ -60,31 +57,34 @@ public class WebAuthnJacksonConfig implements BeanClassLoaderAware {
      * This mapper is configured with the WebauthnJackson2Module and appropriate type information
      * to ensure WebAuthn objects can be properly serialized and deserialized in Redis sessions.
      *
-     * @param primaryObjectMapper             The application's primary ObjectMapper (from JacksonConfig)
+     * @param sessionObjectMapper             The application's primary ObjectMapper (from JacksonConfig)
      * @param sessionPolymorphicTypeValidator The validator for polymorphic types
      * @return A configured ObjectMapper for WebAuthn objects
      */
     @Bean
-    @Qualifier("webAuthnSessionObjectMapper")
+    @Qualifier("webAuthnSessionObjectMapper") // This mapper is for WebAuthn objects *in session*
     public ObjectMapper webAuthnSessionObjectMapper(
-            ObjectMapper primaryObjectMapper,
+            @Qualifier("sessionObjectMapper") ObjectMapper sessionObjectMapper,
             @Qualifier("customSessionPolymorphicTypeValidator") PolymorphicTypeValidator sessionPolymorphicTypeValidator) {
 
-        ObjectMapper webAuthnMapper = primaryObjectMapper.copy(); // Start with a copy of the primary
+        ObjectMapper webAuthnMapper = sessionObjectMapper.copy(); // Start with a copy of the primary
+        log.info("webAuthnSessionObjectMapper: Copied 'sessionObjectMapper' (Hash: {}).", System.identityHashCode(sessionObjectMapper));
 
         // 1. Activate Default Typing - This is crucial for this mapper.
         // It should be done early as it can influence serializer selection.
+        // The underlying serializers (especially for Duration within PKCCOptions)
+        // must correctly implement serializeWithType. This should be ensured by sessionObjectMapper's configuration.
         webAuthnMapper.activateDefaultTyping(
                 sessionPolymorphicTypeValidator,
                 ObjectMapper.DefaultTyping.NON_FINAL,
-                JsonTypeInfo.As.PROPERTY // Or your preferred mechanism
+                JsonTypeInfo.As.PROPERTY // Or the preferred mechanism
         );
         log.info("webAuthnSessionObjectMapper: Activated default typing.");
 
         // 2. Register Spring Security modules (including WebauthnJackson2Module)
         // Their serializers might be overridden by subsequent modules for specific types.
         SecurityJackson2Modules.getModules(this.classLoader).forEach(webAuthnMapper::registerModule);
-        // Explicitly register WebauthnJackson2Module if not found by the above (as per your logs)
+        // Explicitly register WebauthnJackson2Module if not found by the above
         if (SecurityJackson2Modules.getModules(this.classLoader).stream().noneMatch(m -> m instanceof WebauthnJackson2Module)) {
             log.info("webAuthnSessionObjectMapper: Explicitly registering WebauthnJackson2Module as it was not found by SecurityJackson2Modules.getModules().");
             webAuthnMapper.registerModule(new WebauthnJackson2Module());
@@ -126,7 +126,11 @@ public class WebAuthnJacksonConfig implements BeanClassLoaderAware {
             }
         });
         webAuthnMapper.registerModule(explicitDurationModule);
-        log.info("webAuthnSessionObjectMapper: Registered custom ExplicitDurationWithTypeModule to force String serialization for Duration and handle serializeWithType.");
+
+        // Add mixin for Duration to ensure proper type handling
+        webAuthnMapper.addMixIn(Duration.class, DurationMixin.class);
+
+        log.info("webAuthnSessionObjectMapper: Registered custom Duration serialization with type handling");
 
         log.info("Configured specialized WebAuthn ObjectMapper for session serialization (Hash: {})",
                 System.identityHashCode(webAuthnMapper));
@@ -137,15 +141,54 @@ public class WebAuthnJacksonConfig implements BeanClassLoaderAware {
      * Creates a Redis serializer using the WebAuthn-specific ObjectMapper.
      * This serializer is optimized for handling WebAuthn objects in Redis sessions.
      *
-     * @param webAuthnSessionObjectMapper The WebAuthn-specific ObjectMapper
+     * @param webAuthnSessionObjectMapperForRedis The WebAuthn-specific ObjectMapper
      * @return A RedisSerializer for WebAuthn objects
      */
     @Bean
     @Qualifier("webAuthnRedisSerializer")
     public RedisSerializer<Object> webAuthnRedisSerializer(
-            @Qualifier("webAuthnSessionObjectMapper") ObjectMapper webAuthnSessionObjectMapper) {
+            @Qualifier("webAuthnSessionObjectMapper") ObjectMapper webAuthnSessionObjectMapperForRedis) { // Use the mapper qualified for WebAuthn in session
+        log.info("Creating WebAuthn-specific Redis serializer using 'webAuthnSessionObjectMapper' (Hash: {})",
+                System.identityHashCode(webAuthnSessionObjectMapperForRedis));
+        return new GenericJackson2JsonRedisSerializer(webAuthnSessionObjectMapperForRedis);
+    }
 
-        log.info("Creating WebAuthn-specific Redis serializer using ObjectMapper (Hash: {})", System.identityHashCode(webAuthnSessionObjectMapper));
-        return new GenericJackson2JsonRedisSerializer(webAuthnSessionObjectMapper);
+    // Additional module specifically for Duration serialization
+    @Bean
+    public SimpleModule javaTimeModule() {
+        SimpleModule module = new SimpleModule("ExtraJavaTimeModule");
+        module.addSerializer(Duration.class, new JsonSerializer<Duration>() {
+            @Override
+            public void serialize(Duration value, JsonGenerator gen, SerializerProvider provider) throws IOException {
+                if (value == null) {
+                    gen.writeNull();
+                } else {
+                    gen.writeString(value.toString());
+                }
+            }
+
+            @Override
+            public void serializeWithType(Duration value, JsonGenerator gen, SerializerProvider serializers,
+                                          com.fasterxml.jackson.databind.jsontype.TypeSerializer typeSer) throws IOException {
+                if (value == null) {
+                    gen.writeNull();
+                    return;
+                }
+                WritableTypeId typeId = typeSer.typeId(value, Duration.class, JsonToken.VALUE_STRING);
+                typeSer.writeTypePrefix(gen, typeId);
+                serialize(value, gen, serializers);
+                typeSer.writeTypeSuffix(gen, typeId);
+            }
+        });
+        module.addDeserializer(Duration.class, new JsonDeserializer<Duration>() {
+            @Override
+            public Duration deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+                if (p.currentToken() == JsonToken.VALUE_NULL) {
+                    return null;
+                }
+                return Duration.parse(p.getValueAsString());
+            }
+        });
+        return module;
     }
 }
