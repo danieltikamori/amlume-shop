@@ -65,7 +65,15 @@ public class EncryptedByteArrayConverter implements AttributeConverter<byte[], b
             log.info("Setting static EncryptionService in EncryptedByteArrayConverter");
             EncryptedByteArrayConverter.staticEncryptionService = encryptionService;
         } else {
-            log.warn("Static EncryptionService in EncryptedByteArrayConverter already set. This might indicate multiple initializations.");
+            // This log indicates it's being called again while already set.
+            log.warn("Static EncryptionService in EncryptedByteArrayConverter already set. Current: {}, New: {}. This might indicate multiple initializations or context reloads.",
+                    System.identityHashCode(EncryptedByteArrayConverter.staticEncryptionService),
+                    System.identityHashCode(encryptionService));
+            // Optionally, only set if the instance is different, though with singletons this shouldn't happen.
+            // if (EncryptedByteArrayConverter.staticEncryptionService != encryptionService) {
+            //    log.warn("Re-setting static EncryptionService with a different instance. This is unusual.");
+            //    EncryptedByteArrayConverter.staticEncryptionService = encryptionService;
+            // }
         }
     }
 
