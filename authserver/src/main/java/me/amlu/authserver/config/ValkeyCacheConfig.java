@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
 import io.lettuce.core.TimeoutOptions;
@@ -19,10 +20,13 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+import org.springframework.data.redis.serializer.RedisSerializationContext;
 
 import java.time.Duration;
 
@@ -102,5 +106,26 @@ public class ValkeyCacheConfig {
                 host, port, sslEnabled);
 
         return factory;
+    }
+
+    /**
+     * Configures Spring's cache manager to use our custom Jackson serializer.
+     * This will apply to any @Cacheable, @CachePut, etc., annotations.
+     *
+     * @param objectMapper The pre-configured ObjectMapper bean.
+     * @return The Redis cache configuration.
+     */
+    @Bean
+    public RedisCacheConfiguration cacheConfiguration(ObjectMapper objectMapper) {
+        // Create a Jackson serializer with our custom ObjectMapper
+        GenericJackson2JsonRedisSerializer jacksonSerializer = new GenericJackson2JsonRedisSerializer(objectMapper);
+
+        return RedisCacheConfiguration.defaultCacheConfig()
+                // Set a reasonable time-to-live for cache entries
+                .entryTtl(Duration.ofMinutes(60))
+                // Disable caching of null values
+                .disableCachingNullValues()
+                // Define the serializer for cache values
+                .serializeValuesWith(RedisSerializationContext.SerializationPair.fromSerializer(jacksonSerializer));
     }
 }

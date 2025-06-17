@@ -11,6 +11,7 @@
 package me.amlu.authserver.config.jackson.serializer;
 
 import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 
@@ -18,13 +19,21 @@ import java.io.IOException;
 import java.time.Duration;
 
 /**
- * Custom deserializer for java.time.Duration that converts milliseconds to Duration.
+ * Custom deserializer for java.time.Duration that converts string representation to Duration.
  * This is used to ensure proper deserialization of Duration objects in WebAuthn session data.
  */
 public class DurationDeserializer extends JsonDeserializer<Duration> {
     @Override
     public Duration deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
-        long millis = p.getValueAsLong();
-        return Duration.ofMillis(millis);
+        if (p.currentToken() == JsonToken.VALUE_STRING) {
+            String text = p.getText();
+            return Duration.parse(text);
+        } else if (p.currentToken() == JsonToken.VALUE_NUMBER_INT) {
+            long millis = p.getLongValue();
+            return Duration.ofMillis(millis);
+        }
+
+        throw ctxt.wrongTokenException(p, Duration.class, JsonToken.VALUE_STRING,
+                "Expected string or number for Duration");
     }
 }

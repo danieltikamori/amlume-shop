@@ -18,10 +18,16 @@ import me.amlu.authserver.security.CustomWebAuthnRelyingPartyOperations;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.*;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.DelegatingPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.access.expression.DefaultWebSecurityExpressionHandler;
 import org.springframework.security.web.authentication.password.HaveIBeenPwnedRestApiPasswordChecker;
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
@@ -30,8 +36,14 @@ import org.springframework.security.web.webauthn.management.PublicKeyCredentialU
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;
 import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
 
+import java.util.HashMap;
+import java.util.Map;
+
+import static me.amlu.authserver.common.SecurityConstants.*;
+
 @Profile("!test")
 @Configuration
+@EnableMethodSecurity(prePostEnabled = true) // Enables @PreAuthorize, @PostAuthorize, etc.
 public class CommonSecurityConfig {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CommonSecurityConfig.class);
 
@@ -39,6 +51,19 @@ public class CommonSecurityConfig {
 
     public CommonSecurityConfig(javax.sql.DataSource dataSource) {
         this.dataSource = dataSource;
+    }
+
+    @Bean
+    public RoleHierarchy roleHierarchy() {
+        String hierarchy = "ROLE_ROOT > ROLE_SUPER_ADMIN > ROLE_ADMIN > ROLE_USER";
+        return RoleHierarchyImpl.fromHierarchy(hierarchy);
+    }
+
+    @Bean
+    public DefaultWebSecurityExpressionHandler webSecurityExpressionHandler() {
+        DefaultWebSecurityExpressionHandler expressionHandler = new DefaultWebSecurityExpressionHandler();
+        expressionHandler.setRoleHierarchy(roleHierarchy());
+        return expressionHandler;
     }
 
     // @Bean (if not already implicitly configured by Spring Boot)
@@ -185,8 +210,20 @@ public class CommonSecurityConfig {
     // --- PasswordEncoder, CompromisedPasswordChecker ---
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return PasswordEncoderFactories.createDelegatingPasswordEncoder();
+//        Argon2PasswordEncoder passwordEncoder = new Argon2PasswordEncoder(
+//                16,    // saltLength
+//                32,    // hashLength
+//                2,     // parallelism (adjust based on CPU cores)
+//                1 << 14, // memory cost (16MB - adjust based on available RAM)
+//                3       // iterations (increase for more security, impacts performance)
+//        );
+        String encodingId = "argon2";
+        Map<String, PasswordEncoder> encoders = new HashMap<>();
+        encoders.put(encodingId, new Argon2PasswordEncoder(ARGON2_SALT_LENGTH, ARGON2_HASH_LENGTH, ARGON2_PARALLELISM, ARGON2_MEMORY, ARGON2_ITERATIONS));
+//        encoders.put(encodingId, new Argon2PasswordEncoder(16, 32, 2, 1 << 14, 3));
+        return new DelegatingPasswordEncoder(encodingId, encoders);
     }
+
 
     /**
      * Checks for compromised passwords.

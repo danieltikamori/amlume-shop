@@ -11,21 +11,23 @@
 package me.amlu.authserver.config.jackson.module;
 
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import me.amlu.authserver.config.jackson.serializer.DurationDeserializer;
-import me.amlu.authserver.config.jackson.serializer.DurationSerializer;
+import com.fasterxml.jackson.datatype.jsr310.deser.DurationDeserializer;
+import com.fasterxml.jackson.datatype.jsr310.ser.DurationSerializer;
 
 import java.time.Duration;
 
 /**
- * Custom Jackson module for handling Java time types, particularly Duration.
- * This module registers custom serializers and deserializers for Duration to ensure
- * proper handling of WebAuthn session data.
+ * Custom module for handling Java 8 time types, particularly Duration.
  */
 public class CustomJavaTimeModule extends SimpleModule {
 
+    private static final long serialVersionUID = 1L;
+
     public CustomJavaTimeModule() {
         super("CustomJavaTimeModule");
-        addSerializer(Duration.class, new DurationSerializer());
-        addDeserializer(Duration.class, new DurationDeserializer());
+
+        // Register serializers and deserializers for Duration
+        addSerializer(Duration.class, DurationSerializer.INSTANCE);
+        addDeserializer(Duration.class, DurationDeserializer.INSTANCE);
     }
 }

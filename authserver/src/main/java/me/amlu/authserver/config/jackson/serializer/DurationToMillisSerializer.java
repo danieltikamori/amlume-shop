@@ -11,7 +11,6 @@
 package me.amlu.authserver.config.jackson.serializer;
 
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
@@ -19,34 +18,23 @@ import com.fasterxml.jackson.databind.jsontype.TypeSerializer;
 import java.io.IOException;
 import java.time.Duration;
 
-/**
- * Custom serializer for java.time.Duration that converts it to a string representation.
- * This is used to ensure proper serialization of Duration objects in WebAuthn session data.
- * Implements serializeWithType to handle type information properly.
- */
-public class DurationSerializer extends JsonSerializer<Duration> {
+public class DurationToMillisSerializer extends JsonSerializer<Duration> {
     @Override
-    public void serialize(Duration duration, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-        if (duration == null) {
+    public void serialize(Duration value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        if (value == null) {
             gen.writeNull();
         } else {
-            gen.writeString(duration.toString());
+            gen.writeNumber(value.toMillis());
         }
     }
 
     @Override
-    public void serializeWithType(Duration value, JsonGenerator gen, SerializerProvider serializers,
-                                  TypeSerializer typeSer) throws IOException {
-        if (value == null) {
-            gen.writeNull();
-            return;
-        }
-
-        // Use a single typeId object for both prefix and suffix
-        com.fasterxml.jackson.core.type.WritableTypeId typeId =
-                typeSer.typeId(value, Duration.class, JsonToken.VALUE_STRING);
-        typeSer.writeTypePrefix(gen, typeId);
+    public void serializeWithType(Duration value, JsonGenerator gen, SerializerProvider serializers, TypeSerializer typeSer) throws IOException {
+        // When default typing is active for the ObjectMapper, this method is called.
+        // By calling the regular serialize method here, we instruct Jackson to
+        // serialize Duration as its simple long value (milliseconds)
+        // WITHOUT attempting to add a type wrapper or @class property,
+        // effectively bypassing default typing for this specific scalar representation.
         serialize(value, gen, serializers);
-        typeSer.writeTypeSuffix(gen, typeId);
     }
 }

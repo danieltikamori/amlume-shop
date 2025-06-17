@@ -8,13 +8,24 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.config;            // In a @Configuration class, e.g., JpaConfig.java or your main application class
+package me.amlu.authserver.config;
 
 import me.amlu.authserver.security.SecurityAuditorAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.domain.AuditorAware;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
+
+/**
+ * JPA Audit Configuration
+ * This class is responsible for configuring JPA auditing, which automatically tracks who created or modified an entity.
+ * It uses the SecurityAuditorAware class to determine the current auditor (user) for auditing purposes.
+ * The @EnableJpaAuditing annotation is used to enable JPA auditing in the application.
+ * The auditorAwareRef attribute specifies the bean name of the AuditorAware implementation to be used.
+ * In this case, it's the SecurityAuditorAware bean, which is responsible for determining the current auditor.
+ * Consider using also @EnableJpaRepositories and @EnableTransactionManagement for JPA repositories and transactions, respectively.
+ * Consider using also Hibernate Envers for auditing history - full entity history - if we need full historical versioning of the entity.
+ */
 
 @Configuration
 @EnableJpaAuditing(auditorAwareRef = "auditorAware")

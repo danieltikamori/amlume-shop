@@ -16,12 +16,14 @@ import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
+import de.codecentric.boot.admin.server.config.AdminServerProperties;
 import jakarta.annotation.PostConstruct;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.service.JwtCustomizationService;
 import me.amlu.authserver.security.CustomAccessDeniedHandler;
+import me.amlu.authserver.security.CustomAuthenticationSuccessHandler;
 import me.amlu.authserver.security.CustomWebAuthnRelyingPartyOperations;
 import me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler;
 import me.amlu.authserver.user.model.User;
@@ -44,6 +46,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
@@ -73,8 +76,11 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -96,6 +102,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+
 @Profile("!prod")
 @Configuration
 @EnableWebSecurity
@@ -106,18 +113,19 @@ import java.util.UUID;
 public class LocalSecurityConfig {
     private static final Logger log = LoggerFactory.getLogger(LocalSecurityConfig.class);
     private final PersistentTokenRepository persistentTokenRepository;
-    private final ObjectMapper objectMapper;
+    //    private final ObjectMapper objectMapper;
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
     private final DataSource dataSource; // Remove?
     private final PasswordEncoder passwordEncoder;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
+    private final CustomAuthenticationSuccessHandler successHandler;
     private final WebAuthnAuthenticationProvider webAuthnAuthenticationProvider;
-    //    private final WebAuthnRelyingPartyOperations relyingPartyOperations;
     private final OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService;
     private final OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService;
     private final OAuth2AuthorizedClientService authorizedClientService; // Remove?
     private final CustomWebAuthnRelyingPartyOperations relyingPartyOperations;
+    private final AdminServerProperties adminServerProperties;
     private final JwtCustomizationService jwtCustomizationService;
 
 
@@ -146,7 +154,6 @@ public class LocalSecurityConfig {
     /**
      * Constructs the LocalSecurityConfig.
      *
-     * @param objectMapper                         The Jackson ObjectMapper for JSON processing.
      * @param jpaRegisteredClientRepositoryAdapter Adapter for managing OAuth2 registered clients in the database.
      * @param webAuthNProperties                   Properties related to WebAuthn configuration.
      * @param persistentTokenRepository            Repository for persistent remember-me tokens.
@@ -158,32 +165,33 @@ public class LocalSecurityConfig {
      * @param oidcUserService                      Custom service for loading OIDC user information.
      * @param oauth2UserService                    Custom service for loading OAuth2 user information.
      */
-    public LocalSecurityConfig(ObjectMapper objectMapper,
+    public LocalSecurityConfig(
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
                                WebAuthNProperties webAuthNProperties,
                                PersistentTokenRepository persistentTokenRepository,
                                DataSource dataSource,
                                PasswordEncoder passwordEncoder,
-                               CustomAccessDeniedHandler customAccessDeniedHandler,
+                               CustomAccessDeniedHandler customAccessDeniedHandler, CustomAuthenticationSuccessHandler successHandler,
                                WebAuthnAuthenticationProvider webAuthnAuthenticationProvider,
-//                               WebAuthnRelyingPartyOperations relyingPartyOperations,
                                CustomWebAuthnRelyingPartyOperations relyingPartyOperations,
                                @Qualifier("customOidcUserService") OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService,
                                @Qualifier("customOAuth2UserService") OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService,
+                               AdminServerProperties adminServerProperties,
                                OAuth2AuthorizedClientService authorizedClientService, JwtCustomizationService jwtCustomizationService
     ) {
-        this.objectMapper = objectMapper;
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
         this.webAuthNProperties = webAuthNProperties;
         this.persistentTokenRepository = persistentTokenRepository;
         this.dataSource = dataSource;
         this.passwordEncoder = passwordEncoder;
         this.customAccessDeniedHandler = customAccessDeniedHandler;
+        this.successHandler = successHandler;
         this.webAuthnAuthenticationProvider = webAuthnAuthenticationProvider;
         this.relyingPartyOperations = relyingPartyOperations;
         this.oidcUserService = oidcUserService;
         this.oauth2UserService = oauth2UserService;
         this.authorizedClientService = authorizedClientService;
+        this.adminServerProperties = adminServerProperties;
         this.jwtCustomizationService = jwtCustomizationService;
     }
 
@@ -231,6 +239,60 @@ public class LocalSecurityConfig {
         return http.build();
     }
 
+    /**
+     * Security Filter Chain for Spring Boot Admin Server UI.
+     * Ordered before the defaultSecurityFilterChain.
+     */
+    @Bean
+    @Order(1) // Order it before the defaultSecurityFilterChain
+    public SecurityFilterChain adminSecurityFilterChain(HttpSecurity http,
+                                                        UserDetailsService userDetailsService, // Inject your main UserDetailsService
+                                                        PasswordEncoder passwordEncoder) throws Exception {
+        String adminContextPath = this.adminServerProperties.getContextPath(); // e.g., "/admin"
+        SavedRequestAwareAuthenticationSuccessHandler adminSuccessHandler = new SavedRequestAwareAuthenticationSuccessHandler();
+        adminSuccessHandler.setTargetUrlParameter("redirectTo");
+        adminSuccessHandler.setDefaultTargetUrl(adminContextPath + "/");
+
+        // Create an AuthenticationManager for the admin chain
+        // You might want a specific provider for admin, or reuse the main one
+        // For simplicity, let's assume you can reuse the main username/password provider
+        // Ensure 'amlumeUsernamePwdAuthenticationProvider' is accessible here or create a new one
+        // For example, if amlumeUsernamePwdAuthenticationProvider is a @Bean:
+        // @Qualifier("amlumeUsernamePwdAuthenticationProvider") AuthenticationProvider amlumeProvider
+        // Or, create a DaoAuthenticationProvider directly:
+        // --- Preferred way to instantiate DaoAuthenticationProvider ---
+        org.springframework.security.authentication.dao.DaoAuthenticationProvider adminAuthProvider =
+                new org.springframework.security.authentication.dao.DaoAuthenticationProvider(userDetailsService);
+        adminAuthProvider.setPasswordEncoder(passwordEncoder);
+
+        ProviderManager adminAuthenticationManager = new ProviderManager(
+                adminAuthProvider
+        );
+
+        http
+                .securityMatcher(adminContextPath + "/**") // IMPORTANT: Restrict this chain to admin paths
+                .authenticationManager(adminAuthenticationManager) // <--- Add this
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers(adminContextPath + "/assets/**").permitAll()
+                        .requestMatchers(adminContextPath + "/login").permitAll()
+                        .anyRequest().authenticated()
+                )
+                .formLogin(formLogin -> formLogin
+                        .loginPage(adminContextPath + "/login")
+                        .successHandler(adminSuccessHandler) // Use SBA's success handler
+                )
+                .logout(logout -> logout.logoutUrl(adminContextPath + "/logout"))
+                .httpBasic(Customizer.withDefaults()) // This will now use the adminAuthenticationManager
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .ignoringRequestMatchers(
+                                PathPatternRequestMatcher.withDefaults().matcher(adminContextPath + "/instances"),
+                                PathPatternRequestMatcher.withDefaults().matcher(adminContextPath + "/actuator/**")
+                        )
+                );
+        return http.build();
+    }
+
     // The JpaRegisteredClientRepositoryAdapter bean (defined as @Service)
     // will be automatically picked up by Spring Authorization Server.
     // No explicit InMemoryRegisteredClientRepository bean for client definitions is needed here.
@@ -258,12 +320,32 @@ public class LocalSecurityConfig {
                                                           OAuth2LoginAuthenticationProvider oauth2LoginAuthenticationProvider
     ) throws Exception {
 
+        // --- IMPORTANT: Add a securityMatcher to this chain ---
+        // This ensures it doesn't conflict by also trying to match /admin/** or /oauth2/**
+        // It should match everything ELSE.
+        // One way is to explicitly exclude the other specific paths.
+        http
+                // .securityMatcher(
+                //         new NegatedRequestMatcher(
+                //                 new OrRequestMatcher(
+                //                         new AntPathRequestMatcher(this.adminServerProperties.getContextPath() + "/**"),
+                //                         new AntPathRequestMatcher("/oauth2/**"), // Assuming this covers auth server
+                //                         new AntPathRequestMatcher("/.well-known/**") // Assuming this covers auth server
+                //                 )
+                //         )
+                // )
+                // OR, if this is truly the LAST chain, you might not need a securityMatcher,
+                // but the error suggests explicitness is better.
+                // For now, let's rely on the ordering and the fact that previous chains have specific matchers.
+                // The authorizeHttpRequests below will define what this chain protects.
+                // The key is that this chain is now ordered AFTER the admin chain.
+
         // Theoretically Spring Security's WebAuthnConfigurer automatically makes its necessary endpoints (e.g., /webauthn/register/options, /webauthn/register, /webauthn/authenticate/options, /webauthn/authenticate) accessible.
 
         // One way to potentially mitigate the "unchecked" warning is to assign the configurer to a typed variable first.
 //        WebAuthnConfigurer<HttpSecurity> webAuthnConfigurer = new WebAuthnConfigurer<>();
 
-        http.authorizeHttpRequests(
+                .authorizeHttpRequests(
                 authorize -> authorize
                         .requestMatchers(
                                 // Static resources
@@ -281,6 +363,8 @@ public class LocalSecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/favicons/apple-touch-icon.png"),
                                 PathPatternRequestMatcher.withDefaults().matcher("/favicons/site.webmanifest"),
 
+                                // Chrome DevTools
+                                PathPatternRequestMatcher.withDefaults().matcher("/.well-known/appspecific/com.chrome.devtools.json"),
 
 
                                 // Public pages and essential endpoints
@@ -332,8 +416,9 @@ public class LocalSecurityConfig {
         http.authenticationManager(mainAuthenticationManager);
 
         // --- Custom Success Handler for WebAuthn ---
+        // Wrap our main success handler with WebAuthn-specific functionality
         AuthenticationSuccessHandler webAuthnSuccessHandler =
-                new WebAuthnPrincipalSettingSuccessHandler(userDetailsService, "/dashboard");
+                new WebAuthnPrincipalSettingSuccessHandler(userDetailsService, successHandler);
 
         // --- Manually Create and Configure WebAuthn Login Filters ---
 
@@ -388,14 +473,15 @@ public class LocalSecurityConfig {
                 .formLogin(formLogin -> formLogin
                                 .loginPage("/login") // Specify your custom login page
                                 .loginProcessingUrl("/login")
+                                .successHandler(successHandler) // Use our custom success handler
                                 .permitAll() // Allow access to the login page path
 //                                .successHandler((request, response, auth) -> response.setStatus(200))
 //                                .failureHandler((request, response, ex) -> response.setStatus(401))
                                 // --- Explicitly configure success and failure URLs ---
                                 // Redirect to a simple success page or the root on success
 //                                .defaultSuccessUrl("/login?form_login_success=true", true) // Redirect to root after successful form login
-                                .defaultSuccessUrl("/dashboard", true)
-//                        .defaultSuccessUrl("/", true) // Redirect to root after successful form login
+                                // No need for defaultSuccessUrl when using custom success handler
+//                                .defaultSuccessUrl("/dashboard", true)
                                 // Redirect back to login page with error parameter on failure
                                 .failureUrl("/login?error=true")
                 )
@@ -414,10 +500,7 @@ public class LocalSecurityConfig {
                                         .oidcUserService(this.oidcUserService)
                                         .userService(this.oauth2UserService)
                                 )
-                                // Redirect to login page with success param. The 'true' flag forces the redirect, ignoring any saved request
-                                .defaultSuccessUrl("/dashboard", true)
-//                        .defaultSuccessUrl("/login?oauth2_login_success=true", true)
-//                                .failureUrl("/login?oauth2_error=true")
+                        .successHandler(successHandler) // Use the same success handler for OAuth2 login
                 )
                 .logout(logout -> logout
 //                                .logoutSuccessUrl("/")
@@ -425,26 +508,45 @@ public class LocalSecurityConfig {
                                 .permitAll()
                 )
 
+                // --- CSRF Configuration ---
+                // CSRF is not required for WebAuthn or OIDC flows, but it's good practice to have it enabled for other forms.
+                // It's also good to have it enabled for the login page if you're not using a custom login page.
+                // If you're using a custom login page, you can configure it to use a custom success handler that sets CSRF tokens.
+
+                // For stateless APIs (token-based), CSRF might be less relevant for those specific endpoints.
+                // Consider CSRF for /api/profile if it's used by a browser-based frontend with sessions.
                 .csrf(cfg -> cfg.ignoringRequestMatchers(
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/options"),
                         PathPatternRequestMatcher.withDefaults().matcher("/login/webauthn/**"),
                         PathPatternRequestMatcher.withDefaults().matcher("/webauthn/**"),
+                        PathPatternRequestMatcher.withDefaults().matcher("/instances"),
+                        PathPatternRequestMatcher.withDefaults().matcher("/actuator/**"),
+
 
                         // If using default registration filters, permit their URLs:
                         // PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/registration/options"),
                         // PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/registration"),
                         PathPatternRequestMatcher.withDefaults().matcher("/api/**") // If your API clients handle CSRF differently or are stateless
                 ))
+
+                // Session Management Configuration ---
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                        .sessionFixation().migrateSession()
+                        .maximumSessions(1)
+                        .expiredUrl("/login?expired"))
+                .requestCache(cache -> cache
+                        .requestCache(new HttpSessionRequestCache()))
+
+                // No explicit matcher needed here as it's the fallback chain
                 // --- Exception Handling for Access Denied ---
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler(customAccessDeniedHandler)
                 );
-        // For stateless APIs (token-based), CSRF might be less relevant for those specific endpoints.
-        // Consider CSRF for /api/profile if it's used by a browser-based frontend with sessions.
 
-        // No explicit matcher needed here as it's the fallback chain
+
         return http.build();
     }
 
@@ -679,7 +781,6 @@ public class LocalSecurityConfig {
                             .accessTokenFormat(OAuth2TokenFormat.SELF_CONTAINED)
                             .build()).build();
 
-
             this.jpaRegisteredClientRepositoryAdapter.save(clientCredClient);
             this.jpaRegisteredClientRepositoryAdapter.save(introspectClient);
             this.jpaRegisteredClientRepositoryAdapter.save(postmanAuthCodeClient);
@@ -710,7 +811,6 @@ public class LocalSecurityConfig {
         }
 
         // Seed initial root user
-
         UserRepository userRepository = this.jpaRegisteredClientRepositoryAdapter.getUserRepository();
 
         String rootEmail = this.initialRootUserEmail; // Or from config
@@ -718,8 +818,8 @@ public class LocalSecurityConfig {
 
         if (userRepository.findByEmail_Value(rootEmail).isEmpty()) {
             User rootUser = User.builder()
-                    .firstName("Root")
-                    .lastName("Admin")
+                    .givenName("Root")
+                    .surname("Admin")
                     .email(new EmailAddress(rootEmail))
                     .password(new HashedPassword(passwordEncoder.encode(rootPassword)))
                     .externalId(User.generateWebAuthnUserHandle())
@@ -835,8 +935,8 @@ public class LocalSecurityConfig {
      */
     private void putClaims(Map<String, Object> claims, User appUser) {
         claims.put("user_id_numeric", appUser.getId());
-        claims.put("given_name", appUser.getFirstName());
-        claims.put("family_name", appUser.getLastName());
+        claims.put("given_name", appUser.getGivenName());
+        claims.put("family_name", appUser.getSurname());
         claims.put("full_name", appUser.getDisplayableFullName());
         claims.put("nickname", appUser.getNickname());
         claims.put("email", appUser.getEmail().getValue());

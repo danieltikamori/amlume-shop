@@ -8,25 +8,21 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.config.jackson.mixin;
+package me.amlu.authserver.validation;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonValue;
+import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
 
-import java.time.Duration;
+import java.lang.annotation.*;
 
-/**
- * Jackson mixin for Duration class to ensure proper serialization/deserialization.
- */
-public abstract class DurationMixin {
+@Documented
+@Constraint(validatedBy = PasswordConstraintValidator.class)
+@Target({ElementType.METHOD, ElementType.FIELD, ElementType.ANNOTATION_TYPE, ElementType.PARAMETER})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface ValidPassword {
+    String message() default "Invalid password, password must have at least 12 characters long, and contains at least one digit, one lowercase letter, one uppercase letter, and one special character";
 
-    @JsonCreator
-    public static Duration parse(String text) {
-        return Duration.parse(text);
-    }
+    Class<?>[] groups() default {};
 
-    @JsonValue
-    public String toString() {
-        return null; // This is implemented by Duration
-    }
+    Class<? extends Payload>[] payload() default {};
 }

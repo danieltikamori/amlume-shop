@@ -27,8 +27,11 @@ import org.springframework.session.data.mongo.config.annotation.web.http.EnableM
 @Configuration
 public class SessionRepositoryConfig {
 
-    @Autowired
-    private MongoDatabaseFactory mongoDatabaseFactory;
+    private final MongoDatabaseFactory mongoDatabaseFactory;
+
+    public SessionRepositoryConfig(MongoDatabaseFactory mongoDatabaseFactory) {
+        this.mongoDatabaseFactory = mongoDatabaseFactory;
+    }
 
     /**
      * Creates and provides a MongoIndexedSessionRepository bean.
