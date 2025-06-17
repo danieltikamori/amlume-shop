@@ -8,10 +8,11 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-CREATE TABLE persistent_logins
-(
-    username  VARCHAR(255) NOT NULL,
-    series    VARCHAR(64) PRIMARY KEY,
-    token     VARCHAR(64)  NOT NULL,
-    last_used TIMESTAMP    NOT NULL
-);
+package me.amlu.authserver.security.util;
+
+import org.springframework.stereotype.Component;
+
+@Component
+public class PrivilegeChecker {
+
+}
