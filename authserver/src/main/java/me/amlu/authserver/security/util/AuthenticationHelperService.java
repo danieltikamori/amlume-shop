@@ -12,91 +12,194 @@ package me.amlu.authserver.security.util;
 
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
+import me.amlu.authserver.user.service.UserLookupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.oauth2.client.authentication.OAuth2LoginAuthenticationToken;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Arrays;
+import java.util.Comparator;
 
 @Component
 public class AuthenticationHelperService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthenticationHelperService.class);
     private final UserRepository userRepository;
+    private final UserLookupService userLookupService;
 
-    public AuthenticationHelperService(UserRepository userRepository) {
+    public AuthenticationHelperService(UserRepository userRepository, UserLookupService userLookupService) {
         this.userRepository = userRepository;
+        this.userLookupService = userLookupService;
+    }
+
+
+    /**
+     * Defines the role hierarchy for the application.
+     * Higher roles inherit permissions from lower roles.
+     */
+    public enum Role {
+        USER(0),
+        MODERATOR(1),
+        ADMIN(2),
+        SUPER_ADMIN(3),
+        ROOT(4);
+
+        private final int level;
+
+        Role(int level) {
+            this.level = level;
+        }
+
+        public int getLevel() {
+            return level;
+        }
+
+        public boolean hasAtLeastSameAuthorityAs(Role role) {
+            return this.level >= role.level;
+        }
     }
 
     /**
-     * Resolves the application-specific {@link User} entity from the given
-     * Spring Security {@link Authentication} object.
-     * <p>
-     * This method handles different types of principals that might be present
-     * in the Authentication object, such as a pre-loaded {@link User} entity,
-     * an {@link OAuth2User}, or a generic {@link UserDetails}.
+     * Checks if the authenticated user has at least the specified role level.
+     * This implements a hierarchical permission model where higher roles
+     * automatically have the permissions of lower roles.
      *
-     * @param authentication The Spring Security Authentication object.
-     * @return The resolved {@link User} entity, or {@code null} if the user
-     * cannot be resolved or if the authentication is invalid.
+     * @param authentication The Spring Security Authentication object
+     * @param minimumRole    The minimum role required
+     * @return true if the user has at least the specified role level
      */
-    @Transactional(readOnly = true) // Good practice if this method involves DB lookups
-    public User getAppUserFromAuthentication(Authentication authentication) {
+    public boolean hasMinimumRole(Authentication authentication, Role minimumRole) {
         if (authentication == null || !authentication.isAuthenticated()) {
-            log.warn("getAppUserFromAuthentication: Authentication is null or not authenticated.");
-            return null;
+            return false;
         }
-        Object principal = authentication.getPrincipal();
-        if (principal instanceof User appUser) {
-            log.debug("Principal is already an instance of User: {}", appUser.getUsername());
-            return appUser;
-        } else if (principal instanceof OAuth2User oauth2User) {
-            log.debug("Principal is OAuth2User. Attributes: {}", oauth2User.getAttributes());
-            // Assuming your CustomOAuth2UserService ensures 'email' attribute is reliably populated
-            // or you have a consistent way to get the unique identifier.
-            String email = oauth2User.getAttribute("email");
 
-            // Fallback logic if email attribute is not directly available or needs provider-specific handling
-            if (email == null && authentication instanceof OAuth2LoginAuthenticationToken oauthToken) {
-                String registrationId = oauthToken.getClientRegistration().getRegistrationId();
-                String login = oauth2User.getAttribute("login"); // e.g., GitHub username
-
-                if (login != null && "github".equalsIgnoreCase(registrationId)) {
-                    // This block is a fallback. Ideally, CustomOAuth2UserService
-                    // should have already fetched the primary email and put it into
-                    // the oauth2User attributes under the "email" key.
-                    // If CustomOAuth2UserService guarantees the "email" attribute is populated,
-                    // this specific GitHub fallback might be redundant or simplified.
-                    log.warn("Email attribute missing for GitHub user (registrationId: {}), login: {}. " +
-                            "Relying on CustomOAuth2UserService to have populated the 'email' attribute correctly. " +
-                            "If not, this lookup might fail or use a placeholder.", registrationId, login);
-                    // If CustomOAuth2UserService ensures 'email' is set, 'email' variable would already have it.
-                    // If you still need to fetch it here (not recommended as it duplicates logic):
-                    // email = fetchGitHubPrimaryEmail(oauthToken.getAccessToken().getTokenValue());
-                }
+        // Check for each role at or above the minimum level
+        for (Role role : Role.values()) {
+            if (role.getLevel() >= minimumRole.getLevel() &&
+                    authentication.getAuthorities().stream()
+                            .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role.name()))) {
+                return true;
             }
-
-            if (email != null) {
-                log.debug("Looking up User by email from OAuth2User: {}", email);
-                return userRepository.findByEmail_Value(email)
-                        .orElseGet(() -> {
-                            log.warn("No local User found for OAuth2 principal with email: {}. " +
-                                    "This could be a provisioning delay or an issue if the user should exist.", email);
-                            return null;
-                        });
-            } else {
-                log.warn("Could not determine email from OAuth2User principal to look up local User. Attributes: {}", oauth2User.getAttributes());
-                return null;
-            }
-        } else if (principal instanceof UserDetails userDetails) {
-            log.debug("Principal is UserDetails: {}", userDetails.getUsername());
-            // This typically means form login or WebAuthn login where UserDetailsService returns your User entity
-            return userRepository.findByEmail_Value(userDetails.getUsername()).orElse(null);
         }
-        log.warn("Unsupported principal type in getAppUserFromAuthentication: {}", principal.getClass().getName());
-        return null;
+        return false;
     }
+
+    /**
+     * Checks if the authenticated user can manage the specified user.
+     * Implements the principle that users can only manage users with lower roles.
+     *
+     * @param authentication The Spring Security Authentication object
+     * @param targetUserId   The ID of the user to be managed
+     * @return true if the authenticated user can manage the target user
+     */
+    public boolean canManageUser(Authentication authentication, Long targetUserId) {
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication);
+        if (currentUser == null) {
+            return false;
+        }
+
+        // Users can always manage themselves
+        if (currentUser.getId().equals(targetUserId)) {
+            return true;
+        }
+
+        // Find the target user
+        User targetUser = userRepository.findById(targetUserId).orElse(null);
+        if (targetUser == null) {
+            return false;
+        }
+
+        // Get the highest role for each user
+        Role currentUserHighestRole = getHighestRole(currentUser);
+        Role targetUserHighestRole = getHighestRole(targetUser);
+
+        // Can only manage users with lower role levels
+        return currentUserHighestRole.getLevel() > targetUserHighestRole.getLevel();
+    }
+
+    /**
+     * Gets the highest role assigned to a user.
+     *
+     * @param user The user to check
+     * @return The highest role the user has, defaults to USER if no roles found
+     */
+    private Role getHighestRole(User user) {
+        return user.getAuthorities().stream()
+                .map(authority -> {
+                    String roleName = authority.getAuthority().replace("ROLE_", "");
+                    try {
+                        return Role.valueOf(roleName);
+                    } catch (IllegalArgumentException e) {
+                        return Role.USER; // Default if role doesn't match enum
+                    }
+                })
+                .max(Comparator.comparingInt(Role::getLevel))
+                .orElse(Role.USER); // Default if no roles found
+
+    }
+
+    /**
+     * Checks if the authenticated user has any of the specified roles.
+     *
+     * @param authentication The Spring Security Authentication object
+     * @param roles          One or more role names to check
+     * @return true if the user has at least one of the specified roles
+     */
+    public boolean hasAnyRole(Authentication authentication, String... roles) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return false;
+        }
+
+        for (String role : roles) {
+            if (authentication.getAuthorities().stream()
+                    .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Checks if the authenticated user has all of the specified roles.
+     *
+     * @param authentication The Spring Security Authentication object
+     * @param roles          One or more role names to check
+     * @return true if the user has all of the specified roles
+     */
+    public boolean hasAllRoles(Authentication authentication, String... roles) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return false;
+        }
+
+        return Arrays.stream(roles)
+                .allMatch(role -> authentication.getAuthorities().stream()
+                        .anyMatch(authority -> authority.getAuthority().equals("ROLE_" + role)));
+    }
+
+    /**
+     * Checks if the authenticated user is the owner of the specified resource.
+     *
+     * @param authentication  The Spring Security Authentication object
+     * @param resourceOwnerId The ID of the resource owner
+     * @return true if the authenticated user is the owner of the resource
+     */
+    public boolean isResourceOwner(Authentication authentication, Long resourceOwnerId) {
+        User user = userLookupService.getAppUserFromAuthentication(authentication);
+        return user != null && user.getId().equals(resourceOwnerId);
+    }
+
+    /**
+     * Checks if the authenticated user has admin privileges or is the owner of the resource.
+     * This is useful for operations where either admins or resource owners should have access.
+     *
+     * @param authentication  The Spring Security Authentication object
+     * @param resourceOwnerId The ID of the resource owner
+     * @return true if the user is an admin or the resource owner
+     */
+    public boolean isAdminOrResourceOwner(Authentication authentication, Long resourceOwnerId) {
+        return hasAnyRole(authentication, "ADMIN", "SUPER_ADMIN", "ROOT") ||
+                isResourceOwner(authentication, resourceOwnerId);
+    }
+
 }
