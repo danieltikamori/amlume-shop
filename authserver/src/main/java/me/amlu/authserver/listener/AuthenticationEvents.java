@@ -11,6 +11,7 @@
 package me.amlu.authserver.listener;
 
 import io.micrometer.core.annotation.Timed;
+import me.amlu.authserver.user.repository.UserRepository;
 import me.amlu.authserver.user.service.UserServiceInterface;
 import org.springframework.context.event.EventListener;
 import org.springframework.security.authentication.event.AuthenticationFailureBadCredentialsEvent;
@@ -18,14 +19,18 @@ import org.springframework.security.authentication.event.AuthenticationSuccessEv
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 
 @Component
 public class AuthenticationEvents {
 
     private final UserServiceInterface userService;
+    private final UserRepository userRepository;
 
-    public AuthenticationEvents(UserServiceInterface userService) {
+    public AuthenticationEvents(UserServiceInterface userService, UserRepository userRepository) {
         this.userService = userService;
+        this.userRepository = userRepository;
     }
 
     @EventListener
@@ -41,16 +46,36 @@ public class AuthenticationEvents {
     @Timed(value = "authserver.event.authsuccess", description = "Time taken to handle auth success event")
     public void handleAuthenticationSuccess(AuthenticationSuccessEvent event) {
         Object principal = event.getAuthentication().getPrincipal();
-        String username = null;
-        if (principal instanceof UserDetails userDetails) { // Apply pattern matching
-            username = userDetails.getUsername();
-        } else if (principal instanceof String strPrincipal) { // Apply pattern matching, use different variable name
-            username = strPrincipal;
-        }
 
+        // Use Optional to safely extract the username
+        Optional<String> usernameOptional = Optional.ofNullable(principal)
+                .filter(p -> p instanceof UserDetails || p instanceof String) // Filter for expected types
+                .map(p -> {
+                    if (p instanceof UserDetails userDetails) {
+                        return userDetails.getUsername();
+                    } else { // Must be String, based on filter
+                        return (String) p;
+                    }
+                });
 
-        if (username != null) {
-            userService.handleSuccessfulLogin(username);
-        }
+        // The existing logic for handling successful login
+        usernameOptional.ifPresent(userService::handleSuccessfulLogin);
     }
+
+//    @EventListener
+//    @Timed(value = "authserver.event.authsuccess", description = "Time taken to handle auth success event")
+//    public void handleAuthenticationSuccess(AuthenticationSuccessEvent event) {
+//        Object principal = event.getAuthentication().getPrincipal();
+//        String username = null;
+//        if (principal instanceof UserDetails userDetails) { // Apply pattern matching
+//            username = userDetails.getUsername();
+//        } else if (principal instanceof String strPrincipal) { // Apply pattern matching, use different variable name
+//            username = strPrincipal;
+//        }
+//
+//
+//        if (username != null) {
+//            userService.handleSuccessfulLogin(username);
+//        }
+//    }
 }
