@@ -10,6 +10,7 @@
 
 package me.amlu.authserver.user.service;
 
+import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.user.model.User;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,7 +26,17 @@ public interface UserServiceInterface {
 
     User updateUserProfile(Long userId, String newGivenName, String newMiddleName, String newSurname, String newNickname, String newMobileNumber, String defaultRegion, String newRecoveryEmail);
 
-    void changeUserPassword(Long userId, String newRawPassword);
+    void changeUserPassword(Long userId, String oldRawPassword, String newRawPassword);
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')") // Or based on who can change password
+    @Timed(value = "authserver.usermanager.changepassword", description = "Time taken to admin change user password")
+    void adminChangeUserPassword(Long userId, String newRawPassword);
+
+    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    @Timed(value = "authserver.usermanager.changepassword", description = "Time taken to admin change user password")
+    void adminChangeUserPasswordByUsername(String username, String newRawPassword);
 
     // Method to be called by an admin to manually unlock an account
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
