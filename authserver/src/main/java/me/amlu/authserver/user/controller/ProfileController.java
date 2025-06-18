@@ -15,17 +15,18 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import me.amlu.authserver.security.util.AuthenticationHelperService;
 import me.amlu.authserver.user.dto.ChangePasswordRequest;
 import me.amlu.authserver.user.dto.GetUserProfileResponse;
 import me.amlu.authserver.user.dto.UpdateUserProfileRequest;
 import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.service.UserLookupService;
 import me.amlu.authserver.user.service.UserManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
@@ -40,17 +41,17 @@ public class ProfileController {
     private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
     private final UserManager userManager;
     private final HttpServletResponse response;
-    private final AuthenticationHelperService authenticationHelperService;
+    private final UserLookupService userLookupService;
 
-    public ProfileController(UserManager userManager, HttpServletResponse response, AuthenticationHelperService authenticationHelperService) {
+    public ProfileController(UserManager userManager, HttpServletResponse response, UserLookupService userLookupService) {
         this.userManager = userManager;
         this.response = response;
-        this.authenticationHelperService = authenticationHelperService;
+        this.userLookupService = userLookupService;
     }
 
     @GetMapping
     public ResponseEntity<GetUserProfileResponse> getCurrentUserProfile(Authentication authentication) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
             log.warn("Attempt to get profile without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -75,7 +76,7 @@ public class ProfileController {
     public ResponseEntity<GetUserProfileResponse> updateUserProfile(
             Authentication authentication,
             @Valid @RequestBody UpdateUserProfileRequest request) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
             log.warn("Attempt to update profile without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -93,7 +94,7 @@ public class ProfileController {
                     request.surname(),
                     request.nickname(),
                     request.mobileNumber(),
-                    null, // defaultRegion - not provided by this DTO
+                    request.defaultRegion(),
                     request.recoveryEmail()
             );
 
@@ -105,7 +106,7 @@ public class ProfileController {
                     updatedUser.getSurname(),
                     updatedUser.getNickname(),
                     updatedUser.getEmail() != null ? updatedUser.getEmail().getValue() : null,
-                    updatedUser.getRecoveryEmail() != null ? updatedUser.getBackupEmail().getValue() : null,
+                    updatedUser.getRecoveryEmail() != null ? updatedUser.getRecoveryEmail().getValue() : null,
                     updatedUser.getMobileNumber() != null ? updatedUser.getMobileNumber().e164Value() : null
             );
             log.info("User {} profile updated successfully.", currentUser.getEmail().getValue());
@@ -129,10 +130,11 @@ public class ProfileController {
     }
 
     @PostMapping("/change-password")
+    @PreAuthorize("#userId == authentication.principal.id or hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     public ResponseEntity<Void> changePassword(
             Authentication authentication,
             @Valid @RequestBody ChangePasswordRequest request) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
             log.warn("Attempt to change password without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -141,7 +143,7 @@ public class ProfileController {
         // Do NOT log the password itself
 
         try {
-            userManager.changeUserPassword(currentUser.getId(), request.password());
+            userManager.changeUserPassword(currentUser.getId(), request.oldPassword(), request.password());
             log.info("User {} password changed successfully.", currentUser.getEmail().getValue());
             return ResponseEntity.ok().build(); // Or ResponseEntity.noContent().build();
         } catch (EntityNotFoundException e) {
@@ -160,7 +162,7 @@ public class ProfileController {
     public ResponseEntity<Void> deleteCurrentUserAccount(
             Authentication authentication,
             HttpServletRequest request) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve
         if (currentUser == null) {
             log.warn("Attempt to delete account without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
