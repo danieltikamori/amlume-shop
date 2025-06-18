@@ -14,6 +14,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import me.amlu.authserver.user.service.UserManager;
+import me.amlu.authserver.validation.ValidPassword;
+import me.amlu.authserver.validation.ValidRegionCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -82,9 +84,9 @@ public class RegistrationController {
      * Data Transfer Object (DTO) for user registration requests.
      * Contains the necessary fields for creating a new user account.
      *
-     * @param givenName The user's first name (required).
+     * @param givenName The user's given name (required).
      * @param middleName The user's middle name (optional).
-     * @param surname The user's last name (optional).
+     * @param surname The user's surname (optional).
      * @param nickname The user's nickname (optional).
      * @param email The user's primary email address, used for login (required and must be a valid email format).
      * @param password The user's password (required).
@@ -98,9 +100,9 @@ public class RegistrationController {
             String surname, // Optional
             String nickname, // Optional
             @NotBlank @Email String email, // PRIMARY LOGIN email
-            @NotBlank String password, // Consider password complexity rules
+            @NotBlank @ValidPassword String password, // With custom validation including compromised password check
             String mobileNumber, // Optional
-            String defaultRegion, // Optional, for phone number parsing
+            @ValidRegionCode String defaultRegion, // Optional, for phone number parsing
             @Email String recoveryEmail // Optional recovery email
     ) {
     }
