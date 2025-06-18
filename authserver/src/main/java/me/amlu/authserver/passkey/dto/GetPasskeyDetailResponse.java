@@ -10,6 +10,8 @@
 
 package me.amlu.authserver.passkey.dto;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Set;
 
@@ -21,7 +23,10 @@ public record GetPasskeyDetailResponse(
         Set<String> transports,
         Boolean backupEligible,
         Boolean backupState
-) {
+) implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
     // Can add static factory methods or compact constructors if needed,
     // but for a simple DTO, the above is often sufficient.
 

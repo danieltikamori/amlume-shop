@@ -10,38 +10,35 @@
 
 package me.amlu.authserver.passkey.dto;
 
-import jakarta.validation.constraints.NotBlank;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import me.amlu.authserver.config.jackson.deserializer.AuthenticationExtensionsClientOutputsDeserializer;
+import org.springframework.security.web.webauthn.api.AuthenticationExtensionsClientOutputs;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record PostPasskeyRegistrationRequest(
-        @NotBlank(message = "Friendly name cannot be blank")
-        String friendlyName,
-
-        @NotBlank(message = "Credential ID (id) cannot be blank")
         String id,
-
-        @NotBlank(message = "Raw ID (rawId) cannot be blank")
         String rawId,
-
-        @NotBlank(message = "Type cannot be blank")
         String type,
+        String friendlyName,
+        ResponseDto response,
+        String authenticatorAttachment,
 
-        @NotBlank(message = "ClientDataJSON cannot be blank")
-        String clientDataJSON,
-
-        @NotBlank(message = "AttestationObject cannot be blank")
-        String attestationObject,
-
-        String authenticatorAttachment, // Can be null
-
-        java.util.Map<String, Object> clientExtensionResults // Can be null or empty
+        @JsonDeserialize(using = AuthenticationExtensionsClientOutputsDeserializer.class)
+        AuthenticationExtensionsClientOutputs clientExtensionResults
 ) {
-//    private String id; // Base64URL of rawId
-//    private String rawId; // Base64URL
-//    private String type; // e.g., "public-key"
-//    private String clientDataJSON; // Base64URL
-//    private String attestationObject; // Base64URL
-//    private String authenticatorAttachment; // Optional: "platform" or "cross-platform"
-//    private Map<String, Object> clientExtensionResults; // Optional
-//    private String friendlyName; // User-provided name for this passkey
+    public String clientDataJSON() {
+        return response != null ? response.clientDataJSON() : null;
+    }
 
+    public String attestationObject() {
+        return response != null ? response.attestationObject() : null;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ResponseDto(
+        String clientDataJSON,
+        String attestationObject
+    ) {
+    }
 }
