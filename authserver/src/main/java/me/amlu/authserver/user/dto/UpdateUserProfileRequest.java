@@ -12,6 +12,9 @@ package me.amlu.authserver.user.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Size;
+import me.amlu.authserver.validation.ValidRegionCode;
+
+import static me.amlu.authserver.common.Constants.MAX_EMAIL_LENGTH;
 // If you have a custom @Phone annotation that validates a String, import it here.
 // e.g., import me.amlu.shop.amlume_shop.security.config.Phone;
 
@@ -34,16 +37,19 @@ public record UpdateUserProfileRequest(
         @Size(max = 50, message = "Nickname cannot exceed 50 characters.")
         String nickname,
 
-        // If recoveryEmail is provided (can be an empty string to clear, or null for no change).
-        @Email(message = "Invalid recovery email format.")
-        @Size(max = 255, message = "Recovery email cannot exceed 255 characters.")
-        String recoveryEmail,
-
         // Accept mobile number as a String. Validation will occur in the service layer
         // when converting to the PhoneNumber VO, or via a custom @Phone annotation if adapted for String.
         // @Phone // If you adapt/create a @Phone annotation for String
-        String mobileNumber
+        String mobileNumber,
 
+        // If defaultRegion is provided (can be an empty string to clear, or null for no change).
+        @ValidRegionCode
+        String defaultRegion,
+
+        // If recoveryEmail is provided (can be an empty string to clear, or null for no change).
+        @Email(message = "Invalid recovery email format.")
+        @Size(max = MAX_EMAIL_LENGTH, message = "Recovery email cannot exceed " + MAX_EMAIL_LENGTH + " characters.")
+        String recoveryEmail
 
 ) {
 }

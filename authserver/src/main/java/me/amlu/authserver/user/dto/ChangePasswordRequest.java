@@ -12,6 +12,10 @@ package me.amlu.authserver.user.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import me.amlu.authserver.validation.ValidPassword;
+
+import static me.amlu.authserver.common.SecurityConstants.MAX_PASSWORD_LENGTH;
+import static me.amlu.authserver.common.SecurityConstants.MIN_PASSWORD_LENGTH;
 
 // If you have a custom @Password annotation for more complex rules,
 // you can add it here as well, e.g.:
@@ -22,12 +26,8 @@ public record ChangePasswordRequest(
         String oldPassword,
 
         @NotBlank(message = "Password cannot be blank.")
-        @Size(min = 8, max = 128, message = "Password must be between 8 and 128 characters.")
-        // If you have a custom @Password annotation for complexity (e.g., requiring uppercase, number, symbol):
-        // @Password // Add this back if it's a valid, defined custom annotation in your project
+        @Size(min = MIN_PASSWORD_LENGTH, max = MAX_PASSWORD_LENGTH, message = "Password must be between " + MIN_PASSWORD_LENGTH + " and " + MAX_PASSWORD_LENGTH + "characters.")
+        @ValidPassword
         String password
 ) {
-    // Records are concise. No further methods are typically needed for a simple DTO.
-    // If you have a custom @Password annotation, ensure it's correctly defined with a
-    // ConstraintValidator.
 }
