@@ -33,7 +33,7 @@ import java.util.Set;
 @Service // Default bean name will be "amlumeUserDetailsService"
 public class AmlumeUserDetailsService implements UserDetailsService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AmlumeUserDetailsService.class);
+    private static final Logger log = LoggerFactory.getLogger(AmlumeUserDetailsService.class);
 
     private final UserRepository userRepository;
 
@@ -45,10 +45,10 @@ public class AmlumeUserDetailsService implements UserDetailsService {
     @Transactional(readOnly = true)
     @Timed(value = "authserver.userdetailsservice.load", description = "Time taken to load user by username")
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        LOGGER.info("Loading user by username (email): {}", username);
+        log.info("Loading user by username (email): {}", username);
         User user = userRepository.findByEmail_Value(username) // Uses @EntityGraph for authorities and passkeyCredentials
                 .orElseThrow(() -> {
-                    LOGGER.warn("User details not found for the user (email): {}", username);
+                    log.warn("User details not found for the user (email): {}", username);
                     return new UsernameNotFoundException("User details not found for the user: " + username);
                 });
 
@@ -67,7 +67,7 @@ public class AmlumeUserDetailsService implements UserDetailsService {
                     // Authority.permissions is EAGER, so they should be loaded with unproxiedAuth.
                     deProxiedAuthorities.add(unproxiedAuth);
                 } else {
-                    LOGGER.warn("Skipping authority of type {} as it's not an instance of me.amlu.authserver.oauth2.model.Authority",
+                    log.warn("Skipping authority of type {} as it's not an instance of me.amlu.authserver.oauth2.model.Authority",
                             grantedAuth.getClass().getName());
                 }
             }
@@ -90,7 +90,7 @@ public class AmlumeUserDetailsService implements UserDetailsService {
         }
         unproxiedUser.setPasskeyCredentials(deProxiedPasskeys); // Replace with the de-proxied set
 
-        LOGGER.info("User found: {}, Authorities loaded: {}, Passkeys loaded: {}, Enabled: {}, AccountNonLocked: {}",
+        log.info("User found: {}, Authorities loaded: {}, Passkeys loaded: {}, Enabled: {}, AccountNonLocked: {}",
                 unproxiedUser.getUsername(),
                 unproxiedUser.getAuthorities() != null ? unproxiedUser.getAuthorities().size() : "null",
                 unproxiedUser.getPasskeyCredentials() != null ? unproxiedUser.getPasskeyCredentials().size() : "null",
@@ -106,6 +106,28 @@ public class AmlumeUserDetailsService implements UserDetailsService {
 
         // NEW: Return the custom User entity directly, as it implements UserDetails
         // and its getAuthorities() method now returns the custom Authority objects.
-        return unproxiedUser; // Return the fully processed User object
+
+        // Create a fully detached User instance using the builder
+        User detachedUser = unproxiedUser.toBuilder().build();
+        // The toBuilder() method should copy the already de-proxied collections.
+        // The User constructor called by build() will then create new HashSets from these.
+
+        // Log using the detachedUser instance
+        // Example for AmlumeUserDetailsService:
+        log.info("Returning detached User: {}, Authorities: {}, Passkeys: {}, Enabled: {}, AccountNonLocked: {}",
+                detachedUser.getUsername(),
+                detachedUser.getAuthorities() != null ? detachedUser.getAuthorities().size() : "null",
+                detachedUser.getPasskeyCredentials() != null ? detachedUser.getPasskeyCredentials().size() : "null",
+                detachedUser.isEnabled(),
+                detachedUser.isAccountNonLocked());
+
+
+        // log.debug("AmlumeUserDetailsService: Returning detached User: {}, Authorities: {}, Passkeys: {}",
+        //        detachedUser.getUsername(),
+        //        detachedUser.getAuthorities() != null ? detachedUser.getAuthorities().size() : "null",
+        //        detachedUser.getPasskeyCredentials() != null ? detachedUser.getPasskeyCredentials().size() : "null");
+
+
+        return detachedUser; // Return the fully detached User object
     }
 }
