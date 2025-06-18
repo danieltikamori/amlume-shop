@@ -12,13 +12,18 @@ package me.amlu.authserver.oauth2.model;
 
 import jakarta.persistence.*;
 import me.amlu.authserver.model.AbstractAuditableEntity;
+import me.amlu.authserver.user.model.PermissionsEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.GrantedAuthority;
 
+import java.io.Serializable;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 @Entity
 @Table(name = "authorities") // Ensure table name matches your DB schema if it exists
-public class Authority extends AbstractAuditableEntity implements GrantedAuthority {
+public class Authority extends AbstractAuditableEntity implements GrantedAuthority, Serializable {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private long id;
@@ -39,6 +44,14 @@ public class Authority extends AbstractAuditableEntity implements GrantedAuthori
     // This is fine, but less common than a shared roles table.
     // For simplicity with Spring Authorization Server, often UserDetails has a Set<String> or Set<GrantedAuthority> directly.
 
+    @ManyToMany(fetch = FetchType.EAGER) // Fetch permissions eagerly for easy access during auth
+    @JoinTable(
+            name = "role_permissions",
+            joinColumns = @JoinColumn(name = "role_id"), // Corresponds to Authority.id
+            inverseJoinColumns = @JoinColumn(name = "permission_id") // Corresponds to PermissionsEntity.id
+    )
+    private Set<PermissionsEntity> permissions = new HashSet<>();
+
     public Authority(String authority) {
         this.authority = authority;
     }
@@ -46,6 +59,12 @@ public class Authority extends AbstractAuditableEntity implements GrantedAuthori
     public Authority(long id, String authority) {
         this.id = id;
         this.authority = authority;
+    }
+
+    public Authority(long id, String authority, Set<PermissionsEntity> permissions) {
+        this.id = id;
+        this.authority = authority;
+        this.permissions = permissions;
     }
 
     public Authority() {
@@ -90,4 +109,13 @@ public class Authority extends AbstractAuditableEntity implements GrantedAuthori
         this.authority = name;
     }
 
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    public Set<PermissionsEntity> getPermissions() {
+        return this.permissions;
+    }
+
+    @PreAuthorize("hasAnyRole('ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    public void setPermissions(Set<PermissionsEntity> permissions) {
+        this.permissions = permissions;
+    }
 }
