@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.datatype.jsr310.deser.DurationDeserializer;
 import com.fasterxml.jackson.datatype.jsr310.ser.DurationSerializer;
 
+import java.io.Serial;
 import java.time.Duration;
 
 /**
@@ -21,6 +22,7 @@ import java.time.Duration;
  */
 public class CustomJavaTimeModule extends SimpleModule {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     public CustomJavaTimeModule() {
