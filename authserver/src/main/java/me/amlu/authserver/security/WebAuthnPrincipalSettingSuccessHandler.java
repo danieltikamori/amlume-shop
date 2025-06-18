@@ -39,13 +39,13 @@ import java.io.IOException;
 public class WebAuthnPrincipalSettingSuccessHandler implements AuthenticationSuccessHandler {
     private static final Logger log = LoggerFactory.getLogger(WebAuthnPrincipalSettingSuccessHandler.class);
     private final UserDetailsService userDetailsService;
-    private final String defaultTargetUrl;
-    private final RedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
+    private final AuthenticationSuccessHandler delegate;
     private final RequestCache requestCache = new HttpSessionRequestCache();
+    private final RedirectStrategy redirectStrategy = new DefaultRedirectStrategy();
+    private String defaultTargetUrl;
 
     /**
      * Convenience constructor that takes a UserDetailsService and a default target URL.
-     * It will create a SavedRequestAwareAuthenticationSuccessHandler as the delegate.
      *
      * @param userDetailsService The service to load the full UserDetails.
      * @param defaultTargetUrl   The URL to redirect to on successful authentication.
@@ -55,6 +55,25 @@ public class WebAuthnPrincipalSettingSuccessHandler implements AuthenticationSuc
         Assert.hasText(defaultTargetUrl, "Default target URL cannot be blank");
         this.userDetailsService = userDetailsService;
         this.defaultTargetUrl = defaultTargetUrl;
+
+        // Create a simple delegate handler that redirects to the default URL
+        this.delegate = (request, response, auth) -> {
+            redirectStrategy.sendRedirect(request, response, defaultTargetUrl);
+        };
+    }
+
+    /**
+     * Constructor that takes a UserDetailsService and a delegate success handler.
+     *
+     * @param userDetailsService The service to load the full UserDetails.
+     * @param delegate           The delegate success handler to use after setting the principal.
+     */
+    public WebAuthnPrincipalSettingSuccessHandler(UserDetailsService userDetailsService,
+                                                  AuthenticationSuccessHandler delegate) {
+        Assert.notNull(userDetailsService, "UserDetailsService cannot be null");
+        Assert.notNull(delegate, "Delegate AuthenticationSuccessHandler cannot be null");
+        this.userDetailsService = userDetailsService;
+        this.delegate = delegate;
     }
 
     @Override
@@ -108,9 +127,9 @@ public class WebAuthnPrincipalSettingSuccessHandler implements AuthenticationSuc
         // Clear authentication attributes from the session
         clearAuthenticationAttributes(request);
 
-        // Perform the redirect to the default target URL
-        log.debug("Redirecting to default target URL: {}", this.defaultTargetUrl);
-        redirectStrategy.sendRedirect(request, response, this.defaultTargetUrl);
+        // Delegate to the configured success handler
+        log.debug("Delegating to configured success handler");
+        delegate.onAuthenticationSuccess(request, response, newAuth);
     }
 
     /**
