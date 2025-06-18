@@ -51,6 +51,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static me.amlu.authserver.common.SecurityConstants.MAX_PASSWORD_LENGTH;
+
 /**
  * Service responsible for managing user accounts and related operations.
  * Handles user creation, authentication, profile updates, and account management.
@@ -125,32 +127,56 @@ public class UserManager implements UserServiceInterface {
     @Override
     @Timed(value = "authserver.usermanager.failedlogin", description = "Time taken to handle failed login attempt")
     public void handleFailedLogin(String usernameEmail) {
-        log.debug("Handling failed login attempt for username/email: {}", usernameEmail);
-        try {
-            User user = userRepository.findByEmail_ValueAndDeletedAtIsNull(usernameEmail)
-                .orElse(null);
-
-        if (user != null) {
-            log.info("User found for failed login: {}. Recording login failure.", usernameEmail);
-            user.recordLoginFailure();
-            if (user.isLoginAttemptsExceeded() && user.getAccountStatus().isAccountNonLocked()) {
-                // Lock for, e.g., 30 minutes
-                user.lockAccount(Duration.ofMinutes(30));
-                log.warn("User account {} (ID: {}) locked due to excessive failed login attempts.", usernameEmail, user.getId());
-            }
-            userRepository.save(user); // Hibernate checks version here
-            log.debug("Saved user {} (ID: {}) after failed login attempt.", usernameEmail, user.getId());
-        } else {
-            log.warn("User not found for failed login attempt: {}", usernameEmail);
+        if (usernameEmail == null || usernameEmail.trim().isEmpty()) {
+            log.warn("Attempted to handle failed login with null or empty username");
+            return;
         }
-        } catch (OptimisticLockException e) {
-            log.warn("Optimistic lock exception for user {} during failed login handling. Concurrent update detected. Error: {}", usernameEmail, e.getMessage());
-            // Decide on handling:
-            // - Retry the operation (fetch user again, apply logic, save).
-            // - Inform the user of a temporary issue.
-            // - For login attempts, simply failing this attempt might be acceptable.
-            //   The other concurrent operation likely succeeded or also failed.
-            // For now, we'll just log it. The transaction will roll back.
+        
+        log.debug("Handling failed login attempt for username/email: {}", usernameEmail);
+        int retryCount = 0;
+        final int MAX_RETRIES = 3;
+
+        while (retryCount < MAX_RETRIES) {
+            try {
+                User user = userRepository.findByEmail_ValueAndDeletedAtIsNull(usernameEmail)
+                        .orElse(null);
+
+                if (user != null) {
+                    log.info("User found for failed login: {}. Recording login failure.", usernameEmail);
+                    user.recordLoginFailure();
+                    if (user.isLoginAttemptsExceeded() && user.getAccountStatus().isAccountNonLocked()) {
+                        // Lock for, e.g., 30 minutes
+                        user.lockAccount(Duration.ofMinutes(30));
+                        log.warn("User account {} (ID: {}) locked due to excessive failed login attempts.", usernameEmail, user.getId());
+                    }
+                    userRepository.save(user); // Hibernate checks version here
+                    log.debug("Saved user {} (ID: {}) after failed login attempt.", usernameEmail, user.getId());
+                    return; // Success, exit the retry loop
+                } else {
+                    log.warn("User not found for failed login attempt: {}", usernameEmail);
+                    return; // No user found, no need to retry
+                }
+            } catch (OptimisticLockException e) {
+                retryCount++;
+                log.warn("Optimistic lock exception for user {} during failed login handling (attempt {}/{}). Error: {}",
+                        usernameEmail, retryCount, MAX_RETRIES, e.getMessage());
+
+                if (retryCount >= MAX_RETRIES) {
+                    log.error("Max retries reached for handling failed login for user: {}", usernameEmail);
+                    // Consider alerting operations team if this happens frequently
+                } else {
+                    try {
+                        Thread.sleep(50 * retryCount); // Exponential backoff
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("Thread interrupted during retry backoff");
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Unexpected error handling failed login for user {}: {}", usernameEmail, e.getMessage(), e);
+                return; // Don't retry on unexpected errors
+            }
         }
     }
 
@@ -274,7 +300,7 @@ public class UserManager implements UserServiceInterface {
 
     @Transactional
     @Override
-    @PreAuthorize("hasAuthority('PROFILE_EDIT_OWN')")
+    @PreAuthorize("hasAuthority('PROFILE_EDIT_OWN') and @userSecurity.isUserAllowedToModify(#userId)")
     @Timed(value = "authserver.usermanager.updateprofile", description = "Time taken to update user profile")
     public User updateUserProfile(Long userId, String newGivenName, String newMiddleName, String newSurname,
                                   String newNickname, String newMobileNumber, String defaultRegion,
@@ -377,11 +403,17 @@ public class UserManager implements UserServiceInterface {
 
     @Override
     @Transactional
-    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN')") // Or based on who can change password
+    @PreAuthorize("hasAnyRole('ROLE_USER', 'ROLE_ADMIN') and @userSecurity.isUserAllowedToModify(#userId)")
     @Timed(value = "authserver.usermanager.changepassword", description = "Time taken to change user password")
     public void changeUserPassword(Long userId, String oldRawPassword, String newRawPassword) {
         log.info("Attempting to change password for userId: {}", userId);
         // DO NOT log newRawPassword
+
+        // Prevent password reuse
+        if (oldRawPassword != null && oldRawPassword.equals(newRawPassword)) {
+            log.warn("Password change attempt for userId: {} failed. New password same as old password.", userId);
+            throw new IllegalArgumentException("New password must be different from the current password.");
+        }
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
@@ -399,16 +431,46 @@ public class UserManager implements UserServiceInterface {
             throw new PasswordMismatchException("Incorrect old password.");
         }
 
-        // Validate new password before persisting
-        validatePasswordPolicy(newRawPassword);
+        try {
+            // Validate new password before persisting
+            validatePasswordPolicy(newRawPassword);
 
-        HashedPassword newHashedPassword = new HashedPassword(passwordEncoder.encode(newRawPassword));
-        user.changePassword(newHashedPassword);
-        userRepository.save(user);
-        log.info("Successfully changed password for userId: {}", userId);
+            HashedPassword newHashedPassword = new HashedPassword(passwordEncoder.encode(newRawPassword));
+            user.changePassword(newHashedPassword);
+            userRepository.save(user);
+
+            // Invalidate existing sessions for security
+            try {
+                String principalName = user.getUsername();
+                Map<String, ? extends Session> userSessions = sessionRepository.findByPrincipalName(principalName);
+                if (userSessions != null && !userSessions.isEmpty()) {
+                    // Keep current session if applicable
+                    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+                    String currentSessionId = null;
+                    if (auth != null && auth.getDetails() instanceof Map) {
+                        currentSessionId = (String) ((Map<?, ?>) auth.getDetails()).get("sessionId");
+                    }
+
+                    for (String sessionId : userSessions.keySet()) {
+                        if (!sessionId.equals(currentSessionId)) {
+                            sessionRepository.deleteById(sessionId);
+                        }
+                    }
+                    log.debug("Invalidated other sessions after password change for userId: {}", userId);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to invalidate sessions after password change: {}", e.getMessage());
+                // Continue - password was changed successfully
+            }
+
+            log.info("Successfully changed password for userId: {}", userId);
+        } catch (Exception e) {
+            log.error("Error during password change for userId {}: {}", userId, e.getMessage());
+            throw e;
+        }
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = {IllegalArgumentException.class})
     @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     @Timed(value = "authserver.usermanager.changepassword", description = "Time taken to admin change user password")
     @Override
@@ -501,8 +563,8 @@ public class UserManager implements UserServiceInterface {
         log.info("Admin successfully set enabled status to {} for userId: {}", enabled, userId);
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_USER')")
-    @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_USER') and @userSecurity.isUserAllowedToModify(#userId)")
+    @Transactional(rollbackFor = Exception.class)
     @Override
     @Timed(value = "authserver.usermanager.deleteaccount", description = "Time taken to delete user account")
     public void deleteUserAccount(Long userId) {
@@ -592,6 +654,11 @@ public class UserManager implements UserServiceInterface {
             throw new IllegalArgumentException("Password cannot be empty.");
         }
 
+        // Prevent extremely long passwords that could cause DoS
+        if (rawPassword.length() > MAX_PASSWORD_LENGTH) {
+            throw new IllegalArgumentException("Password is too long (maximum " + MAX_PASSWORD_LENGTH + " characters).");
+        }
+
         // Check minimum length
         if (rawPassword.length() < passwordPolicyConfig.getMinLength()) {
             throw new IllegalArgumentException("Password must be at least " + passwordPolicyConfig.getMinLength() + " characters long.");
@@ -601,8 +668,16 @@ public class UserManager implements UserServiceInterface {
         if (passwordPolicyConfig.isRequireUppercase()) {
             String regex = passwordPolicyConfig.getUppercaseRegex();
             if (regex != null && !regex.isEmpty()) {
-                if (!Pattern.matches(regex, rawPassword)) {
-                    throw new IllegalArgumentException("Password must contain an uppercase letter.");
+                try {
+                    if (!Pattern.matches(regex, rawPassword)) {
+                        throw new IllegalArgumentException("Password must contain an uppercase letter.");
+                    }
+                } catch (Exception e) {
+                    log.error("Invalid uppercase regex pattern: {}", regex, e);
+                    // Fallback to default pattern
+                    if (!rawPassword.matches(".*[A-Z].*")) {
+                        throw new IllegalArgumentException("Password must contain an uppercase letter.");
+                    }
                 }
             } else if (!rawPassword.matches(".*[A-Z].*")) {
                 throw new IllegalArgumentException("Password must contain an uppercase letter.");
@@ -620,9 +695,14 @@ public class UserManager implements UserServiceInterface {
             throw new IllegalArgumentException("Password must contain a special character.");
         }
 
-        // Check if password has been compromised in a data breach
-        if (compromisedPasswordChecker.check(rawPassword).isCompromised()) {
-            throw new IllegalArgumentException("Password has been found in a data breach.");
+        try {
+            // Check if password has been compromised in a data breach
+            if (compromisedPasswordChecker.check(rawPassword).isCompromised()) {
+                throw new IllegalArgumentException("Password has been found in a data breach.");
+            }
+        } catch (Exception e) {
+            log.warn("Unable to check if password is compromised: {}", e.getMessage());
+            // Continue without breach check if service is unavailable
         }
 
         log.debug("Password policy validation passed for the provided password.");
@@ -642,18 +722,27 @@ public class UserManager implements UserServiceInterface {
      */
     private void verifyAdminAccess(String errorMessage) {
         Authentication currentUserAuth = SecurityContextHolder.getContext().getAuthentication();
-        boolean isAdminInitiated = currentUserAuth != null &&
-                currentUserAuth.getAuthorities().stream()
-                        .map(GrantedAuthority::getAuthority)
-                        .anyMatch(authority -> authority.equals("ROLE_ADMIN") ||
-                                authority.equals("ROLE_SUPER_ADMIN") ||
-                                authority.equals("ROLE_ROOT"));
+        if (currentUserAuth == null) {
+            log.warn("No authentication found when verifying admin access");
+            throw new AccessDeniedException("Authentication required for admin operations");
+        }
+
+        boolean isAdminInitiated = currentUserAuth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(authority -> authority.equals("ROLE_ADMIN") ||
+                        authority.equals("ROLE_SUPER_ADMIN") ||
+                        authority.equals("ROLE_ROOT"));
 
         if (!isAdminInitiated) {
             log.warn(errorMessage);
             throw new AccessDeniedException("User without required privileges attempted to perform an admin operation.");
         } else {
-            log.info("Admin operation initiated by: {}", currentUserAuth.getName());
+            // Audit log for admin operations
+            log.info("Admin operation initiated by: {} with roles: {}",
+                    currentUserAuth.getName(),
+                    currentUserAuth.getAuthorities().stream()
+                            .map(GrantedAuthority::getAuthority)
+                            .collect(Collectors.joining(", ")));
         }
     }
 
