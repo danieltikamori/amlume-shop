@@ -265,7 +265,7 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
                                                 .surname(userByEmail.getSurname())
                                                 .nickname(userByEmail.getNickname())
                                                 .email(userByEmail.getEmail())
-                                                .backupEmail(userByEmail.getBackupEmail())
+                                                .recoveryEmail(userByEmail.getRecoveryEmail())
                                                 .mobileNumber(userByEmail.getMobileNumber())
                                                 .accountStatus(userByEmail.getAccountStatus())
                                                 .externalId(externalIdFromWebAuthnEntity)
