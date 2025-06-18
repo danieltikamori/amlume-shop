@@ -19,6 +19,8 @@ import me.amlu.authserver.user.model.User;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.proxy.HibernateProxy;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 
@@ -26,7 +28,10 @@ import java.util.Objects;
 @Table(name = "passkey_credentials")
 @Builder
 @AllArgsConstructor
-public class PasskeyCredential extends AbstractAuditableEntity {
+public class PasskeyCredential extends AbstractAuditableEntity implements Serializable {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     /**
      * The unique identifier for the passkey credential.
@@ -74,7 +79,8 @@ public class PasskeyCredential extends AbstractAuditableEntity {
      * Encrypted before stored in the database.
      */
     @Lob
-    @Column(name = "public_key_cose", nullable = false)
+    @Column(name = "public_key_cose", nullable = false, columnDefinition = "BYTEA")
+    // to align Hibernate's expectation with the Flyway schema by explicitly telling Hibernate to use BYTEA for these columns
     @Convert(converter = EncryptedByteArrayConverter.class)
     private byte[] publicKeyCose; // COSE-encoded public key
 
@@ -115,7 +121,8 @@ public class PasskeyCredential extends AbstractAuditableEntity {
      * Encrypted before stored in the database.
      */
     @Lob
-    @Column(name = "attestation_object") // Often processed at registration and might not be stored long-term
+    @Column(name = "attestation_object", columnDefinition = "BYTEA")
+    // Often processed at registration and might not be stored long-term
     @Convert(converter = EncryptedByteArrayConverter.class)
     private byte[] attestationObject;
 
