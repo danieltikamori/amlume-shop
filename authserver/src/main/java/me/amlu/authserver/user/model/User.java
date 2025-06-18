@@ -25,7 +25,6 @@ import me.amlu.authserver.user.model.vo.PhoneNumber;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.proxy.HibernateProxy;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.webauthn.api.Bytes;
 import org.springframework.util.Assert;
@@ -34,27 +33,41 @@ import org.springframework.util.StringUtils;
 import java.io.Serial;
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collections; // Ensure this is imported
+import java.util.stream.Collectors; // If used by builder or other methods
 
 import static me.amlu.authserver.common.SecurityConstants.MAX_LOGIN_ATTEMPTS;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "email"),
+        @UniqueConstraint(columnNames = "email"), // Or email_blind_index if primary email is encrypted
         @UniqueConstraint(columnNames = "nickname"),
-        @UniqueConstraint(columnNames = "mobile_number"),
+        // For encrypted fields that are unique, the unique constraint should be on the blind index if one exists,
+        // or carefully considered if the encrypted value itself can be unique (deterministic encryption without salt/IV, not recommended for PII).
+        // If recoveryEmail_encrypted and mobile_number_encrypted are to be unique, and you are using
+        // non-deterministic encryption (good for security), you'd need blind indexes for them too for DB-level uniqueness.
+        // For now, assuming the @Convert handles the type and the @Column defines the DB column.
+        // Uniqueness on encrypted BYTEA columns is tricky.
+        @UniqueConstraint(columnNames = "recovery_email_encrypted"),
+        @UniqueConstraint(columnNames = "recovery_email_blind_index"),
+        @UniqueConstraint(columnNames = "mobile_number_encrypted"),
         @UniqueConstraint(columnNames = "external_id")
 }, indexes = {
-        @Index(name = "idx_email", columnList = "email"),
+        @Index(name = "idx_external_id", columnList = "external_id"),
+        @Index(name = "idx_email", columnList = "email"), // Or email_blind_index
         @Index(name = "idx_recovery_email", columnList = "recovery_email_encrypted"),
+        @Index(name = "idx_recovery_email_blind_index", columnList = "recovery_email_blind_index"),
         @Index(name = "idx_nickname", columnList = "nickname"),
-        @Index(name = "idx_mobile_number", columnList = "mobile_number"),
+        @Index(name = "idx_mobile_number", columnList = "mobile_number_encrypted"), // Index on the encrypted column
         @Index(name = "idx_created_at", columnList = "created_at"),
         @Index(name = "idx_updated_at", columnList = "updated_at"),
-        @Index(name = "idx_external_id", columnList = "external_id")
+        @Index(name = "idx_last_login_at", columnList = "last_login_at")
 })
 @SQLDelete(sql = "UPDATE users SET deleted_at = CURRENT_TIMESTAMP WHERE user_id = ?")
 // @Where(clause = "deleted_at IS NULL") // Hibernate 5/6 specific, filters SELECTs
@@ -84,7 +97,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @Column(name = "middle_Name", nullable = true, length = 127)
     private String middleName;
 
-    @Column(name = "surname", columnDefinition = "BYTEA") // Change to BYTEA
+    @Column(name = "surname", columnDefinition = "BYTEA")
     @Convert(converter = EncryptedStringConverter.class)    // Apply converter
     private String surname;
 
@@ -95,20 +108,20 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @AttributeOverride(name = "value", column = @Column(name = "email", nullable = false, unique = true))
     private EmailAddress email;
 
-    @Embedded
-    @AttributeOverrides({
-            // Change column name to reflect encryption and type to BYTEA for PostgreSQL
-            @AttributeOverride(name = "value", column = @Column(name = "recovery_email_encrypted", columnDefinition = "BYTEA", unique = true, nullable = true))
-    })
+    @Column(name = "recovery_email_encrypted", columnDefinition = "BYTEA", unique = true, nullable = true)
     @Convert(converter = EncryptedEmailAddressConverter.class) // Apply the converter
     private EmailAddress recoveryEmail; // Renamed from recoveryEmail to better reflect its purpose
+
+    @Column(name = "recovery_email_blind_index", unique = true, nullable = true, length = 64)
+    // SHA-256 hex string length
+    @JsonIgnore // Don't expose blind index in API responses
+    private String recoveryEmailBlindIndex;
 
     @Column(name = "profile_picture_url", length = 2046)
     private String profilePictureUrl;
 
-    @Embedded
-    // Change column name to reflect encryption and type to BYTEA for PostgreSQL
-    @AttributeOverride(name = "e164Value", column = @Column(name = "mobile_number_encrypted", columnDefinition = "BYTEA", length = 20, unique = true))
+    @Column(name = "mobile_number_encrypted", columnDefinition = "BYTEA", unique = true)
+    // length is not needed for BYTEA
     @Convert(converter = EncryptedPhoneNumberConverter.class) // Apply the converter
     private PhoneNumber mobileNumber;
 
@@ -124,6 +137,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @Embedded
     @Access(AccessType.FIELD)
     @AttributeOverrides({
+            @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
             @AttributeOverride(name = "enabled", column = @Column(name = "enabled", nullable = false)),
             @AttributeOverride(name = "failedLoginAttempts", column = @Column(name = "failed_login_attempts")),
             @AttributeOverride(name = "lockoutExpirationTime", column = @Column(name = "lockout_expiration_time")),
@@ -170,8 +184,10 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @Column(name = "version")
     private int version;
 
-    private User(Long id, String externalIdParam, String givenName, String middleName, String surname, String nickname, EmailAddress email, EmailAddress recoveryEmail, PhoneNumber mobileNumber,
-                 HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities) {
+    private User(Long id, String externalIdParam, String givenName, String middleName, String surname, String nickname,
+                 EmailAddress email, EmailAddress recoveryEmail, PhoneNumber mobileNumber,
+                 HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities,
+                 Set<PasskeyCredential> passkeyCredentials) {
         Assert.hasText(givenName, "User first name cannot be empty.");
         Assert.notNull(email, "User email cannot be null.");
 
@@ -188,7 +204,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         this.password = password;
         this.accountStatus = (accountStatus != null) ? accountStatus : AccountStatus.initial();
         this.authorities = authorities != null ? new HashSet<>(authorities) : new HashSet<>(); // Defensive copy
-        this.passkeyCredentials = new HashSet<>(); // Ensure initialized
+        this.passkeyCredentials = passkeyCredentials != null ? new HashSet<>(passkeyCredentials) : new HashSet<>(); // Initialize from builder
     }
 
     /**
@@ -313,9 +329,51 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         this.email = newEmail;
     }
 
-    public void updateRecoveryEmail(EmailAddress newRecoveryEmail) {
-        // Can be null to clear it
+    private void updateRecoveryEmailInternal(EmailAddress newRecoveryEmail) {
         this.recoveryEmail = newRecoveryEmail;
+        if (newRecoveryEmail != null && StringUtils.hasText(newRecoveryEmail.getValue())) {
+            this.recoveryEmailBlindIndex = generateBlindIndex(newRecoveryEmail.getValue());
+        } else {
+            this.recoveryEmailBlindIndex = null;
+        }
+    }
+
+    public void updateRecoveryEmail(EmailAddress newRecoveryEmail) {
+        // Perform existing checks (e.g., not same as primary email)
+        if (newRecoveryEmail != null && newRecoveryEmail.equals(this.email)) {
+            // log.warn("Attempt to set recovery email same as primary email for userId: {}", this.id);
+            throw new IllegalArgumentException("Recovery email cannot be the same as the primary email.");
+        }
+        // You might also want to check for conflicts with other users' recovery emails here
+        // if the blind index is to be unique across all users.
+        updateRecoveryEmailInternal(newRecoveryEmail);
+    }
+
+    // Helper method to generate a blind index (e.g., SHA-256 hash)
+    // IMPORTANT: For consistent querying, this hash MUST be deterministic (same input always yields same output).
+    // If you salt this hash, the salt must be consistent for this field across all users,
+    // or not used if the goal is just to prevent rainbow tables on the blind index itself.
+    // For a simple existence check, an unsalted SHA-256 of the normalized email is common.
+    public static String generateBlindIndex(String emailValue) {
+        if (emailValue == null) {
+            return null;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(emailValue.toLowerCase().trim().getBytes(StandardCharsets.UTF_8)); // Normalize email
+            StringBuilder hexString = new StringBuilder(2 * hash.length);
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (NoSuchAlgorithmException e) {
+            // This should not happen with SHA-256
+            throw new RuntimeException("Failed to generate blind index", e);
+        }
     }
 
     public void updateProfilePictureUrl(String pictureUrl) {
@@ -403,14 +461,18 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     // In User.UserBuilder or constructor where externalId is set:
     // this.externalId = User.generateWebAuthnUserHandle();
 
-
     @Override
     @Transient
     public Collection<? extends GrantedAuthority> getAuthorities() {
         if (this.authorities == null) return Collections.emptySet();
-        return this.authorities.stream()
-                .map(authority -> new SimpleGrantedAuthority(authority.getAuthority()))
-                .collect(Collectors.toSet());
+        // OLD: This converts to SimpleGrantedAuthority, losing permission details
+        // return this.authorities.stream()
+        //         .map(authority -> new SimpleGrantedAuthority(authority.getAuthority()))
+        //         .collect(Collectors.toSet());
+
+        // NEW: Return the collection of your custom Authority objects directly
+        // as me.amlu.authserver.oauth2.model.Authority implements GrantedAuthority
+        return Collections.unmodifiableSet(this.authorities);
     }
 
     /**
@@ -419,8 +481,12 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
      * @param newAuthorities The new set of authorities. If null or empty, authorities will be cleared.
      */
     public void setAuthorities(Set<Authority> newAuthorities) {
-        this.authorities.clear();
-        if (newAuthorities != null) this.authorities.addAll(newAuthorities);
+        if (newAuthorities == null) {
+            this.authorities = new HashSet<>(); // Assign a new empty HashSet
+        } else {
+            // The UserDetailsService is already providing a new HashSet of de-proxied entities.
+            this.authorities = newAuthorities; // Assign the new Set instance
+        }
     }
 
     // --- UserDetails Implementation ---
@@ -511,6 +577,10 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return this.recoveryEmail;
     }
 
+    public String getRecoveryEmailBlindIndex() {
+        return this.recoveryEmailBlindIndex;
+    }
+
     /**
      * @deprecated Use {@link #getRecoveryEmail()} instead.
      * This method is kept for backward compatibility.
@@ -529,6 +599,10 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     }
 
     public Set<PasskeyCredential> getPasskeyCredentials() {
+        // If passkeyCredentials can be null before JPA loads it (though unlikely with initialization)
+        // if (this.passkeyCredentials == null) {
+        //     return Collections.emptySet();
+        // }
         return Collections.unmodifiableSet(this.passkeyCredentials);
     }
 
@@ -582,6 +656,22 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return version;
     }
 
+    /**
+     * Replaces all existing passkey credentials with the given set.
+     * This method is intended for use during user loading to ensure a "clean"
+     * set of de-proxied entities is associated with the User principal.
+     *
+     * @param newPasskeys The new set of passkey credentials. If null or empty, credentials will be cleared.
+     */
+    public void setPasskeyCredentials(Set<PasskeyCredential> newPasskeys) {
+        if (newPasskeys == null) {
+            this.passkeyCredentials = new HashSet<>(); // Assign a new empty HashSet
+        } else {
+            // Ensure we are assigning a new HashSet instance that is not a Hibernate proxy collection
+            this.passkeyCredentials = new HashSet<>(newPasskeys);
+        }
+    }
+
     public void setDeletedAt(Instant deletedAt) {
         this.deletedAt = deletedAt;
     }
@@ -626,11 +716,12 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
                 .surname(this.surname)
                 .nickname(this.nickname)
                 .email(this.email)
-                .backupEmail(this.recoveryEmail)
+                .recoveryEmail(this.recoveryEmail)
                 .mobileNumber(this.mobileNumber)
                 .password(this.password)
                 .accountStatus(this.accountStatus)
-                .authorities(new HashSet<>(this.authorities));
+                .authorities(this.authorities != null ? new HashSet<>(this.authorities) : null) // Pass a copy
+                .passkeyCredentials(this.passkeyCredentials != null ? new HashSet<>(this.passkeyCredentials) : null); // Pass a copy
         // externalId and displayName are not part of the private constructor,
         // so they are not set by this toBuilder() directly into the builder's fields
         // for that constructor. If they were, they'd be added here.
@@ -645,12 +736,14 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         private String surname;
         private String nickname;
         private EmailAddress email;
-        private EmailAddress backupEmail;
+        private EmailAddress recoveryEmail;
         private PhoneNumber mobileNumber;
         private HashedPassword password;
         private AccountStatus accountStatus;
         private Set<Authority> authorities$value;
         private boolean authorities$set;
+        private Set<PasskeyCredential> passkeyCredentials$value; // Added
+        private boolean passkeyCredentials$set; // Added
 
         // Note: externalId and displayName are not managed by this builder directly
         // as they are not in the private User constructor's parameters.
@@ -694,17 +787,15 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
             return this;
         }
 
-        public UserBuilder backupEmail(EmailAddress recoveryEmail) {
-            this.backupEmail = recoveryEmail;
-            return this;
-        }
 
         /**
          * @param recoveryEmail The recovery email address for the user
          * @return This builder for method chaining
          */
         public UserBuilder recoveryEmail(EmailAddress recoveryEmail) {
-            return backupEmail(recoveryEmail);
+//            return recoveryEmail(recoveryEmail);
+            this.recoveryEmail = recoveryEmail;
+            return this;
         }
 
         public UserBuilder mobileNumber(PhoneNumber mobileNumber) {
@@ -730,14 +821,34 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
             return this;
         }
 
+        @JsonIgnore
+        public UserBuilder passkeyCredentials(Set<PasskeyCredential> passkeyCredentials) {
+            this.passkeyCredentials$value = passkeyCredentials;
+            this.passkeyCredentials$set = true;
+            return this;
+        }
+
+
         public User build() {
             Set<Authority> authoritiesValue = this.authorities$value;
             if (!this.authorities$set) {
                 authoritiesValue = User.$default$authorities();
             }
-            return new User(this.id, this.externalId, this.givenName, this.middleName, this.surname, this.nickname,
-                    this.email, this.backupEmail, this.mobileNumber,
-                    this.password, this.accountStatus, authoritiesValue);
+            // Handle passkeyCredentials default
+            Set<PasskeyCredential> passkeyCredentialsValue = this.passkeyCredentials$value;
+            if (!this.passkeyCredentials$set) {
+                passkeyCredentialsValue = new HashSet<>(); // Default to empty set
+            }
+
+            User user = new User(this.id, this.externalId, this.givenName, this.middleName, this.surname, this.nickname,
+                    this.email, this.recoveryEmail, this.mobileNumber,
+                    this.password, this.accountStatus, authoritiesValue,
+                    passkeyCredentialsValue);
+            // Set blind index after construction if recoveryEmail is present
+            if (this.recoveryEmail != null && StringUtils.hasText(this.recoveryEmail.getValue())) {
+                user.recoveryEmailBlindIndex = generateBlindIndex(this.recoveryEmail.getValue());
+            }
+            return user;
         }
 
         @Override
@@ -749,11 +860,13 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
                     ", surname=" + this.surname +
                     ", nickname=" + this.nickname +
                     ", email=" + this.email +
-                    ", recoveryEmail=" + this.backupEmail +
+                    ", recoveryEmail=" + this.recoveryEmail +
                     ", mobileNumber=" + this.mobileNumber +
                     ", password=" + (password != null ? "[PROTECTED]" : "null") +
                     ", accountStatus=" + this.accountStatus +
-                    ", authorities$value=" + this.authorities$value + ")";
+                    ", authorities$value=" + this.authorities$value +
+                    ", passkeyCredentials$value=" + (this.passkeyCredentials$value != null ? this.passkeyCredentials$value.size() : "null") + // Log size
+                    ")";
         }
     }
 }
