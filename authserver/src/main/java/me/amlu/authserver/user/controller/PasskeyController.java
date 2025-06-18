@@ -29,6 +29,7 @@ import me.amlu.authserver.passkey.service.WebAuthnSessionService;
 import me.amlu.authserver.security.util.AuthenticationHelperService;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
+import me.amlu.authserver.user.service.UserLookupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -60,7 +61,7 @@ public class PasskeyController {
     private static final Logger log = LoggerFactory.getLogger(PasskeyController.class);
 
     private final PasskeyService passkeyService;
-    private final AuthenticationHelperService authenticationHelperService;
+    private final UserLookupService userLookupService;
     private final ObjectMapper webAuthnApiMapper;
     private final WebAuthnSessionService webAuthnSessionService;
     
@@ -76,11 +77,11 @@ public class PasskeyController {
     public PasskeyController(
             PasskeyService passkeyService,
             UserRepository userRepository,
-            AuthenticationHelperService authenticationHelperService,
+            AuthenticationHelperService authenticationHelperService, UserLookupService userLookupService,
             @Qualifier("webAuthnApiMapper") ObjectMapper webAuthnApiMapper,
             WebAuthnSessionService webAuthnSessionService) {
         this.passkeyService = passkeyService;
-        this.authenticationHelperService = authenticationHelperService;
+        this.userLookupService = userLookupService;
         this.webAuthnApiMapper = webAuthnApiMapper;
         this.webAuthnSessionService = webAuthnSessionService;
     }
@@ -98,7 +99,7 @@ public class PasskeyController {
      */
     @PostMapping("/registration-options")
     public ResponseEntity<String> beginPasskeyRegistration(Authentication authentication) { // Changed parameter
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve User
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve User
         if (currentUser == null) {
             log.warn("Attempt to begin passkey registration without resolvable authenticated user.");
             // Consider throwing ResponseStatusException for cleaner error handling if preferred
@@ -147,7 +148,7 @@ public class PasskeyController {
     public ResponseEntity<Void> finishPasskeyRegistration(
             Authentication authentication,
             @Valid @RequestBody PostPasskeyRegistrationRequest registrationRequest) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve User
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve User
         if (currentUser == null) {
             log.warn("Attempt to finish passkey registration without resolvable authenticated user.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
@@ -202,7 +203,7 @@ public class PasskeyController {
             log.warn("/api/profile/passkeys: No authentication object in SecurityContextHolder!");
         }
 
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve User
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve User
 
         if (currentUser == null) {
             log.warn("Attempt to list passkeys without resolvable authenticated user.");
@@ -228,7 +229,7 @@ public class PasskeyController {
     public ResponseEntity<Void> deleteUserPasskey(
             Authentication authentication,
             @PathVariable String credentialId) {
-        User currentUser = authenticationHelperService.getAppUserFromAuthentication(authentication); // Resolve User
+        User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve User
         if (currentUser == null) {
             log.warn("Attempt to delete passkey {} without resolvable authenticated user.", credentialId);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
