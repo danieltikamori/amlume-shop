@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.session.hazelcast.config.annotation.web.http.EnableHazelcastHttpSession;
 import org.springframework.session.web.http.CookieSerializer;
 import org.springframework.session.web.http.DefaultCookieSerializer;
 
@@ -32,7 +33,10 @@ import org.springframework.session.web.http.DefaultCookieSerializer;
  * @see JacksonConfig
  * @see MongoSessionConfig
  */
-@Configuration
+//@Configuration
+//@EnableHazelcastHttpSession // Enable Hazelcast-backed HTTP sessions
+// maxInactiveIntervalInSeconds can be set via spring.session.timeout in application.properties
+// mapName can be set via spring.session.hazelcast.map-name
 // This enables non-indexed Redis sessions. If you need indexed sessions, use @EnableRedisIndexedHttpSession
 // The redisNamespace isolates session keys, e.g., "authserver:session:amlume:sessions:<session_id>"
 // Removed Redis session configuration in favor of MongoDB
@@ -138,6 +142,17 @@ public class SessionConfig {
         return serializer;
     }
 
-    // Redis session repository customizer and expiration store removed
-    // as we're now using MongoDB for sessions
+    // If you need to customize HazelcastInstance configuration (e.g., for embedded server or specific client settings not covered by properties):
+    /*
+    @Bean
+    public HazelcastInstance hazelcastInstance() {
+        ClientConfig clientConfig = new ClientConfig();
+        clientConfig.setClusterName("dev"); // Or your cluster name
+        clientConfig.getNetworkConfig().addAddress("localhost:5701"); // Or hazelcast:5701 if app is also in Docker
+        // Add other client configurations if needed
+        return HazelcastClient.newHazelcastClient(clientConfig);
+    }
+    */
+    // However, Spring Boot auto-configuration for Hazelcast client is usually sufficient
+    // when `spring.hazelcast.client.*` properties are set.
 }

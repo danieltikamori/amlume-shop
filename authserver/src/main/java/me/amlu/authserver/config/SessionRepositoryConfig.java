@@ -24,7 +24,7 @@ import org.springframework.session.data.mongo.config.annotation.web.http.EnableM
 /**
  * Configuration for providing the FindByIndexNameSessionRepository bean.
  */
-@Configuration
+//@Configuration
 public class SessionRepositoryConfig {
 
     private final MongoDatabaseFactory mongoDatabaseFactory;

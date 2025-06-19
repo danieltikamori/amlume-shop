@@ -31,12 +31,12 @@ import java.util.Collections;
  * Configuration for MongoDB-based session storage.
  * This replaces the Redis session configuration to avoid serialization issues.
  */
-@Configuration
+//@Configuration
 // EnableMongoHttpSession should be present to activate MongoDB session handling.
 // The maxInactiveIntervalInSeconds and collectionName can also be set in application.properties:
 // spring.session.mongodb.collection-name=auth_sessions
 // server.servlet.session.timeout=2h (e.g., 7200s)
-@EnableMongoHttpSession(maxInactiveIntervalInSeconds = 7200, collectionName = "auth_sessions")
+//@EnableMongoHttpSession(maxInactiveIntervalInSeconds = 7200, collectionName = "auth_sessions")
 public class MongoSessionConfig {
 
     private static final Logger log = LoggerFactory.getLogger(MongoSessionConfig.class);
