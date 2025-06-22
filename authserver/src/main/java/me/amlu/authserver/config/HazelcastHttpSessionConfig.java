@@ -10,28 +10,32 @@
 
 package me.amlu.authserver.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
 import com.hazelcast.client.HazelcastClient;
 import com.hazelcast.client.config.ClientConfig;
 import com.hazelcast.client.config.ClientConnectionStrategyConfig;
+import com.hazelcast.client.config.ClientUserCodeDeploymentConfig;
 import com.hazelcast.config.SerializerConfig;
 import com.hazelcast.core.HazelcastInstance;
+import me.amlu.authserver.config.hazelcast.AuthoritySerializer;
 import me.amlu.authserver.config.hazelcast.CsrfTokenSerializer;
 import me.amlu.authserver.config.hazelcast.SecurityContextSerializer;
-import org.springframework.security.web.csrf.DefaultCsrfToken;
-import org.springframework.security.core.context.SecurityContextImpl;
+import me.amlu.authserver.oauth2.model.Authority;
+import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.core.context.SecurityContextImpl;
+import org.springframework.security.web.csrf.DefaultCsrfToken;
 import org.springframework.session.FlushMode;
+import org.springframework.session.MapSession;
 import org.springframework.session.SaveMode;
+import org.springframework.session.Session;
 import org.springframework.session.config.SessionRepositoryCustomizer;
 import org.springframework.session.hazelcast.HazelcastIndexedSessionRepository;
 import org.springframework.session.hazelcast.HazelcastSessionSerializer;
+import org.springframework.session.hazelcast.SessionUpdateEntryProcessor;
 import org.springframework.session.hazelcast.config.annotation.SpringSessionHazelcastInstance;
 import org.springframework.session.hazelcast.config.annotation.web.http.EnableHazelcastHttpSession;
 import org.springframework.session.web.http.CookieSerializer;
@@ -79,9 +83,11 @@ public class HazelcastHttpSessionConfig {
     @Bean
     @SpringSessionHazelcastInstance
     public HazelcastInstance hazelcastInstance() {
+        // Use ClientConfig for client-side configuration
         ClientConfig clientConfig = new ClientConfig();
         clientConfig.setClusterName(hazelcastClusterName);
-        if (hazelcastClusterMembers == null || hazelcastClusterMembers.isEmpty()) {
+
+        if (CollectionUtils.isEmpty(hazelcastClusterMembers)) {
             log.error("Hazelcast cluster members not configured (spring.hazelcast.client.network.cluster-members). Cannot create client.");
             throw new IllegalStateException("Hazelcast cluster members must be configured.");
         }
@@ -94,8 +100,22 @@ public class HazelcastHttpSessionConfig {
                         .setTypeClass(DefaultCsrfToken.class))
                 .addSerializerConfig(new SerializerConfig()
                         .setImplementation(new SecurityContextSerializer())
-                        .setTypeClass(SecurityContextImpl.class));
+                        .setTypeClass(SecurityContextImpl.class))
+                .addSerializerConfig(new SerializerConfig()
+                        .setImplementation(new AuthoritySerializer())
+                        .setTypeClass(Authority.class));
 
+
+        // Use custom serializer to de/serialize sessions faster. This is optional.
+        // Note that, all members in a cluster and connected clients need to use the
+        // same serializer for sessions. For instance, clients cannot use this serializer
+        // where members are not configured to do so.
+        // Configure a serializer for the session map itself
+        SerializerConfig sessionSerializerConfig = new SerializerConfig();
+        sessionSerializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
+        clientConfig.getSerializationConfig().addSerializerConfig(sessionSerializerConfig);
+
+        // Configure connection strategy
         clientConfig.getConnectionStrategyConfig()
                 .setAsyncStart(false)
                 .setReconnectMode(ClientConnectionStrategyConfig.ReconnectMode.ON)
@@ -105,6 +125,28 @@ public class HazelcastHttpSessionConfig {
                 .setMultiplier(2.0)
                 .setClusterConnectTimeoutMillis(5000)
                 .setJitter(0.2);
+
+        // --- Use the deprecated but available ClientUserCodeDeploymentConfig ---
+        // This is the correct API on the ClientConfig to send classes to the server.
+        // If spring-session packages do not present in Hazelcast member's classpath,
+        // these classes need to be deployed over the client. This is required since
+        // Hazelcast updates sessions via entry processors.
+        ClientUserCodeDeploymentConfig userCodeDeploymentConfig = new ClientUserCodeDeploymentConfig();
+        userCodeDeploymentConfig.setEnabled(true)
+                // Add your custom serializers
+                .addClass(CsrfTokenSerializer.class)
+                .addClass(SecurityContextSerializer.class)
+                .addClass(AuthoritySerializer.class)
+                // Add Spring Session classes required by the server for entry processing
+                .addClass(Session.class)
+                .addClass(MapSession.class)
+                .addClass(SessionUpdateEntryProcessor.class);
+
+        clientConfig.setUserCodeDeploymentConfig(userCodeDeploymentConfig);
+
+
+//        clientConfig.getNamespacesConfig().setEnabled(true).addClass(Session.class)
+//                .addClass(MapSession.class).addClass(SessionUpdateEntryProcessor.class);
 
         log.info("Configuring Hazelcast Client: clusterName='{}', members='{}'", hazelcastClusterName, hazelcastClusterMembers);
         return HazelcastClient.newHazelcastClient(clientConfig);
