@@ -8,15 +8,28 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.auth.dto;
+package me.amlu.authserver.user.dto;
 
+import org.springframework.validation.ObjectError;
+
+import java.util.List;
 
 /**
+ * Represents the response returned after a user registration attempt.
+ * This record encapsulates either the details of the newly registered user
+ * or a list of errors that occurred during the registration process.
  *
- * For keycloak or jwt based
+ * <p><b>Usage Example:</b></p>
+ * <pre>{@code
+ * // Successful registration
+ * GetRegisterResponse successResponse = new GetRegisterResponse(new UserResponse("john.doe@example.com", "John Doe"), null);
  *
- * @param status of the login
- * @param jwtToken of the user
+ * // Failed registration with errors
+ * GetRegisterResponse errorResponse = new GetRegisterResponse(null, List.of(new ObjectError("email", "Email already exists")));
+ * }</pre>
  */
-public record GetJwtLoginResponse(String status, String jwtToken) {
+public record GetRegisterResponse(
+        UserResponse userResponse,
+        List<ObjectError> errors
+) {
 }
