@@ -8,23 +8,14 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.user_management.dto;
+package me.amlu.authserver.cache_management.config.properties;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import me.amlu.shop.amlume_shop.user_management.UserRole;
+public interface RedisConfigPropertiesInterface {
+//    String getNodes();
 
-@Data
-@Builder
-@AllArgsConstructor
-@NoArgsConstructor
-public class RegisterRequest {
+    String getHost();
 
-  private String firstname;
-  private String lastname;
-  private String email;
-  private String password;
-  private UserRole role;
+    int getPort();
+
+    String getPassword();
 }
