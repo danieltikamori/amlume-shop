@@ -15,8 +15,10 @@ import jakarta.persistence.*;
 import me.amlu.authserver.model.AbstractAuditableEntity;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.passkey.model.PasskeyCredential;
+import me.amlu.authserver.security.model.UserDeviceFingerprint;
 import me.amlu.authserver.security.util.EncryptedEmailAddressConverter;
 import me.amlu.authserver.security.util.EncryptedPhoneNumberConverter;
+import me.amlu.authserver.security.model.DeviceFingerprintingInfo;
 import me.amlu.authserver.security.util.EncryptedStringConverter;
 import me.amlu.authserver.user.model.vo.AccountStatus;
 import me.amlu.authserver.user.model.vo.EmailAddress;
@@ -87,9 +89,13 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @Column(name = "user_id")
     private Long id;
 
-    @Column(name = "external_id", unique = true, updatable = false, nullable = false)
+    /**
+     * Made mutable as an existing user may want to add passkey later.
+     * We want their externalId to be consistent with the passkey's user handle
+     */
+    @Column(name = "external_id", unique = true, updatable = true, nullable = false)
     // Ensure externalId is unique if used as a primary lookup
-    private final String externalId; // User handle for WebAuthn.
+    private String externalId; // User handle for WebAuthn.
 
     @Column(name = "given_name", nullable = false, length = 127)
     private String givenName;
@@ -126,6 +132,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     private PhoneNumber mobileNumber;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    // TOCHECK if intefere in serialization
     @JsonIgnore
     private Set<PasskeyCredential> passkeyCredentials = new HashSet<>(); // Initialize to avoid NullPointerExceptions
 
@@ -133,6 +140,17 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @AttributeOverride(name = "value", column = @Column(name = "password", nullable = true, length = 127))
     @JsonIgnore
     private HashedPassword password;
+
+    // This is the correct JPA mapping for persisting device fingerprints
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private List<UserDeviceFingerprint> userDeviceFingerprints = new ArrayList<>();
+
+    /**
+     * Device fingerprinting information for this user (settings and current fingerprint).
+     * This is an @Embedded object, not managing the collection of historical fingerprints.
+     */
+    @Embedded
+    private DeviceFingerprintingInfo deviceFingerprintingInfo = new DeviceFingerprintingInfo(); // Use no-arg constructor
 
     @Embedded
     @Access(AccessType.FIELD)
@@ -169,7 +187,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     private Instant deletedAt;
 
     // Ensure 'authorities' set is initialized by the builder
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     // EAGER can be acceptable if the number of roles per user is small and always needed. LAZY is generally safer for performance.
     @JoinTable(
             name = "user_authorities",
@@ -184,6 +202,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     @Column(name = "version")
     private int version;
 
+    // Private constructor used by the builder
     private User(Long id, String externalIdParam, String givenName, String middleName, String surname, String nickname,
                  EmailAddress email, EmailAddress recoveryEmail, PhoneNumber mobileNumber,
                  HashedPassword password, AccountStatus accountStatus, Set<Authority> authorities,
@@ -193,7 +212,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
 
         this.id = id;
         // Use the parameter if provided and valid, otherwise generate a new one.
-        this.externalId = (externalIdParam != null && !externalIdParam.isBlank()) ? externalIdParam : User.generateWebAuthnUserHandle();
+        this.externalId = StringUtils.hasText(externalIdParam) ? externalIdParam : User.generateWebAuthnUserHandle();
         this.givenName = givenName;
         this.middleName = middleName;
         this.surname = surname;
@@ -203,8 +222,9 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         this.mobileNumber = mobileNumber;
         this.password = password;
         this.accountStatus = (accountStatus != null) ? accountStatus : AccountStatus.initial();
-        this.authorities = authorities != null ? new HashSet<>(authorities) : new HashSet<>(); // Defensive copy
-        this.passkeyCredentials = passkeyCredentials != null ? new HashSet<>(passkeyCredentials) : new HashSet<>(); // Initialize from builder
+        this.authorities = authorities != null ? new HashSet<>(authorities) : new HashSet<>();
+        this.passkeyCredentials = passkeyCredentials != null ? new HashSet<>(passkeyCredentials) : new HashSet<>();
+        this.deviceFingerprintingInfo = new DeviceFingerprintingInfo(); // Initialize here
     }
 
     /**
@@ -217,7 +237,8 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         this.externalId = User.generateWebAuthnUserHandle();
         this.authorities = new HashSet<>();
         this.passkeyCredentials = new HashSet<>();
-        this.accountStatus = AccountStatus.initial(); // Sensible default for JPA-created instances
+        this.accountStatus = AccountStatus.initial();
+        this.deviceFingerprintingInfo = new DeviceFingerprintingInfo(); // Initialize here
     }
 
     /**
@@ -228,12 +249,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
      * @return A new user instance with default initializations.
      */
     public static User createNew() {
-        User newUser = new User(); // Calls the protected constructor
-        // Ensure essential defaults are set if not handled by protected constructor
-        // newUser.accountStatus = AccountStatus.initial(); // Already in protected constructor
-        // newUser.authorities = new HashSet<>(); // Already in protected constructor
-        // newUser.passkeyCredentials = new HashSet<>(); // Already in protected constructor
-        return newUser;
+        return new User();
     }
 
     private static Set<Authority> $default$authorities() { // Used by the builder
@@ -449,6 +465,20 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         }
     }
 
+    // --- Methods to manage UserDeviceFingerprint collection directly on User ---
+    public void addUserDeviceFingerprint(UserDeviceFingerprint fingerprint) {
+        if (fingerprint != null) {
+            this.userDeviceFingerprints.add(fingerprint);
+            fingerprint.setUser(this); // Maintain bidirectional relationship
+        }
+    }
+
+    public void removeUserDeviceFingerprint(UserDeviceFingerprint fingerprint) {
+        if (fingerprint != null && this.userDeviceFingerprints.remove(fingerprint)) {
+            fingerprint.setUser(null); // Maintain bidirectional relationship
+        }
+    }
+
     // Generate a random user handle for WebAuthn, externalId
     public static String generateWebAuthnUserHandle() {
         UUID uuid = UUID.randomUUID();
@@ -485,7 +515,8 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
             this.authorities = new HashSet<>(); // Assign a new empty HashSet
         } else {
             // The UserDetailsService is already providing a new HashSet of de-proxied entities.
-            this.authorities = newAuthorities; // Assign the new Set instance
+            this.authorities = new HashSet<>(newAuthorities);
+            ; // Assign the new Set instance
         }
     }
 
@@ -549,6 +580,10 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return this.id;
     }
 
+    public Long getUserId() {
+        return this.id;
+    }
+
     public String getExternalId() {
         return this.externalId;
     }
@@ -581,15 +616,6 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return this.recoveryEmailBlindIndex;
     }
 
-    /**
-     * @deprecated Use {@link #getRecoveryEmail()} instead.
-     * This method is kept for backward compatibility.
-     */
-    @Deprecated
-    public EmailAddress getBackupEmail() {
-        return getRecoveryEmail();
-    }
-
     public String getProfilePictureUrl() {
         return this.profilePictureUrl;
     }
@@ -604,6 +630,11 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         //     return Collections.emptySet();
         // }
         return Collections.unmodifiableSet(this.passkeyCredentials);
+    }
+
+    // Getter for the persisted UserDeviceFingerprint collection
+    public List<UserDeviceFingerprint> getUserDeviceFingerprints() {
+        return Collections.unmodifiableList(this.userDeviceFingerprints);
     }
 
     public AccountStatus getAccountStatus() {
@@ -657,6 +688,28 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
     }
 
     /**
+     * Sets the user's external ID. Uses Spring's StringUtils for robustness.
+     *
+     * @param newExternalId The new external ID. Must not be null or blank. Usually from WebAuthnEntity
+     */
+    public void setExternalId(String newExternalId) {
+        if (!org.springframework.util.StringUtils.hasText(newExternalId)) { // Use Spring's StringUtils for robustness
+            throw new IllegalArgumentException("External ID cannot be null or blank.");
+        }
+        this.externalId = newExternalId;
+    }
+
+//    public void setExternalId(String externalIdFromWebAuthnEntity) {
+//            if (!externalIdFromWebAuthnEntity.isBlank()) {
+//                this.externalId = externalIdFromWebAuthnEntity;
+//            }
+//
+//            if (externalIdFromWebAuthnEntity.isBlank()) {
+//            throw new IllegalArgumentException("New External ID cannot be blank.");
+//            }
+//    }
+
+    /**
      * Replaces all existing passkey credentials with the given set.
      * This method is intended for use during user loading to ensure a "clean"
      * set of de-proxied entities is associated with the User principal.
@@ -664,7 +717,7 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
      * @param newPasskeys The new set of passkey credentials. If null or empty, credentials will be cleared.
      */
     public void setPasskeyCredentials(Set<PasskeyCredential> newPasskeys) {
-        if (newPasskeys == null) {
+        if (newPasskeys.isEmpty()) {
             this.passkeyCredentials = new HashSet<>(); // Assign a new empty HashSet
         } else {
             // Ensure we are assigning a new HashSet instance that is not a Hibernate proxy collection
@@ -681,14 +734,43 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         return this.deletedAt != null;
     }
 
+    /**
+     * Gets the device fingerprinting information for this user.
+     *
+     * @return the device fingerprinting information
+     */
+    public DeviceFingerprintingInfo getDeviceFingerprintingInfo() {
+        return deviceFingerprintingInfo;
+    }
+
+    /**
+     * Updates the device fingerprinting information for this user.
+     *
+     * @param newDeviceFingerprintingInfo the new device fingerprinting information
+     */
+    public void updateDeviceFingerprintingInfo(DeviceFingerprintingInfo newDeviceFingerprintingInfo) {
+        this.deviceFingerprintingInfo = Objects.requireNonNull(newDeviceFingerprintingInfo,
+                "Device fingerprinting info cannot be null");
+    }
+
+    /**
+     * Checks if device fingerprinting is enabled for this user.
+     *
+     * @return true if device fingerprinting is enabled, false otherwise
+     */
+    public boolean isDeviceFingerprintingEnabled() {
+        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
+    }
+
     @Override
     public String toString() {
         // For lazy collections, just indicate presence, or if they are null,
         // rather than trying to get their size, which can trigger lazy loading.
-        String passkeyStatus = (passkeyCredentials == null) ? "null_collection" : "[passkey_credentials_present]";
+        String passkeyStatus = (passkeyCredentials.isEmpty()) ? "null_collection" : "[passkey_credentials_present]";
         // Authorities are EAGER, but being cautious is fine.
-        String authoritiesStatus = (authorities == null) ? "null_collection" : "[authorities_present_count:" + authorities.size() + "]";
+        String authoritiesStatus = (authorities.isEmpty()) ? "null_collection" : "[authorities_present_count:" + authorities.size() + "]";
 
+        String deviceFingerprintStatus = (userDeviceFingerprints.isEmpty()) ? "null_collection" : "[device_fingerprints_present_count:" + userDeviceFingerprints.size() + "]";
 
         return "User{" +
                 "id=" + id +
@@ -701,8 +783,9 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
                 ", recoveryEmail=" + (recoveryEmail != null ? recoveryEmail.getValue() : "null") +
                 ", mobileNumber=" + (mobileNumber != null ? mobileNumber.e164Value() : "null") +
                 ", accountStatus=" + accountStatus +
-                ", authorities_status=" + authoritiesStatus + // Changed to status
-                ", passkeyCredentials_status=" + passkeyStatus + // Changed to status
+                ", authorities_status=" + authoritiesStatus +
+                ", passkeyCredentials_status=" + passkeyStatus +
+                ", userDeviceFingerprints_status=" + deviceFingerprintStatus + // Added status
                 '}';
     }
 
@@ -721,7 +804,9 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
                 .password(this.password)
                 .accountStatus(this.accountStatus)
                 .authorities(this.authorities != null ? new HashSet<>(this.authorities) : null) // Pass a copy
-                .passkeyCredentials(this.passkeyCredentials != null ? new HashSet<>(this.passkeyCredentials) : null); // Pass a copy
+                .passkeyCredentials(this.passkeyCredentials != null ? new HashSet<>(this.passkeyCredentials) : null) // Pass a copy
+                .userDeviceFingerprints(this.userDeviceFingerprints != null ? new ArrayList<>(this.userDeviceFingerprints) : null)
+                .deviceFingerprintingInfo(this.deviceFingerprintingInfo);
         // externalId and displayName are not part of the private constructor,
         // so they are not set by this toBuilder() directly into the builder's fields
         // for that constructor. If they were, they'd be added here.
@@ -742,8 +827,11 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
         private AccountStatus accountStatus;
         private Set<Authority> authorities$value;
         private boolean authorities$set;
-        private Set<PasskeyCredential> passkeyCredentials$value; // Added
-        private boolean passkeyCredentials$set; // Added
+        private Set<PasskeyCredential> passkeyCredentials$value;
+        private boolean passkeyCredentials$set;
+        private List<UserDeviceFingerprint> userDeviceFingerprints$value;
+        private boolean userDeviceFingerprints$set;
+        private DeviceFingerprintingInfo deviceFingerprintingInfo;
 
         // Note: externalId and displayName are not managed by this builder directly
         // as they are not in the private User constructor's parameters.
@@ -793,7 +881,6 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
          * @return This builder for method chaining
          */
         public UserBuilder recoveryEmail(EmailAddress recoveryEmail) {
-//            return recoveryEmail(recoveryEmail);
             this.recoveryEmail = recoveryEmail;
             return this;
         }
@@ -828,6 +915,17 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
             return this;
         }
 
+        // Builder method for userDeviceFingerprints
+        public UserBuilder userDeviceFingerprints(List<UserDeviceFingerprint> userDeviceFingerprints) {
+            this.userDeviceFingerprints$value = userDeviceFingerprints;
+            this.userDeviceFingerprints$set = true;
+            return this;
+        }
+
+        public UserBuilder deviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
+            this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+            return this;
+        }
 
         public User build() {
             Set<Authority> authoritiesValue = this.authorities$value;
@@ -837,13 +935,24 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
             // Handle passkeyCredentials default
             Set<PasskeyCredential> passkeyCredentialsValue = this.passkeyCredentials$value;
             if (!this.passkeyCredentials$set) {
-                passkeyCredentialsValue = new HashSet<>(); // Default to empty set
+                passkeyCredentialsValue = new HashSet<>(); // Default to an empty set
+            }
+
+            // Handle userDeviceFingerprints default
+            List<UserDeviceFingerprint> userDeviceFingerprintsValue = this.userDeviceFingerprints$value;
+            if (!this.userDeviceFingerprints$set) {
+                userDeviceFingerprintsValue = new ArrayList<>();
             }
 
             User user = new User(this.id, this.externalId, this.givenName, this.middleName, this.surname, this.nickname,
                     this.email, this.recoveryEmail, this.mobileNumber,
                     this.password, this.accountStatus, authoritiesValue,
                     passkeyCredentialsValue);
+
+            // Set the userDeviceFingerprints after construction
+            user.userDeviceFingerprints = userDeviceFingerprintsValue;
+            user.deviceFingerprintingInfo = this.deviceFingerprintingInfo != null ? this.deviceFingerprintingInfo : new DeviceFingerprintingInfo(); // ADDED: Set DeviceFingerprintingInfo
+
             // Set blind index after construction if recoveryEmail is present
             if (this.recoveryEmail != null && StringUtils.hasText(this.recoveryEmail.getValue())) {
                 user.recoveryEmailBlindIndex = generateBlindIndex(this.recoveryEmail.getValue());
@@ -864,8 +973,11 @@ public class User extends AbstractAuditableEntity implements UserDetails, Serial
                     ", mobileNumber=" + this.mobileNumber +
                     ", password=" + (password != null ? "[PROTECTED]" : "null") +
                     ", accountStatus=" + this.accountStatus +
-                    ", authorities$value=" + this.authorities$value +
+                    ", authorities$value=" + this.authorities$value + // Only use this if EAGER loaded
+//                    ", authorities$value=" + (this.authorities$value != null ? this.authorities$value.size() : "null") + // Log size if authorities is LAZY loaded
                     ", passkeyCredentials$value=" + (this.passkeyCredentials$value != null ? this.passkeyCredentials$value.size() : "null") + // Log size
+                    ", userDeviceFingerprints$value=" + (this.userDeviceFingerprints$value != null ? this.userDeviceFingerprints$value.size() : "null") +
+                    ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
                     ")";
         }
     }

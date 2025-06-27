@@ -45,6 +45,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @EntityGraph(attributePaths = {"authorities", "passkeyCredentials"})
     Optional<User> findByExternalIdAndDeletedAtIsNull(String externalId);
 
+    /**
+     * Finds a user by their authServerSubjectId.
+     * This ID is the 'sub' claim from the JWT issued by the authserver,
+     * linking the local amlume-shop user to the central authserver identity.
+     *
+     * @param authServerSubjectId The subject ID from the authserver.
+     * @return An Optional containing the User if found, or empty otherwise.
+     */
+    Optional<User> findBy(String authServerSubjectId);
+
     // Check if a user exists by email
     boolean existsByEmail_Value(String email);
 

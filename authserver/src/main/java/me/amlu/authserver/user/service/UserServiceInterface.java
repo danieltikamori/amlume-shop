@@ -11,6 +11,7 @@
 package me.amlu.authserver.user.service;
 
 import io.micrometer.core.annotation.Timed;
+import me.amlu.authserver.security.dto.DeviceRegistrationInfo;
 import me.amlu.authserver.user.model.User;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +20,27 @@ public interface UserServiceInterface {
     // Method called by authentication failure handler
     void handleFailedLogin(String username);
 
-    // Method called by authentication success handler
-    void handleSuccessfulLogin(String username);
 
-    User createUser(String givenName, String middleName, String surname, String nickname, String email, String rawPassword, String mobileNumber, String defaultRegion, String recoveryEmail);
+    /**
+     * Handles successful login attempts by resetting failed login counters,
+     * unlocking accounts, and updating the device fingerprint.
+     *
+     * @param usernameEmail     The username or email used in the successful login attempt.
+     * @param deviceFingerprint The generated fingerprint of the device used for login.
+     */
+    void handleSuccessfulLogin(String usernameEmail, DeviceRegistrationInfo deviceInfo);
+
+    // Method called by authentication success handler
+//    @Deprecated
+//    void handleSuccessfulLogin(String username);
+
+//    User createUser(String givenName, String middleName, String surname, String nickname, String email, String rawPassword, String mobileNumber, String defaultRegion, String recoveryEmail);
+
+    @Transactional
+    @Timed(value = "authserver.usermanager.create", description = "Time taken to create user")
+    User createUser(String givenName, String middleName, String surname, String nickname,
+                    String email, String rawPassword, String mobileNumber,
+                    String defaultRegion, String recoveryEmailRaw, String captchaResponse, String ipAddress);
 
     User updateUserProfile(Long userId, String newGivenName, String newMiddleName, String newSurname, String newNickname, String newMobileNumber, String defaultRegion, String newRecoveryEmail);
 
@@ -51,4 +69,7 @@ public interface UserServiceInterface {
         // Consider if @PreAuthorize is needed here, e.g., only admin or the user themselves.
         // The controller endpoint already checks for @AuthenticationPrincipal.
     void deleteUserAccount(Long userId);
+
+    User getCurrentUser();
+
 }

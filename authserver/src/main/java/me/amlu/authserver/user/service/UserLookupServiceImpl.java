@@ -11,6 +11,7 @@
 package me.amlu.authserver.user.service;
 
 import me.amlu.authserver.common.AuthUtils;
+import me.amlu.authserver.common.StringUtils;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
 import org.springframework.security.core.Authentication;
@@ -40,7 +41,7 @@ public class UserLookupServiceImpl implements UserLookupService {
     @Transactional(readOnly = true)
     public User getAppUserFromAuthentication(Authentication authentication) {
         return AuthUtils.getUserFromAuthentication(authentication, email -> {
-            if (email == null) {
+            if (StringUtils.isBlank(email)) {
                 return null; // For type checking in AuthUtils
             }
             return userRepository.findByEmail_Value(email)
@@ -49,7 +50,7 @@ public class UserLookupServiceImpl implements UserLookupService {
                                 "This could be a provisioning delay or an issue if the user should exist.", email);
                         return null;
                     });
-        });
+        }, User.class);
     }
 
     /**

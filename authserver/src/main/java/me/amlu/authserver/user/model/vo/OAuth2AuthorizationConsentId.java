@@ -19,6 +19,7 @@ import java.util.Objects;
 
 @Embeddable
 public class OAuth2AuthorizationConsentId implements Serializable {
+
     @Serial
     private static final long serialVersionUID = 1L;
 

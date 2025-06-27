@@ -16,7 +16,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.util.StringUtils;
 
 import java.io.Serial;

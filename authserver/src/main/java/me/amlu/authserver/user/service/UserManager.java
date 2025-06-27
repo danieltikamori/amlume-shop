@@ -14,26 +14,37 @@ import io.micrometer.core.annotation.Timed;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.OptimisticLockException;
 import me.amlu.authserver.exceptions.PasswordMismatchException;
+import me.amlu.authserver.exceptions.TooManyAttemptsException;
+import me.amlu.authserver.exceptions.UnauthorizedException;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.repository.OAuth2AuthorizationConsentRepository;
 import me.amlu.authserver.oauth2.repository.OAuth2AuthorizationRepository;
 import me.amlu.authserver.passkey.repository.PasskeyCredentialRepository;
 import me.amlu.authserver.security.config.PasswordPolicyConfig;
+import me.amlu.authserver.security.failedlogin.FailedLoginAttemptService;
+import me.amlu.authserver.security.repository.UserDeviceFingerprintRepository;
+import me.amlu.authserver.security.service.CaptchaService;
+import me.amlu.authserver.security.service.DeviceFingerprintServiceInterface;
+import me.amlu.authserver.security.audit.SecurityAuditService;
+import me.amlu.authserver.security.dto.DeviceRegistrationInfo;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.model.vo.PhoneNumber;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.password.CompromisedPasswordChecker;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.session.FindByIndexNameSessionRepository;
@@ -66,7 +77,9 @@ public class UserManager implements UserServiceInterface {
      * Repository for user entity operations
      */
     private final UserRepository userRepository;
-    /** Service for password encoding and verification */
+    /**
+     * Service for password encoding and verification
+     */
     private final PasswordEncoder passwordEncoder;
     /**
      * Configuration for password policy rules
@@ -76,20 +89,36 @@ public class UserManager implements UserServiceInterface {
      * Service to check if passwords have been compromised in data breaches
      */
     private final CompromisedPasswordChecker compromisedPasswordChecker;
-    /** Repository for user authority/role operations */
+    /**
+     * Repository for user authority/role operations
+     */
     private final AuthorityRepository authorityRepository;
-    /** Repository for passkey credential operations */
+    /**
+     * Repository for passkey credential operations
+     */
     private final PasskeyCredentialRepository passkeyCredentialRepository;
-    /** Repository for OAuth2 authorization operations */
+    /**
+     * Repository for OAuth2 authorization operations
+     */
     private final OAuth2AuthorizationRepository oauth2AuthorizationRepository;
-    /** Repository for OAuth2 consent operations */
+    /**
+     * Repository for OAuth2 consent operations
+     */
     private final OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository;
-    /** Repository for persistent remember-me tokens */
+    /**
+     * Repository for persistent remember-me tokens
+     */
     private final PersistentTokenRepository persistentTokenRepository;
     /**
      * Repository for user session management
      */
     private final FindByIndexNameSessionRepository<? extends Session> sessionRepository;
+
+    private final DeviceFingerprintServiceInterface deviceFingerprintService;
+    private final FailedLoginAttemptService failedLoginAttemptService;
+    private final SecurityAuditService securityAuditService;
+    private final CaptchaService captchaService;
+    private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
 
 
     /**
@@ -106,7 +135,7 @@ public class UserManager implements UserServiceInterface {
      * @param persistentTokenRepository            Repository for persistent remember-me tokens
      * @param sessionRepository                    Repository for user session management
      */
-    public UserManager(UserRepository userRepository, PasswordEncoder passwordEncoder, PasswordPolicyConfig passwordPolicyConfig, CompromisedPasswordChecker compromisedPasswordChecker, AuthorityRepository authorityRepository, PasskeyCredentialRepository passkeyCredentialRepository, OAuth2AuthorizationRepository oauth2AuthorizationRepository, OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository, PersistentTokenRepository persistentTokenRepository, FindByIndexNameSessionRepository<? extends Session> sessionRepository) {
+    public UserManager(UserRepository userRepository, PasswordEncoder passwordEncoder, PasswordPolicyConfig passwordPolicyConfig, CompromisedPasswordChecker compromisedPasswordChecker, AuthorityRepository authorityRepository, PasskeyCredentialRepository passkeyCredentialRepository, OAuth2AuthorizationRepository oauth2AuthorizationRepository, OAuth2AuthorizationConsentRepository oauth2AuthorizationConsentRepository, PersistentTokenRepository persistentTokenRepository, FindByIndexNameSessionRepository<? extends Session> sessionRepository, DeviceFingerprintServiceInterface deviceFingerprintService, FailedLoginAttemptService failedLoginAttemptService, SecurityAuditService securityAuditService, CaptchaService captchaService, UserDeviceFingerprintRepository userDeviceFingerprintRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.passwordPolicyConfig = passwordPolicyConfig;
@@ -117,11 +146,16 @@ public class UserManager implements UserServiceInterface {
         this.oauth2AuthorizationConsentRepository = oauth2AuthorizationConsentRepository;
         this.persistentTokenRepository = persistentTokenRepository;
         this.sessionRepository = sessionRepository;
+        this.deviceFingerprintService = deviceFingerprintService;
+        this.failedLoginAttemptService = failedLoginAttemptService;
+        this.securityAuditService = securityAuditService;
+        this.captchaService = captchaService;
+        this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
     }
 
     /**
      * Handles failed login attempts by recording the failure and potentially locking the account.
-     * 
+     *
      * @param usernameEmail The username or email used in the failed login attempt
      */
     @Override
@@ -131,7 +165,7 @@ public class UserManager implements UserServiceInterface {
             log.warn("Attempted to handle failed login with null or empty username");
             return;
         }
-        
+
         log.debug("Handling failed login attempt for username/email: {}", usernameEmail);
         int retryCount = 0;
         final int MAX_RETRIES = 3;
@@ -166,7 +200,7 @@ public class UserManager implements UserServiceInterface {
                     // Consider alerting operations team if this happens frequently
                 } else {
                     try {
-                        Thread.sleep(50 * retryCount); // Exponential backoff
+                        Thread.sleep(50L * retryCount); // Exponential backoff
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         log.warn("Thread interrupted during retry backoff");
@@ -181,12 +215,56 @@ public class UserManager implements UserServiceInterface {
     }
 
     /**
-     * Handles successful login attempts by resetting failed login counters and unlocking accounts.
-     * Called by authentication success handler.
-     * 
-     * @param usernameEmail The username or email used in the successful login attempt
+     * Handles successful login attempts by resetting failed login counters, unlocking accounts,
+     * and updating the device fingerprint.
+     *
+     * @param usernameEmail The username or email used in the successful login attempt.
+     * @param deviceInfo    The DTO containing all device-related information.
      */
     @Override
+    @Timed(value = "authserver.usermanager.successfullogin", description = "Time taken to handle successful login")
+    public void handleSuccessfulLogin(String usernameEmail, DeviceRegistrationInfo deviceInfo) {
+        log.debug("Handling successful login for username/email: {}", usernameEmail);
+        userRepository.findByEmail_Value(usernameEmail).ifPresent(user -> {
+            boolean wasUpdated = false;
+
+            // Reset login failures if necessary
+            if (user.getAccountStatus().getFailedLoginAttempts() > 0 || !user.getAccountStatus().isAccountNonLocked()) {
+                log.info("Resetting login failures for user {} (ID: {}).", usernameEmail, user.getId());
+                user.recordSuccessfulLogin(); // This also resets login failures count
+                wasUpdated = true;
+            }
+
+            // --- Update device fingerprint from the provided parameter ---
+            if (deviceInfo != null && org.springframework.util.StringUtils.hasText(deviceInfo.deviceFingerprint())) {
+                log.debug("Updating device fingerprint for user {}: {}", usernameEmail, deviceInfo.deviceFingerprint());
+
+                // Update the current fingerprint in DeviceFingerprintingInfo (embedded object)
+                user.getDeviceFingerprintingInfo().setCurrentFingerprint(deviceInfo.deviceFingerprint());
+
+                // Delegate to the service's storeOrUpdateFingerprint method
+                // This method will handle finding/updating/creating the UserDeviceFingerprint entity
+                // Pass all collected metadata to the service
+                deviceFingerprintService.storeOrUpdateFingerprint(user, deviceInfo);
+
+                wasUpdated = true;
+            }
+
+            if (wasUpdated) {
+                userRepository.save(user); // Save the User entity (which contains DeviceFingerprintingInfo)
+                log.debug("Saved user {} (ID: {}) after successful login and updates.", usernameEmail, user.getId());
+            }
+        });
+    }
+
+    /**
+     * Handles successful login attempts by resetting failed login counters and unlocking accounts.
+     * Called by authentication success handler.
+     *
+     * @param usernameEmail The username or email used in the successful login attempt
+     */
+    @Deprecated
+//    @Override
     @Timed(value = "authserver.usermanager.successfullogin", description = "Time taken to handle successful login")
     public void handleSuccessfulLogin(String usernameEmail) {
         log.debug("Handling successful login for username/email: {}", usernameEmail);
@@ -207,26 +285,36 @@ public class UserManager implements UserServiceInterface {
      * Creates a new user account with the provided information.
      * Validates email uniqueness and password policy compliance.
      *
-     * @param givenName User's first name
-     * @param middleName User's middle name (optional)
-     * @param surname User's last name
-     * @param nickname User's preferred name (optional)
-     * @param email User's primary email address
-     * @param rawPassword User's password in plain text (will be hashed)
-     * @param mobileNumber User's mobile phone number (optional)
-     * @param defaultRegion Default region code for phone number formatting
+     * @param givenName        User's first name
+     * @param middleName       User's middle name (optional)
+     * @param surname          User's last name
+     * @param nickname         User's preferred name (optional)
+     * @param email            User's primary email address
+     * @param rawPassword      User's password in plain text (will be hashed)
+     * @param mobileNumber     User's mobile phone number (optional)
+     * @param defaultRegion    Default region code for phone number formatting
      * @param recoveryEmailRaw Secondary email for account recovery (optional)
      * @return The newly created User entity
      * @throws DataIntegrityViolationException If email or recovery email already exists
-     * @throws IllegalArgumentException If password policy is violated
+     * @throws IllegalArgumentException        If password policy is violated
      */
     @Transactional
-    @Override
     @Timed(value = "authserver.usermanager.create", description = "Time taken to create user")
+    @Override
     public User createUser(String givenName, String middleName, String surname, String nickname,
                            String email, String rawPassword, String mobileNumber,
-                           String defaultRegion, String recoveryEmailRaw) {
+                           String defaultRegion, String recoveryEmailRaw, String captchaResponse, String ipAddress) {
         log.info("Attempting to create user: email={}, recoveryEmail={}, givenName={}", email, recoveryEmailRaw, givenName);
+
+        // 0. Perform local pre-flight checks (rate limiting, captcha)
+        // Keep these if amlume-shop should enforce them before hitting authserver
+        // Use userEmail as the identifier for local rate limiting
+        // Ensure request.userEmail() and request.userEmail().getEmail() are not null before calling
+        String emailForPreCheck = (!email.isEmpty())
+                ? email
+                : "unknown_email_for_precheck"; // Or handle as error
+        performPreFlightChecks(emailForPreCheck, ipAddress, "Registration", captchaResponse);
+        log.debug("Local pre-flight checks passed for registration of user userEmail: {}", emailForPreCheck);
 
         EmailAddress emailVO = new EmailAddress(email);
         EmailAddress recoveryEmailVO = StringUtils.hasText(recoveryEmailRaw) ? new EmailAddress(recoveryEmailRaw) : null; // Process recovery email
@@ -563,8 +651,8 @@ public class UserManager implements UserServiceInterface {
         log.info("Admin successfully set enabled status to {} for userId: {}", enabled, userId);
     }
 
-    @PreAuthorize("hasAnyRole('ROLE_USER') and @userSecurity.isUserAllowedToModify(#userId)")
     @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAnyRole('ROLE_USER') and @userSecurity.isUserAllowedToModify(#userId)")
     @Override
     @Timed(value = "authserver.usermanager.deleteaccount", description = "Time taken to delete user account")
     public void deleteUserAccount(Long userId) {
@@ -578,44 +666,33 @@ public class UserManager implements UserServiceInterface {
 
         String principalName = user.getUsername(); // This is the email, used as principal in OAuth2
 
-        // 0. Proactive session invalidation
-        try {
-            log.debug("Attempting to invalidate sessions for principalName: {}", principalName);
-            Map<String, ? extends Session> userSessions = sessionRepository.findByPrincipalName(principalName);
-            if (userSessions != null && !userSessions.isEmpty()) {
-                int count = 0;
-                for (String sessionId : userSessions.keySet()) {
-                    sessionRepository.deleteById(sessionId);
-                    count++;
-                }
-                log.info("Invalidated {} active session(s) for principalName: {}", count, principalName);
-            } else {
-                log.debug("No active sessions found to invalidate for principalName: {}", principalName);
-            }
-        } catch (Exception e) {
-            log.error("Error during proactive session invalidation for principalName {}: {}", principalName, e.getMessage(), e);
-        }
+        // Proactive session invalidation
+        invalidateAllSessions(userId);
 
-        // 1. Deleting associated PasskeyCredentials
+        // Deleting associated PasskeyCredentials
         log.debug("Deleting passkey credentials for userId: {}", userId);
         passkeyCredentialRepository.deleteByUserId(userId);
 
-        // 2. Deleting OAuth2Authorizations (invalidates access and refresh tokens)
+        // Deleting associated UserDeviceFingerprints
+        log.debug("Deleting user device fingerprints for userId: {}", userId);
+        userDeviceFingerprintRepository.deleteByUserId(userId);
+
+        // Deleting OAuth2Authorizations (invalidates access and refresh tokens)
         log.debug("Deleting OAuth2 authorizations for principalName: {}", principalName);
         oauth2AuthorizationRepository.deleteAllByPrincipalName(principalName);
 
-        // 3. Deleting OAuth2AuthorizationConsents
+        // Deleting OAuth2AuthorizationConsents
         log.debug("Deleting OAuth2 authorization consents for principalName: {}", principalName);
         oauth2AuthorizationConsentRepository.deleteByIdPrincipalName(principalName);
 
         // Finally, deleting the User entity
         // This will also cascade delete related entities if configured in User (e.g., user_authorities join table)
 
-        // 4. RememberMe - Remove/invalidate user token
+        // RememberMe - Remove/invalidate user token
         persistentTokenRepository.removeUserTokens(principalName);
         log.debug("Removed persistent tokens for user: {}", principalName);
 
-        // 5. Soft delete the user entity
+        // Soft delete the user entity
         user.setDeletedAt(Instant.now()); // Or set a boolean flag
         user.disableAccount();
         log.debug("Deleting user entity for userId: {}", userId);
@@ -634,17 +711,204 @@ public class UserManager implements UserServiceInterface {
         log.info("Successfully deleted account and associated data for userId: {}, principalName: {}", userId, principalName);
     }
 
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    public void appendRole(@NonNull Long userId, @NonNull String roleName) {
+        log.info("Attempting to append role {} to user {}", roleName, userId);
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            log.error("User not found with id: {}", userId);
+            return;
+        }
+        log.debug("Found user for role append: userId={}", userId);
+
+        Authority authority = authorityRepository.findByAuthority(roleName).orElse(null);
+        user.assignAuthority(authority);
+
+        log.debug("Assigned role {} to user {}", roleName, userId);
+
+        String principalName = user.getUsername();
+
+        // For security purposes, all sessions should be invalidated
+        // Proactive session invalidation
+        invalidateAllSessions(userId);
+
+        // Update authorizations
+
+        // Deleting OAuth2Authorizations (invalidates access and refresh tokens)
+        log.debug("Deleting OAuth2 authorizations for principalName: {}", principalName);
+        oauth2AuthorizationRepository.deleteAllByPrincipalName(principalName);
+
+        // Deleting OAuth2AuthorizationConsents
+        log.debug("Deleting OAuth2 authorization consents for principalName: {}", principalName);
+        oauth2AuthorizationConsentRepository.deleteByIdPrincipalName(principalName);
+
+        // RememberMe - Remove/invalidate user token
+        persistentTokenRepository.removeUserTokens(principalName);
+        log.debug("Removed persistent tokens for user: {}", principalName);
+
+        // RememberMe - Remove/invalidate user token
+        persistentTokenRepository.removeUserTokens(principalName);
+        log.debug("Removed persistent tokens for user as role(s) were appended: {}", principalName);
+
+        userRepository.save(user);
+        log.info("Successfully appended role {} to user {}", roleName, userId);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
+    public void revokeRole(@NonNull Long userId, @NonNull String roleName) {
+        log.info("Attempting to remove role {} from user {}", roleName, userId);
+
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            log.error("User not found with id: {}", userId);
+            return;
+        }
+        log.debug("Found user for role removal: userId={}", userId);
+        Authority authority = authorityRepository.findByAuthority(roleName).orElse(null);
+        user.revokeAuthority(authority);
+
+        log.debug("Revoked role {} from user {}", roleName, userId);
+
+        String principalName = user.getUsername();
+
+        // For security purposes, all sessions should be invalidated
+        // Proactive session invalidation
+
+        invalidateAllSessions(userId);
+
+        // Update authorizations
+
+        // Deleting OAuth2Authorizations (invalidates access and refresh tokens)
+        log.debug("Deleting OAuth2 authorizations for principalName: {}", principalName);
+        oauth2AuthorizationRepository.deleteAllByPrincipalName(principalName);
+
+        // Deleting OAuth2AuthorizationConsents
+        log.debug("Deleting OAuth2 authorization consents for principalName: {}", principalName);
+        oauth2AuthorizationConsentRepository.deleteByIdPrincipalName(principalName);
+
+        // RememberMe - Remove/invalidate user token
+        persistentTokenRepository.removeUserTokens(principalName);
+        log.debug("Removed persistent tokens for user: {}", principalName);
+
+
+        userRepository.save(user);
+        log.info("Successfully removed role {} from user {}", roleName, userId);
+    }
+
+    /**
+     * Retrieves the currently authenticated user from the SecurityContext.
+     *
+     * @return The authenticated User entity.
+     * @throws UnauthorizedException If no user is authenticated or the user is anonymous.
+     */
+    @Override
+    // Caching the current user can be tricky due to keying and potential staleness.
+    // Often better to fetch when necessary or cache specific, less volatile data.
+    // @Cacheable(value = CURRENT_USER_CACHE, key = "authentication.name") // Key needs context
+    @Timed(value = "authserver.userservice.currentuser", extraTags = {"method", "getCurrentUser"}, description = "Time taken to get current user")
+    public User getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() || authentication instanceof AnonymousAuthenticationToken) {
+            throw new UnauthorizedException("No authenticated user found or user is anonymous");
+        }
+
+        // Action: Handle OAuth2/OIDC principal correctly
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+            // For JWT principal, the 'sub' claim is the user ID from authserver.
+            String authServerSubjectId = jwt.getSubject(); // This is the authserver User.id (as a String)
+            // The 'userEmail' claim might also be present and useful for logging/display
+            String emailFromToken = jwt.getClaimAsString("userEmail"); // Assuming authserver adds userEmail claim
+
+            log.debug("Authenticated via JWT. Subject (authserver user ID): {}, Email from token: {}", authServerSubjectId, emailFromToken);
+
+            // Action: Find the local amlume-shop User entity using the authServerSubjectId
+            // You need a new repository method: findByAuthServerSubjectId(String subjectId)
+            // And the authServerSubjectId field in amlume-shop.User entity.
+            User currentUser = userRepository.findByEmail_ValueAndDeletedAtIsNull(authServerSubjectId)
+                    .orElseThrow(() -> {
+                        log.error("Local user not found for authserver subject ID: {}", authServerSubjectId);
+                        // This indicates a provisioning issue - the user logged in via authserver
+                        // but no corresponding local user record was created/linked.
+                        // This should be handled by the OidcUserService/OAuth2UserService.
+                        // Throwing UnauthorizedException or a specific provisioning error might be appropriate.
+                        return new UnauthorizedException("Local user profile not found for authenticated identity.");
+                    });
+
+            // Optional: Update local user data from token claims if needed (e.g., name, userEmail)
+            // This logic might be better placed in the OidcUserService/OAuth2UserService during provisioning/loading.
+            // if (emailFromToken != null && !emailFromToken.equals(currentUser.getContactInfo().getEmail())) {
+            //     currentUser.updateContactInfo(currentUser.getContactInfo().withEmail(emailFromToken));
+            //     userRepository.save(currentUser); // Save the updated local user
+            // }
+
+            log.debug("Successfully retrieved local user for authserver subject ID {}: userId={}", authServerSubjectId, currentUser.getUserId());
+            return currentUser;
+
+        } else if (principal instanceof UserDetails userDetails) {
+            // This branch handles cases where the principal is already a UserDetails object,
+            // which might happen with local form login (if still enabled) or other custom auth.
+            // If local form login is removed, this branch might become less relevant or indicate an issue.
+            // If UserDetails is your amlume-shop.User entity, return it directly.
+            if (userDetails instanceof User localUser) {
+                log.debug("Authenticated via UserDetails principal: username={}", userDetails.getUsername());
+                return localUser;
+            } else {
+                // Handle other UserDetails types if necessary, or throw error
+                log.error("Authenticated with unexpected UserDetails type: {}", userDetails.getClass());
+                throw new UnauthorizedException("Unexpected authenticated principal type.");
+            }
+        }
+        // Remove or adapt other principal types if they were handled here (e.g., old PASETO principals)
+
+        else {
+            // Should not happen with standard Spring Security setup after OAuth2 config
+            log.error("Unexpected principal type in SecurityContext: {}", principal.getClass());
+            throw new UnauthorizedException("Unexpected authentication principal type");
+        }
+    }
+
+
     // --- Helper methods ---
 
     /**
-     * Helper method to validate the password against the password policy.
-     * This method should be called before persisting the password to the database.
-     *
-     * @param rawPassword The raw password as string to be validated before hashing.
+     * Consolidated pre-flight checks for registration and login.
+     * // The 'identifier' parameter will now be an userEmail address.
+     * Keep these if amlume-shop should enforce them before hitting authserver/login flow.
      */
+    private void performPreFlightChecks(String identifier, String ipAddress, String actionType, String captchaResponse) throws TooManyAttemptsException {
+
+        // Check failed login attempts (applies to log in/MFA verify, maybe registration too)
+        // This logic might need adjustment if authserver handles all failed attempts centrally.
+        // If amlume-shop still wants to block based on *local* failed attempts (e.g., attempts to hit its login endpoint directly), keep this.
+        // If authserver handles it, remove this.
+        // For now, assuming local IP/username rate limiting is still desired before calling authserver.
+        try {
+            failedLoginAttemptService.checkAndThrowIfBlocked(identifier); // Check by username/userEmail
+            failedLoginAttemptService.checkAndThrowIfBlocked(ipAddress); // Check by IP
+        } catch (TooManyAttemptsException e) {
+            // Use the exception message which likely contains the key type information
+            securityAuditService.logFailedAttempt(identifier, ipAddress, "Too Many Attempts (Backoff) for " + e.getMessage());
+            throw e;
+        }
+
+        // Keep Captcha validation here if required for the actionType (e.g., on amlume-shop's registration form)
+        if ("Login".equals(actionType) || "Registration".equals(actionType)) {
+            captchaService.verifyRateLimitAndCaptcha(captchaResponse, ipAddress);
+        }
+
+        log.trace("Local pre-flight checks passed for identifier [{}], action [{}]", identifier, actionType);
+    }
+
     /**
      * Validates the password against the password policy.
      * Checks length, character requirements, and if the password has been compromised.
+     * This method should be called before persisting the password to the database.
      *
      * @param rawPassword The raw password as string to be validated before hashing
      * @throws IllegalArgumentException If the password doesn't meet policy requirements
@@ -714,12 +978,6 @@ public class UserManager implements UserServiceInterface {
      * @param errorMessage The error message to use if verification fails
      * @throws AccessDeniedException if the current user doesn't have admin privileges
      */
-    /**
-     * Verifies that the current user has admin privileges.
-     *
-     * @param errorMessage The error message to use if verification fails
-     * @throws AccessDeniedException if the current user doesn't have admin privileges
-     */
     private void verifyAdminAccess(String errorMessage) {
         Authentication currentUserAuth = SecurityContextHolder.getContext().getAuthentication();
         if (currentUserAuth == null) {
@@ -746,6 +1004,34 @@ public class UserManager implements UserServiceInterface {
         }
     }
 
+    public void invalidateAllSessions(Long userId) {
+        log.info("Attempting to invalidate all sessions for userId: {}", userId);
+        User user = userRepository.findById(userId).orElse(null);
+        if (user == null) {
+            log.error("User not found with id for session invalidation: {}", userId);
+            return;
+        }
+        log.debug("Found user for session invalidation: userId={}", userId);
+
+        String principalName = user.getUsername();
+        try {
+            log.debug("Attempting to invalidate sessions for principalName: {}", principalName);
+            Map<String, ? extends Session> userSessions = sessionRepository.findByPrincipalName(principalName);
+            if (userSessions != null && !userSessions.isEmpty()) {
+                int count = 0;
+                for (String sessionId : userSessions.keySet()) {
+                    sessionRepository.deleteById(sessionId);
+                    count++;
+                }
+                log.info("Invalidated {} active session(s) for principalName: {}", count, principalName);
+            } else {
+                log.debug("No active sessions found to invalidate for principalName: {}", principalName);
+            }
+        } catch (Exception e) {
+            log.error("Error during proactive session invalidation for principalName {}: {}", principalName, e.getMessage(), e);
+        }
+    }
+
     /**
      * Checks if a user has only regular user privileges (ROLE_USER) and no admin roles.
      *
@@ -762,7 +1048,7 @@ public class UserManager implements UserServiceInterface {
      * Checks if a user has admin privileges (ROLE_ADMIN).
      *
      * @param userId The ID of the user to check
-     * @return true if the user has admin privileges, false otherwise
+     * @return true if the user has admin privileges, false otherwise.
      */
     public boolean isAdmin(Long userId) {
         return hasRole(userId, "ROLE_ADMIN");
@@ -785,7 +1071,7 @@ public class UserManager implements UserServiceInterface {
      *
      * @param userId   The ID of the user to check
      * @param roleName The role name to check for
-     * @return true if the user has the specified role, false otherwise
+     * @return true if the user has the specified role, false otherwise.
      */
     private boolean hasRole(Long userId, String roleName) {
         // Implement logic to query your database for the user's roles
@@ -798,7 +1084,7 @@ public class UserManager implements UserServiceInterface {
      *
      * @param userId    The ID of the user to check
      * @param roleNames The role names to check for
-     * @return true if the user has any of the specified roles, false otherwise
+     * @return true if the user has any of the specified roles, false otherwise.
      */
     private boolean hasAnyRole(Long userId, String... roleNames) {
         // Implement logic to check if user has any of the given roles
@@ -812,4 +1098,3 @@ public class UserManager implements UserServiceInterface {
         return Arrays.stream(roleNames).anyMatch(userRoles::contains);
     }
 }
-
