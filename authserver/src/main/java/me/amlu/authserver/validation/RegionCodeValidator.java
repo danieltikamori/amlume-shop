@@ -14,6 +14,7 @@ package me.amlu.authserver.validation;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
+import org.jspecify.annotations.NonNull;
 import org.springframework.util.StringUtils;
 
 import java.util.Set;
@@ -30,7 +31,7 @@ public class RegionCodeValidator implements ConstraintValidator<ValidRegionCode,
     }
 
     @Override
-    public boolean isValid(String value, ConstraintValidatorContext context) {
+    public boolean isValid(@NonNull String value, @NonNull ConstraintValidatorContext context) {
         // null or empty values are considered valid here, as the field might be optional.
         // Use @NotBlank or @NotNull on the DTO field if it's mandatory.
         if (!StringUtils.hasText(value)) {
