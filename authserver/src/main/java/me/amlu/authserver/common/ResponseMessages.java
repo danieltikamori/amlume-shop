@@ -39,6 +39,7 @@ public final class ResponseMessages {
     public static final String VALIDATION_ERROR = "Validation error";
     public static final String INTERNAL_ERROR = "Internal server error";
     public static final String SERVICE_UNAVAILABLE = "Service temporarily unavailable";
+    public static final String DEVICE_FINGERPRINT_CANNOT_BE_NULL = "Device fingerprint cannot be null";
 
     // Authentication error messages
     public static final String INVALID_CREDENTIALS = "Invalid username or password";

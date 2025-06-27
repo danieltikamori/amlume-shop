@@ -16,25 +16,45 @@ package me.amlu.authserver.common;
  * and prevent key collisions.
  */
 public final class CacheKeys {
-    // Cache regions/names
-    public static final String USER_CACHE = "userCache";
-    public static final String AUTH_CACHE = "authCache";
-    public static final String TOKEN_CACHE = "tokenCache";
-    public static final String RATE_LIMIT_CACHE = "rateLimitCache";
-    public static final String SESSION_CACHE = "sessionCache";
-    public static final String WEBAUTHN_CACHE = "webauthnCache";
 
-    // User cache keys
-    public static final String USER_BY_ID_PREFIX = "user:id:";
-    public static final String USER_BY_EMAIL_PREFIX = "user:email:";
-    public static final String USER_BY_EXTERNAL_ID_PREFIX = "user:externalId:";
+    private static final String CACHE_VERSION = "v1";
 
     // Authentication cache keys
+    public static final String AUTH_CACHE = "authCache";
+    public static final String AUTH_CACHE_KEY_PREFIX = "auth:";
+    public static final String SESSION_CACHE = "sessionCache";
     public static final String LOGIN_ATTEMPTS_PREFIX = "login:attempts:";
     public static final String BLOCKED_IP_PREFIX = "blocked:ip:";
     public static final String USER_AUTHORITIES_PREFIX = "user:authorities:";
 
+    // --- Cache Names for IP Security & Geolocation ---
+    public static final String IP_BLOCK_CACHE = "ipBlockCache";
+    public static final String IP_METADATA_CACHE = "ipMetadataCache";
+    public static final String GEO_LOCATION_CACHE = "geoLocationCache";
+    public static final String GEO_HISTORY_CACHE = "geoHistoryCache";
+
+    // User cache keys
+    public static final String USER_CACHE = "userCache";
+    public static final String USER_CACHE_KEY_PREFIX = AUTH_CACHE_KEY_PREFIX + CACHE_VERSION + ":user:";
+    public static final String CURRENT_USER_CACHE = "currentUser";
+    public static final String USER_BY_ID_PREFIX = "user:id:";
+    public static final String USER_BY_EMAIL_PREFIX = "user:email:";
+    public static final String USER_BY_EXTERNAL_ID_PREFIX = "user:externalId:";
+    public static final String ROLES_CACHE = "rolesCache";
+
+    // Regions/names
+    public static final String ASN_CACHE = "asnCache";
+
+    // Resilience cache keys
+    public static final String RATE_LIMIT_CACHE = "rateLimitCache";
+    public static final String CAPTCHA_RATELIMIT_KEY = "captcha:";
+    public static final String AUTH_SW_RATELIMIT_KEY = "auth-sw:";
+
+    // The Secrets cache keys
+    public static final String HCP_SECRETS_CACHE = "hcpSecretsCache";
+
     // Token cache keys
+    public static final String TOKEN_CACHE = "tokenCache";
     public static final String ACCESS_TOKEN_PREFIX = "token:access:";
     public static final String REFRESH_TOKEN_PREFIX = "token:refresh:";
     public static final String REVOKED_TOKEN_PREFIX = "token:revoked:";
@@ -42,9 +62,13 @@ public final class CacheKeys {
     public static final String EMAIL_VERIFICATION_TOKEN_PREFIX = "token:emailVerification:";
 
     // WebAuthn cache keys
+    public static final String WEBAUTHN_CACHE = "webauthnCache";
     public static final String WEBAUTHN_CHALLENGE_PREFIX = "webauthn:challenge:";
     public static final String WEBAUTHN_REGISTRATION_PREFIX = "webauthn:registration:";
     public static final String WEBAUTHN_CREDENTIAL_PREFIX = "webauthn:credential:";
+
+    // Temporary cache keys
+    public static final String TEMPORARY_CACHE = "temporaryCache"; // Used by CacheMaintenanceService
 
     /**
      * Generates a user ID cache key.

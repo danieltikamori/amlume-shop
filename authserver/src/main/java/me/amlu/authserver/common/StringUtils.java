@@ -47,6 +47,17 @@ public final class StringUtils {
     }
 
     /**
+     * Checks if a string is null, empty, or contains only whitespace.
+     * To make sure it is not blank.
+     *
+     * @param str The string to check
+     * @return true if string is not null or empty
+     */
+    public static boolean isNotBlank(String str) {
+        return str != null && !str.trim().isEmpty();
+    }
+
+    /**
      * Returns a default value if the string is null or empty.
      *
      * @param str          The string to check
@@ -141,4 +152,5 @@ public final class StringUtils {
         }
         return new String(Base64.getDecoder().decode(base64), StandardCharsets.UTF_8);
     }
+
 }

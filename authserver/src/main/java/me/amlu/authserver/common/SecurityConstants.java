@@ -10,10 +10,30 @@
 
 package me.amlu.authserver.common;
 
+import java.time.Duration;
+
 /**
  * Security-related constants used throughout the application.
  */
 public final class SecurityConstants {
+
+    // Cache TTL
+    public static final Duration ANNOTATION_CACHE_DURATION = Duration.ofHours(24);
+    public static final Duration USER_CACHE_DURATION = Duration.ofMinutes(30);
+    public static final Duration LOCK_TIMEOUT = Duration.ofSeconds(10);
+    public static final Duration USERS_CACHE_TTL = Duration.ofMinutes(15); // User details - shorter TTL
+    public static final Duration ROLES_CACHE_TTL = Duration.ofHours(4);
+    //    public static final Duration ROLES_CACHE_TTL = Duration.ofHours(2);
+    public static final Duration TOKENS_CACHE_TTL = Duration.ofHours(1); // Tokens - TTL should match token validity
+    public static final Duration AUTH_CACHE_TTL = Duration.ofHours(6);
+    public static final Duration PRODUCTS_CACHE_TTL = Duration.ofDays(3);
+    //    public static final Duration PRODUCTS_CACHE_TTL = Duration.ofMinutes(30);
+    public static final Duration CATEGORIES_CACHE_TTL = Duration.ofDays(7);
+    //    public static final Duration CATEGORIES_CACHE_TTL = Duration.ofHours(1);
+    public static final Duration ASN_CACHE_TTL = Duration.ofDays(15);
+    //    public static final Duration ASN_CACHE_TTL = Duration.ofDays(7);
+    public static final Duration HCP_SECRETS_CACHE_TTL = Duration.ofMinutes(35); // (e.g., slightly longer than secrets refresh interval)
+    public static final Duration TEMPORARY_CACHE_TTL = Duration.ofMinutes(10); // Cleaned by maintenance service
 
     // Cryptography constants
     public static final String BCRYPT = "{bcrypt}";
@@ -34,6 +54,8 @@ public final class SecurityConstants {
     public static final String PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256";
     public static final String PBKDF2_ALGORITHM_NAME = "PBKDF2";
     public static final String PBKDF2_ALGORITHM_FULL_NAME = "PBKDF2WithHmacSHA256";
+    public static final String HASH_ALGORITHM = "SHA-256";
+    public static final int INITIAL_MAP_CAPACITY = 16;
 
     // JWT related constants
     public static final String TOKEN_PREFIX = "Bearer ";
@@ -59,10 +81,16 @@ public final class SecurityConstants {
     public static final boolean SECURE_COOKIE = true;
     public static final String REMEMBER_ME_KEY = "amlume-remember-me-key";
     public static final int REMEMBER_ME_VALIDITY = 2592000; // 30 days in seconds
+    public static final String REMEMBER_ME_PARAMETER = "remember-me";
+    public static final String REMEMBER_ME_COOKIE_NAME = "remember-me";
+    public static final String SESSIONS_MAP_NAME = "${spring:session:authserver:sessions}";
 
     // CSRF constants
     public static final String CSRF_COOKIE_NAME = "XSRF-TOKEN";
     public static final String CSRF_HEADER_NAME = "X-XSRF-TOKEN";
+
+    // Content Security Policy (CSP) nonce attribute name
+    public static final String CSP_NONCE_ATTRIBUTE = "nonce";
 
     // WebAuthn constants
     public static final String WEBAUTHN_RELYING_PARTY_ID = "amlume.me";

@@ -17,6 +17,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.oauth2.client.authentication.OAuth2LoginAuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
+import java.util.function.Function;
+
 /**
  * Utility methods for authentication operations.
  */
@@ -32,10 +34,12 @@ public final class AuthUtils {
      *
      * @param authentication     The authentication object
      * @param userLookupFunction Function to look up a user by email
+     * @param expectedUserType   The Class object representing the expected user type (e.g., User.class)
      * @return The user if found, null otherwise
      */
     public static <T> T getUserFromAuthentication(Authentication authentication,
-                                                  java.util.function.Function<String, T> userLookupFunction) {
+                                                  Function<String, T> userLookupFunction,
+                                                  Class<T> expectedUserType) { // ADDED: Class<T> parameter
         if (authentication == null || !authentication.isAuthenticated()) {
             log.warn("getUserFromAuthentication: Authentication is null or not authenticated.");
             return null;
@@ -44,10 +48,10 @@ public final class AuthUtils {
         Object principal = authentication.getPrincipal();
 
         // If principal is already the expected user type
-        if (principal != null && userLookupFunction.apply(null) != null &&
-                principal.getClass().isAssignableFrom(userLookupFunction.apply(null).getClass())) {
+        // Use expectedUserType.isInstance(principal) for type-safe check
+        if (expectedUserType.isInstance(principal)) {
             log.debug("Principal is already the expected user type: {}", principal.getClass().getName());
-            return (T) principal;
+            return expectedUserType.cast(principal); // Type-safe cast
         }
 
         // Extract email and look up user
@@ -58,6 +62,40 @@ public final class AuthUtils {
         }
 
         log.warn("Could not determine email from authentication principal");
+        return null;
+    }
+
+    /**
+     * Extracts the primary user identifier (email or username) from an Authentication object.
+     * This method should be used by services that then perform a user lookup.
+     *
+     * @param authentication The authentication object.
+     * @return The user's email or username if found, null otherwise.
+     */
+    public static String getUserIdentifierFromAuthentication(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            log.warn("getUserIdentifierFromAuthentication: Authentication is null or not authenticated.");
+            return null;
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof UserDetails userDetails) {
+            return userDetails.getUsername(); // Assuming username is email
+        } else if (principal instanceof OAuth2User oauth2User) {
+            // Prioritize 'email' attribute for OAuth2 users
+            String email = oauth2User.getAttribute("email");
+            if (email != null) {
+                return email;
+            }
+            // Fallback to 'name' attribute if 'email' is not present (e.g., some OAuth2 providers)
+            // The 'name' attribute is typically the 'sub' claim or a unique identifier.
+            return oauth2User.getName();
+        } else if (principal instanceof String strPrincipal) { // Use pattern matching
+            return strPrincipal;
+        }
+
+        log.warn("Could not determine user identifier from authentication principal of type: {}", principal.getClass().getName());
         return null;
     }
 
@@ -100,8 +138,8 @@ public final class AuthUtils {
             return email;
         } else if (principal instanceof UserDetails userDetails) {
             return userDetails.getUsername(); // Assuming username is email
-        } else if (principal instanceof String) {
-            return (String) principal;
+        } else if (principal instanceof String strPrincipal) { // Use pattern matching
+            return strPrincipal;
         }
 
         return null;
@@ -115,14 +153,11 @@ public final class AuthUtils {
      * @return true if the authentication is from the specified provider
      */
     public static boolean isOAuth2Provider(Authentication authentication, String providerName) {
-        if (authentication == null || !(authentication instanceof OAuth2LoginAuthenticationToken)) {
-            return false;
+        if (authentication instanceof OAuth2LoginAuthenticationToken oauthToken) {
+            String registrationId = oauthToken.getClientRegistration().getRegistrationId();
+            return providerName.equalsIgnoreCase(registrationId);
         }
-
-        OAuth2LoginAuthenticationToken oauthToken = (OAuth2LoginAuthenticationToken) authentication;
-        String registrationId = oauthToken.getClientRegistration().getRegistrationId();
-
-        return providerName.equalsIgnoreCase(registrationId);
+        return false;
     }
 
     /**
@@ -132,12 +167,10 @@ public final class AuthUtils {
      * @return The provider name if available, null otherwise
      */
     public static String getOAuth2Provider(Authentication authentication) {
-        if (authentication == null || !(authentication instanceof OAuth2LoginAuthenticationToken)) {
-            return null;
+        if (authentication instanceof OAuth2LoginAuthenticationToken oauthToken) {
+            return oauthToken.getClientRegistration().getRegistrationId();
         }
-
-        OAuth2LoginAuthenticationToken oauthToken = (OAuth2LoginAuthenticationToken) authentication;
-        return oauthToken.getClientRegistration().getRegistrationId();
+        return null;
     }
 
     /**
@@ -161,7 +194,17 @@ public final class AuthUtils {
             return null;
         }
 
-        OAuth2User oauth2User = (OAuth2User) authentication.getPrincipal();
+        // It's better to pass the OAuth2User directly if it's already extracted,
+        // or use pattern matching if it's still the raw principal.
+        // Assuming isOAuth2Authentication ensures authentication.getPrincipal() is OAuth2User
+        // However, for safety and clarity, let's re-extract with pattern matching.
+        Object principal = authentication.getPrincipal();
+        if (!(principal instanceof OAuth2User oauth2User)) {
+            // This case should ideally not happen if isOAuth2Authentication is accurate,
+            // but it's a defensive check.
+            log.warn("extractOAuth2DisplayName: Principal is not an OAuth2User despite being an OAuth2 authentication.");
+            return null;
+        }
 
         // Try common attribute names for display name
         String name = oauth2User.getAttribute("name");

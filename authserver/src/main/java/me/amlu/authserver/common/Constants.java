@@ -22,9 +22,15 @@ public final class Constants {
     public static final String DEFAULT_LOCALE = "en_US";
 
     // Pagination defaults
+    public static final String PAGE_NUMBER = "0";
+    public static final String DEFAULT_PAGE_NUMBER = "0";
     public static final int DEFAULT_PAGE_SIZE = 20;
     public static final int MAX_PAGE_SIZE = 100;
     public static final String DEFAULT_SORT_DIRECTION = "ASC";
+    public static final String DEFAULT_SORT_BY = "id";
+    public static final String SORT_USERS_BY = "roles"; // TOUPDATE
+
+
 
     // Default limits
     public static final int MAX_USERNAME_LENGTH = 50;

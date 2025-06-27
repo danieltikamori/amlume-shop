@@ -20,7 +20,7 @@ import java.net.UnknownHostException;
  */
 public final class IpUtils {
 
-    private static final String[] IP_HEADERS = {
+    public static final String[] IP_HEADERS = {
             "X-Forwarded-For",
             "Proxy-Client-IP",
             "WL-Proxy-Client-IP",
