@@ -20,6 +20,8 @@ import org.springframework.web.bind.annotation.RequestParam; // Import @RequestP
 @Controller
 public class LoginController {
 
+//    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LoginController.class);
+
     @GetMapping("/login")
     public String login(Model model,
                         // Use @RequestParam to get the value of the "error" query parameter

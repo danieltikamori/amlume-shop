@@ -10,9 +10,11 @@
 
 package me.amlu.authserver.user.controller;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import me.amlu.authserver.user.dto.GetRegisterResponse;
 import me.amlu.authserver.user.service.UserManager;
 import me.amlu.authserver.validation.ValidPassword;
 import me.amlu.authserver.validation.ValidRegionCode;
@@ -21,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -55,7 +58,14 @@ public class RegistrationController {
      * @return A ResponseEntity with status 201 Created on successful registration, or an appropriate error status.
      */
     @PostMapping
-    public ResponseEntity<Void> registerUser(@Valid @RequestBody RegistrationRequest request) {
+    public ResponseEntity<GetRegisterResponse> registerUser(@Valid @RequestBody RegistrationRequest request, BindingResult bindingResult, HttpServletRequest httpServletRequest) {
+
+        if (bindingResult.hasErrors()) {
+            log.warn("Registration validation failed for user userEmail: {}", request.email());
+            return ResponseEntity.badRequest().body(new GetRegisterResponse(null, bindingResult.getAllErrors()));
+        }
+
+        String ipAddress = httpServletRequest.getRemoteAddr(); // Get IP address
         try {
             // You might want to return a UserProfileResponse DTO or just 201 Created
             userManager.createUser(
@@ -67,7 +77,9 @@ public class RegistrationController {
                     request.password(),
                     request.mobileNumber(),
                     request.defaultRegion(),
-                    request.recoveryEmail()
+                    request.recoveryEmail(),
+                    request.captchaResponse(),
+                    ipAddress
             );
             return ResponseEntity.status(HttpStatus.CREATED).build();
         } catch (DataIntegrityViolationException e) {
@@ -103,7 +115,8 @@ public class RegistrationController {
             @NotBlank @ValidPassword String password, // With custom validation including compromised password check
             String mobileNumber, // Optional
             @ValidRegionCode String defaultRegion, // Optional, for phone number parsing
-            @Email String recoveryEmail // Optional recovery email
+            @Email String recoveryEmail, // Optional recovery email
+            String captchaResponse
     ) {
     }
 }

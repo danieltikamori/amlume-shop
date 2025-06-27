@@ -43,12 +43,12 @@ public class PasskeyControllerAdvice {
     }
 
     /**
-     * Handles general exceptions that may occur during WebAuthn operations.
+     * Handles WebAuthn-specific exceptions.
      *
-     * @param ex The Exception
+     * @param ex The WebAuthn-related Exception
      * @return A ResponseEntity with an error message
      */
-    @ExceptionHandler(Exception.class)
+    @ExceptionHandler(com.webauthn4j.util.exception.WebAuthnException.class)
     public ResponseEntity<String> handleWebAuthnException(Exception ex) {
         log.error("Error in WebAuthn operation", ex);
         return ResponseEntity
