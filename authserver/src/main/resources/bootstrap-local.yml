@@ -1,0 +1,14 @@
+spring:
+  cloud:
+    # For generic Spring Cloud Config Server client (if spring-cloud-starter-config is present)
+    config:
+      enabled: false
+      import-check:
+        enabled: false # Disables the check for "configserver:" import
+
+    # For Spring Cloud Consul Config client
+    consul:
+      config:
+        enabled: false # Explicitly disable Consul config client if not used by authserver
+        import-check:
+          enabled: false # Disables the check for "consul:" import

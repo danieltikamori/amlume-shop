@@ -91,14 +91,19 @@ content = @`
     </div>
 
     <script>
-        // Helper function to decode Base64URL to ArrayBuffer
+        /**
+         * Decodes a Base64URL encoded string into an ArrayBuffer.
+         * @param {string} value The Base64URL encoded string.
+         * @returns {ArrayBuffer} The decoded ArrayBuffer.
+         * @throws {Error} if the input string is not valid Base64URL or if atob fails.
+         */
         function bufferDecode(value) {
+            // This internal check handles if 'value' is an object like {"bytes": "..."}
             if (typeof value !== 'string') {
                 if (value && typeof value === 'object' && typeof value.bytes === 'string') {
-                    console.warn("bufferDecode received an object, using its 'bytes' property:", value);
-                    value = value.bytes; // Use the 'bytes' property
+                    value = value.bytes;
                 } else {
-                    console.error("bufferDecode received non-string value:", value, "Type:", typeof value);
+                    console.error("bufferDecode received non-string, non-{bytes:..} value:", value, "Type:", typeof value);
                     throw new TypeError('Input to bufferDecode must be a string or an object with a "bytes" property.');
                 }
             }
@@ -118,27 +123,27 @@ content = @`
                     throw new Error('Illegal base64url string format: ' + value);
             }
             const stringToDecode = s + padding;
-            let decodedString;
+            let binaryString;
             try {
-                decodedString = atob(stringToDecode);
+                binaryString = atob(stringToDecode);
             } catch (e) {
                 console.error("Error during atob. Input stringToDecode:", stringToDecode, "Original value:", value, "Error:", e);
                 throw e;
             }
-            try {
-                const uint8Array = Uint8Array.from(decodedString, c => c.charCodeAt(0));
-                return uint8Array.buffer;
-            } catch (e) {
-                console.error("Error during Uint8Array.from processing. Input decodedString length:", decodedString.length, "Error:", e);
-                throw e;
+
+            // --- IMPROVED CONVERSION TO Uint8Array ---
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i); // Correctly get byte value
             }
+            return bytes.buffer; // Return ArrayBuffer
         }
 
-        // Helper function to encode ArrayBuffer to Base64URL
         function bufferEncode(value) {
             return btoa(String.fromCharCode.apply(null, new Uint8Array(value)))
                 .replace(/\+/g, '-')
-                .replace(new RegExp('/', 'g'), '_')
+                .replace(new RegExp('\\/', 'g'), '_')
                 .replace(/=/g, '');
         }
 

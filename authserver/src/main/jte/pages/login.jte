@@ -248,8 +248,8 @@ content = @`
                                 // to narrow down credentials.
 
                                 // Path that Bitwarden prompted on (the diagnostic path)
-                                const optionsUrl = '/webauthn/authenticate/options'; // Your custom URL
-                                // const optionsUrl = '/login/webauthn/options'; // Spring Security Default
+                                // const optionsUrl = '/webauthn/authenticate/options'; // Your custom URL
+                                const optionsUrl = '/login/webauthn/options'; // Spring Security Default
 
                                 // Path for submitting the assertion (likely the Spring Security default)
                                 // const assertionUrl = '/login/webauthn/authenticate'; // Your custom URL
@@ -468,7 +468,6 @@ content = @`
                                 throw new TypeError('Input to bufferDecode must be a string or an object with a "bytes" property.');
                             }
                         }
-                        // Now 'value' is expected to be a Base64URL string
                         let s = value.replace(/-/g, '+').replace(/_/g, '/');
                         let padding = '';
                         switch (s.length % 4) {
@@ -485,34 +484,21 @@ content = @`
                                 throw new Error('Illegal base64url string format: ' + value);
                         }
                         const stringToDecode = s + padding;
-                        let decodedString;
+                        let binaryString;
                         try {
-                            // console.debug("Attempting to atob:", stringToDecode); // For debugging
-                            decodedString = atob(stringToDecode);
-                            if (typeof decodedString !== 'string') {
-                                // This should not happen if atob succeeds without error
-                                console.error("atob result is not a string:", decodedString, "Type:", typeof decodedString);
-                                throw new Error('Internal error: atob did not return a string.');
-                            }
+                            binaryString = atob(stringToDecode);
                         } catch (e) {
-                            console.error("Error during atob. Input stringToDecode:", stringToDecode, "Original value:", value, "Error name:", e.name, "Error message:", e.message);
-                            throw e; // Rethrow the original atob error (likely DOMException for invalid chars)
+                            console.error("Error during atob. Input stringToDecode:", stringToDecode, "Original value:", value, "Error:", e);
+                            throw e;
                         }
 
-                        try {
-                            const uint8Array = Uint8Array.from(decodedString, (char, index) => {
-                                if (typeof char !== 'string') {
-                                    console.error('CRITICAL: Character at index', index, 'is not a string!', char, typeof char);
-                                    throw new TypeError('Character being processed by Uint8Array.from is not a string: ' + String(char));
-                                }
-                                // console.log('Char:', char, 'Code Unit:', char.charCodeAt(0)); // Verbose logging
-                                return char.charCodeAt(0); // This is the call in question
-                            });
-                            return uint8Array.buffer;
-                        } catch (e_uint8) {
-                            console.error("Error during Uint8Array.from processing. Input decodedString length:", decodedString.length, "Error name:", e_uint8.name, "Error message:", e_uint8.message);
-                            throw e_uint8;
+                        // --- IMPROVED CONVERSION TO Uint8Array ---
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) {
+                            bytes[i] = binaryString.charCodeAt(i); // Correctly get byte value
                         }
+                        return bytes.buffer; // Return ArrayBuffer
                     }
 
                     function bufferEncode(value) {
