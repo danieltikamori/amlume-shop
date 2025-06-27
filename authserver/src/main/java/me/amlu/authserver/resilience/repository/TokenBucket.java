@@ -8,10 +8,10 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.shop.amlume_shop.auth.dto;
+package me.amlu.authserver.resilience.repository;
 
-import com.fasterxml.jackson.annotation.JsonIncludeProperties;
+public interface TokenBucket {
+    boolean tryConsume(int numTokens);
 
-@JsonIncludeProperties
-public record UserAuthenticationResponse() {
+    int getAvailableTokens();
 }

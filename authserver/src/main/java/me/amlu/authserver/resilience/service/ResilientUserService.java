@@ -8,7 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.service;
+package me.amlu.authserver.resilience.service;
 
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
@@ -78,10 +78,10 @@ public class ResilientUserService {
     @Retry(name = USER_SERVICE)
     public User createUser(String givenName, String middleName, String surname, String nickname,
                            String email, String rawPassword, String mobileNumber,
-                           String defaultRegion, String recoveryEmailRaw) {
+                           String defaultRegion, String recoveryEmailRaw, String captchaResponse, String ipAddress) {
         return userManager.createUser(givenName, middleName, surname, nickname,
                 email, rawPassword, mobileNumber,
-                defaultRegion, recoveryEmailRaw);
+                defaultRegion, recoveryEmailRaw, captchaResponse, ipAddress);
     }
 
     /**

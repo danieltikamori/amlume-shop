@@ -8,10 +8,11 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.service;
+package me.amlu.authserver.resilience.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigBuilder;
 import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -25,11 +26,13 @@ import org.springframework.web.client.RestTemplate;
  * </p>
  */
 @Service
-public class ExternalApiService {
-    private static final Logger log = LoggerFactory.getLogger(ExternalApiService.class);
+public class ResilientExternalApiService {
+    private static final Logger log = LoggerFactory.getLogger(ResilientExternalApiService.class);
 
     private final RestTemplate restTemplate;
-    private final CircuitBreakerFactory circuitBreakerFactory;
+    // Need to specify the generic type parameter for CircuitBreakerFactory.
+    // Assuming we are using Resilience4j (which is the default implementation for Spring Cloud Circuit Breaker in many cases), the correct parameter is Resilience4JConfigBuilder
+    private final CircuitBreakerFactory<Resilience4JConfigBuilder.Resilience4JCircuitBreakerConfiguration, Resilience4JConfigBuilder> circuitBreakerFactory;
 
     /**
      * Creates a new ExternalApiService.
@@ -37,7 +40,7 @@ public class ExternalApiService {
      * @param restTemplate          The RestTemplate for making HTTP requests
      * @param circuitBreakerFactory The factory for creating circuit breakers
      */
-    public ExternalApiService(RestTemplate restTemplate, CircuitBreakerFactory circuitBreakerFactory) {
+    public ResilientExternalApiService(RestTemplate restTemplate, CircuitBreakerFactory<Resilience4JConfigBuilder.Resilience4JCircuitBreakerConfiguration, Resilience4JConfigBuilder> circuitBreakerFactory) {
         this.restTemplate = restTemplate;
         this.circuitBreakerFactory = circuitBreakerFactory;
     }
