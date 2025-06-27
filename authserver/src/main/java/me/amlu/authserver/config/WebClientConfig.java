@@ -10,40 +10,24 @@
 
 package me.amlu.authserver.config;
 
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestTemplate;
-
-import java.time.Duration;
-
-/**
- * Configuration for RestTemplate with timeout settings.
- * <p>
- * This class provides a configured RestTemplate bean with appropriate
- * connection and read timeouts to prevent hanging connections when
- * external services are slow or unresponsive.
- * </p>
- */
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
-public class RestTemplateConfig {
+public class WebClientConfig {
 
     /**
-     * Creates a RestTemplate with configured timeouts.
-     * <p>
-     * Sets both connection and read timeouts to 3 seconds to prevent
-     * long-running HTTP requests from blocking threads.
-     * </p>
+     * Configures a WebClient bean for the amlume-shop service.
      *
-     * @param builder The RestTemplateBuilder to use
-     * @return A configured RestTemplate instance
+     * @param builder The WebClient.Builder instance
+     * @return The configured WebClient instance
      */
     @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) {
-        return builder
-                .connectTimeout(Duration.ofSeconds(3))
-                .readTimeout(Duration.ofSeconds(3))
+    public WebClient amlumeShopWebClient(WebClient.Builder builder) {
+        return builder.baseUrl("http://amlume-shop:8080") // Internal service name and port
+                // Add a filter for client credentials grant if amlume-shop requires it
+                // .filter(new ClientCredentialsClientRequestInterceptor(...))
                 .build();
     }
 }

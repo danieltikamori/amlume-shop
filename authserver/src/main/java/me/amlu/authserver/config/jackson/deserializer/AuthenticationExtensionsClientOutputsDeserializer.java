@@ -15,12 +15,11 @@ import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.security.web.webauthn.api.AuthenticationExtensionsClientOutputs;
 import me.amlu.authserver.passkey.model.SimpleAuthenticationExtensionsClientOutputs;
+import org.springframework.security.web.webauthn.api.AuthenticationExtensionsClientOutputs;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -37,19 +36,22 @@ public class AuthenticationExtensionsClientOutputsDeserializer extends JsonDeser
 
         // Convert JsonNode to Map
         if (node != null && !node.isNull()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                JsonNode value = entry.getValue();
-
-                if (value.isBoolean()) {
-                    extensions.put(entry.getKey(), value.asBoolean());
-                } else if (value.isNumber()) {
-                    extensions.put(entry.getKey(), value.asLong());
-                } else if (value.isTextual()) {
-                    extensions.put(entry.getKey(), value.asText());
-                }
-            }
+            // The 'fields()' method is deprecated. Replaced with 'properties()'.
+            // The modern approach is to use a stream.
+            node.properties().stream()
+                    .forEach(entry -> {
+                        JsonNode value = entry.getValue();
+                        if (value.isBoolean()) {
+                            extensions.put(entry.getKey(), value.asBoolean());
+                        } else if (value.isNumber()) {
+                            // Use numberValue() to handle different number types (int, long, double)
+                            extensions.put(entry.getKey(), value.numberValue());
+                        } else if (value.isTextual()) {
+                            extensions.put(entry.getKey(), value.asText());
+                        }
+                        // Note: This logic doesn't handle nested objects or arrays within the extensions.
+                        // For standard WebAuthn extensions, this is usually sufficient.
+                    });
         }
 
         // Use the existing SimpleAuthenticationExtensionsClientOutputs class

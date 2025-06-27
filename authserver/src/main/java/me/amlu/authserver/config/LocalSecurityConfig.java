@@ -10,7 +10,6 @@
 
 package me.amlu.authserver.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet;
@@ -18,18 +17,23 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 import de.codecentric.boot.admin.server.config.AdminServerProperties;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import me.amlu.authserver.oauth2.JpaRegisteredClientRepositoryAdapter;
 import me.amlu.authserver.oauth2.model.Authority;
 import me.amlu.authserver.oauth2.repository.AuthorityRepository;
 import me.amlu.authserver.oauth2.service.JwtCustomizationService;
-import me.amlu.authserver.security.CustomAccessDeniedHandler;
-import me.amlu.authserver.security.CustomAuthenticationSuccessHandler;
+import me.amlu.authserver.security.handler.CustomAccessDeniedHandler;
+import me.amlu.authserver.security.handler.CustomAuthenticationSuccessHandler;
 import me.amlu.authserver.security.CustomWebAuthnRelyingPartyOperations;
 import me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.model.vo.EmailAddress;
 import me.amlu.authserver.user.model.vo.HashedPassword;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -46,6 +50,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.HeadersConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -79,7 +84,10 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.authentication.SavedRequestAwareAuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
+import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
+import org.springframework.security.web.header.writers.XXssProtectionHeaderWriter;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
@@ -89,18 +97,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.OncePerRequestFilter;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.SecureRandom;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+
+import static me.amlu.authserver.common.SecurityConstants.CSP_NONCE_ATTRIBUTE;
 
 
 @Profile("!prod")
@@ -116,14 +126,14 @@ public class LocalSecurityConfig {
     //    private final ObjectMapper objectMapper;
     private final JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter;
     private final WebAuthNProperties webAuthNProperties;
-    private final DataSource dataSource; // Remove?
+    //    private final DataSource dataSource; // Remove?
     private final PasswordEncoder passwordEncoder;
     private final CustomAccessDeniedHandler customAccessDeniedHandler;
     private final CustomAuthenticationSuccessHandler successHandler;
     private final WebAuthnAuthenticationProvider webAuthnAuthenticationProvider;
     private final OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService;
     private final OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService;
-    private final OAuth2AuthorizedClientService authorizedClientService; // Remove?
+    //    private final OAuth2AuthorizedClientService authorizedClientService; // Remove?
     private final CustomWebAuthnRelyingPartyOperations relyingPartyOperations;
     private final AdminServerProperties adminServerProperties;
     private final JwtCustomizationService jwtCustomizationService;
@@ -138,6 +148,9 @@ public class LocalSecurityConfig {
 
     @Value("${oauth2.clients.shopClient.secret}") // For amlume-shop
     private String shopClientSecret;
+
+    @Value("${oauth2.clients.shopClient.redirect-uri}")
+    private String shopClientRedirectUri;
 
     @Value("${oauth2.clients.postmanClient.secret}") // For Postman testing
     private String postmanClientSecret;
@@ -157,7 +170,6 @@ public class LocalSecurityConfig {
      * @param jpaRegisteredClientRepositoryAdapter Adapter for managing OAuth2 registered clients in the database.
      * @param webAuthNProperties                   Properties related to WebAuthn configuration.
      * @param persistentTokenRepository            Repository for persistent remember-me tokens.
-     * @param dataSource                           The application's DataSource.
      * @param passwordEncoder                      The password encoder.
      * @param customAccessDeniedHandler            Custom handler for access denied exceptions.
      * @param webAuthnAuthenticationProvider       The Spring Security WebAuthn authentication provider.
@@ -169,20 +181,17 @@ public class LocalSecurityConfig {
                                JpaRegisteredClientRepositoryAdapter jpaRegisteredClientRepositoryAdapter,
                                WebAuthNProperties webAuthNProperties,
                                PersistentTokenRepository persistentTokenRepository,
-                               DataSource dataSource,
                                PasswordEncoder passwordEncoder,
                                CustomAccessDeniedHandler customAccessDeniedHandler, CustomAuthenticationSuccessHandler successHandler,
                                WebAuthnAuthenticationProvider webAuthnAuthenticationProvider,
                                CustomWebAuthnRelyingPartyOperations relyingPartyOperations,
                                @Qualifier("customOidcUserService") OAuth2UserService<OidcUserRequest, OidcUser> oidcUserService,
                                @Qualifier("customOAuth2UserService") OAuth2UserService<OAuth2UserRequest, OAuth2User> oauth2UserService,
-                               AdminServerProperties adminServerProperties,
-                               OAuth2AuthorizedClientService authorizedClientService, JwtCustomizationService jwtCustomizationService
+                               AdminServerProperties adminServerProperties, JwtCustomizationService jwtCustomizationService
     ) {
         this.jpaRegisteredClientRepositoryAdapter = jpaRegisteredClientRepositoryAdapter;
         this.webAuthNProperties = webAuthNProperties;
         this.persistentTokenRepository = persistentTokenRepository;
-        this.dataSource = dataSource;
         this.passwordEncoder = passwordEncoder;
         this.customAccessDeniedHandler = customAccessDeniedHandler;
         this.successHandler = successHandler;
@@ -190,7 +199,6 @@ public class LocalSecurityConfig {
         this.relyingPartyOperations = relyingPartyOperations;
         this.oidcUserService = oidcUserService;
         this.oauth2UserService = oauth2UserService;
-        this.authorizedClientService = authorizedClientService;
         this.adminServerProperties = adminServerProperties;
         this.jwtCustomizationService = jwtCustomizationService;
     }
@@ -202,6 +210,7 @@ public class LocalSecurityConfig {
      *
      * @param http The HttpSecurity object to configure.
      * @return The configured SecurityFilterChain.
+     * @throws Exception If an error occurs during configuration.
      */
     @Bean
     @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -273,14 +282,27 @@ public class LocalSecurityConfig {
                 .securityMatcher(adminContextPath + "/**") // IMPORTANT: Restrict this chain to admin paths
                 .authenticationManager(adminAuthenticationManager) // <--- Add this
                 .authorizeHttpRequests(authorize -> authorize
+                                .requestMatchers(adminContextPath + "/**").hasAnyRole("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT")
                         .requestMatchers(adminContextPath + "/assets/**").permitAll()
                         .requestMatchers(adminContextPath + "/login").permitAll()
-                        .anyRequest().authenticated()
+                                .requestMatchers(adminContextPath + "/dashboard").hasAnyRole("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT")
+                        // If we want to allow authenticated users to see dashboard but only admins to manage:
+                        // .requestMatchers(adminContextPath + "/dashboard").authenticated()
+                        // .requestMatchers(adminContextPath + "/manage/**").hasAnyRole("ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT")
+                        // .anyRequest().authenticated() // This would apply to paths not matched by adminContextPath + "/**"
                 )
                 .formLogin(formLogin -> formLogin
                         .loginPage(adminContextPath + "/login")
                         .successHandler(adminSuccessHandler) // Use SBA's success handler
                 )
+                .oneTimeTokenLogin(configurer -> configurer.tokenGenerationSuccessHandler(
+                        (request, response, oneTimeToken) -> {
+                            // TODO: implement sending email with the link
+//                            var msg = "go to http://localhost:8080/login/ott?token=" + oneTimeToken.getTokenValue();
+//                            System.out.println(msg);
+//                            response.setContentType(MediaType.TEXT_PLAIN_VALUE);
+//                            response.getWriter().print("you've got console mail!");
+                        }))
                 .logout(logout -> logout.logoutUrl(adminContextPath + "/logout"))
                 .httpBasic(Customizer.withDefaults()) // This will now use the adminAuthenticationManager
                 .csrf(csrf -> csrf
@@ -320,10 +342,37 @@ public class LocalSecurityConfig {
                                                           OAuth2LoginAuthenticationProvider oauth2LoginAuthenticationProvider
     ) throws Exception {
 
+        // --- 1. Define a single AuthenticationManager with all your providers ---
+        // --- AuthenticationManager for WebAuthn & Form Login ---
+        // This ProviderManager will be used by our manually configured WebAuthnAuthenticationFilter.
+        // It includes the WebAuthn provider and your form login provider.
+        ProviderManager mainAuthenticationManager = new ProviderManager(
+                this.webAuthnAuthenticationProvider,
+                amlumeUsernamePwdAuthenticationProvider,
+                oidcAuthenticationProvider,       // ADD OIDC PROVIDER
+                oauth2LoginAuthenticationProvider // ADD OAUTH2 PROVIDER
+        );
+        // Set this as the shared AuthenticationManager for HttpSecurity
+        // This is important so filters like UsernamePasswordAuthenticationFilter and OAuth2LoginAuthenticationFilter
+        // use this manager, and also so the manually added WebAuthn filters can get it.
+        http.authenticationManager(mainAuthenticationManager);
+
+        // --- 2. Create the specific success handler for WebAuthn ---
+        // --- Custom Success Handler for WebAuthn ---
+        // Wrap our main success handler with WebAuthn-specific functionality
+        AuthenticationSuccessHandler webAuthnSuccessHandler =
+                new WebAuthnPrincipalSettingSuccessHandler(userDetailsService, successHandler);
+
+        // --- 3. Configure the HttpSecurity chain ---
         // --- IMPORTANT: Add a securityMatcher to this chain ---
         // This ensures it doesn't conflict by also trying to match /admin/** or /oauth2/**
         // It should match everything ELSE.
         // One way is to explicitly exclude the other specific paths.
+
+        // To store the security context in a cache or database to enable horizontal scaling
+//        SecurityContextRepository repo = new MyCustomSecurityContextRepository();
+
+
         http
                 // .securityMatcher(
                 //         new NegatedRequestMatcher(
@@ -373,10 +422,12 @@ public class LocalSecurityConfig {
                                 PathPatternRequestMatcher.withDefaults().matcher("/error"),
 
                                 // --- WebAuthn Endpoints (MUST BE PERMITTED FOR ANONYMOUS ACCESS TO START LOGIN/REGISTRATION) ---
-                                // Spring Security's default WebAuthn endpoints for login
+
 //                                PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/authenticate/options"), // Passkey login options
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/webauthn/authenticate/options"), // Client's options URL for login
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/authenticate"),      // Passkey login verification. Client's assertion URL
+
+                                // Permit the two default Spring Security WebAuthn URLs
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/options"),      // Passkey login verification. Client's assertion URL
                                 PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn"),      // Passkey login verification. Client's assertion URL
 
@@ -400,26 +451,6 @@ public class LocalSecurityConfig {
                         .anyRequest().authenticated()
         );
 
-        // --- AuthenticationManager for WebAuthn & Form Login ---
-        // This ProviderManager will be used by our manually configured WebAuthnAuthenticationFilter.
-        // It includes the WebAuthn provider and your form login provider.
-        ProviderManager mainAuthenticationManager = new ProviderManager(
-                this.webAuthnAuthenticationProvider,
-                amlumeUsernamePwdAuthenticationProvider,
-                oidcAuthenticationProvider,       // ADD OIDC PROVIDER
-                oauth2LoginAuthenticationProvider // ADD OAUTH2 PROVIDER
-        );
-
-        // Set this as the shared AuthenticationManager for HttpSecurity
-        // This is important so filters like UsernamePasswordAuthenticationFilter and OAuth2LoginAuthenticationFilter
-        // use this manager, and also so the manually added WebAuthn filters can get it.
-        http.authenticationManager(mainAuthenticationManager);
-
-        // --- Custom Success Handler for WebAuthn ---
-        // Wrap our main success handler with WebAuthn-specific functionality
-        AuthenticationSuccessHandler webAuthnSuccessHandler =
-                new WebAuthnPrincipalSettingSuccessHandler(userDetailsService, successHandler);
-
         // --- Manually Create and Configure WebAuthn Login Filters ---
 
         // 1. PublicKeyCredentialRequestOptionsFilter (for generating authentication options)
@@ -432,11 +463,7 @@ public class LocalSecurityConfig {
         log.info("Configured PublicKeyCredentialRequestOptionsFilter (default processes: POST /login/webauthn/options)");
 
         // 2. WebAuthnAuthenticationFilter (for processing authentication assertion)
-        WebAuthnAuthenticationFilter webAuthnAuthenticationFilter = new WebAuthnAuthenticationFilter(); // Use no-arg constructor
-        webAuthnAuthenticationFilter.setAuthenticationManager(mainAuthenticationManager);
-        PublicKeyCredentialRequestOptionsRepository requestOptRepo = new HttpSessionPublicKeyCredentialRequestOptionsRepository();
-        webAuthnAuthenticationFilter.setRequestOptionsRepository(requestOptRepo);
-        webAuthnAuthenticationFilter.setAuthenticationSuccessHandler(webAuthnSuccessHandler);
+        WebAuthnAuthenticationFilter webAuthnAuthenticationFilter = getWebAuthnAuthenticationFilter(mainAuthenticationManager, webAuthnSuccessHandler);
         // Default processing URL is POST /login/webauthn. This matches your client JS.
         log.info("Configured WebAuthnAuthenticationFilter to process: POST /login/webauthn");
 
@@ -447,28 +474,9 @@ public class LocalSecurityConfig {
 
         http
                 .userDetailsService(userDetailsService)
-                // In LocalSecurityConfig.java, inside defaultSecurityFilterChain method
-// UserDetailsService userDetailsService is already injected as a parameter to this method.
-
-//                .webAuthn(webauthn -> webauthn
-//                        .userDetailsService(userDetailsService) // Explicitly pass the injected UserDetailsService
-                // You might also need to explicitly set relyingPartyOperations if it's not picked up:
-//                 .relyingPartyOperations(relyingPartyOperations(userEntities, userCredentials, webAuthNProperties)) // Assuming these are available or injectable
-//        )
-//                .webAuthn(webauthn -> { // Explicitly configure WebAuthn
-//                    webauthn.userDetailsService(userDetailsService); // Pass the injected UserDetailsService
-//                    webauthn.relyingPartyOperations(relyingPartyOperations); // Pass the injected RelyingPartyOperations
-//                    // We can add other WebAuthn customizer settings here if needed
-//                })
 
                 // Remove .webAuthn() DSL as we are adding filters manually
                 // .removeConfigurer(WebAuthnConfigurer.class) // More specific way to remove if needed
-
-                // Add WebAuthn filters manually in the correct order
-                // These are typically added around where form login or other auth filters are.
-                // Adding after UsernamePasswordAuthenticationFilter is a common placement.
-                .addFilterAfter(requestOptionsFilter, UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(webAuthnAuthenticationFilter, PublicKeyCredentialRequestOptionsFilter.class)
 
                 .formLogin(formLogin -> formLogin
                                 .loginPage("/login") // Specify your custom login page
@@ -485,6 +493,12 @@ public class LocalSecurityConfig {
                                 // Redirect back to login page with error parameter on failure
                                 .failureUrl("/login?error=true")
                 )
+
+                // Add WebAuthn filters manually in the correct order
+                // These are typically added around where form login or other auth filters are.
+                // Adding after UsernamePasswordAuthenticationFilter is a common placement.
+                .addFilterAfter(requestOptionsFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(webAuthnAuthenticationFilter, PublicKeyCredentialRequestOptionsFilter.class)
 
                 // --- Remember-Me Configuration ---
                 .rememberMe(rememberMe -> rememberMe
@@ -520,7 +534,7 @@ public class LocalSecurityConfig {
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn"),
                         PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/login/webauthn/options"),
                         PathPatternRequestMatcher.withDefaults().matcher("/login/webauthn/**"),
-                        PathPatternRequestMatcher.withDefaults().matcher("/webauthn/**"),
+                        PathPatternRequestMatcher.withDefaults().matcher("/webauthn/**"), // Covers /webauthn/register/options, /webauthn/register
                         PathPatternRequestMatcher.withDefaults().matcher("/instances"),
                         PathPatternRequestMatcher.withDefaults().matcher("/actuator/**"),
 
@@ -540,14 +554,112 @@ public class LocalSecurityConfig {
                 .requestCache(cache -> cache
                         .requestCache(new HttpSessionRequestCache()))
 
+                // --- Security Context Configuration - Set the session repository ---
+//                .securityContext((context) -> context
+//                        .securityContextRepository(repo)
+//                )
+
                 // No explicit matcher needed here as it's the fallback chain
                 // --- Exception Handling for Access Denied ---
                 .exceptionHandling(exceptions -> exceptions
                         .accessDeniedHandler(customAccessDeniedHandler)
-                );
+                )
+                // --- Security Headers (Keep or adjust) ---
+                .headers(headers -> headers // Keep security headers
+                                .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
+                                .contentTypeOptions(HeadersConfigurer.ContentTypeOptionsConfig::disable) // X-Content-Type-Options: nosniff
+                                .xssProtection(xss -> xss.headerValue(XXssProtectionHeaderWriter.HeaderValue.DISABLED)) // X-XSS-Protection: 1; mode=block Sets the value of the X-XSS-PROTECTION header.
+                                // OWASP recommends using XXssProtectionHeaderWriter.HeaderValue.DISABLED.
+                                // If XXssProtectionHeaderWriter.HeaderValue.DISABLED, will specify that X-XSS-Protection is disabled in favor of CSP
+                                // IMPORTANT: Adjust CSP as needed for your application. This is a basic example.
+//                        .contentSecurityPolicy(csp -> csp
+//                                .policyDirectives("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; media-src 'self'; frame-ancestors 'self'; form-action 'self';"))
+                                .contentSecurityPolicy(contentSecurityPolicyConfig -> contentSecurityPolicyConfig
+                                                // IMPORTANT: 'nonce-{random-value}' should be generated per request
+                                                // and added to both the CSP header and any inline script/style tags.
+                                                // The 'strict-dynamic' keyword is crucial when using nonces as it allows
+                                                // scripts loaded by trusted scripts (via nonce) to execute.
+                                                .policyDirectives(
+                                                        "default-src 'self';" +
+                                                                "script-src 'self' 'nonce-" + CSP_NONCE_ATTRIBUTE + "' 'strict-dynamic';" +
+                                                                "style-src 'self' 'nonce-" + CSP_NONCE_ATTRIBUTE + "';" +
+                                                                "img-src 'self' data:;" + // Allow self-hosted images and data URIs
+                                                                "font-src 'self';" +
+                                                                "connect-src 'self';" +
+                                                                "object-src 'none';" + // Block plugins like Flash
+                                                                "base-uri 'self';" + // Restrict base URL to self
+                                                                "form-action 'self';" + // Restrict form submissions to self
+                                                                "frame-ancestors 'self';" + // Prevent clickjacking by restricting embedding
+                                                                "upgrade-insecure-requests;" + // Upgrade HTTP requests to HTTPS
+                                                                "block-all-mixed-content;" // Block mixed content in secure contexts
+                                                        // Uncomment and configure for reporting CSP violations:
+                                                        // "report-uri /csp-report-endpoint;"
+                                                )
+                                        // Optional: Start in report-only mode during development/testing
+                                        // .reportOnly()
+                                )
+                                .xssProtection(xss -> xss.headerValue(org.springframework.security.web.header.writers.XXssProtectionHeaderWriter.HeaderValue.DISABLED)) // OWASP recommendation
+                                .frameOptions(HeadersConfigurer.FrameOptionsConfig::deny) // Prevent clickjacking, unless you need iframes
+                                .referrerPolicy(referrer -> referrer.policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER_WHEN_DOWNGRADE))
+                                .httpStrictTransportSecurity(hsts -> hsts.maxAgeInSeconds(31536000).includeSubDomains(true).preload(true))
+                )
+                // Add a filter to generate and expose the nonce
+                .addFilterBefore(new OncePerRequestFilter() {
+                    @Override
+                    protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response, @NonNull FilterChain filterChain)
+                            throws ServletException, IOException {
+                        String nonce = generateNonce();
+                        // Store the nonce in request attribute so it can be accessed by your templating engine (e.g., Thymeleaf)
+                        request.setAttribute(CSP_NONCE_ATTRIBUTE, nonce);
+                        // Add the nonce to the response header for Content-Security-Policy
+                        response.setHeader("Content-Security-Policy", getCspHeader(nonce));
+                        filterChain.doFilter(request, response);
+                    }
+
+                    private String generateNonce() {
+                        SecureRandom secureRandom = new SecureRandom();
+                        byte[] nonceBytes = new byte[16]; // 16 bytes for 128 bits, good enough for nonce
+                        secureRandom.nextBytes(nonceBytes);
+                        return Base64.getEncoder().encodeToString(nonceBytes);
+                    }
+
+                    private String getCspHeader(String nonce) {
+                        return "default-src 'self';" +
+                                "script-src 'self' 'nonce-" + nonce + "' 'strict-dynamic';" +
+                                "style-src 'self' 'nonce-" + nonce + "';" +
+                                "img-src 'self' data:;" +
+                                "font-src 'self';" +
+                                "connect-src 'self';" +
+                                "object-src 'none';" +
+                                "base-uri 'self';" +
+                                "form-action 'self';" +
+                                "frame-ancestors 'self';" +
+                                "upgrade-insecure-requests;" +
+                                "block-all-mixed-content;";
+                        // Add report-uri if needed
+                        // "report-uri /csp-report-endpoint;";
+                    }
+                }, org.springframework.security.web.header.HeaderWriterFilter.class); // Place before HeaderWriterFilter
 
 
         return http.build();
+    }
+
+    /**
+     * Provides the WebAuthnAuthenticationFilter used by WebAuthn authentication providers
+     * to exchange authorization codes for access tokens.
+     *
+     * @param mainAuthenticationManager The main authentication manager.
+     * @param webAuthnSuccessHandler    The success handler for WebAuthn authentication.
+     * @return The configured WebAuthnAuthenticationFilter.
+     */
+    private static WebAuthnAuthenticationFilter getWebAuthnAuthenticationFilter(ProviderManager mainAuthenticationManager, AuthenticationSuccessHandler webAuthnSuccessHandler) {
+        WebAuthnAuthenticationFilter webAuthnAuthenticationFilter = new WebAuthnAuthenticationFilter(); // Use no-arg constructor
+        webAuthnAuthenticationFilter.setAuthenticationManager(mainAuthenticationManager);
+        PublicKeyCredentialRequestOptionsRepository requestOptRepo = new HttpSessionPublicKeyCredentialRequestOptionsRepository();
+        webAuthnAuthenticationFilter.setRequestOptionsRepository(requestOptRepo);
+        webAuthnAuthenticationFilter.setAuthenticationSuccessHandler(webAuthnSuccessHandler);
+        return webAuthnAuthenticationFilter;
     }
 
 
@@ -770,7 +882,8 @@ public class LocalSecurityConfig {
                     .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                     .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                     // IMPORTANT: This redirect URI MUST match what amlume-shop configures
-                    .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
+                    .redirectUri(this.shopClientRedirectUri) // Use the injected property
+//                    .redirectUri("http://localhost:8080/login/oauth2/code/amlumeclient")
 //                    .redirectUri(defaultRedirectBase + "/login/oauth2/code/amlumeclient")
                     .scope(OidcScopes.OPENID).scope(OidcScopes.PROFILE).scope(OidcScopes.EMAIL)
                     .clientSettings(ClientSettings.builder().requireProofKey(true).build()) // ADDED PKCE
@@ -836,7 +949,7 @@ public class LocalSecurityConfig {
             log.info("ROOT USER SEEDED: {} / (password in config/env)", rootEmail);
             log.info("***************************************************************************");
         } else {
-            log.info("Root user {} already exists. Skipping seeding.", rootEmail);
+            log.info("Root user {} already exists. Skipping seeding.");
         }
     }
 
@@ -925,21 +1038,6 @@ public class LocalSecurityConfig {
     @Bean
     public OAuth2TokenCustomizer<JwtEncodingContext> jwtTokenCustomizer() {
         return jwtCustomizationService::customizeToken;
-    }
-
-    /**
-     * Populates JWT claims with user profile information.
-     *
-     * @param claims  The map of claims to populate.
-     * @param appUser The User object containing the profile information.
-     */
-    private void putClaims(Map<String, Object> claims, User appUser) {
-        claims.put("user_id_numeric", appUser.getId());
-        claims.put("given_name", appUser.getGivenName());
-        claims.put("family_name", appUser.getSurname());
-        claims.put("full_name", appUser.getDisplayableFullName());
-        claims.put("nickname", appUser.getNickname());
-        claims.put("email", appUser.getEmail().getValue());
     }
 
     /*

@@ -14,7 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.session.data.mongo.JacksonMongoSessionConverter;
 
 import java.util.Collections;

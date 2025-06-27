@@ -45,6 +45,12 @@ import org.springframework.session.web.http.DefaultCookieSerializer;
 import java.time.Duration;
 import java.util.List;
 
+/**
+ * Configures Hazelcast for Spring Session.
+ * This setup uses Hazelcast in a client-server mode, connecting to an external Hazelcast cluster
+ * (as defined in Docker Compose). It enables JSON serialization for session attributes.
+ *
+ */
 import static me.amlu.authserver.common.SecurityConstants.REMEMBER_ME_PARAMETER;
 
 /**
@@ -53,8 +59,7 @@ import static me.amlu.authserver.common.SecurityConstants.REMEMBER_ME_PARAMETER;
  * (as defined in Docker Compose). It enables JSON serialization for session attributes.
  */
 @Configuration
-@EnableHazelcastHttpSession // Enable Hazelcast-backed HTTP sessions
-// DO NOT extend HazelcastHttpSessionConfiguration
+@EnableHazelcastHttpSession
 public class HazelcastHttpSessionConfig {
 
     private static final Logger log = LoggerFactory.getLogger(HazelcastHttpSessionConfig.class);
@@ -79,6 +84,16 @@ public class HazelcastHttpSessionConfig {
      * external Hazelcast server/cluster defined in Docker Compose.
      * This instance will be used by Spring Session.
      *
+     * <p><b>Important Notes:</b></p>
+     * <ul>
+     *     <li>The {@code @SpringSessionHazelcastInstance} annotation is crucial for Spring Session to
+     *     identify which HazelcastInstance to use.</li>
+     *     <li>Custom serializers are registered for Spring Security objects (CsrfToken, SecurityContext, Authority)
+     *     to ensure proper serialization when stored in Hazelcast.</li>
+     *     <li>User code deployment is enabled to push necessary Spring Session classes to the Hazelcast members,
+     *     which is required for entry processors to function correctly if these classes are not already on the classpath.</li>
+     * </ul>
+     *
      * @return Configured HazelcastInstance client.
      */
     @Bean
@@ -93,12 +108,15 @@ public class HazelcastHttpSessionConfig {
                 .setName(HazelcastIndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE)
                 .setExtractorClassName(PrincipalNameExtractor.class.getName());
 
-        // Cluster configuration
-        Config config = new Config();
-        config.setClusterName("auth-session-cluster");
-        config.getMapConfig(HazelcastIndexedSessionRepository.DEFAULT_SESSION_MAP_NAME)
-                .addAttributeConfig(attributeConfig)
-                .addIndexConfig(
+        // Map configuration for the session map
+        MapConfig sessionMapConfig = new MapConfig(sessionMapName)
+                .setTimeToLiveSeconds((int) sessionTimeout.toSeconds()) // Set TTL for sessions
+                .setEvictionConfig(new EvictionConfig()
+                        .setEvictionPolicy(EvictionPolicy.LRU)
+                        .setSize(100000) // Max 100,000 sessions in memory
+                        .setMaxSizePolicy(MaxSizePolicy.PER_NODE))
+                .addAttributeConfig(attributeConfig) // Add principal name attribute for indexing
+                .addIndexConfig( // Add index for efficient principal name lookups
                         new IndexConfig(IndexType.HASH, HazelcastIndexedSessionRepository.PRINCIPAL_NAME_ATTRIBUTE));
 
         if (CollectionUtils.isEmpty(hazelcastClusterMembers)) {
@@ -106,6 +124,7 @@ public class HazelcastHttpSessionConfig {
             throw new IllegalStateException("Hazelcast cluster members must be configured.");
         }
         clientConfig.getNetworkConfig().addAddress(hazelcastClusterMembers.toArray(new String[0]));
+        clientConfig.addMapConfig(sessionMapConfig); // Add the session map configuration to the client config
 
 
         // Configure custom serializers for Spring Security objects
@@ -121,11 +140,10 @@ public class HazelcastHttpSessionConfig {
                         .setTypeClass(Authority.class));
 
 
-        // Use custom serializer to de/serialize sessions faster. This is optional.
-        // Note that, all members in a cluster and connected clients need to use the
-        // same serializer for sessions. For instance, clients cannot use this serializer
-        // where members are not configured to do so.
-        // Configure a serializer for the session map itself
+        // Configure a custom serializer for the session map itself.
+        // This is crucial for performance and proper serialization of MapSession objects.
+        // All members in a cluster and connected clients must use the same serializer for sessions.
+        // If the server-side Hazelcast cluster does not have this serializer configured, issues will arise.
         SerializerConfig sessionSerializerConfig = new SerializerConfig();
         sessionSerializerConfig.setImplementation(new HazelcastSessionSerializer()).setTypeClass(MapSession.class);
         clientConfig.getSerializationConfig().addSerializerConfig(sessionSerializerConfig);
@@ -133,17 +151,6 @@ public class HazelcastHttpSessionConfig {
 
         // Configure connection strategy
         clientConfig.getConnectionStrategyConfig()
-                .setAsyncStart(false)
-                .setReconnectMode(ClientConnectionStrategyConfig.ReconnectMode.ON)
-                .getConnectionRetryConfig()
-                .setInitialBackoffMillis(1000)
-                .setMaxBackoffMillis(30000)
-                .setMultiplier(2.0)
-                .setClusterConnectTimeoutMillis(5000)
-                .setJitter(0.2);
-
-        ClientConnectionStrategyConfig connectionStrategyConfig = new ClientConnectionStrategyConfig();
-        connectionStrategyConfig
                 .setAsyncStart(false)
                 .setReconnectMode(ClientConnectionStrategyConfig.ReconnectMode.ON)
                 .getConnectionRetryConfig()
@@ -179,6 +186,10 @@ public class HazelcastHttpSessionConfig {
      * Provides a custom HazelcastSessionSerializer that uses the application's
      * configured ObjectMapper for serializing session attributes to JSON.
      *
+     * <p><b>Usage:</b></p>
+     * This bean is automatically picked up by Spring Session's Hazelcast integration
+     * to handle the serialization and deserialization of {@link MapSession} objects.
+     *
      * @return HazelcastSessionSerializer for JSON.
      */
     @Bean
@@ -190,6 +201,12 @@ public class HazelcastHttpSessionConfig {
     /**
      * Customizes the HazelcastIndexedSessionRepository settings.
      *
+     * <p><b>Important Notes:</b></p>
+     * <ul>
+     *     <li>{@code FlushMode.IMMEDIATE}: Ensures session changes are written to Hazelcast immediately.</li>
+     *     <li>{@code SaveMode.ALWAYS}: Ensures the session is always saved to Hazelcast, even if no attributes change.</li>
+     *     <li>The session map name and default max inactive interval are configured from application properties.</li>
+     * </ul>
      * @return SessionRepositoryCustomizer for HazelcastIndexedSessionRepository.
      */
     @Bean
@@ -208,6 +225,14 @@ public class HazelcastHttpSessionConfig {
     /**
      * Customizes the session cookie configuration.
      *
+     * <p><b>Security and Performance Considerations:</b></p>
+     * <ul>
+     *     <li>{@code useSecureCookie}: Set to true in production to ensure cookies are only sent over HTTPS.</li>
+     *     <li>{@code useHttpOnlyCookie}: Set to true to prevent client-side scripts from accessing the cookie, mitigating XSS attacks.</li>
+     *     <li>{@code SameSite=Lax}: Provides a good balance between security (CSRF protection) and usability.</li>
+     *     <li>{@code cookieMaxAge}: Aligns with the session timeout to ensure cookie expiration matches session expiration.</li>
+     *     <li>{@code useBase64Encoding}: Encodes the session ID in Base64, which can be useful for certain environments or proxies.</li>
+     * </ul>
      * @return A configured CookieSerializer.
      */
     @Bean

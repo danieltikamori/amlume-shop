@@ -21,7 +21,6 @@ import org.springframework.security.web.webauthn.api.AuthenticationExtensionsCli
 import java.io.IOException;
 import java.lang.reflect.Proxy;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -37,19 +36,34 @@ public class AuthenticationExtensionsClientInputsDeserializer extends JsonDeseri
         Map<String, Object> extensions = new HashMap<>();
 
         if (node != null && !node.isNull()) {
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fields.next();
-                JsonNode value = entry.getValue();
+            // Refactored: Use properties() instead of fields()
+            // Option 1: Using a traditional iterator loop (similar to original logic)
+            // Iterator<Map.Entry<String, JsonNode>> properties = node.properties(); // properties() returns Iterator
+            // while (properties.hasNext()) {
+            //     Map.Entry<String, JsonNode> entry = properties.next();
+            //     JsonNode value = entry.getValue();
+            //     if (value.isBoolean()) {
+            //         extensions.put(entry.getKey(), value.asBoolean());
+            //     } else if (value.isNumber()) {
+            //         extensions.put(entry.getKey(), value.asLong());
+            //     } else if (value.isTextual()) {
+            //         extensions.put(entry.getKey(), value.asText());
+            //     }
+            // }
 
-                if (value.isBoolean()) {
-                    extensions.put(entry.getKey(), value.asBoolean());
-                } else if (value.isNumber()) {
-                    extensions.put(entry.getKey(), value.asLong());
-                } else if (value.isTextual()) {
-                    extensions.put(entry.getKey(), value.asText());
-                }
-            }
+            // Option 2: Using Java 8 Streams (more modern and often preferred)
+            // properties() returns an Iterator, which can be converted to a Stream using StreamSupport.stream
+            node.properties().stream()
+                    .forEach(entry -> {
+                        JsonNode value = entry.getValue();
+                        if (value.isBoolean()) {
+                            extensions.put(entry.getKey(), value.asBoolean());
+                        } else if (value.isNumber()) {
+                            extensions.put(entry.getKey(), value.asLong());
+                        } else if (value.isTextual()) {
+                            extensions.put(entry.getKey(), value.asText());
+                        }
+                    });
         }
 
         final CustomAuthenticationExtensionsClientInputs customInputs =
