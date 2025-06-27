@@ -37,6 +37,10 @@ import java.util.List;
 import java.util.Objects;
 
 
+/**
+ * REST controller for managing user profile-related operations.
+ * Provides endpoints for retrieving, updating, changing password, deleting account, and managing associated devices.
+ */
 @RestController
 @RequestMapping("/api/profile") // Consistent base path
 public class ProfileController {
@@ -47,6 +51,14 @@ public class ProfileController {
     private final UserLookupService userLookupService;
     private final DeviceFingerprintServiceInterface deviceFingerprintService;
 
+    /**
+     * Constructs a new {@code ProfileController}.
+     *
+     * @param userManager              The service for managing user-related operations.
+     * @param response                 The HTTP servlet response, used for logout operations.
+     * @param userLookupService        The service for looking up user details.
+     * @param deviceFingerprintService The service for managing device fingerprints.
+     */
     public ProfileController(UserManager userManager,
                              HttpServletResponse response,
                              UserLookupService userLookupService,
@@ -57,6 +69,12 @@ public class ProfileController {
         this.deviceFingerprintService = deviceFingerprintService;
     }
 
+    /**
+     * Retrieves the profile information of the currently authenticated user.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @return A {@link ResponseEntity} containing the user's profile data if successful, or an unauthorized status.
+     */
     @GetMapping
     public ResponseEntity<GetUserProfileResponse> getCurrentUserProfile(Authentication authentication) {
         User currentUser = userLookupService.getAppUserFromAuthentication(authentication); // Resolve
@@ -81,6 +99,13 @@ public class ProfileController {
     }
 
     @PutMapping // Maps to PUT /api/profile
+    /**
+     * Updates the profile information of the currently authenticated user.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @param request The {@link UpdateUserProfileRequest} containing the new profile data.
+     * @return A {@link ResponseEntity} containing the updated user's profile data if successful, or an error status.
+     */
     public ResponseEntity<GetUserProfileResponse> updateUserProfile(
             Authentication authentication,
             @Valid @RequestBody UpdateUserProfileRequest request) {
@@ -139,6 +164,13 @@ public class ProfileController {
 
     @PostMapping("/change-password")
     // As ChangePasswordRequest does not contain userId or user identifier data, avoid PreAuthorize as it may not work for the current user
+    /**
+     * Allows the currently authenticated user to change their password.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @param request The {@link ChangePasswordRequest} containing the old and new passwords.
+     * @return A {@link ResponseEntity} with no content if the password change is successful, or an error status.
+     */
 //    @PreAuthorize("principal.id == #userId or hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     public ResponseEntity<Void> changePassword(
             Authentication authentication,
@@ -176,6 +208,15 @@ public class ProfileController {
     }
 
     @DeleteMapping // Maps to DELETE /api/profile
+    /**
+     * Deletes the account of the currently authenticated user.
+     * This operation also logs out the user after deletion.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @param request The HTTP servlet request, used for logout operations.
+     * @param response The HTTP servlet response, used for logout operations.
+     * @return A {@link ResponseEntity} with no content if the account deletion is successful, or an error status.
+     */
     public ResponseEntity<Void> deleteCurrentUserAccount(
             Authentication authentication,
             HttpServletRequest request,
@@ -212,6 +253,14 @@ public class ProfileController {
     // --- Device fingerprint ---
 
     @GetMapping("/devices")
+    /**
+     * Retrieves a list of devices associated with the currently authenticated user.
+     * The current device is identified and marked in the list.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @param request The HTTP servlet request, used to extract device fingerprinting headers.
+     * @return A {@link ResponseEntity} containing a list of {@link UserDeviceResponse} objects.
+     */
     public ResponseEntity<List<UserDeviceResponse>> listUserDevices(Authentication authentication, HttpServletRequest request) { // Add HttpServletRequest
         User currentUser = userLookupService.getAppUserFromAuthentication(authentication);
         if (currentUser == null) {
@@ -233,6 +282,13 @@ public class ProfileController {
     }
 
     @DeleteMapping("/devices/{fingerprintId}")
+    /**
+     * Revokes (deletes) a specific device fingerprint associated with the current user.
+     *
+     * @param authentication The authentication object containing the principal of the current user.
+     * @param fingerprintId The ID of the device fingerprint to revoke.
+     * @return A {@link ResponseEntity} with no content if the device is successfully revoked, or an unauthorized status.
+     */
     public ResponseEntity<Void> revokeDevice(Authentication authentication, @PathVariable String fingerprintId) {
         User currentUser = userLookupService.getAppUserFromAuthentication(authentication);
         if (currentUser == null) {
