@@ -12,6 +12,10 @@ package me.amlu.authserver.security.service;
 
 import com.maxmind.geoip2.model.AsnResponse;
 import com.maxmind.geoip2.model.CityResponse;
+import com.maxmind.geoip2.record.AbstractNamedRecord;
+import com.maxmind.geoip2.record.Country;
+import com.maxmind.geoip2.record.Postal;
+import com.maxmind.geoip2.record.Subdivision;
 import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.security.model.GeoLocation;
 import org.slf4j.Logger;
@@ -22,10 +26,30 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Optional;
 
+/**
+ * Service implementation for performing GeoIP2 lookups using MaxMind's GeoIP2 database.
+ * This service provides methods to lookup Autonomous System Number (ASN) and geographical location
+ * based on an IP address.
+ *
+ * <p>This service integrates with {@link MaxMindGeoService} to perform the actual database queries.
+ * It handles IP address parsing and provides a structured {@link GeoLocation} object for location lookups.</p>
+ *
+ * <p>Usage Example:</p>
+ * <pre>{@code
+ * @Autowired
+ * private GeoIp2Service geoIp2Service;
+ *
+ * public void processIpAddress(String ip) {
+ *     Optional<GeoLocation> location = geoIp2Service.lookupLocation(ip);
+ *     location.ifPresent(loc -> System.out.println("City: " + loc.getCity()));
+ *     AsnResponse asn = geoIp2Service.lookupAsn(ip);
+ *     if (asn != null) System.out.println("ASN: " + asn.getAutonomousSystemOrganization());
+ * }
+ * }</pre>
+ */
 @Service
 public class GeoIp2ServiceImpl implements GeoIp2Service {
     private final MaxMindGeoService maxMindGeoService;
-
     private static final Logger log = LoggerFactory.getLogger(GeoIp2ServiceImpl.class);
 
     public GeoIp2ServiceImpl(MaxMindGeoService maxMindGeoService) {
@@ -33,6 +57,12 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
     }
 
     @Override
+    /**
+     * Performs an Autonomous System Number (ASN) lookup for a given IP address.
+     *
+     * @param ip The IP address string for which to perform the ASN lookup.
+     * @return An {@link AsnResponse} object if the lookup is successful, or {@code null} if the IP is invalid or lookup fails.
+     */
     @Timed(value = "authserver.geolocation.lookup-asn", description = "Time taken to lookup ASN")
     public AsnResponse lookupAsn(String ip) {
         try {
@@ -46,6 +76,12 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
     }
 
     @Override
+    /**
+     * Performs a geographical location lookup for a given IP address.
+     *
+     * @param ip The IP address string for which to perform the location lookup.
+     * @return An {@link Optional} containing a {@link GeoLocation} object if the lookup is successful, or {@link Optional#empty()} if the IP is invalid or lookup fails.
+     */
     @Timed(value = "authserver.geolocation.lookup-location", description = "Time taken to lookup location")
     public Optional<GeoLocation> lookupLocation(String ip) {
         try {
@@ -56,17 +92,17 @@ public class GeoIp2ServiceImpl implements GeoIp2Service {
             // Build GeoLocation only if response is valid
             if (response != null && response.getLocation() != null) {
                 // Ensure all necessary fields are checked for null before accessing
-                String countryCode = (response.getCountry() != null) ? response.getCountry().getIsoCode() : null;
-                String cityName = (response.getCity() != null) ? response.getCity().getName() : null;
-                Double latitude = response.getLocation().getLatitude(); // Assuming getLocation() is checked above
-                Double longitude = response.getLocation().getLongitude(); // Assuming getLocation() is checked above
+                String countryCode = Optional.ofNullable(response.getCountry()).map(Country::getIsoCode).orElse(null);
+                String cityName = Optional.ofNullable(response.getCity()).map(AbstractNamedRecord::getName).orElse(null);
+                Double latitude = response.getLocation().getLatitude();
+                Double longitude = response.getLocation().getLongitude();
 
                 // Add other fields as needed, checking for nulls
-                String countryName = (response.getCountry() != null) ? response.getCountry().getName() : null;
-                String postalCode = (response.getPostal() != null) ? response.getPostal().getCode() : null;
-                String timeZone = response.getLocation().getTimeZone(); // Assuming getLocation() is checked above
-                String subdivisionName = (response.getMostSpecificSubdivision() != null) ? response.getMostSpecificSubdivision().getName() : null;
-                String subdivisionCode = (response.getMostSpecificSubdivision() != null) ? response.getMostSpecificSubdivision().getIsoCode() : null;
+                String countryName = Optional.ofNullable(response.getCountry()).map(AbstractNamedRecord::getName).orElse(null);
+                String postalCode = Optional.ofNullable(response.getPostal()).map(Postal::getCode).orElse(null);
+                String timeZone = response.getLocation().getTimeZone();
+                String subdivisionName = Optional.ofNullable(response.getMostSpecificSubdivision()).map(AbstractNamedRecord::getName).orElse(null);
+                String subdivisionCode = Optional.ofNullable(response.getMostSpecificSubdivision()).map(Subdivision::getIsoCode).orElse(null);
                 // ASN might not be available from CityResponse, depends on MaxMindGeoService.getCity implementation
                 // String asn = ...; // Get ASN if available
 

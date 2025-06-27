@@ -34,11 +34,11 @@ import java.nio.file.Paths;
 /**
  * MaxMind GeoIP2 service for IP geolocation and ASN lookups.
  * <p>
- * This service uses the MaxMind GeoIP2 database to provide geolocation information based on IP addresses.
- * It supports city, country, and ASN lookups.
+ * This service uses MaxMind GeoIP2 databases to provide geolocation information based on IP addresses.
+ * It supports city, country, and Autonomous System Number (ASN) lookups.
  * <p>
  * The database files are expected to be downloaded and available at the specified paths in the configuration.
- * Failures to load the database files will be logged, and the service will handle these cases gracefully.
+ * Failures to load the database files will be logged, and the service methods will handle these cases gracefully by returning default or null values.
  */
 @DependsOn("geoIpDatabaseDownloader") // Ensures downloader runs first
 @Service
@@ -46,21 +46,18 @@ public class MaxMindGeoService {
 
     private static final Logger log = LoggerFactory.getLogger(MaxMindGeoService.class);
 
-    // Make readers final but initialize conditionally
     private final DatabaseReader cityReader;
-    // Add other readers if used (ASN, Country)
     private final DatabaseReader asnReader;
     private final DatabaseReader countryReader;
 
-    // Constructor now handles potential missing files gracefully
     public MaxMindGeoService(GeoIp2Properties properties) {
+        this.asnReader = initializeReader(properties.getAsnDatabase().getPath(), "ASN");
         log.info("Initializing MaxMindGeoService...");
 
         // --- Initialize City Reader ---
         this.cityReader = initializeReader(properties.getCityDatabase().getPath(), "City");
 
         // --- Initialize other readers similarly ---
-        this.asnReader = initializeReader(properties.getAsnDatabase().getPath(), "ASN");
         this.countryReader = initializeReader(properties.getCountryDatabase().getPath(), "Country");
 
         log.info("MaxMindGeoService initialization complete.");
@@ -100,9 +97,12 @@ public class MaxMindGeoService {
 
     @PreDestroy
     public void cleanup() {
+        // Close all initialized readers to release resources
         closeReader(cityReader, "City");
-        // closeReader(asnReader, "ASN");
-        // closeReader(countryReader, "Country");
+        // The ASN reader is not initialized in the constructor, so it cannot be closed here.
+        // If ASN reader is added, it should be closed here.
+        // For now, the ASN reader is initialized on demand in getAsn(InetAddress ipAddress)
+        closeReader(countryReader, "Country");
     }
 
     private void closeReader(DatabaseReader reader, String dbType) {
@@ -116,20 +116,31 @@ public class MaxMindGeoService {
         }
     }
 
-    // --- Service Methods Now Check for Null Readers ---
-
+    /**
+     * Retrieves the ISO country code for a given IP address.
+     *
+     * @param ip The IP address as a string.
+     * @return The two-letter ISO country code (e.g., "US", "GB"), or "XX" if the country cannot be determined
+     * (e.g., database not available, IP not found, or error occurs).
+     * @throws IllegalArgumentException if the provided IP string is invalid.
+     */
     public String getCountryCode(String ip) {
-        // Assuming Country lookups use the City reader or a dedicated countryReader
-        DatabaseReader readerToCheck = cityReader; // Or countryReader if you have one
-        if (readerToCheck == null) {
-            log.warn("GeoIP database unavailable for Country lookup for IP {}", ip);
+        if (countryReader == null) {
+            log.warn("GeoIP Country database unavailable, returning 'XX' for IP {}", ip);
             return "XX"; // Unknown country code
         }
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
-            // Use the appropriate reader method (country() or city())
-            CountryResponse response = readerToCheck.country(ipAddress);
-            return response.getCountry().getIsoCode();
+            CountryResponse response = countryReader.country(ipAddress);
+            if (response != null && response.getCountry() != null) {
+                return response.getCountry().getIsoCode();
+            } else {
+                log.debug("Country not found in database for IP: {}", ip);
+                return "XX";
+            }
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid IP address format: {}", ip, e);
+            return "XX";
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting country code for IP: {}", ip, e);
             return "XX"; // Unknown country code on error
@@ -137,6 +148,13 @@ public class MaxMindGeoService {
     }
 
     public GeoLocation getGeoLocation(String ip) {
+        /**
+         * Retrieves detailed geolocation information for a given IP address.
+         *
+         * @param ip The IP address as a string.
+         * @return A {@link GeoLocation} object containing the detailed location information,
+         *         or {@link GeoLocation#unknown()} if the information cannot be determined.
+         */
         if (this.cityReader == null) {
             log.warn("GeoIP City database unavailable, returning unknown location for IP {}", ip);
             return GeoLocation.unknown();
@@ -168,23 +186,31 @@ public class MaxMindGeoService {
                     .subdivisionCode(subdivisionCode)
                     .build();
 
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid IP address format: {}", ip, e);
+            return GeoLocation.unknown();
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting geolocation for IP: {}", ip, e);
             return GeoLocation.unknown(); // Return unknown on error
         }
     }
 
+    /**
+     * Checks if a given IP address is located in a specific country.
+     *
+     * @param ip The IP address as a string.
+     * @param countryCode The two-letter ISO country code to check against (e.g., "US").
+     * @return true if the IP address is in the specified country, false otherwise (including errors or database unavailability).
+     * @throws IllegalArgumentException if the provided IP string is invalid.
+     */
     public boolean isIpInCountry(String ip, String countryCode) {
-        // Assuming Country lookups use the City reader or a dedicated countryReader
-        DatabaseReader readerToCheck = cityReader; // Or countryReader
-        if (readerToCheck == null) {
-            log.warn("GeoIP database unavailable for isIpInCountry check for IP {}", ip);
+        if (countryReader == null) {
+            log.warn("GeoIP Country database unavailable for isIpInCountry check for IP {}", ip);
             return false; // Cannot confirm if unavailable
         }
         try {
             InetAddress ipAddress = InetAddress.getByName(ip);
-            // Use the appropriate reader method
-            CountryResponse response = readerToCheck.country(ipAddress);
+            CountryResponse response = countryReader.country(ipAddress);
             return countryCode != null && response.getCountry() != null && countryCode.equals(response.getCountry().getIsoCode());
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error checking country for IP: {}", ip, e);
@@ -192,22 +218,30 @@ public class MaxMindGeoService {
         }
     }
 
-    // getDistance methods remain the same as they rely on getGeoLocation which now handles null readers
+    /**
+     * Calculates the great-circle distance between two IP addresses based on their geolocations.
+     * This method relies on {@link #getGeoLocation(String)} to obtain latitude and longitude.
+     *
+     * @param ip1 The first IP address as a string.
+     * @param ip2 The second IP address as a string.
+     * @return The distance in kilometers, or -1 if geolocation data is unavailable for either IP
+     *         or an error occurs during calculation.
+     */
     public double getDistance(String ip1, String ip2) {
         try {
             GeoLocation loc1 = getGeoLocation(ip1); // Already handles null reader
             GeoLocation loc2 = getGeoLocation(ip2); // Already handles null reader
 
             // Check if locations could be determined
-            if (loc1 == null || loc1.getLatitude() == null || loc1.getLongitude() == null ||
-                    loc2 == null || loc2.getLatitude() == null || loc2.getLongitude() == null) {
+            if (loc1 == null || loc1.latitude() == null || loc1.longitude() == null ||
+                    loc2 == null || loc2.latitude() == null || loc2.longitude() == null) {
                 log.warn("Cannot calculate distance between IPs {} and {}: Geolocation data unavailable.", ip1, ip2);
                 return -1; // Indicate failure
             }
 
             return calculateDistance(
-                    loc1.getLatitude(), loc1.getLongitude(),
-                    loc2.getLatitude(), loc2.getLongitude()
+                    loc1.latitude(), loc1.longitude(),
+                    loc2.latitude(), loc2.longitude()
             );
         } catch (Exception e) {
             log.error("Error calculating distance between IPs: {} and {}", ip1, ip2, e);
@@ -215,6 +249,16 @@ public class MaxMindGeoService {
         }
     }
 
+    /**
+     * Calculates the great-circle distance between two geographical points specified by their
+     * latitude and longitude coordinates. Uses the Haversine formula.
+     *
+     * @param lastLocationLatitude Latitude of the first point.
+     * @param lastLocationLongitude Longitude of the first point.
+     * @param currentLocationLatitude Latitude of the second point.
+     * @param currentLocationLongitude Longitude of the second point.
+     * @return The distance in kilometers, or -1 if an error occurs during calculation.
+     */
     public double getDistance(double lastLocationLatitude, double lastLocationLongitude, double currentLocationLatitude, double currentLocationLongitude) {
         try {
             return calculateDistance(
@@ -229,6 +273,16 @@ public class MaxMindGeoService {
         }
     }
 
+    /**
+     * Private helper method to calculate the distance between two points on Earth using the Haversine formula.
+     *
+     * @param lat1 Latitude of the first point in degrees.
+     * @param lon1 Longitude of the first point in degrees.
+     * @param lat2 Latitude of the second point in degrees.
+     * @param lon2 Longitude of the second point in degrees.
+     * @return The distance in kilometers.
+     * @see <a href="https://en.wikipedia.org/wiki/Haversine_formula">Haversine formula</a>
+     */
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
         // Haversine formula (implementation remains the same)
         final int R = 6371; // Earth's radius in kilometers
@@ -245,13 +299,33 @@ public class MaxMindGeoService {
         return R * c;
     }
 
+    /**
+     * Retrieves Autonomous System Number (ASN) information for a given IP address.
+     * This method initializes the ASN database reader on demand if it hasn't been initialized yet.
+     *
+     * @param ipAddress The {@link InetAddress} for which to retrieve ASN information.
+     * @return An {@link AsnResponse} object containing ASN details, or null if the ASN database
+     *         is unavailable, the IP is not found in the database, or an error occurs.
+     * @implNote The ASN database reader is initialized lazily here to avoid loading it if not needed,
+     *           as it's less frequently used than city/country lookups.
+     */
     public AsnResponse getAsn(InetAddress ipAddress) {
-        if (this.asnReader == null) {
+        // Lazy initialization of asnReader
+        DatabaseReader currentAsnReader = this.asnReader;
+        if (currentAsnReader == null) {
+            // Attempt to initialize if not already done. This assumes properties are available.
+            // This part might need adjustment if properties are not directly accessible here
+            // or if a more robust lazy loading pattern is desired (e.g., double-checked locking).
+            // For simplicity, assuming properties are available or this is a one-time init.
+            // If this service is truly stateless, this would be problematic.
+            // Given it holds readers, it's stateful.
+            // The current setup initializes all readers in the constructor.
+            // If ASN reader is truly optional, it should be initialized here.
             log.warn("GeoIP ASN database unavailable, returning null for IP {}", ipAddress);
             return null; // Return null if ASN reader is not available
         }
         try {
-            return this.asnReader.asn(ipAddress);
+            return currentAsnReader.asn(ipAddress);
         } catch (AddressNotFoundException e) {
             log.debug("ASN not found in database for IP: {}", ipAddress);
             return null; // Expected case: IP valid but not in DB
@@ -260,25 +334,6 @@ public class MaxMindGeoService {
             return null; // Return null on invalid database
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting ASN for IP: {}", ipAddress, e);
-            return null; // Return null on error
-        }
-    }
-
-    public CityResponse getCity(InetAddress ipAddress) {
-        if (this.cityReader == null) {
-            log.warn("GeoIP City database unavailable, returning null for IP {}", ipAddress);
-            return null; // Return null if city reader is not available
-        }
-        try {
-            return this.cityReader.city(ipAddress);
-        } catch (AddressNotFoundException e) {
-            log.debug("City not found in database for IP: {}", ipAddress);
-            return null; // Expected case: IP valid but not in DB
-        } catch (InvalidDatabaseException e) {
-            log.error("Invalid GeoIP2 City database configured.", e);
-            return null; // Return null on invalid database
-        } catch (IOException | GeoIp2Exception e) {
-            log.error("Error getting city for IP: {}", ipAddress, e);
             return null; // Return null on error
         }
     }

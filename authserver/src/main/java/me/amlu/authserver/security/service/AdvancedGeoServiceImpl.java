@@ -13,8 +13,6 @@ package me.amlu.authserver.security.service;
 import com.maxmind.geoip2.exception.GeoIp2Exception;
 import io.micrometer.core.annotation.Timed;
 import io.micrometer.core.instrument.MeterRegistry;
-
-import me.amlu.authserver.cache_management.config.ValkeyCacheConfig;
 import me.amlu.authserver.notification.service.AlertService;
 import me.amlu.authserver.security.config.properties.GeoSecurityProperties;
 import me.amlu.authserver.security.enums.AlertSeverityEnum;
@@ -154,7 +152,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
      * @return The original or an enriched GeoLocation object.
      */
     private GeoLocation enrichWithAsnIfNeeded(GeoLocation location, String ip) {
-        if (location != null && location.getAsn() == null) {
+        if (location != null && location.asn() == null) {
             try {
                 String asn = String.valueOf(geoIp2Service.lookupAsn(ip));
                 // Assuming GeoLocation is immutable (record/builder pattern)
@@ -162,15 +160,15 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                 GeoLocation.GeoLocationBuilder builder = GeoLocation.builder();
 
                 // Copy existing fields from the original location
-                builder.countryCode(location.getCountryCode());
-                builder.countryName(location.getCountryName());
-                builder.city(location.getCity());
-                builder.postalCode(location.getPostalCode());
-                builder.latitude(location.getLatitude());
-                builder.longitude(location.getLongitude());
-                builder.timeZone(location.getTimeZone());
-                builder.subdivisionName(location.getSubdivisionName());
-                builder.subdivisionCode(location.getSubdivisionCode());
+                builder.countryCode(location.countryCode());
+                builder.countryName(location.countryName());
+                builder.city(location.city());
+                builder.postalCode(location.postalCode());
+                builder.latitude(location.latitude());
+                builder.longitude(location.longitude());
+                builder.timeZone(location.timeZone());
+                builder.subdivisionName(location.subdivisionName());
+                builder.subdivisionCode(location.subdivisionCode());
                 // Do NOT copy the original ASN, as we are setting the new one below
 
                 // Set the new ASN
@@ -234,7 +232,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         GeoVerificationResult result = new GeoVerificationResult();
 
         // Handle case where MaxMind lookup failed or returned an "unknown" object
-        if (currentLocation == null || GeoLocation.DEFAULT_COUNTRY_CODE.equals(currentLocation.getCountryCode())) {
+        if (currentLocation == null || GeoLocation.UNKNOWN_COUNTRY_CODE.equals(currentLocation.countryCode())) {
             return handleUnknownLocation(result);
         }
 
@@ -292,12 +290,12 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                                                        String userId) {
         GeoLocation lastLocation = history.getLastLocation();
         // Ensure both locations and necessary coordinates are available
-        if (lastLocation != null && lastLocation.getLatitude() != null && lastLocation.getLongitude() != null &&
-                currentLocation.getLatitude() != null && currentLocation.getLongitude() != null) {
+        if (lastLocation != null && lastLocation.latitude() != null && lastLocation.longitude() != null &&
+                currentLocation.latitude() != null && currentLocation.longitude() != null) {
 
             double distance = calculateDistance(
-                    lastLocation.getLatitude(), lastLocation.getLongitude(),
-                    currentLocation.getLatitude(), currentLocation.getLongitude()
+                    lastLocation.latitude(), lastLocation.longitude(),
+                    currentLocation.latitude(), currentLocation.longitude()
             );
 
             Instant lastTimestamp = history.getLastTimestamp();
@@ -342,10 +340,10 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
                         "distanceKm", String.format("%.2f", distance),
                         "speedKmH", String.format("%.2f", speedKmH),
                         "timeDiffSeconds", String.valueOf(timeDiff.toSeconds()),
-                        "fromCity", from.getCity() != null ? from.getCity() : "Unknown",
-                        "fromCountry", from.getCountryCode() != null ? from.getCountryCode() : "XX",
-                        "toCity", to.getCity() != null ? to.getCity() : "Unknown",
-                        "toCountry", to.getCountryCode() != null ? to.getCountryCode() : "XX"
+                        "fromCity", from.city() != null ? from.city() : "Unknown",
+                        "fromCountry", from.countryCode() != null ? from.countryCode() : "XX",
+                        "toCity", to.city() != null ? to.city() : "Unknown",
+                        "toCountry", to.countryCode() != null ? to.countryCode() : "XX"
                 ),
                 AlertSeverityEnum.HIGH,
                 Instant.now(),
@@ -443,15 +441,15 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
      */
     @Override
     public boolean isLikelyVpn(GeoLocation location) {
-        if (location == null || location.getAsn() == null || geoSecurityProperties.getKnownVpnAsns() == null) {
+        if (location == null || location.asn() == null || geoSecurityProperties.getKnownVpnAsns() == null) {
             return false;
         }
         // Check against the injected set of known VPN ASNs from GeoSecurityProperties
-        boolean isKnownVpn = geoSecurityProperties.getKnownVpnAsns().contains(location.getAsn());
+        boolean isKnownVpn = geoSecurityProperties.getKnownVpnAsns().contains(location.asn());
         if (isKnownVpn) {
             // CHANGED: Use Micrometer meterRegistry
             meterRegistry.counter("geo.vpn.detected.asn").increment();
-            log.debug("Potential VPN detected based on known ASN: {}", location.getAsn());
+            log.debug("Potential VPN detected based on known ASN: {}", location.asn());
         }
         return isKnownVpn;
     }
@@ -464,7 +462,7 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
         // Simple check based on ASN list
         if (isLikelyVpn(location)) {
             result.setRisk(RiskLevel.MEDIUM); // Or HIGH depending on policy
-            result.addAlert("Potential VPN/Proxy detected based on ASN: " + location.getAsn());
+            result.addAlert("Potential VPN/Proxy detected based on ASN: " + location.asn());
         }
 
         // --- Optional Advanced Check (Currently not active in default flow) ---
@@ -496,12 +494,12 @@ public class AdvancedGeoServiceImpl implements AdvancedGeoService {
      * Updates the GeoVerificationResult accordingly.
      */
     private void checkCountryRisk(GeoVerificationResult result, GeoLocation location) {
-        if (location.getCountryCode() != null && isHighRiskCountry(location.getCountryCode())) {
+        if (location.countryCode() != null && isHighRiskCountry(location.countryCode())) {
             // Only set risk if it's not already HIGH (e.g., from impossible travel)
             if (result.getRisk() != RiskLevel.HIGH) {
                 result.setRisk(RiskLevel.MEDIUM); // Or HIGH depending on policy
             }
-            result.addAlert("Connection from high-risk country: " + location.getCountryCode());
+            result.addAlert("Connection from high-risk country: " + location.countryCode());
         }
     }
 

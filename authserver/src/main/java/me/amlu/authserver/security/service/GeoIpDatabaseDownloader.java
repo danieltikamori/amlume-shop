@@ -34,22 +34,73 @@ import java.nio.file.*;
 import java.time.Duration;
 import java.time.Instant;
 
+/**
+ * Service responsible for downloading and managing GeoIP2 databases from MaxMind.
+ * This service ensures that the necessary GeoIP2 database files (City, ASN, Country)
+ * are present and up-to-date in the configured directory. It handles initial
+ * directory creation, file existence checks, age-based updates, and secure
+ * download/extraction of the .mmdb files from MaxMind's tar.gz archives.
+ *
+ * <p>The download process requires a valid MaxMind Account ID and License Key,
+ * which should be configured in the application properties.
+ *
+ * <p>This service is initialized automatically on application startup via the
+ * {@link PostConstruct} annotation, attempting to prepare the databases.
+ * Failures during database preparation are logged but do not prevent the
+ * application from starting, though GeoIP features may be unavailable.
+ *
+ * <p><b>Usage:</b>
+ * Configure `application.properties` or `application.yml` with:
+ * <ul>
+ *     <li>`geoip2.database-directory`: Path where .mmdb files will be stored.</li>
+ *     <li>`geoip2.license.account-id`: Your MaxMind Account ID.</li>
+ *     <li>`geoip2.license.license-key`: Your MaxMind License Key.</li>
+ * </ul>
+ *
+ * <p>Example configuration:
+ * <pre>
+ * geoip2.database-directory=/var/lib/geoip
+ * geoip2.license.account-id=123456
+ * geoip2.license.license-key=your_license_key_here
+ * </pre>
+ */
 @Service("geoIpDatabaseDownloader")
 public class GeoIpDatabaseDownloader {
 
     private static final Logger log = LoggerFactory.getLogger(GeoIpDatabaseDownloader.class);
     private static final Duration MAX_AGE_BEFORE_UPDATE_CHECK = Duration.ofDays(7);
     private static final String MAXMIND_DOWNLOAD_BASE_URL = "https://download.maxmind.com/app/geoip_download";
-    private static final String DOWNLOAD_SUFFIX = "tar.gz";
+    private static final String DOWNLOAD_SUFFIX = "tar.gz"; // MaxMind provides .tar.gz archives
 
-    private final GeoIp2Properties geoIp2Properties;
-    private final RestTemplate restTemplate;
+    private final GeoIp2Properties geoIp2Properties; // Configuration properties for GeoIP2
+    private final RestTemplate restTemplate; // Used for making HTTP requests to download databases
 
+    /**
+     * Constructs a new {@code GeoIpDatabaseDownloader} with the specified properties and RestTemplate.
+     *
+     * @param geoIp2Properties The configuration properties for GeoIP2.
+     * @param restTemplate     The RestTemplate used for HTTP requests.
+     */
     public GeoIpDatabaseDownloader(GeoIp2Properties geoIp2Properties, RestTemplate restTemplate) {
         this.geoIp2Properties = geoIp2Properties;
         this.restTemplate = restTemplate;
     }
 
+    /**
+     * Initializes the service by checking and preparing the GeoIP2 database directory
+     * and individual database files. This method is automatically called after
+     * dependency injection is complete.
+     *
+     * <p>It performs the following steps:
+     * <ol>
+     *     <li>Validates and resolves the configured database directory path.</li>
+     *     <li>Creates the database directory if it does not exist.</li>
+     *     <li>Checks each configured database (City, ASN, Country) for existence and age.</li>
+     *     <li>Initiates a download if a database is missing or outdated.</li>
+     * </ol>
+     * Errors during this process are logged, but the application will continue to start.
+     * However, GeoIP features may be impaired or unavailable if databases cannot be prepared.
+     */
     @PostConstruct
     public void checkAndPrepareDatabases() {
         log.info("Attempting to check and prepare GeoIP2 database directory and files...");
@@ -102,6 +153,14 @@ public class GeoIpDatabaseDownloader {
         }
     }
 
+    /**
+     * Checks the existence and age of a specific GeoIP2 database file and initiates
+     * a download if necessary.
+     *
+     * @param filePathStr The string representation of the path to the database file.
+     * @param editionId The MaxMind edition ID for the database (e.g., "GeoLite2-City").
+     *                  This is used for logging and constructing the download URL.
+     */
     private void checkAndDownloadDatabase(String filePathStr, String editionId) {
         Path filePath = null; // Initialize to null
         try {
@@ -154,12 +213,22 @@ public class GeoIpDatabaseDownloader {
         }
     }
 
+    /**
+     * Downloads a specific GeoIP2 database from MaxMind's servers.
+     * This method constructs the download URL using the configured MaxMind Account ID
+     * and License Key, performs the HTTP GET request, and then extracts the .mmdb
+     * file from the downloaded .tar.gz archive.
+     *
+     * @param targetFile The {@link Path} where the final .mmdb file should be saved.
+     * @param editionId The MaxMind edition ID (e.g., "GeoLite2-City") for the database to download.
+     * @return {@code true} if the download and extraction were successful, {@code false} otherwise.
+     */
     private boolean downloadDatabaseDirectly(Path targetFile, String editionId) {
         // --- 1. Construct URL & Check Credentials (same as before) ---
         String accountId = geoIp2Properties.getLicense().getAccountId();
         String licenseKey = geoIp2Properties.getLicense().getLicenseKey();
 
-        if (accountId == null || accountId.isBlank() || licenseKey == null || licenseKey.isBlank()) {
+        if (accountId.isBlank() || licenseKey.isBlank()) {
             log.error("Cannot download GeoIP database '{}': Account ID or License Key is missing in configuration.", editionId);
             return false;
         }
@@ -168,7 +237,7 @@ public class GeoIpDatabaseDownloader {
         try {
             downloadUrl = UriComponentsBuilder.fromUriString(MAXMIND_DOWNLOAD_BASE_URL)
                     .queryParam("edition_id", editionId)
-                    .queryParam("license_key", licenseKey)
+                    .queryParam("license_key", licenseKey) // License key is required for download
                     .queryParam("suffix", DOWNLOAD_SUFFIX)
                     .toUriString();
         } catch (Exception e) {
@@ -176,9 +245,7 @@ public class GeoIpDatabaseDownloader {
             return false;
         }
 
-        // TODO: SECURITY - Consider logging less sensitive information.
-        //       Logging the masked URL is better than plaintext, but logging just the base URL
-        //       and edition ID might be sufficient and avoids potential masking issues.
+        // Log the attempt without sensitive information
         log.info("Attempting download for '{}' from Maxmind GeoIp2 servers.", editionId);
 
         // --- 2. Prepare Request Callback and Response Extractor ---
@@ -261,7 +328,18 @@ public class GeoIpDatabaseDownloader {
         }
     }
 
-    // Helper method to extract .mmdb from .tar.gz
+    /**
+     * Extracts the .mmdb file from a downloaded .tar.gz archive.
+     * The MaxMind archives typically contain a directory (e.g., GeoLite2-City_YYYYMMDD)
+     * and the .mmdb file inside it. This method searches for the .mmdb file
+     * matching the {@code editionId} and extracts it to the {@code targetMmdbFile} path.
+     *
+     * @param tarGzFile The path to the downloaded .tar.gz archive.
+     * @param targetMmdbFile The path where the extracted .mmdb file should be saved.
+     * @param editionId The MaxMind edition ID (e.g., "GeoLite2-City") to identify the correct .mmdb file within the archive.
+     * @return {@code true} if the .mmdb file was found and successfully extracted, {@code false} otherwise.
+     * @throws IOException If an I/O error occurs during archive processing or file writing.
+     */
     private boolean extractMmdbFromTarGz(Path tarGzFile, Path targetMmdbFile, String editionId) throws IOException {
         try (InputStream fi = Files.newInputStream(tarGzFile);
              BufferedInputStream bi = new BufferedInputStream(fi);

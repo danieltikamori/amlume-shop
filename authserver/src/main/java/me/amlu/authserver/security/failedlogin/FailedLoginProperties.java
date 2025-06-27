@@ -8,9 +8,11 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.security.config.properties;
+// package me.amlu.shop.amlume_shop.config.properties;
+package me.amlu.authserver.security.failedlogin;
 
 import jakarta.validation.constraints.Min;
+import lombok.Data;
 import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
@@ -19,41 +21,21 @@ import org.springframework.validation.annotation.Validated;
 import java.time.Duration;
 
 @Configuration
-@ConfigurationProperties(prefix = "auth.aspect")
+@ConfigurationProperties(prefix = "security.failed-login")
 @Validated
-public class AuthenticationAspectProperties {
-    @NonNull
-    private Duration cacheTimeout = Duration.ofHours(1);
+@Data
+public class FailedLoginProperties {
 
     @Min(1)
-    private int maxRetryAttempts = 3;
+    private int maxAttempts = 5; // Max attempts before blocking
 
     @NonNull
-    private Duration retryInterval = Duration.ofSeconds(1);
+    private Duration counterWindow = Duration.ofMinutes(15); // How long to keep the failure count
 
-    // getters and setters
+    // Optional: Add lockout duration if implementing timed lockouts
+    // @NotNull
+    // private Duration lockoutDuration = Duration.ofHours(1);
 
-    public @NonNull Duration getCacheTimeout() {
-        return cacheTimeout;
-    }
-
-    public void setCacheTimeout(@NonNull Duration cacheTimeout) {
-        this.cacheTimeout = cacheTimeout;
-    }
-
-    public int getMaxRetryAttempts() {
-        return maxRetryAttempts;
-    }
-
-    public void setMaxRetryAttempts(int maxRetryAttempts) {
-        this.maxRetryAttempts = maxRetryAttempts;
-    }
-
-    public @NonNull Duration getRetryInterval() {
-        return retryInterval;
-    }
-
-    public void setRetryInterval(@NonNull Duration retryInterval) {
-        this.retryInterval = retryInterval;
-    }
+    @NonNull
+    private String redisKeyPrefix = "failedlogin:attempts:";
 }

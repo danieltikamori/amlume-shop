@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import me.amlu.authserver.exceptions.DeviceFingerprintMismatchException;
 import me.amlu.authserver.exceptions.DeviceFingerprintRegistrationException;
 import me.amlu.authserver.exceptions.UserNotFoundException;
+import me.amlu.authserver.security.dto.DeviceRegistrationInfo;
 import me.amlu.authserver.security.model.UserDeviceFingerprint;
 import me.amlu.authserver.user.dto.UserDeviceResponse;
 import me.amlu.authserver.user.model.User;
@@ -31,7 +32,7 @@ import java.util.List;
  * <p>This service provides methods to register, validate, and manage device fingerprints,
  * helping to detect and prevent unauthorized access to user accounts.</p>
  */
-public interface DeviceFingerprintService {
+public interface DeviceFingerprintServiceInterface {
 
     /**
      * Registers a new device fingerprint for a user.
@@ -43,21 +44,9 @@ public interface DeviceFingerprintService {
      * @param request      the HTTP request containing additional information
      * @throws DeviceFingerprintRegistrationException if registration fails
      */
-    void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight, HttpServletRequest request) throws DeviceFingerprintRegistrationException;
+    void registerDeviceFingerprint(String userId, String userAgent, String screenWidth, String screenHeight,
+                                   DeviceRegistrationInfo deviceInfo, HttpServletRequest request) throws DeviceFingerprintRegistrationException;
 
-    /**
-     * Lists all registered devices for a user.
-     *
-     * @param userId                   The ID of the user.
-     * @param currentDeviceFingerprint The fingerprint of the device making the current request.
-     * @return A list of UserDeviceResponse DTOs.
-     */
-    @Transactional(readOnly = true)
-    List<UserDeviceResponse> listUserDevices(Long userId, String currentDeviceFingerprint);
-
-
-    @Transactional
-    void revokeDevice(Long userId, String fingerprintId);
 
     /**
      * Validates a device fingerprint for a user.
@@ -75,6 +64,15 @@ public interface DeviceFingerprintService {
      * @param deviceFingerprint the fingerprint to delete
      */
     void deleteDeviceFingerprint(String userId, String deviceFingerprint);
+
+//    /**
+//     * Deletes a device fingerprint for a user.
+//     *
+//     * @param userId the user ID to delete the fingerprint for
+//     * @param deviceFingerprintId the device fingerprint ID to delete
+//     */
+//    void deleteDeviceFingerprint(Long userId, String deviceFingerprintId);
+
 
     /**
      * Deletes a device fingerprint for a user.
@@ -94,8 +92,6 @@ public interface DeviceFingerprintService {
      * @return the generated fingerprint
      */
     String generateDeviceFingerprint(String userAgent, String screenWidth, String screenHeight, HttpServletRequest request);
-
-    String generateDeviceFingerprint(HttpServletRequest request);
 
     /**
      * Verifies that a token's fingerprint matches the current device.
@@ -148,39 +144,36 @@ public interface DeviceFingerprintService {
      */
     String getDeviceNameFromUserAgent(String userAgent);
 
-    /**
-     * Stores or updates a device fingerprint for a user.
-     *
-     * @param user              the user
-     * @param deviceFingerprint the device fingerprint
-     * @param browserInfo       the browser information
-     */
-    void storeOrUpdateFingerprint(User user, String deviceFingerprint,
-                                  String browserInfo, String lastKnownIp, String location,
-                                  String lastKnownCountry, String deviceName, String source);
+//    /**
+//     * Stores or updates a device fingerprint for a user.
+//     *
+//     * @param user              the user
+//     * @param deviceFingerprint the device fingerprint
+//     * @param browserInfo       the browser information
+//     */
+//    void storeOrUpdateFingerprint(User user, String deviceFingerprint,
+//                                  String browserInfo, String lastKnownIp, String location,
+//                                  String lastKnownCountry, String deviceName, String source);
+
+    void storeOrUpdateFingerprint(User user, DeviceRegistrationInfo deviceInfo);
 
     /**
      * Updates an existing device fingerprint.
      *
      * @param fingerprint the fingerprint to update
      */
-    void updateExistingFingerprint(UserDeviceFingerprint fingerprint);
+    void updateExistingFingerprint(UserDeviceFingerprint fingerprint, String newLastKnownIp);
 
     /**
      * Creates a new device fingerprint.
      *
      * @param user              the user
-     * @param deviceFingerprint the device fingerprint
-     * @param browserInfo       the browser information
-     * @param lastKnownIp       last used IP address
-     * @param location          the location of the device
-     * @param lastKnownCountry  last used country
-     * @param deviceName        device name set by the user
-     * @param source            the source of the fingerprint
+     * @param deviceInfo the device info DTO
+
      */
-    void createNewFingerprint(User user, String deviceFingerprint,
-                              String browserInfo, String lastKnownIp, String location,
-                              String lastKnownCountry, String deviceName, String source);
+    void createNewFingerprint(User user, DeviceRegistrationInfo deviceInfo);
+
+
 
     /**
      * Marks a device as suspicious for a user.
@@ -220,27 +213,39 @@ public interface DeviceFingerprintService {
      */
     void enableDeviceFingerprinting(User user);
 
-    /**
-     * Gets all devices for a user.
-     *
-     * @param user the user
-     * @return a list of device fingerprints
-     */
-    List<UserDeviceFingerprint> getUserDevices(User user);
 
     /**
-     * Gets a device by its ID.
+     * Lists all registered devices for a user.
      *
-     * @param deviceId the device ID
-     * @return the device fingerprint, or null if not found
+     * @param userId                   The ID of the user.
+     * @param currentDeviceFingerprint The fingerprint of the device making the current request.
+     * @return A list of UserDeviceResponse DTOs.
      */
-    UserDeviceFingerprint getDeviceById(Long deviceId);
+    @Transactional(readOnly = true)
+    List<UserDeviceResponse> listUserDevices(Long userId, String currentDeviceFingerprint);
 
-    /**
-     * Marks a device as untrusted for a user.
-     *
-     * @param userId      the ID of the user
-     * @param fingerprint the fingerprint of the device to untrust
-     */
-    void untrustDevice(long userId, String fingerprint);
+
+//    /**
+//     * Gets all devices for a user.
+//     *
+//     * @param user the user
+//     * @return a list of device fingerprints
+//     */
+//    List<UserDeviceFingerprint> getUserDevices(User user);
+//
+//    /**
+//     * Gets a device by its ID.
+//     *
+//     * @param deviceId the device ID
+//     * @return the device fingerprint, or null if not found
+//     */
+//    UserDeviceFingerprint getDeviceById(Long deviceId);
+//
+//    /**
+//     * Marks a device as untrusted for a user.
+//     *
+//     * @param userId      the ID of the user
+//     * @param fingerprint the fingerprint of the device to untrust
+//     */
+//    void untrustDevice(long userId, String fingerprint);
 }
