@@ -15,6 +15,7 @@ import me.amlu.authserver.role.repository.RoleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -80,6 +81,7 @@ public class RoleService {
      * @return The created role
      */
     @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     public Role createRole(Role role) {
         // If parent is specified, update the path
         if (role.getParent() != null) {
@@ -105,6 +107,7 @@ public class RoleService {
      * @return true if successful, false otherwise
      */
     @Transactional
+    @PreAuthorize("hasAnyRole('ROLE_ADMIN', 'ROLE_SUPER_ADMIN', 'ROLE_ROOT')")
     public boolean addChildRole(String parentName, String childName) {
         Optional<Role> parentOpt = findByName(parentName);
         Optional<Role> childOpt = findByName(childName);
