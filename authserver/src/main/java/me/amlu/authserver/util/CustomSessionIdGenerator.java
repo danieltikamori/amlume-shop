@@ -10,7 +10,7 @@
 
 package me.amlu.authserver.util;
 
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.session.SessionIdGenerator;
 
 import java.nio.ByteBuffer;
