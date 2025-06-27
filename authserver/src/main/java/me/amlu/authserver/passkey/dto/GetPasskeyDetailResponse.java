@@ -33,7 +33,7 @@ public record GetPasskeyDetailResponse(
     // Example of a compact constructor for validation (if needed):
     /*
     public GetPasskeyDetailResponse {
-        if (credentialId == null || credentialId.isBlank()) {
+        if (StringUtils.isBlank(credentialId)) {
             throw new IllegalArgumentException("credentialId cannot be blank");
         }
         // Add other validations if necessary

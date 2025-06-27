@@ -34,7 +34,7 @@ import org.springframework.security.web.webauthn.management.WebAuthnRelyingParty
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
-
+import org.springframework.security.web.webauthn.api.ImmutableAuthenticationExtensionsClientOutputs;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Duration;
 import java.util.*;
@@ -125,52 +125,66 @@ public class PasskeyServiceImpl implements PasskeyService {
         }
 
         final User finalCurrentUser = currentUser;
+        AuthenticatorSelectionCriteria.AuthenticatorSelectionCriteriaBuilder authSelectorBuilder = AuthenticatorSelectionCriteria.builder()
+                .residentKey(ResidentKeyRequirement.PREFERRED);
+        // ... (your logic for userVerification based on roles) ...
+        AuthenticatorSelectionCriteria authenticatorSelection = authSelectorBuilder.build();
+
+        PublicKeyCredentialCreationOptionsRequest request = new CustomCreationOptionsRequest(
+                currentAuthentication,
+                userEntity,
+                excludeCredentials,
+                PASSKEY_RELYING_PARTY_TIMEOUT,
+                AttestationConveyancePreference.INDIRECT,
+                new ImmutableAuthenticationExtensionsClientInputs(), // Or your actual extensions
+                authenticatorSelection
+        );
 
         // Implement PublicKeyCredentialCreationOptionsRequest directly
-        PublicKeyCredentialCreationOptionsRequest request = new PublicKeyCredentialCreationOptionsRequest() {
-            @Override
-            public Authentication getAuthentication() {
-                return currentAuthentication;
-            }
-
-            public PublicKeyCredentialUserEntity getUserEntity() {
-                return userEntity;
-            }
-
-            public List<PublicKeyCredentialDescriptor> getExcludeCredentials() {
-                return excludeCredentials;
-            }
-
-            public AuthenticatorSelectionCriteria getAuthenticatorSelection() {
-                AuthenticatorSelectionCriteria.AuthenticatorSelectionCriteriaBuilder builder = AuthenticatorSelectionCriteria.builder()
-                        .residentKey(ResidentKeyRequirement.PREFERRED);
-
-                boolean isPrivilegedUser = finalCurrentUser.getAuthorities().stream()
-                        .map(GrantedAuthority::getAuthority)
-                        .anyMatch(roleName -> "ROLE_ADMIN".equals(roleName) || "ROLE_SUPER_ADMIN".equals(roleName));
-
-                if (isPrivilegedUser) {
-                    log.debug("Privileged user ({}): Applying stricter authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
-                    builder.userVerification(UserVerificationRequirement.REQUIRED);
-                } else {
-                    log.debug("Standard user ({}): Applying preferred authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
-                    builder.userVerification(UserVerificationRequirement.PREFERRED);
-                }
-                return builder.build();
-            }
-
-            public AttestationConveyancePreference getAttestation() {
-                return AttestationConveyancePreference.INDIRECT;
-            }
-
-            public Map<String, Object> getExtensions() {
-                return Collections.emptyMap();
-            }
-
-            public Duration getTimeout() {
-                return PASSKEY_RELYING_PARTY_TIMEOUT;
-            }
-        };
+//        PublicKeyCredentialCreationOptionsRequest request = new PublicKeyCredentialCreationOptionsRequest() {
+//            @Override
+//            public Authentication getAuthentication() {
+//                return currentAuthentication;
+//            }
+//
+//            public PublicKeyCredentialUserEntity getUserEntity() {
+//                return userEntity;
+//            }
+//
+//            public List<PublicKeyCredentialDescriptor> getExcludeCredentials() {
+//                return excludeCredentials;
+//            }
+//
+//            public AuthenticatorSelectionCriteria getAuthenticatorSelection() {
+//                AuthenticatorSelectionCriteria.AuthenticatorSelectionCriteriaBuilder builder = AuthenticatorSelectionCriteria.builder()
+//                        .residentKey(ResidentKeyRequirement.PREFERRED);
+//
+//                boolean isPrivilegedUser = finalCurrentUser.getAuthorities().stream()
+//                        .map(GrantedAuthority::getAuthority)
+//                        .anyMatch(roleName -> "ROLE_ADMIN".equals(roleName) || "ROLE_SUPER_ADMIN".equals(roleName));
+//
+//                if (isPrivilegedUser) {
+//                    log.debug("Privileged user ({}): Applying stricter authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
+//                    builder.userVerification(UserVerificationRequirement.REQUIRED);
+//                } else {
+//                    log.debug("Standard user ({}): Applying preferred authenticator selection for passkey registration.", finalCurrentUser.getEmail().getValue());
+//                    builder.userVerification(UserVerificationRequirement.PREFERRED);
+//                }
+//                return builder.build();
+//            }
+//
+//            public AttestationConveyancePreference getAttestation() {
+//                return AttestationConveyancePreference.INDIRECT;
+//            }
+//
+//            public Map<String, Object> getExtensions() {
+//                return Collections.emptyMap();
+//            }
+//
+//            public Duration getTimeout() {
+//                return PASSKEY_RELYING_PARTY_TIMEOUT;
+//            }
+//        };
 
         PublicKeyCredentialCreationOptions options = relyingPartyOperations.createPublicKeyCredentialCreationOptions(request);
 
@@ -221,13 +235,44 @@ public class PasskeyServiceImpl implements PasskeyService {
 
             // Handle clientExtensionResults using ObjectMapper
             AuthenticationExtensionsClientOutputs clientExtOutputs = null;
-            if (registrationRequest.clientExtensionResults() != null && !registrationRequest.clientExtensionResults().isEmpty()) {
-                try {
-                    String extensionsJson = webAuthnApiMapper.writeValueAsString(registrationRequest.clientExtensionResults());
-                    clientExtOutputs = webAuthnApiMapper.readValue(extensionsJson, ImmutableAuthenticationExtensionsClientOutputs.class);
-                } catch (JsonProcessingException e) {
-                    log.warn("Failed to process clientExtensionResults for user {}: {}. Proceeding without extensions.", currentUser.getEmail().getValue(), e.getMessage());
+            AuthenticationExtensionsClientOutputs receivedClientExtensions = registrationRequest.clientExtensionResults();
+
+            if (receivedClientExtensions != null) {
+                ImmutableAuthenticationExtensionsClientOutputs processedExtensions = null;
+                if (receivedClientExtensions instanceof ImmutableAuthenticationExtensionsClientOutputs castedImmutable) {
+                    // If it's already the correct concrete type, use it directly
+                    processedExtensions = castedImmutable;
+                } else {
+                    // If it's not the expected concrete type, attempt to convert it.
+                    // This handles cases where it might be a different implementation of
+                    // AuthenticationExtensionsClientOutputs, though less common from Jackson deserialization
+                    // with WebauthnJackson2Module.
+                    log.warn("clientExtensionResults is of type {}, not ImmutableAuthenticationExtensionsClientOutputs. Attempting conversion.",
+                            receivedClientExtensions.getClass().getName());
+                    try {
+                        String extensionsJson = webAuthnApiMapper.writeValueAsString(receivedClientExtensions);
+                        // When deserializing, Jackson will use the constructor that takes List<AuthenticationExtensionsClientOutput<?>>
+                        // if the JSON structure matches (e.g., an array of output objects).
+                        processedExtensions = webAuthnApiMapper.readValue(extensionsJson, ImmutableAuthenticationExtensionsClientOutputs.class);
+                    } catch (JsonProcessingException e) {
+                        log.warn("Failed to process/convert clientExtensionResults (type: {}) for user {}: {}. Proceeding without extensions.",
+                                receivedClientExtensions.getClass().getName(), currentUser.getEmail().getValue(), e.getMessage());
+                        // processedExtensions will remain null
+                    }
                 }
+
+                // Now, check the (potentially converted) processedExtensions
+                if (processedExtensions != null) {
+                    List<AuthenticationExtensionsClientOutput<?>> outputsList = processedExtensions.getOutputs();
+                    if (outputsList != null && !outputsList.isEmpty()) {
+                        clientExtOutputs = processedExtensions; // Use the processed, non-empty extensions
+                        log.debug("Successfully processed and will use non-empty clientExtensionResults (based on getOutputs list).");
+                    } else if (receivedClientExtensions != null) { // Log only if there was something to begin with
+                        log.debug("Received clientExtensionResults were processed but resulted in an empty/null outputs list, or processing failed.");
+                    }
+                }
+            } else {
+                log.debug("clientExtensionResults in registrationRequest is null.");
             }
 
             // Store the fully constructed credential in a final variable to be used in the anonymous class
@@ -408,4 +453,59 @@ public class PasskeyServiceImpl implements PasskeyService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
+
+    // Example of extracted class
+    private static class CustomCreationOptionsRequest implements PublicKeyCredentialCreationOptionsRequest {
+        private final Authentication authentication;
+        private final PublicKeyCredentialUserEntity userEntity;
+        private final List<PublicKeyCredentialDescriptor> excludeCredentials;
+        private final Duration timeout;
+        private final AttestationConveyancePreference attestation;
+        private final AuthenticationExtensionsClientInputs extensions;
+        private final AuthenticatorSelectionCriteria authenticatorSelection;
+
+        public CustomCreationOptionsRequest(Authentication authentication, PublicKeyCredentialUserEntity userEntity,
+                                            List<PublicKeyCredentialDescriptor> excludeCredentials,
+                                            Duration timeout, AttestationConveyancePreference attestation,
+                                            AuthenticationExtensionsClientInputs extensions,
+                                            AuthenticatorSelectionCriteria authenticatorSelection) {
+            this.authentication = authentication;
+            this.userEntity = userEntity;
+            this.excludeCredentials = excludeCredentials;
+            this.timeout = timeout;
+            this.attestation = attestation;
+            this.extensions = extensions;
+            this.authenticatorSelection = authenticatorSelection;
+        }
+
+
+        public Authentication getAuthentication() {
+            return authentication;
+        }
+
+        public PublicKeyCredentialUserEntity getUserEntity() {
+            return userEntity;
+        }
+
+        public List<PublicKeyCredentialDescriptor> getExcludeCredentials() {
+            return excludeCredentials;
+        }
+
+        public AuthenticatorSelectionCriteria getAuthenticatorSelection() {
+            return authenticatorSelection;
+        }
+
+        public AttestationConveyancePreference getAttestation() {
+            return attestation;
+        }
+
+        public Map<String, Object> getExtensions() {
+            return extensions != null ? (Map<String, Object>) extensions.getInputs() : Collections.emptyMap();
+        } // Ensure it returns Map<String, Object>
+
+        public Duration getTimeout() {
+            return timeout;
+        }
+    }
+
 }

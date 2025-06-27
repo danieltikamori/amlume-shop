@@ -202,7 +202,7 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
         User userToSave = userRepository.findByExternalId(externalIdFromWebAuthnEntity)
                 .map(existingUser -> {
                     // This user was found by the externalId/userHandle that WebAuthn library is using.
-                    log.debug("Updating existing user (ID: {}) for WebAuthn externalId: {}", existingUser.getId(), externalIdFromWebAuthnEntity);
+                    log.debug("Found and Updating existing user (ID: {}) for WebAuthn externalId: {}", existingUser.getId(), externalIdFromWebAuthnEntity);
 
                     // Update display name if provided and different.
                     // The email (existingUser.getEmail()) should NOT be changed by webAuthnUserEntity.getName() here.
@@ -232,25 +232,44 @@ public class DbPublicKeyCredentialUserEntityRepository implements PublicKeyCrede
 
                     // 2. If no user found by externalId, try to find by email (nameFromWebAuthnEntity)
                     // This covers the case where an existing user (email/password, OAuth2) is adding their first passkey.
-
                     if (EmailAddress.isValid(nameFromWebAuthnEntity)) {
-                        // Scenario 1: Passkey-first registration. Create a new user.
-                        log.info("No existing user found with externalId: {}. 'name' field ('{}') is a valid email. Creating new user.",
-                                externalIdFromWebAuthnEntity, nameFromWebAuthnEntity);
-                        User newUser = User.builder()
-                                // ... populate fields from webAuthnUserEntity and nameFromWebAuthnEntity
-                                .email(new EmailAddress(nameFromWebAuthnEntity))
-                                .externalId(externalIdFromWebAuthnEntity) // Set the externalId here
-                                .build();
-                        newUser.enableAccount();
-                        authorityRepository.findByAuthority("ROLE_USER").ifPresent(newUser::assignAuthority);
-                        return newUser;
+                        return userRepository.findByEmail_Value(nameFromWebAuthnEntity)
+                                .map(existingUserByEmail -> {
+                                    log.info("Found existing user (ID: {}) by email '{}'. Associating WebAuthn externalId '{}'.",
+                                            existingUserByEmail.getId(), nameFromWebAuthnEntity, externalIdFromWebAuthnEntity);
+                                    // Set the externalId for this existing user
+                                    existingUserByEmail.setExternalId(externalIdFromWebAuthnEntity); // Requires setExternalId
+                                    // Update display name if provided
+                                    if (StringUtils.hasText(displayNameFromWebAuthnEntity) && !displayNameFromWebAuthnEntity.equals(existingUserByEmail.getDisplayableFullName())) {
+                                        String[] nameParts = parseFullName(displayNameFromWebAuthnEntity);
+                                        existingUserByEmail.updateGivenName(nameParts[0]);
+                                        existingUserByEmail.updateMiddleName(nameParts[1]);
+                                        existingUserByEmail.updateSurname(nameParts[2]);
+                                    }
+                                    return existingUserByEmail;
+                                })
+                                .orElseGet(() -> {
+                                    // 3. If still no user found (neither by externalId nor by email), create a brand new user.
+                                    log.info("No existing user found by externalId or email. Creating new user for email '{}' with externalId '{}'.",
+                                            nameFromWebAuthnEntity, externalIdFromWebAuthnEntity);
+                                    User newUser = User.builder()
+                                            .email(new EmailAddress(nameFromWebAuthnEntity))
+                                            .externalId(externalIdFromWebAuthnEntity)
+                                            .givenName(parseFullName(displayNameFromWebAuthnEntity)[0]) // Try to parse from display name
+                                            .middleName(parseFullName(displayNameFromWebAuthnEntity)[1])
+                                            .surname(parseFullName(displayNameFromWebAuthnEntity)[2])
+                                            .build();
+                                    newUser.enableAccount();
+                                    authorityRepository.findByAuthority("ROLE_USER").ifPresent(newUser::assignAuthority);
+                                    return newUser;
+                                });
                     } else {
-                        // Scenario 2: nameFromWebAuthnEntity is NOT a valid email (e.g., GitHub ID).
-                        // This is an error. The user *should* already exist and be identifiable by externalId.
+                        // nameFromWebAuthnEntity is NOT a valid email (e.g., GitHub ID, or just a username).
+                        // This implies the user *should* have been provisioned via OAuth2/OIDC first,
+                        // and their externalId should have been set. If we reach here, it's an error.
                         log.error("Cannot create or find user: The 'name' field ('{}') from PublicKeyCredentialUserEntity is not a valid email, " +
                                         "and no existing user found with the WebAuthn-provided externalId '{}'. " +
-                                        "This indicates an issue in the WebAuthn flow when adding a passkey to an existing OAuth2/OIDC user, " +
+                                        "This indicates an issue in the WebAuthn flow (e.g., trying to add passkey to non-existent OAuth2/OIDC user) " +
                                         "or a misconfiguration.",
                                 nameFromWebAuthnEntity, externalIdFromWebAuthnEntity);
                         throw new IllegalStateException("Failed to process WebAuthn user entity: 'name' field ('" + nameFromWebAuthnEntity +

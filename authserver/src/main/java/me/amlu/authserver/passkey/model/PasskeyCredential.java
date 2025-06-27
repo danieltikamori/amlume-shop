@@ -166,6 +166,11 @@ public class PasskeyCredential extends AbstractAuditableEntity implements Serial
         return userHandle;
     }
 
+    /**
+     * Ensure that whenever PasskeyCredential is created or updated, its userHandle field is set to user.getExternalId()
+     *
+     * @param userHandle it is the User.externalId as Base64URL string
+     */
     public void setUserHandle(String userHandle) {
         this.userHandle = userHandle;
     }
