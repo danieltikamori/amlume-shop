@@ -198,7 +198,7 @@ public class MaxMindGeoService {
     /**
      * Checks if a given IP address is located in a specific country.
      *
-     * @param ip The IP address as a string.
+     * @param ip          The IP address as a string.
      * @param countryCode The two-letter ISO country code to check against (e.g., "US").
      * @return true if the IP address is in the specified country, false otherwise (including errors or database unavailability).
      * @throws IllegalArgumentException if the provided IP string is invalid.
@@ -225,7 +225,7 @@ public class MaxMindGeoService {
      * @param ip1 The first IP address as a string.
      * @param ip2 The second IP address as a string.
      * @return The distance in kilometers, or -1 if geolocation data is unavailable for either IP
-     *         or an error occurs during calculation.
+     * or an error occurs during calculation.
      */
     public double getDistance(String ip1, String ip2) {
         try {
@@ -253,9 +253,9 @@ public class MaxMindGeoService {
      * Calculates the great-circle distance between two geographical points specified by their
      * latitude and longitude coordinates. Uses the Haversine formula.
      *
-     * @param lastLocationLatitude Latitude of the first point.
-     * @param lastLocationLongitude Longitude of the first point.
-     * @param currentLocationLatitude Latitude of the second point.
+     * @param lastLocationLatitude     Latitude of the first point.
+     * @param lastLocationLongitude    Longitude of the first point.
+     * @param currentLocationLatitude  Latitude of the second point.
      * @param currentLocationLongitude Longitude of the second point.
      * @return The distance in kilometers, or -1 if an error occurs during calculation.
      */
@@ -305,9 +305,9 @@ public class MaxMindGeoService {
      *
      * @param ipAddress The {@link InetAddress} for which to retrieve ASN information.
      * @return An {@link AsnResponse} object containing ASN details, or null if the ASN database
-     *         is unavailable, the IP is not found in the database, or an error occurs.
+     * is unavailable, the IP is not found in the database, or an error occurs.
      * @implNote The ASN database reader is initialized lazily here to avoid loading it if not needed,
-     *           as it's less frequently used than city/country lookups.
+     * as it's less frequently used than city/country lookups.
      */
     public AsnResponse getAsn(InetAddress ipAddress) {
         // Lazy initialization of asnReader
@@ -334,6 +334,32 @@ public class MaxMindGeoService {
             return null; // Return null on invalid database
         } catch (IOException | GeoIp2Exception e) {
             log.error("Error getting ASN for IP: {}", ipAddress, e);
+            return null; // Return null on error
+        }
+    }
+
+    /**
+     * Retrieves city-level geolocation information for a given IP address.
+     *
+     * @param ipAddress The {@link InetAddress} for which to retrieve city information.
+     * @return A {@link CityResponse} object containing city details, or {@code null} if the city database
+     * is unavailable, the IP is not found in the database, or an error occurs.
+     */
+    public CityResponse getCity(InetAddress ipAddress) {
+        if (this.cityReader == null) {
+            log.warn("GeoIP City database unavailable, returning null for IP {}", ipAddress);
+            return null; // Return null if city reader is not available
+        }
+        try {
+            return this.cityReader.city(ipAddress);
+        } catch (AddressNotFoundException e) {
+            log.debug("City not found in database for IP: {}", ipAddress);
+            return null; // Expected case: IP valid but not in DB
+        } catch (InvalidDatabaseException e) {
+            log.error("Invalid GeoIP2 City database configured.", e);
+            return null; // Return null on invalid database
+        } catch (IOException | GeoIp2Exception e) {
+            log.error("Error getting city for IP: {}", ipAddress, e);
             return null; // Return null on error
         }
     }
