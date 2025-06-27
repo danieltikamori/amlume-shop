@@ -10,7 +10,7 @@
 
 package me.amlu.authserver.health;
 
-import me.amlu.authserver.service.ResilientDatabaseService;
+import me.amlu.authserver.resilience.service.ResilientDatabaseService;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.stereotype.Component;
