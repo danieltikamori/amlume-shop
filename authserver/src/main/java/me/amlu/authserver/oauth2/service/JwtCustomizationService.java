@@ -13,13 +13,16 @@ package me.amlu.authserver.oauth2.service;
 import io.micrometer.core.annotation.Timed;
 import me.amlu.authserver.user.model.User;
 import me.amlu.authserver.user.repository.UserRepository;
+import org.checkerframework.common.returnsreceiver.qual.This;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -34,9 +37,11 @@ public class JwtCustomizationService {
 
     private static final Logger log = LoggerFactory.getLogger(JwtCustomizationService.class);
     private final UserRepository userRepository;
+    private final WebClient amlumeShopWebClient; // Configured to talk to amlume-shop
 
-    public JwtCustomizationService(UserRepository userRepository) {
+    public JwtCustomizationService(UserRepository userRepository, WebClient amlumeShopWebClient) {
         this.userRepository = userRepository;
+        this.amlumeShopWebClient = amlumeShopWebClient;
     }
 
     /**
@@ -49,6 +54,24 @@ public class JwtCustomizationService {
     public void customizeToken(JwtEncodingContext context) {
         if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
             log.debug("Customizing JWT access token for principal: {}", context.getPrincipal().getName());
+
+            // This part handles user-based grants
+            if (!AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
+                String username = context.getPrincipal().getName();
+
+                // 1. Add standard user claims from authserver's own User entity
+                userRepository.findByEmail_Value(username).ifPresent(user -> {
+                    context.getClaims().claims(claims -> {
+                        putUserSpecificClaims(claims, user); // Your existing method
+                    });
+                });
+
+                // 2. Fetch and add business roles from amlume-shop
+                // In a real scenario, this would be an API call or a read from a shared DB.
+                // Let's simulate fetching them.
+                Set<String> businessRoles = fetchBusinessRolesForUser(username); // Simulated method call
+            }
+
             context.getClaims().claims((claims) -> {
                 if (AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
                     // For client_credentials, scopes often map to roles/permissions.
@@ -99,6 +122,12 @@ public class JwtCustomizationService {
                         claims.put("authorities", Collections.unmodifiableSet(authoritiesAndPermissions));
                         log.debug("Added 'authorities' (roles and permissions) for user {}: {}", appUser.getEmail().getValue(), authoritiesAndPermissions);
 
+                        // Add the business roles to a custom claim
+                        // This assumes businessRoles was fetched earlier in the method.
+                        Set<String> businessRoles = fetchBusinessRolesForUser(appUser.getUsername()); // Re-fetch or pass from outer scope
+                        claims.put("business_roles", businessRoles);
+                        log.debug("Added custom 'business_roles' claim for user {}: {}", appUser.getUsername(), businessRoles);
+
                     } else {
                         // If appUser is still null, add only basic authorities from the Authentication principal
                         // These would typically just be roles like "ROLE_USER"
@@ -110,6 +139,36 @@ public class JwtCustomizationService {
                     }
                 }
             });
+        }
+    }
+
+    // API Call - requires WebClient and a DTO from amlume-shop
+    private Set<String> fetchBusinessRolesForUser(String username) {
+        // In a real implementation, 'username' here would be the email or authServerSubjectId
+        // that amlume-shop uses to identify its users.
+        // You'd need to map this 'username' to the correct identifier for amlume-shop.
+        // For example, if amlume-shop identifies users by authServerSubjectId:
+        User authserverUser = userRepository.findByEmail_Value(username).orElse(null);
+        if (authserverUser == null || authserverUser.getExternalId() == null) {
+            log.warn("Authserver user not found or has no externalId for business role fetch: {}", username);
+            return Collections.emptySet();
+        }
+        String amlumeShopUserId = authserverUser.getExternalId(); // This is the authServerSubjectId in amlume-shop
+
+        // amlume-shop needs an endpoint like /api/internal/users/{authServerSubjectId}/roles
+        // that is secured for M2M communication (e.g., using @PreAuthorize("hasAuthority('SCOPE_internal_roles_read')")
+        // and validating the client credentials token from authserver).
+        try {
+            return amlumeShopWebClient.get()
+                    .uri("/api/internal/users/{id}/roles", amlumeShopUserId)
+//                      .attributes(clientRegistrationId("amlume-shop-client-credentials")) // If using client credentials
+                    .retrieve()
+                    .bodyToMono(new ParameterizedTypeReference<Set<String>>() {
+                    })
+                    .block(); // Use block() for synchronous behavior in this context, or refactor to reactive
+        } catch (Exception e) {
+            log.error("Failed to fetch business roles from amlume-shop for user {}: {}", username, e.getMessage());
+            return Collections.emptySet(); // Fail-safe
         }
     }
 
@@ -125,11 +184,19 @@ public class JwtCustomizationService {
         claims.put("given_name", appUser.getGivenName());
         // Ensure surname is not null if it's encrypted and might return null from getter if not decrypted
         if (appUser.getSurname() != null) {
-            claims.put("family_name", appUser.getSurname());
+            claims.put("family_name", appUser.getSurname()); // family_name is according to OIDC standard
         }
         claims.put("full_name", appUser.getDisplayableFullName());
         claims.put("nickname", appUser.getNickname());
         claims.put("email", appUser.getEmail().getValue());
         claims.put("email_verified", appUser.getAccountStatus().isEmailVerified()); // Assuming AccountStatus has this
+
+        // --- Add device fingerprint claim ---
+        if (appUser.isDeviceFingerprintingEnabled() && appUser.getDeviceFingerprintingInfo().getCurrentFingerprint() != null) {
+            claims.put("device_fingerprint", appUser.getDeviceFingerprintingInfo().getCurrentFingerprint());
+            log.debug("Added 'device_fingerprint' claim for user {}: {}", appUser.getEmail().getValue(), appUser.getDeviceFingerprintingInfo().getCurrentFingerprint());
+        } else {
+            log.debug("Device fingerprinting not enabled or current fingerprint not found for user {}. 'device_fingerprint' claim not added.", appUser.getEmail().getValue());
+        }
     }
 }

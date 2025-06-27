@@ -10,15 +10,18 @@
 
 package me.amlu.authserver.oauth2.repository;
 
+import jakarta.validation.constraints.NotBlank;
 import me.amlu.authserver.oauth2.model.OAuth2AuthorizationConsent;
 import me.amlu.authserver.user.model.vo.OAuth2AuthorizationConsentId;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.access.annotation.Secured;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
+@NullMarked
 @Secured("ROLE_USER")
 @Repository
 public interface OAuth2AuthorizationConsentRepository extends JpaRepository<OAuth2AuthorizationConsent, OAuth2AuthorizationConsentId> {
@@ -52,6 +55,6 @@ public interface OAuth2AuthorizationConsentRepository extends JpaRepository<OAut
     void deleteByIdRegisteredClientIdAndIdPrincipalName(String registeredClientId, String principalName);
 
     //    @Secured({"ROLE_ADMIN", "ROLE_SUPER_ADMIN", "ROLE_ROOT"})
-    void deleteByIdPrincipalName(@NonNull String principalName);
+    void deleteByIdPrincipalName(@NotBlank String principalName);
 
 }

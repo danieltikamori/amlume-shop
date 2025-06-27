@@ -145,6 +145,19 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
                     updated = true;
                 }
 
+                // --- REMOVE OR COMMENT OUT THIS BLOCK ---
+                // This block is what sets the externalId from the OAuth2 provider.
+                // By removing it, the original system-generated externalId will be preserved
+//                // If the user doesn't have an externalId, set it from the OAuth2 subject
+//                // The 'sub' claim from the OAuth2 provider is a good candidate for externalId.
+//                // This assumes the OAuth2 provider's 'sub' is stable and unique.
+//                String authProviderSubjectId = oauth2User.getName(); // This is typically the 'sub' claim
+//                if (localUser.getExternalId().isBlank() && StringUtils.hasText(authProviderSubjectId)) {
+//                    localUser.setExternalId(authProviderSubjectId); // Requires setExternalId on User
+//                    updated = true;
+//                    log.info("Set externalId for existing user {} to {} from OAuth2 provider.", localUser.getEmail().getValue(), authProviderSubjectId);
+//                }
+
                 if (updated) {
                     localUser = userRepository.save(localUser);
                     log.info("Updated profile details for user ID {} from provider '{}'", localUser.getId(), userRequest.getClientRegistration().getRegistrationId());
@@ -215,13 +228,15 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             }
         }
 
+        // ATTENTION: Avoid placeholder email
+        // as users with such emails cannot receive password-reset emails or other notifications.
         // Fallback to placeholder if no real email found
-        String login = (String) attributes.get("login"); // e.g., GitHub username
-        if (StringUtils.hasText(login)) {
-            String placeholderEmail = login + "@" + registrationId + ".placeholder.authserver"; // More distinct placeholder
-            log.warn("Using placeholder email for provider '{}', login '{}': {}", registrationId, login, placeholderEmail);
-            return placeholderEmail;
-        }
+//        String login = (String) attributes.get("login"); // e.g., GitHub username
+//        if (StringUtils.hasText(login)) {
+//            String placeholderEmail = login + "@" + registrationId + ".placeholder.authserver"; // More distinct placeholder
+//            log.warn("Using placeholder email for provider '{}', login '{}': {}", registrationId, login, placeholderEmail);
+//            return placeholderEmail;
+//        }
 
         return null; // No email could be determined
     }
