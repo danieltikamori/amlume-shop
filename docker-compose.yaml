@@ -12,6 +12,15 @@ services:
     environment:
       VAULT_ADDR: http://vault:8200 # Internal address
 
+  # PostgreSQL for user data and role hierarchies
+  postgres:
+    image: postgres:17.5-bookworm
+    container_name: amlume-auth-postgres
+    networks:
+      - amlume-shop-network
+    # No ports, volumes, or env vars here - defined in overrides
+
+
   # --- Auth Database Service Placeholder ---
   mysql-auth:
     image: bitnami/percona-mysql # Or your preferred image/version
