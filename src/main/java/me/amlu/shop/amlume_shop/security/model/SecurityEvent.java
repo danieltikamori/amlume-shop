@@ -35,7 +35,7 @@ public class SecurityEvent {
 
     @Column(name = "user_id")
     @ToString.Exclude
-    private String userId;
+    private Long userId;
 
     @Column(nullable = false, name = "username")
     @ToString.Exclude

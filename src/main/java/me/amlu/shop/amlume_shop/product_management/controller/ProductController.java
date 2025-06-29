@@ -34,7 +34,7 @@ public class ProductController {
     }
 
 
-    @PostMapping("v1/admin/categories/{categoryId}/product")
+    @PostMapping("admin/categories/{categoryId}/product")
     public ResponseEntity<CreateProductRequest> addProduct(@Valid @RequestBody CreateProductRequest productDTO, @PathVariable Long categoryId) throws ProductAlreadyExistsException {
 
         CreateProductRequest savedProductDTO = productService.addProduct(productDTO, categoryId);
@@ -42,7 +42,7 @@ public class ProductController {
 
     }
 
-    @GetMapping("v1/public/products")
+    @GetMapping("public/products")
     public ResponseEntity<GetProductResponse> getAllProducts(
             @RequestParam(value = "pageNumber", defaultValue = Constants.PAGE_NUMBER, required = false) int pageNumber,
             @RequestParam(value = "pageSize", defaultValue = Constants.PAGE_SIZE, required = false) int pageSize,
@@ -55,7 +55,7 @@ public class ProductController {
 
     }
 
-    @GetMapping("v1/public/categories/{categoryId}/products")
+    @GetMapping("public/categories/{categoryId}/products")
     public ResponseEntity<GetProductResponse> getProductsByCategory(@PathVariable Long categoryId,
                                                                     @RequestParam(value = "pageNumber", defaultValue = Constants.PAGE_NUMBER, required = false) int pageNumber,
                                                                     @RequestParam(value = "pageSize", defaultValue = Constants.PAGE_SIZE, required = false) int pageSize,
@@ -67,7 +67,7 @@ public class ProductController {
 
     }
 
-    @GetMapping("v1/public/products/keyword/{keyword}")
+    @GetMapping("public/products/keyword/{keyword}")
     public ResponseEntity<GetProductResponse> getProductsByKeyword(@PathVariable String keyword,
                                                                    @RequestParam(value = "pageNumber", defaultValue = Constants.PAGE_NUMBER, required = false) int pageNumber,
                                                                    @RequestParam(value = "pageSize", defaultValue = Constants.PAGE_SIZE, required = false) int pageSize,
@@ -78,21 +78,21 @@ public class ProductController {
         return new ResponseEntity<>(getProductResponse, null, HttpStatus.FOUND);
     }
 
-    @PutMapping("v1/admin/products/{productId}")
+    @PutMapping("admin/products/{productId}")
     public ResponseEntity<CreateProductRequest> updateProduct(@Valid @RequestBody CreateProductRequest productDTO, @PathVariable Long productId) {
 
         CreateProductRequest updatedProductDTO = productService.updateProduct(productDTO, productId);
         return new ResponseEntity<>(updatedProductDTO, null, HttpStatus.OK);
     }
 
-    @DeleteMapping("v1/admin/products/{productId}")
+    @DeleteMapping("admin/products/{productId}")
     public ResponseEntity<CreateProductRequest> deleteProduct(@PathVariable Long productId) {
 
         CreateProductRequest deletedProduct = productService.deleteProduct(productId);
         return new ResponseEntity<>(deletedProduct, null, HttpStatus.OK);
     }
 
-    @PutMapping("v1/admin/products/{productId}/image")
+    @PutMapping("admin/products/{productId}/image")
     public ResponseEntity<CreateProductRequest> updateProductImage(@PathVariable Long productId, @RequestParam("image") MultipartFile image) throws IOException {
 
         CreateProductRequest updatedProductDTO = productService.updateProductImage(productId, image);

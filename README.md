@@ -112,6 +112,65 @@ This project is the Spring Boot backend application for Amlume Shop. It provides
 
 The application will start, connect to Valkey/Redis and the database, and be available (typically on port 8080, unless configured otherwise). Ensure Spring Authorization Server is also running and accessible if it's deployed separately.
 
+## Certificates
+
+### Overview
+
+Using truststore to store certificates, preferably in pem format.
+
+MySQL, Valkey, Vault (TLS is not possible in dev/local mode), etc.
+
+### Importing certificates to truststore.jks or p12 (PKCS12)
+
+The central-truststore.jks file (located at authserver/config/central-truststore.jks if running from IDE, or
+authserver/src/main/resources/config/central-truststore.jks if packaged) must trust the certificate that your Valkey
+server is presenting (which is valkey_certificate.pem from your ./certificates/valkey/ directory).
+•If valkey_certificate.pem is self-signed, you need to import this certificate (or its CA certificate if you created
+one) into central-truststore.jks.
+•You can use keytool for this. For example, if valkey_certificate.pem is self-signed:
+
+```shell-session
+keytool -importcert -alias valkey_server_cert -file ./certificates/valkey/valkey_certificate.pem -keystore ./authserver/src/main/resources/config/central-truststore.jks -storepass your_truststore_password-pure -noprompt
+```
+
+## Docker
+
+### Overview
+
+We are using Base docker-compose.yml where the override(local) and prod are derived.
+
+Starting docker compose:
+
+```shell-session
+ docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache vault-seeder vault-seeder-authserver
+```
+
+Stopping, removing orphans and volumes:
+
+```shell-session
+docker compose -f docker-compose.yaml -f docker-compose.override.yml down --remove-orphans --volumes
+```
+
+### Docker troubleshooting
+
+#### Checking logs
+
+Valkey container example:
+
+```shell-session
+docker logs valkey-cache
+```
+
+## Valkey (Redis fork)
+
+### Overview
+
+#### Manually testing Valkey connection
+
+```shell-session
+redis-cli -h localhost -p 6379 --tls --cacert ./certificates/valkey/valkey_certificate.pem -a your-valkey-password ping
+```
+
 ## Configuration Reference
 
 Key configuration properties are typically found in `src/main/resources/application.yml` (or `.properties`). Pay close attention to:

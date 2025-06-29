@@ -1,0 +1,58 @@
+# src/main/resources/bootstrap.yml
+
+spring:
+  application:
+    name: amlume-shop # Ensure this matches application.yml and Vault paths if used
+  cloud:
+    vault:
+      enabled: true
+      fail-fast: false # Good for development, consider 'true' for production startup checks
+      uri: https://vault:8200 # Use Docker service name (assuming HTTP for local dev Vault)
+      # Change to https://vault:8200 if you configured TLS for Vault
+      connection-timeout: 5000
+      read-timeout: 15000
+
+      # --- Authentication (AppRole Recommended) ---
+      authentication: TOKEN
+      token: "token"
+
+      # Uncomment and configure if using AppRole authentication
+      #      authentication: TOKEN
+      #      app-role:
+      #        # These MUST be provided securely, e.g., via environment variables
+      #        # DO NOT HARDCODE HERE
+      #        role-id: ${VAULT_ROLE_ID}
+      #        secret-id: ${VAULT_SECRET_ID}
+      #        # Optional: Only if your AppRole auth path or role name isn't the default
+      #        # role: "amlume-shop-role"
+      #        # app-role-path: "approle"
+
+      # --- KV Secrets Engine Configuration ---
+      kv:
+        enabled: true
+        backend: secret # The mount path of your KV v2 engine in Vault
+        # application-name: ${spring.application.name} # Uses spring.application.name by default
+        default-context: "local" # Specifies the sub-path under application-name (e.g., secret/amlume-shop/local/*)
+        # profile-separator: '/' # Usually default is fine
+
+      # --- Optional: TLS Configuration (if Vault uses HTTPS) ---
+      # ssl:
+      #   # If using a truststore containing Vault's CA or self-signed cert:
+      #   trust-store: file:/path/to/your/vault-truststore.jks # Or classpath:vault-truststore.jks
+      #   trust-store-password: ${VAULT_TRUSTSTORE_PASSWORD} # Load securely
+      #
+      #   # If using PEM files directly (check Spring Cloud Vault docs for exact property names if needed):
+      #   # pem-trust-material: file:/path/to/vault_certificate.pem
+
+  # --- Define which config sources to import ---
+  config:
+    # Import Vault first, making it optional allows startup if Vault is down (fail-fast: false)
+    import: "optional:vault://"
+    # You can add other imports like config server or local files if needed
+    # import: ["optional:vault://", "optional:configserver:", "optional:classpath:bootstrap-override.yml"]
+
+# Optional: Define placeholders needed ONLY during bootstrap phase (like VAULT_ROLE_ID/SECRET_ID if not env vars)
+# vault:
+#   role-id: ${VAULT_ROLE_ID_FROM_SOMEWHERE_ELSE}
+#   secret-id: ${VAULT_SECRET_ID_FROM_SOMEWHERE_ELSE}
+

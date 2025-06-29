@@ -50,4 +50,3 @@ public class PhoneNumberConverter implements AttributeConverter<PhoneNumber, Str
         }
     }
 }
-            

@@ -36,7 +36,7 @@ import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static me.amlu.shop.amlume_shop.commons.Constants.*;
+import static me.amlu.shop.amlume_shop.commons.ErrorCodes.USER_NOT_FOUND;
 
 @Service
 @Transactional
@@ -47,6 +47,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private final UserRepository userRepository;
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository;
     private final AuditLogger auditLogger;
+    private final SecurityAuditService securityAuditService;
     private final SecurityProperties securityProperties;
     private final IpValidationService ipValidationService;
     private final IpSecurityService ipSecurityService;
@@ -63,7 +64,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                                         @Value("${security.max-devices-per-user}") int maxDevicesPerUser,
                                         UserRepository userRepository,
                                         UserDeviceFingerprintRepository userDeviceFingerprintRepository,
-                                        AuditLogger auditLogger,
+                                        AuditLogger auditLogger, SecurityAuditService securityAuditService,
                                         SecurityProperties securityProperties,
                                         IpValidationService ipValidationService,
                                         IpSecurityService ipSecurityService, @Qualifier("redisSlidingWindowRateLimiter") RateLimiter rateLimiter
@@ -73,6 +74,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         this.userRepository = Objects.requireNonNull(userRepository, "UserRepository cannot be null");
         this.userDeviceFingerprintRepository = Objects.requireNonNull(userDeviceFingerprintRepository, "UserDeviceFingerprintRepository cannot be null");
         this.auditLogger = Objects.requireNonNull(auditLogger, "AuditLogger cannot be null");
+        this.securityAuditService = securityAuditService;
         this.securityProperties = Objects.requireNonNull(securityProperties, "SecurityProperties cannot be null");
         this.ipValidationService = Objects.requireNonNull(ipValidationService, "IpValidationService cannot be null");
         this.ipSecurityService = Objects.requireNonNull(ipSecurityService, "IpSecurityService cannot be null");
@@ -115,13 +117,15 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         // Check if IP is blocked
         if (ipSecurityService.isIpBlocked(clientIp)) {
             log.warn("Blocked IP address attempted device registration: {}", clientIp);
-            auditLogger.logSecurityEvent("BLOCKED_IP_ATTEMPT", userId, clientIp);
+            // CORRECTED: Use logFailedAttempt
+            securityAuditService.logFailedAttempt(userId, clientIp, "Blocked IP Attempt during device registration");
             throw new BlockedIpAddressException("IP address is blocked");
         }
         // Validate IP
         if (!ipValidationService.isValidIp(clientIp)) {
             log.warn("Invalid IP detected: {}", clientIp);
-            auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, clientIp);
+            // CORRECTED: Use logFailedAttempt
+            securityAuditService.logFailedAttempt(userId, clientIp, "Invalid IP Attempt during device registration");
         }
 
         // Check for spoofing
@@ -136,7 +140,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         try {
             if (!rateLimiter.tryAcquire(rateLimitKey)) {
                 log.warn("Rate limit exceeded for IP: {} on device registration", clientIp);
-                auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, "Device Registration", clientIp);
+                // CORRECTED: Use logFailedAttempt
+                securityAuditService.logFailedAttempt(userId, clientIp, "Rate limit exceeded for device registration");
                 throw new DeviceFingerprintRegistrationException("Rate limit exceeded for device registration");
             }
         } catch (RateLimitException e) { // Catch Redis failure if fail-closed
@@ -156,13 +161,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     }
 
     private User findAndValidateUser(String userId) {
-        return userRepository.findByUserId(Long.valueOf(userId))
+        return userRepository.findById(Long.valueOf(userId))
                 .orElseThrow(() -> new UserNotFoundException(USER_NOT_FOUND));
     }
 
     private void isDeviceFingerprintingEnabled(User user) {
         if (!user.isDeviceFingerprintingEnabled()) {
-            log.info("Device fingerprinting is disabled for user: {}", user.getUserId());
+            log.info("Device fingerprinting is disabled for user: {}", user.getId());
             throw new DeviceFingerprintingDisabledException("Device fingerprinting is disabled");
         }
     }
@@ -170,7 +175,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
     private void validateDeviceLimit(User user) {
         long deviceCount = userDeviceFingerprintRepository.countByUser(user);
         if (deviceCount >= maxDevicesPerUser) {
-            log.warn("Maximum device limit reached for user: {}", user.getUserId());
+            log.warn("Maximum device limit reached for user: {}", user.getId());
             throw new MaxDevicesExceededException("Maximum number of devices reached for user");
         }
     }
@@ -200,7 +205,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 .isActive(true)
                 .build();
         userDeviceFingerprintRepository.save(newFingerprint);
-        log.info("New device fingerprint registered for user: {}", user.getUserId());
+        log.info("New device fingerprint registered for user: {}", user.getId());
     }
 
     private void handleRegistrationError(String userId, Exception e) throws DeviceFingerprintRegistrationException {
@@ -226,7 +231,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             validateIpSecurityAtExistingDeviceFingerprintValidation(userId, clientIp, fingerprint, request);
             updateFingerprintUsage(fingerprint, clientIp);
 
-            auditLogger.logDeviceValidation(user, fingerprint, true);
+            securityAuditService.logDeviceValidation(user, fingerprint, true);
 
         } catch (Exception e) {
             handleValidationError(userId, deviceFingerprint, clientIp, e);
@@ -241,7 +246,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
             userDeviceFingerprintRepository.delete(fingerprint);
             log.info("Device fingerprint {} deleted for user {}", deviceFingerprint, userId);
-            auditLogger.logDeviceDeletion(user, fingerprint);
+            securityAuditService.logDeviceDeletion(user, fingerprint);
 
         } catch (Exception e) {
             handleDeletionError(userId, deviceFingerprint, e);
@@ -255,7 +260,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                     .orElseThrow(() -> new DeviceFingerprintNotFoundException("Device Fingerprint not found"));
 
             userDeviceFingerprintRepository.delete(fingerprint); // Delete the entity
-            log.info("Device fingerprint {} deleted for user {}", fingerprintId, user.getUserId());
+            log.info("Device fingerprint {} deleted for user {}", fingerprintId, user.getId());
 
         } catch (DeviceFingerprintNotFoundException e) {
             log.error("Error deleting fingerprint", e);
@@ -405,16 +410,17 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             UserDeviceFingerprint fingerprint = userDeviceFingerprintRepository
                     .findByUserAndDeviceFingerprint(user, fingerprintId)
                     .orElseThrow(() -> new DeviceFingerprintNotFoundException(
-                            String.format("Device Fingerprint not found for user %s", user.getUserId())));
+                            String.format("Device Fingerprint not found for user %s", user.getId())));
+            // Use user.getId() instead of user.getUserId() for consistency with User entity
 
             if (!fingerprint.isActive()) {
-                log.warn("Attempt to use inactive fingerprint: {} for user: {}", fingerprintId, user.getUserId());
+                log.warn("Attempt to use inactive fingerprint: {} for user: {}", fingerprintId, user.getId());
                 throw new InactiveDeviceFingerprintException("Device fingerprint is inactive");
             }
 
             return fingerprint;
         } catch (Exception e) {
-            log.error("Error validating fingerprint: {} for user: {}", fingerprintId, user.getUserId(), e);
+            log.error("Error validating fingerprint: {} for user: {}", fingerprintId, user.getId(), e);
             throw new DeviceFingerprintValidationException("Error validating device fingerprint", e);
         }
     }
@@ -424,7 +430,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             // Check if IP is blocked
             if (ipSecurityService.isIpBlocked(clientIp)) {
                 log.warn("Blocked IP address attempted access: {}", clientIp);
-                auditLogger.logSecurityEvent("BLOCKED_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
+                // CORRECTED: Use logFailedAttempt
+                securityAuditService.logFailedAttempt(userId, clientIp, "Blocked IP Attempt during fingerprint validation");
                 throw new BlockedIpAddressException("IP address is blocked");
             }
 
@@ -437,7 +444,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             // Validate IP format
             if (!ipValidationService.isValidIp(clientIp)) {
                 log.warn("Invalid IP address detected: {}", clientIp);
-                auditLogger.logSecurityEvent("INVALID_IP_ATTEMPT", userId, String.valueOf(fingerprint.getUserDeviceFingerprintId()), clientIp);
+                // CORRECTED: Use logFailedAttempt
+                securityAuditService.logFailedAttempt(userId, clientIp, "Invalid IP Attempt during fingerprint validation");
                 throw new InvalidIpAddressException("Invalid IP address format");
             }
 
@@ -448,7 +456,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         } catch (RateLimitExceededException | TooManyAttemptsException e) { // Catch the specific exception(s)
             // Handle rate limit exceedance specifically
             log.warn("Rate limit exceeded for IP: {} on fingerprint validation: {}", clientIp, e.getMessage());
-            auditLogger.logSecurityEvent("RATE_LIMIT_EXCEEDED", userId, String.valueOf(fingerprint.getUser().getUserId()), clientIp);
+            // CORRECTED: Use logFailedAttempt
+            securityAuditService.logFailedAttempt(userId, clientIp, "Rate limit exceeded on fingerprint validation");
             // Re-throw the original exception as the calling method might expect it
             throw e;
         } catch (InvalidIpAddressException | BlockedIpAddressException e) {
@@ -472,24 +481,25 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             // Update fingerprint details
             fingerprint.setLastUsedAt(now);
             fingerprint.setLastKnownIp(clientIp);
+
             fingerprint.setUpdateCount(fingerprint.getUpdateCount() + 1);
 
             // Save and verify the update
             UserDeviceFingerprint updatedFingerprint = userDeviceFingerprintRepository.save(fingerprint);
 
             if (!updatedFingerprint.getLastUsedAt().equals(now)) {
-                log.warn("Fingerprint update verification failed for user: {}", fingerprint.getUser().getUserId());
+                log.warn("Fingerprint update verification failed for user: {}", fingerprint.getUser().getId());
                 throw new DeviceFingerprintUpdateException("Failed to update fingerprint usage");
             }
 
-            log.debug("Successfully updated fingerprint usage for user: {}", fingerprint.getUser().getUserId());
+            log.debug("Successfully updated fingerprint usage for user: {}", fingerprint.getUser().getId());
 
             // Log the update for audit purposes
-            auditLogger.logFingerprintUpdate(fingerprint.getUser().getUserId(), clientIp);
+            securityAuditService.logFingerprintUpdate(fingerprint.getUser().getId(), clientIp);
 
         } catch (Exception e) {
             log.error("Error updating fingerprint usage for user: {}",
-                    fingerprint.getUser().getUserId(), e);
+                    fingerprint.getUser().getId(), e);
             throw new DeviceFingerprintUpdateException("Failed to update fingerprint usage", e);
         }
     }
@@ -536,7 +546,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
     private void handleValidationError(String userId, String fingerprintId, String clientIp, Exception e) {
         log.error("Error validating device fingerprint for user: {} fingerprint: {}", userId, fingerprintId, e);
-        auditLogger.logFailedValidation(userId, fingerprintId, clientIp);
+        // CORRECTED: Use logFailedValidation with reason
+        securityAuditService.logFailedValidation(userId, fingerprintId, clientIp, e.getMessage());
         throw new DeviceFingerprintValidationException("Failed to validate device fingerprint", e);
     }
 
@@ -620,14 +631,16 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                                           String accessToken,
                                           String refreshToken) {
         fingerprint.setLastUsedAt(Instant.now());
-        fingerprint.setAccessToken(accessToken);
-        fingerprint.setRefreshToken(refreshToken);
+        // Removed accessToken and refreshToken fields from UserDeviceFingerprint
+        // fingerprint.setAccessToken(accessToken);
+        // fingerprint.setRefreshToken(refreshToken);
         fingerprint.setFailedAttempts(0); // Reset failed attempts on successful update
         userDeviceFingerprintRepository.save(fingerprint);
 
-        auditLogger.logDeviceAccess(String.valueOf(fingerprint.getUser().getUserId()),
+        // CORRECTED: Use logDeviceAccess with 4 arguments
+        securityAuditService.logDeviceAccess(String.valueOf(fingerprint.getUser().getId()),
                 fingerprint.getDeviceFingerprint(),
-                "DEVICE_UPDATED");
+                "DEVICE_UPDATED", fingerprint.getLastKnownIp()); // Added clientIp
     }
 
     @Override
@@ -641,8 +654,9 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         UserDeviceFingerprint newFingerprint = UserDeviceFingerprint.builder()
                 .user(user)
                 .deviceFingerprint(deviceFingerprint)
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
+                // Removed accessToken and refreshToken fields from UserDeviceFingerprint
+                // .accessToken(accessToken)
+                // .refreshToken(refreshToken)
 //                .createdAt(Instant.now()) // Already set in @PrePersist
 //                .updatedAt(Instant.now())
                 .lastUsedAt(Instant.now())
@@ -654,9 +668,10 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
         userDeviceFingerprintRepository.save(newFingerprint);
 
-        auditLogger.logDeviceAccess(String.valueOf(user.getUserId()),
+        // CORRECTED: Use logDeviceAccess with 4 arguments
+        securityAuditService.logDeviceAccess(String.valueOf(user.getId()),
                 deviceFingerprint,
-                "NEW_DEVICE_REGISTERED");
+                "NEW_DEVICE_REGISTERED", newFingerprint.getLastKnownIp()); // Added clientIp
     }
 
 
@@ -675,7 +690,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                     if (device.getFailedAttempts() >= MAX_FAILED_ATTEMPTS) {
                         device.setActive(false);
                         device.setDeactivatedAt(Instant.now());
-                        auditLogger.logSecurityEvent("DEVICE_DEACTIVATED", userId, deviceFingerprint);
+                        // CORRECTED: Use logDeviceDeactivation
+                        securityAuditService.logDeviceDeactivation(device.getUser(), device);
                     }
                     userDeviceFingerprintRepository.save(device);
                 });
@@ -691,7 +707,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
             String errorMessage = String.format(
                     "Maximum device limit (%d) reached for user: %s",
                     maxDevices,
-                    user.getUserId()
+                    user.getId()
             );
             log.warn(errorMessage);
             throw new TooManyDevicesException(errorMessage);
@@ -724,10 +740,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         devices.forEach(device -> {
             device.setActive(false);
             device.setDeactivatedAt(Instant.now());
-            userDeviceFingerprintRepository.save(device);
+            // No need to save here, saveAll will do it
         });
 
-        auditLogger.logSecurityEvent("ALL_DEVICES_REVOKED EXCEPT this fingerprint:", userId, exceptFingerprint);
+        userDeviceFingerprintRepository.saveAll(devices); // Save all changes at once
+
+        // CORRECTED: Use logAllDevicesRevoked
+        securityAuditService.logAllDevicesRevoked(userId, exceptFingerprint);
     }
 
     @Override
@@ -736,6 +755,7 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 .ifPresent(device -> {
                     device.setActive(false);
                     device.setDeactivatedAt(Instant.now());
+                    securityAuditService.logDeviceDeactivation(device.getUser(), device); // Pass User object
                     userDeviceFingerprintRepository.save(device);
                 });
     }
@@ -749,13 +769,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
         // 1. Create the new disabled state for DeviceFingerprintingInfo
         // Use the existing method on the embeddable which returns a new instance
-        DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
-        DeviceFingerprintingInfo disabledInfo;
+        me.amlu.authserver.security.model.DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
+        me.amlu.authserver.security.model.DeviceFingerprintingInfo disabledInfo;
         if (currentInfo != null) {
             disabledInfo = currentInfo.disableFingerprinting(); // Creates new instance with enabled=false, fingerprints=null
         } else {
             // Handle case where info might be null (though unlikely with @Embedded)
-            disabledInfo = DeviceFingerprintingInfo.builder()
+            disabledInfo = me.amlu.authserver.security.model.DeviceFingerprintingInfo.builder()
                     .deviceFingerprintingEnabled(false)
                     .build();
         }
@@ -774,12 +794,13 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
                 // Don't save inside the loop for efficiency
             }
             userDeviceFingerprintRepository.saveAll(activeDevices); // Save all changes at once
-            log.info("Deactivated {} active device fingerprints for user: {}", activeDevices.size(), user.getUserId());
+            log.info("Deactivated {} active device fingerprints for user: {}", activeDevices.size(), user.getId());
         }
 
         // 4. Logging
-        auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_DISABLED", String.valueOf(user.getUserId()), null);
-        log.info("Device fingerprinting disabled for user: {}", user.getUserId()); // Use INFO level
+        // CORRECTED: Use logDeviceFingerprintingSettingChange
+        securityAuditService.logDeviceFingerprintingSettingChange(String.valueOf(user.getId()), "DEVICE_FINGERPRINTING_DISABLED", "SUCCESS");
+        log.info("Device fingerprinting disabled for user: {}", user.getId()); // Use INFO level
     }
 
     @Override
@@ -790,15 +811,15 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
         }
 
         // 1. Get current info (handle potential null)
-        DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
-        DeviceFingerprintingInfo enabledInfo;
+        me.amlu.authserver.security.model.DeviceFingerprintingInfo currentInfo = user.getDeviceFingerprintingInfo();
+        me.amlu.authserver.security.model.DeviceFingerprintingInfo enabledInfo;
 
         if (currentInfo != null) {
             // Use the existing method which returns a new instance, preserving existing fingerprints
             enabledInfo = currentInfo.enableFingerprinting();
         } else {
             // If it was somehow null, create a new enabled one from scratch
-            enabledInfo = DeviceFingerprintingInfo.builder()
+            enabledInfo = me.amlu.authserver.security.model.DeviceFingerprintingInfo.builder()
                     .deviceFingerprintingEnabled(true)
                     // No existing fingerprints to preserve if currentInfo was null
                     .build();
@@ -810,7 +831,8 @@ public class DeviceFingerprintServiceImpl implements DeviceFingerprintService {
 
         // 3. Logging
         // Note: We don't automatically reactivate devices here. They remain inactive.
-        auditLogger.logSecurityEvent("DEVICE_FINGERPRINTING_ENABLED", String.valueOf(user.getUserId()), null);
-        log.info("Device fingerprinting enabled for user: {}", user.getUserId()); // Use INFO level
+        // CORRECTED: Use logDeviceFingerprintingSettingChange
+        securityAuditService.logDeviceFingerprintingSettingChange(String.valueOf(user.getId()), "DEVICE_FINGERPRINTING_ENABLED", "SUCCESS");
+        log.info("Device fingerprinting enabled for user: {}", user.getId()); // Use INFO level
     }
 }

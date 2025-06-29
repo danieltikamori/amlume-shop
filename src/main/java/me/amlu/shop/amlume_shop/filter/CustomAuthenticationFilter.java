@@ -22,9 +22,10 @@ import me.amlu.shop.amlume_shop.dto.ErrorResponse;
 import me.amlu.shop.amlume_shop.exceptions.TokenGenerationFailureException;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenServiceImpl;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -55,8 +56,8 @@ public class CustomAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    @NotNull HttpServletResponse response,
-                                    @NotNull FilterChain filterChain) throws ServletException, IOException {
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain) throws ServletException, IOException {
 
         if (!request.getRequestURI().equals(Constants.API_AUTH_V_1_LOGIN_PATH)) {
             filterChain.doFilter(request, response);

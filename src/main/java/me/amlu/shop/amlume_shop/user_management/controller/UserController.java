@@ -70,7 +70,7 @@ public class UserController {
         return optionalUser.orElse(null);
     }
 
-//    @PostMapping("v1/admin/user/")
+//    @PostMapping("admin/user/")
 //    public ResponseEntity<UserRegistrationRequest> registerUser(@Valid @RequestBody UserRegistrationRequest userRegistrationRequest, @PathVariable String password) throws ProductAlreadyExistsException {
 //
 //        User registeredUser = userService.registerUser(userRegistrationRequest);

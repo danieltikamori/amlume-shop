@@ -13,21 +13,13 @@
     import org.springframework.beans.factory.annotation.Value;
     import org.springframework.context.annotation.Bean;
     import org.springframework.context.annotation.Configuration;
-    import org.springframework.core.convert.converter.Converter;
-    import org.springframework.security.core.GrantedAuthority;
-    import org.springframework.security.core.authority.SimpleGrantedAuthority;
-    import org.springframework.security.oauth2.jwt.Jwt;
     import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
     import org.springframework.web.cors.CorsConfiguration;
     import org.springframework.web.cors.CorsConfigurationSource;
     import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
     import java.util.Arrays;
-    import java.util.Collection;
-    import java.util.Collections;
     import java.util.List;
-    import java.util.Map;
-    import java.util.stream.Collectors;
 
     @Configuration
     public class ShopWebSecurityComponentsConfig {
@@ -60,7 +52,7 @@
         public JwtAuthenticationConverter jwtAuthenticationConverter() {
             JwtAuthenticationConverter jwtConverter = new JwtAuthenticationConverter();
             // Configure a custom converter to extract authorities
-            jwtConverter.setJwtGrantedAuthoritiesConverter(new SecurityConfig.KeycloakRealmRoleConverter());
+            jwtConverter.setJwtGrantedAuthoritiesConverter(new SecurityConfig.CustomJwtGrantedAuthoritiesConverter());
 
             // Optional: Set principal name claim if different from 'sub' (e.g., 'preferred_username')
             // jwtConverter.setPrincipalClaimName("preferred_username");

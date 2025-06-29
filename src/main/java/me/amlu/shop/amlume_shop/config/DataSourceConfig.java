@@ -110,4 +110,3 @@ package me.amlu.shop.amlume_shop.config;
                     .build();
         }
     }
-    

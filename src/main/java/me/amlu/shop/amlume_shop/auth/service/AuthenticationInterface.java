@@ -33,7 +33,7 @@ public interface AuthenticationInterface {
      * @throws UserRegistrationException  If an internal error occurs during registration (local or authserver).
      * @throws IllegalArgumentException   If the request is invalid (reported by authserver).
      */
-    // CHANGED: Return type is now void
+    // Return type is now void
     void register(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException;
 
     /**
@@ -51,6 +51,19 @@ public interface AuthenticationInterface {
 //    @Deprecated(since = "2025-05-15", forRemoval = true)
 //    AuthResponse authenticateUser(LoginRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, AuthenticationFailException;
 
+    /**
+     * Registers an admin user.
+     *
+     * @param request   The admin user registration details.
+     * @param ipAddress The IP address of the registration request.
+     * @throws TooManyAttemptsException   If admin registration attempts does exceed the limits (local check).
+     * @throws InvalidCaptchaException    If captcha validation fails (local check).
+     * @throws UserAlreadyExistsException If the username or userEmail is already taken (reported by authserver).
+     * @throws UserRegistrationException  If an internal error occurs during registration (local or authserver).
+     * @throws IllegalArgumentException   If the request is invalid (reported by authserver).
+     */
+    void registerAdmin(@Valid UserRegistrationRequest request, String ipAddress) throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException;
+
     // --- Logout ---
 
     /**
@@ -63,17 +76,6 @@ public interface AuthenticationInterface {
     void logout(String accessToken, String refreshToken);
 
     // --- Device Fingerprinting ---
-
-    /**
-     * Generates a device fingerprint based on request details.
-     *
-     * @param userAgent    The User-Agent string.
-     * @param screenWidth  The screen width.
-     * @param screenHeight The screen height.
-     * @return The generated device fingerprint string, or null if generation fails.
-     */
-    // This can potentially remain if amlume-shop needs its own device tracking for shop-specific actions
-    String generateAndHandleFingerprint(String userAgent, String screenWidth, String screenHeight);
 
     // --- Token Information ---
 

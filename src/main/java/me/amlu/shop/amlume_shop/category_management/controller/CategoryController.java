@@ -29,7 +29,7 @@ public class CategoryController {
         this.categoryService = categoryService;
     }
 
-    @GetMapping("v1/public/categories")
+    @GetMapping("public/categories")
     public ResponseEntity<GetCategoryResponse> getAllCategories(@RequestParam (name = "pageNumber", defaultValue = Constants.PAGE_NUMBER, required = false) int pageNumber,
                                                                 @RequestParam(name = "pageSize", defaultValue = Constants.PAGE_SIZE, required = false) int pageSize,
                                                                 @RequestParam(name = "sortBy", defaultValue = Constants.SORT_CATEGORIES_BY, required = false) String sortBy,
@@ -40,21 +40,21 @@ public class CategoryController {
         return new ResponseEntity<>(getCategoryResponse, HttpStatus.OK);
     }
 
-    @PostMapping("v1/public/categories")
+    @PostMapping("public/categories")
     public ResponseEntity<CreateCategoryRequest> createCategory(@Valid @RequestBody CreateCategoryRequest createCategoryRequest) {
         CreateCategoryRequest savedCreateCategoryRequest = categoryService.createCategory(createCategoryRequest);
 
         return new ResponseEntity<>(savedCreateCategoryRequest, HttpStatus.CREATED);
     }
 
-    @DeleteMapping("v1/admin/categories/{categoryId}")
+    @DeleteMapping("admin/categories/{categoryId}")
     public ResponseEntity<CreateCategoryRequest> deleteCategory(@PathVariable Long categoryId) {
         CreateCategoryRequest deletedCategory = categoryService.deleteCategory(categoryId);
 
         return ResponseEntity.status(HttpStatus.OK).body(deletedCategory);
     }
 
-    @PutMapping("v1/admin/categories/{categoryId}")
+    @PutMapping("admin/categories/{categoryId}")
     public ResponseEntity<CreateCategoryRequest> updateCategory(@Valid @PathVariable Long categoryId, @RequestBody CreateCategoryRequest createCategoryRequest) {
         CreateCategoryRequest savedCreateCategoryRequest = categoryService.updateCategory(categoryId, createCategoryRequest);
 

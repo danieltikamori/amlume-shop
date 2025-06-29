@@ -14,7 +14,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,9 +33,9 @@ public class SecurityHeadersConfig {
     public FilterRegistrationBean<OncePerRequestFilter> securityHeadersFilter() {
         FilterRegistrationBean<OncePerRequestFilter> registrationBean = new FilterRegistrationBean<>(new OncePerRequestFilter() {
             @Override
-            protected void doFilterInternal(@NotNull HttpServletRequest request,
-                                            @NotNull HttpServletResponse response,
-                                            @NotNull FilterChain filterChain)
+            protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                            @NonNull HttpServletResponse response,
+                                            @NonNull FilterChain filterChain)
                     throws ServletException, IOException {
 
                 // Prevent MIME-sniffing

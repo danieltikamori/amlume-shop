@@ -82,6 +82,33 @@ spring:
 
   # --- Vault Integration ---
   cloud:
+
+    consul:
+      host: localhost # Or your Consul agent/server host
+      port: 8500
+      discovery:
+        service-name: ${spring.application.name}
+        instance-id: ${spring.application.name}:${spring.profiles.active[0]}:${random.value}
+        prefer-ip-address: true
+        health-check-path: /actuator/health
+        health-check-interval: 15s
+      config: # If amlume-shop also uses Consul for config
+        enabled: true
+        prefix: config
+        default-context: application
+        profile-separator: '::'
+        format: YAML
+
+  boot:
+    admin:
+      client:
+        # URL of the Spring Boot Admin Server (your authserver)
+        url: "http://localhost:9000" # Assuming authserver runs on 9000 and admin UI is at root
+        # If authserver's admin UI is at /admin:
+        # url: "http://localhost:9000/admin"
+        instance:
+          # How the admin server should call back to this amlume-shop instance
+          service-base-url: "http://localhost:8080" # Assuming amlume-shop runs on 8080
     vault:
       enabled: true
       fail-fast: true # Allow app to start if Vault is down initially
@@ -125,6 +152,7 @@ spring:
   # --- Import Vault ---
   config:
     import:
+      - "optional:consul:" # Load config from Consul
       - "optional:vault://"
       - "optional:classpath:application-local-secrets.yml"
 #      - "vault://secret/amlume-shop" # Import Vault secrets
@@ -271,10 +299,16 @@ spring:
 
 # --- Actuator ---
 management:
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
   endpoints:
     web:
       exposure:
         include: health,info,prometheus,metrics,caches # Expose necessary endpoints
+  #        include: "*" # Expose all for dev/admin; be selective in prod
   health:
     livenessState:
       enabled: true
@@ -720,6 +754,8 @@ security: # Used by various security services/configs
 
 # --- Server ---
 server:
+  port: 8080
+  #  address: 0.0.0.0
   tomcat:
     threads:
       max: 200 # Maximum number of threads in the thread pool (default is 200)

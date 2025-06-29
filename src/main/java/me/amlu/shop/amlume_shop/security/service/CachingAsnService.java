@@ -24,6 +24,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -147,7 +148,7 @@ public class CachingAsnService {
     public void cleanupStaleAsnEntries() {
         log.info("Running scheduled cleanup of stale ASN entries...");
         // Use Duration from AsnProperties
-        LocalDateTime staleThreshold = LocalDateTime.now().minus(asnProperties.getStaleThreshold());
+        Instant staleThreshold = Instant.now().minus(asnProperties.getStaleThreshold());
         try {
             // Assuming deleteStaleEntries returns void or int count
              asnRepository.deleteStaleEntries(staleThreshold);

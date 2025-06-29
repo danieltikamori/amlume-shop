@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Daniel Itiro Tikamori. All rights reserved.
+ * Copyright (c) 2024-2025 Daniel Itiro Tikamori. All rights reserved.
  *
  * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
  *
@@ -40,6 +40,8 @@ import java.util.TimeZone;
 @EnableTransactionManagement
 @EnableJpaAuditing(auditorAwareRef = "auditorAware") // Ensure you have an AuditorAware bean named "auditorAware"
 @ConfigurationPropertiesScan
+//@EnableMongoHttpSession(maxInactiveIntervalInSeconds = 3600, collectionName = "shop_sessions")
+@EnableDiscoveryClient
 @EnableConfigurationProperties({TokenCacheProperties.class, AsnProperties.class, TokenValidationConfig.class})
 public class AmlumeShopApplication {
 

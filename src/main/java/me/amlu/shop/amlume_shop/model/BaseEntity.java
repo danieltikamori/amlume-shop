@@ -15,7 +15,8 @@ import me.amlu.shop.amlume_shop.user_management.User;
 import org.hibernate.annotations.FilterDef;
 import org.hibernate.annotations.ParamDef;
 import org.hibernate.annotations.SoftDelete;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedBy;
@@ -107,47 +108,50 @@ public abstract class BaseEntity implements Serializable, Auditable<User, Long, 
     // --- Implementation of Auditable ---
     // Setters are needed by the AuditingEntityListener
 
-    @NotNull
+    @NullMarked
     @Override
     public Optional<User> getCreatedBy() {
         return Optional.ofNullable(this.createdBy);
     }
 
     @Override
-    public void setCreatedBy(@NotNull User createdBy) {
+    public void setCreatedBy(@NonNull User createdBy) {
         this.createdBy = createdBy;
     }
 
-    @NotNull
+    @NullMarked
     @Override
     public Optional<Instant> getCreatedDate() {
         return Optional.ofNullable(this.createdDate);
     }
 
+    @NullMarked
     @Override
-    public void setCreatedDate(@NotNull Instant creationDate) {
+    public void setCreatedDate(@NonNull Instant creationDate) {
         this.createdDate = creationDate;
     }
 
-    @NotNull
+    @org.jetbrains.annotations.NotNull
+    @NullMarked
     @Override
     public Optional<User> getLastModifiedBy() {
         return Optional.ofNullable(this.lastModifiedBy);
     }
 
     @Override
-    public void setLastModifiedBy(@NotNull User lastModifiedBy) {
+    public void setLastModifiedBy(@NonNull User lastModifiedBy) {
         this.lastModifiedBy = lastModifiedBy;
     }
 
-    @NotNull
+    @NullMarked
     @Override
     public Optional<Instant> getLastModifiedDate() {
         return Optional.ofNullable(this.lastModifiedDate);
     }
 
+    @NullMarked
     @Override
-    public void setLastModifiedDate(@NotNull Instant lastModifiedDate) {
+    public void setLastModifiedDate(@NonNull Instant lastModifiedDate) {
         this.lastModifiedDate = lastModifiedDate;
     }
 

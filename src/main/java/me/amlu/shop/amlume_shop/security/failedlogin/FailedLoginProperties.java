@@ -40,4 +40,3 @@
         @NotBlank
         private String redisKeyPrefix = "failedlogin:attempts:";
     }
-    

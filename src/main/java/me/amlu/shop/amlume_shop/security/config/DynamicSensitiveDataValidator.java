@@ -15,19 +15,26 @@ import jakarta.validation.ConstraintValidatorContext;
 import me.amlu.shop.amlume_shop.security.service.RoleService;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * See the SensitiveData annotation for more details.
- * This class is used to validate the SensitiveData annotation.
- * Usage:
+ * Validates that the current user has the required static or dynamic roles to access a field.
+ * This validator is associated with the {@link SensitiveData} annotation.
+ * It checks the user's authorities against a static list from the annotation and a dynamic
+ * list determined by the {@link RoleService} based on the annotated field's value.
+ *
+ * @see SensitiveData
  *
  * @SensitiveData(rolesAllowed = {"ADMIN", "USER"})
  * private String sensitiveField;
@@ -36,111 +43,84 @@ import java.util.stream.Collectors;
 @Component
 public class DynamicSensitiveDataValidator implements ConstraintValidator<SensitiveData, Object> {
 
-    private static final Logger log = org.slf4j.LoggerFactory.getLogger(DynamicSensitiveDataValidator.class);
+    private static final Logger log = LoggerFactory.getLogger(DynamicSensitiveDataValidator.class);
 
     private final RoleService roleService;
 
     private Set<String> staticRolesAllowed;
 
     public DynamicSensitiveDataValidator(RoleService roleService) {
+        Assert.notNull(roleService, "RoleService cannot be null.");
         this.roleService = roleService;
     }
 
     @Override
     public void initialize(SensitiveData constraintAnnotation) {
-        try {
-            this.staticRolesAllowed = Set.of(constraintAnnotation.rolesAllowed())
-                    .stream()
-                    .map(role -> "ROLE_" + role.toUpperCase()) // Ensure ROLE_ prefix for comparison
-                    .collect(Collectors.toSet());
-            log.debug("Initialized static roles: {}", staticRolesAllowed);
-        } catch (Exception e) {
-            log.error("Error initializing validator", e);
-            this.staticRolesAllowed = Collections.emptySet();
-        }
+        // Pre-process the static roles from the annotation to include the "ROLE_" prefix
+        // for consistent comparison with Spring Security's GrantedAuthority strings.
+        this.staticRolesAllowed = Arrays.stream(constraintAnnotation.rolesAllowed())
+                .map(role -> "ROLE_" + role.toUpperCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        log.debug("Initialized validator with static roles allowed: {}", staticRolesAllowed);
     }
 
     @Override
     public boolean isValid(Object value, ConstraintValidatorContext context) {
-        try {
-            // Get authentication
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-            // Check if user is authenticated
-            if (authentication == null || !authentication.isAuthenticated()) {
-                log.warn("Access denied: User not authenticated");
-                return false;
-            }
-
-            // Get user roles (Set<String>)
-            Set<String> userRoles = authentication.getAuthorities().stream()
-                    .map(GrantedAuthority::getAuthority)
-                    .collect(Collectors.toSet());
-
-            // Log current user and their roles for debugging
-            log.debug("Validating access for user: {} with roles: {}",
-                    authentication.getName(), userRoles);
-
-            // Check static roles
-            boolean hasStaticRole = !Collections.disjoint(staticRolesAllowed, userRoles);
-            log.debug("Static role check result: {}", hasStaticRole);
-
-            // Get dynamic roles (Set<UserRole>)
-            Set<UserRole> dynamicUserRolesObject = getDynamicRoles(value);
-
-            // Convert dynamic roles (Set<UserRole>) to a Set<String> of authority names
-            Set<String> dynamicRolesAsString = dynamicUserRolesObject.stream()
-                    .map(userRole -> userRole.getRoleName().name()) // Get AppRole enum, then its string name
-                    .collect(Collectors.toSet());
-            log.debug("Dynamic roles (as strings) for resource: {}", dynamicRolesAsString);
-
-            // Check dynamic roles (comparing Set<String> with Set<String>)
-            boolean hasDynamicRole = !Collections.disjoint(dynamicRolesAsString, userRoles);
-            log.debug("Dynamic role check result: {}", hasDynamicRole);
-
-            boolean hasAccess = hasStaticRole || hasDynamicRole;
-
-            // Log the result
-            if (!hasAccess) {
-                log.warn("Access denied for user: {}. Required static roles: {}, dynamic roles (strings): {}, user roles: {}",
-                        authentication.getName(),
-                        staticRolesAllowed,
-                        dynamicRolesAsString, // Log the string representation
-                        userRoles);
-            } else {
-                log.debug("Access granted for user: {}", authentication.getName());
-            }
-
-            return hasAccess;
-
-        } catch (Exception e) {
-            log.error("Error during validation", e);
-            return false; // Fail secure
+        if (authentication == null || !authentication.isAuthenticated()) {
+            log.warn("Access denied: User is not authenticated.");
+            return false;
         }
+
+        // Get the user's roles as a Set of strings (e.g., "ROLE_ADMIN", "ROLE_USER")
+        Set<String> userAuthorities = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toSet());
+
+        // 1. Check against the static roles defined in the annotation.
+        if (!Collections.disjoint(staticRolesAllowed, userAuthorities)) {
+            log.debug("Access granted for user '{}' based on static role match. User roles: {}, Allowed static roles: {}",
+                    authentication.getName(), userAuthorities, staticRolesAllowed);
+            return true; // User has a required static role.
+        }
+
+        // 2. If no static role match, check for dynamic roles based on the resource.
+        Set<String> dynamicAuthorities = getDynamicAuthorities(value);
+        if (!Collections.disjoint(dynamicAuthorities, userAuthorities)) {
+            log.debug("Access granted for user '{}' based on dynamic role match. User roles: {}, Required dynamic roles: {}",
+                    authentication.getName(), userAuthorities, dynamicAuthorities);
+            return true; // User has a required dynamic role.
+        }
+
+        // 3. If neither check passes, deny access.
+        log.warn("Access DENIED for user '{}'. User roles {} do not match required static roles {} or dynamic roles {}.",
+                authentication.getName(), userAuthorities, staticRolesAllowed, dynamicAuthorities);
+        return false;
     }
 
-    private Set<UserRole> getDynamicRoles(Object value) {
-        try {
-            if (value == null) {
-                return Collections.emptySet();
-            }
-            // Ensure roleService is not null
-            if (roleService == null) {
-                log.error("RoleService is not injected. Cannot retrieve dynamic roles.");
-                return Collections.emptySet();
-            }
-
-            Set<UserRole> dynamicRoles = roleService.getDynamicRolesForResource(value);
-            log.debug("Retrieved dynamic roles for resource type {}: {}",
-                    value.getClass().getSimpleName(),
-                    dynamicRoles.stream()
-                            .map(userRole -> userRole.getRoleName().name()) // Log the AppRole enum name
-                            .collect(Collectors.toSet()));
-            return dynamicRoles;
-        } catch (Exception e) {
-            log.error("Error retrieving dynamic roles for resource: {}",
-                    value != null ? value.getClass().getSimpleName() : "null", e);
+    /**
+     * Retrieves dynamic roles for the given resource and converts them into a Set of authority strings.
+     *
+     * @param resource The resource object being validated.
+     * @return A Set of authority strings (e.g., "ROLE_OWNER") for the resource, or an empty set if none.
+     */
+    private Set<String> getDynamicAuthorities(Object resource) {
+        if (resource == null) {
             return Collections.emptySet();
+        }
+        try {
+            // Get the domain-specific Role objects
+            Set<UserRole> dynamicRoles = roleService.getDynamicRolesForResource(resource);
+
+            // Convert them to standard authority strings (e.g., "ROLE_...")
+            return dynamicRoles.stream()
+                    .map(role -> "ROLE_" + role.getRoleName().name().toUpperCase(Locale.ROOT)) // Assuming role.getName() returns "OWNER", etc.
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            log.error("Error retrieving dynamic roles for resource of type {}: {}",
+                    resource.getClass().getSimpleName(), e.getMessage(), e);
+            return Collections.emptySet(); // Fail secure
         }
     }
 }

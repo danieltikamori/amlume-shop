@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.dto;
 
 import me.amlu.shop.amlume_shop.enums.ErrorCodeEnum;
 import me.amlu.shop.amlume_shop.enums.ResponseMessage;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.http.HttpStatus;
 
 import java.util.Date;
@@ -40,7 +40,7 @@ public record GetErrorMessageResponse(String message, String title, HttpStatus e
         this(message.toString(), error, message.getErrorCode(), data);
     }
 
-    @NotNull
+    @NullMarked
     @Override
     public String toString() {
         return "ErrorMessage{" +

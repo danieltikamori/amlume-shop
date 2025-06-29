@@ -42,10 +42,7 @@ import java.security.SignatureException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
-import java.util.Arrays;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import static me.amlu.shop.amlume_shop.security.paseto.util.TokenConstants.*;
@@ -532,7 +529,7 @@ public class TokenValidationServiceImpl implements TokenValidationService {
             throw new TokenValidationFailureException(NO_ROLES_FOUND_FOR_USER);
         }
         Set<String> expectedScopes = roles.stream()
-                .map(role -> role.getRoleName().name().toUpperCase())
+                .map(role -> role.getRoleName().name().toUpperCase(Locale.ROOT))
                 .collect(Collectors.toSet());
 
         Set<String> actualScopes = Arrays.stream(userScope.split(","))

@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.resilience.config.properties;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.hibernate.validator.constraints.time.DurationMin;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.validation.annotation.Validated;
@@ -25,6 +26,7 @@ import java.time.temporal.ChronoUnit;
  *
  * @author Daniel Itiro Tikamori
  */
+@NullMarked
 @ConfigurationProperties(prefix = "resilience4j.circuitbreaker.instances.default")
 @Validated
 public class Resilience4jCircuitBreakerProperties {

@@ -29,7 +29,7 @@ public class GeoController {
         this.geoService = geoService;
     }
 
-    @PostMapping("/v1/verify")
+    @PostMapping("/verify")
     public ResponseEntity<GeoVerificationResult> verifyLocation(
             @RequestHeader("X-Real-IP") String ip,
             @RequestHeader("X-User-ID") String userId) {

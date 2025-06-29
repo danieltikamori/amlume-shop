@@ -16,7 +16,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import org.hibernate.Session;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,9 +30,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
     private EntityManager entityManager;
 
    @Override
-   public boolean preHandle(@Valid @NotNull HttpServletRequest request,
-                            @NotNull HttpServletResponse response,
-                            @NotNull Object handler) throws Exception {
+   public boolean preHandle(@Valid @NonNull HttpServletRequest request,
+                            @NonNull HttpServletResponse response,
+                            @NonNull Object handler) throws Exception {
        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
        if (authentication != null && authentication.isAuthenticated()) {
            boolean isAdmin = authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ADMIN")) || authentication.getAuthorities().contains(new SimpleGrantedAuthority("ROLE_ROOT"));
@@ -46,9 +47,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
    }
    // ... Might need postHandle or afterCompletion(implemented below) methods to clean up filters.
    @Override
-   public void afterCompletion(@Valid @NotNull HttpServletRequest request,
-                               @NotNull HttpServletResponse response,
-                               @NotNull Object handler, Exception ex) throws Exception {
+   public void afterCompletion(@Valid @NonNull HttpServletRequest request,
+                               @NonNull HttpServletResponse response,
+                               @NonNull Object handler, Exception ex) throws Exception {
        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
        if (authentication != null && authentication.isAuthenticated()) {
            Session session = entityManager.unwrap(Session.class);

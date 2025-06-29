@@ -12,7 +12,7 @@ package me.amlu.shop.amlume_shop.security.paseto.util;
 
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.user_management.User;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
 import java.time.Instant;
 import java.util.Map;

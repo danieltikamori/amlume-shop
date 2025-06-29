@@ -42,11 +42,13 @@ public class SecurityEventService {
 
     public SecurityEvent createEvent(
             SecurityEventType type,
+            Long userId,
             String username,
             String ipAddress,
             String details) {
         SecurityEvent event = SecurityEvent.builder()
                 .eventType(type)
+                .userId(userId)
                 .username(username)
                 .ipAddress(ipAddress)
                 .timestamp(Instant.now())
@@ -71,6 +73,10 @@ public class SecurityEventService {
                 since,
                 PageRequest.of(0, 100, Sort.by("timestamp").descending())
         ).getContent();
+    }
+
+    public List<SecurityEvent> getUserEventsById(Long userId) {
+        return securityEventRepository.findByUserId(userId);
     }
 
     @Scheduled(cron = "0 0 0 * * *") // Run daily at midnight

@@ -11,7 +11,7 @@
 package me.amlu.shop.amlume_shop.resilience.config.properties;
 
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotNull;
+import org.jspecify.annotations.NullMarked;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -24,6 +24,7 @@ import org.springframework.validation.annotation.Validated;
  */
 @ConfigurationProperties(prefix = "resilience4j.exponential-backoff.instances.default")
 @Validated
+@NullMarked
 public class Resilience4jExponentialBackoffProperties {
 
     /**
@@ -34,7 +35,6 @@ public class Resilience4jExponentialBackoffProperties {
      * </p>
      */
     @Min(value = 0, message = "initialIntervalMillis must be greater than or equal to 0")
-    @NotNull
     private long initialIntervalMillis = 200L; // Default value
 
     /**
@@ -45,7 +45,6 @@ public class Resilience4jExponentialBackoffProperties {
      * </p>
      */
     @Min(value = 1, message = "ebMultiplier must be greater than or equal to 1")
-    @NotNull
     private double ebMultiplier = 1.5; // Default value
 
     /**
@@ -55,7 +54,6 @@ public class Resilience4jExponentialBackoffProperties {
      * The default value is 0.5.
      * </p>
      */
-    @NotNull
     private double randomizationFactor = 0.5; // Default value
 
     /**
@@ -66,7 +64,6 @@ public class Resilience4jExponentialBackoffProperties {
      * </p>
      */
     @Min(value = 1000, message = "maxIntervalMillis must be greater than or equal to 1000")
-    @NotNull
     private long maxIntervalMillis = 86_400_000L; // Yes, we can use _ here, it's a long value
 
     // --- Getters ---

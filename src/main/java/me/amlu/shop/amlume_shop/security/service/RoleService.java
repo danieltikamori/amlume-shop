@@ -13,7 +13,7 @@ package me.amlu.shop.amlume_shop.security.service;
 import me.amlu.shop.amlume_shop.product_management.Product;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;

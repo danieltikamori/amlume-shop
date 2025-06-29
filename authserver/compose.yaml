@@ -1,11 +1,52 @@
 services:
-  mysql:
-    image: 'bitnami/percona-mysql'
+  # PostgreSQL for user data and role hierarchies
+  postgres:
+    image: postgres:16-alpine
     environment:
-      MYSQL_DATABASE: ${AUTH_DB_NAME}
-      MYSQL_USER: ${AUTH_DB_USER}
-      MYSQL_PASSWORD: ${AUTH_DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${AUTH_DB_ROOT_PASSWORD}
+      POSTGRES_DB: amlume_auth_db
+      POSTGRES_USER: amlume_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize LTREE extension
+      - ./init-postgres.sql:/docker-entrypoint-initdb.d/init-postgres.sql
     ports:
-      - '3406'
-#      - '3306'
+      - '5432:5432'
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U amlume_user -d amlume_auth_db" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB for session storage
+  mongodb:
+    image: mongo:7.0
+    environment:
+      MONGO_INITDB_DATABASE: amlume_sessions
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - '27017:27017'
+    healthcheck:
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching only
+  redis:
+    image: valkey/valkey:7.2.4
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:

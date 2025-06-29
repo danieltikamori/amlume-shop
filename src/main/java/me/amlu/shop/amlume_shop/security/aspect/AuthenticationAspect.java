@@ -29,7 +29,8 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier; // Import Qualifier
@@ -39,7 +40,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.retry.RetryPolicy;
 // Removed unused import: import org.springframework.retry.backoff.ExponentialBackOffPolicy;
 // Removed unused import: import org.springframework.retry.backoff.ExponentialRandomBackOffPolicy;
@@ -62,6 +63,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.io.IOException;
 import java.security.SignatureException;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -179,7 +181,7 @@ public class AuthenticationAspect {
     }
 
     // Spring Retry Policy Factory (Remains the same)
-    @NotNull
+    @NullMarked
     private static CompositeRetryPolicy getCompositeRetryPolicy(int maxRetryAttempts) {
         BinaryExceptionClassifier defaultClassifier = new BinaryExceptionClassifier(Map.of(
                 IOException.class, true,
@@ -232,7 +234,7 @@ public class AuthenticationAspect {
             UserDetails userDetails = circuitBreaker.executeSupplier(() -> // Execute within circuit breaker
                             retryTemplate.execute(context -> { // Execute within retry policy
                                 try {
-                                    // Call your token validation service (e.g., PasetoTokenService)
+                                    // Call your token validation service
                                     // This service should parse, validate signature/expiry/claims, and check revocation
                                     Map<String, Object> claims = tokenValidationService.validatePublicAccessToken(token); // Or appropriate method
 
@@ -247,6 +249,7 @@ public class AuthenticationAspect {
                                     UserDetails loadedUser = userService.getUserById(Long.valueOf(userId)); // Or findByUsername if sub is username
 
                                     // Basic UserDetails checks
+                                    assert loadedUser != null;
                                     if (!loadedUser.isEnabled()) throw new UnauthorizedException("User account is disabled");
                                     if (!loadedUser.isAccountNonLocked())
                                         throw new UnauthorizedException("User account is locked");
@@ -274,12 +277,27 @@ public class AuthenticationAspect {
                             })
             );
 
-            // 3. Set Security Context
+
+            // After: UserDetails loadedUser = userService.getUserById(Long.valueOf(userId));
+            // And before: Authentication authentication = new UsernamePasswordAuthenticationToken(...)
+
+            // Extract device_fingerprint claim from the JWT
+            String deviceFingerprint = jwt.getClaimAsString("device_fingerprint"); // Assuming 'jwt' is the Jwt object
+
+            // Create a map for details
+            Map<String, Object> detailsMap = new HashMap<>();
+            detailsMap.put("sub", userId); // Or whatever you use for subject
+            if (deviceFingerprint != null) {
+                detailsMap.put("device_fingerprint", deviceFingerprint);
+            }
+
+            // 3. Set Security Context with details
             Authentication authentication = new UsernamePasswordAuthenticationToken(
                     userDetails, // Principal
                     null,        // Credentials (cleared)
                     userDetails.getAuthorities() // Authorities
             );
+            ((UsernamePasswordAuthenticationToken) authentication).setDetails(detailsMap);
             SecurityContextHolder.getContext().setAuthentication(authentication);
             log.debug("Authentication successful for user: {}", userDetails.getUsername());
 

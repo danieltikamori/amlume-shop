@@ -10,13 +10,13 @@
 
 package me.amlu.shop.amlume_shop.user_management.dto;
 
-public record UserProfileUpdateRequest(String firstName, String lastName) {
+public record UserProfileUpdateRequest(String givenName, String surname) {
 
-    public String getFirstName() {
-        return firstName;
+    public String getGivenName() {
+        return givenName;
     }
 
-    public String getLastName() {
-        return lastName;
+    public String getSurname() {
+        return surname;
     }
 }

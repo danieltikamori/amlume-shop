@@ -19,4 +19,3 @@ package me.amlu.shop.amlume_shop.exceptions;
             super(message, cause);
         }
     }
-    

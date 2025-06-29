@@ -1,0 +1,6 @@
+license_key: ${NEW_RELIC_LICENSE_KEY}
+enable_process_metrics: true
+status_server_enabled: true
+status_server_port: 18003
+custom_attributes:
+  nr_deployed_by: authserver

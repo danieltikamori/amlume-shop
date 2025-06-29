@@ -1,0 +1,14 @@
+{
+  "name": "amlume-shop-tailwind-builder",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.1.8",
+    "tailwindcss": "^4.1.8"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.1.8"
+  },
+  "scripts": {
+    "build-authserver-css": "tailwindcss -i ./authserver/src/main/resources/static/css/authserver-input.css -o ./authserver/src/main/resources/static/css/authserver-output.css --minify",
+    "watch-authserver-css": "tailwindcss -i ./authserver/src/main/resources/static/css/authserver-input.css -o ./authserver/src/main/resources/static/css/authserver-output.css --watch"
+  }
+}

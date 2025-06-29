@@ -263,6 +263,10 @@ public class UserDeviceFingerprint extends BaseEntity {
         return "UserDeviceFingerprint(userDeviceFingerprintId=" + this.getUserDeviceFingerprintId() + ", accessToken=" + this.getAccessToken() + ", refreshToken=" + this.getRefreshToken() + ", lastUsedAt=" + this.getLastUsedAt() + ", deactivatedAt=" + this.getDeactivatedAt() + ", failedAttempts=" + this.getFailedAttempts() + ", trusted=" + this.isTrusted() + ", active=" + this.isActive() + ", deviceFingerprint=" + this.getDeviceFingerprint() + ", deviceName=" + this.getDeviceName() + ", lastKnownIp=" + this.getLastKnownIp() + ", updateCount=" + this.getUpdateCount() + ", location=" + this.getLocation() + ", lastKnownCountry=" + this.getLastKnownCountry() + ", browserInfo=" + this.getBrowserInfo() + ")";
     }
 
+    public Object getSource() {
+        return null;
+    }
+
 //    @NotBlank
 //    @Column(name = "device_type")
 //    private String deviceType;

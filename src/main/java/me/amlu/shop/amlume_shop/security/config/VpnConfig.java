@@ -46,4 +46,3 @@ public class VpnConfig {
         return geoSecurityProperties.getKnownDatacenterRanges();
     }
 }
-    

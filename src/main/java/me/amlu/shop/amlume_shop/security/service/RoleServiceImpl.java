@@ -28,7 +28,7 @@ import me.amlu.shop.amlume_shop.user_management.AppRole;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -95,7 +95,7 @@ public class RoleServiceImpl implements RoleService {
     // Note: Relies on SecurityContextHolder, making testing slightly harder.
     // Ensure resource.hashCode() is stable and meaningful.
     @Cacheable(key = "authentication.name + '_' + #resource.hashCode()")
-    public Set<UserRole> getDynamicRolesForResource(@NotNull Object resource) {
+    public Set<UserRole> getDynamicRolesForResource(@NonNull Object resource) {
         Assert.notNull(resource, "Resource cannot be null for role determination.");
 
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -355,7 +355,7 @@ public class RoleServiceImpl implements RoleService {
 
     @CacheEvict(key = "#authServerSubjectId + '_' + #resource.hashCode()") // Use authServerSubjectId for key
     @Override
-    public void clearUserRoles(String authServerSubjectId, @NotNull Object resource) {
+    public void clearUserRoles(String authServerSubjectId, @NonNull Object resource) {
         Assert.notNull(authServerSubjectId, "Auth Server Subject ID cannot be null");
         Assert.notNull(resource, "Resource cannot be null");
         log.info("Clearing role cache for user (subjectId: {}) and resource: {}",
@@ -379,7 +379,7 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     @CacheEvict(cacheNames = {Constants.USERS_CACHE, Constants.CURRENT_USER_CACHE}, key = "#user.userId")
     @Override
-    public boolean assignRoles(@NotNull User user, @NotNull Set<UserRole> newRoles) {
+    public boolean assignRoles(@NonNull User user, @NonNull Set<UserRole> newRoles) {
         Assert.notNull(user, "User cannot be null for role assignment.");
         Assert.notNull(newRoles, "New roles set cannot be null.");
 
@@ -430,7 +430,7 @@ public class RoleServiceImpl implements RoleService {
      * @return true if the user has sufficient privileges, false otherwise.
      */
     @Override
-    public boolean canManageProduct(@NotNull User user, @NotNull Product product) {
+    public boolean canManageProduct(@NonNull User user, @NonNull Product product) {
         Assert.notNull(user, "User cannot be null");
         Assert.notNull(product, "Product cannot be null");
 

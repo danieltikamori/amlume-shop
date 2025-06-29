@@ -11,7 +11,8 @@
 package me.amlu.shop.amlume_shop.audit;
 
 import me.amlu.shop.amlume_shop.user_management.User; // Import your User entity
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.AuditorAware;
@@ -27,7 +28,7 @@ public class SecurityAuditorAware implements AuditorAware<Long> {
 
     private final Logger log = LoggerFactory.getLogger(SecurityAuditorAware.class);
 
-    @NotNull
+    @NullMarked
     @Override
     public Optional<Long> getCurrentAuditor() {
         // Get the current Authentication object from Spring Security's context

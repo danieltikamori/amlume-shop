@@ -1,0 +1,18 @@
+feat(config): enhance authserver security and performance configuration
+
+- Add security encryption configuration with passkey-data-key
+- Update truststore configuration and environment variable names
+- Add Spring Actuator metrics for monitoring
+- Configure Redis/Valkey for local development and session management
+- Add email configuration with SMTP settings
+- Update OAuth2 redirect URIs and WebAuthn origins to use HTTPS
+- Add SSL bundle configuration for secure connections
+- Enable virtual threads for improved performance
+- Configure server with SSL/TLS, error handling, compression (including Brotli)
+- Optimize Tomcat settings (request sizes, access logs)
+- Configure secure session cookies
+- Enhance logging for WebAuthn and security components
+
+These changes significantly improve the security posture of the authserver
+while also optimizing performance through compression, virtual threads,
+and proper Redis configuration for session management.

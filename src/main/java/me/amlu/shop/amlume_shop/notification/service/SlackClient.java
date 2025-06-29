@@ -1,4 +1,3 @@
-// C:/Users/itiro/OneDrive/code/src/github.com/danieltikamori/amlume-shop/src/main/java/me/amlu/shop/amlume_shop/notification/service/SlackClient.java
 /*
  * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
  *
@@ -9,6 +8,7 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
+// C:/Users/itiro/OneDrive/code/src/github.com/danieltikamori/amlume-shop/src/main/java/me/amlu/shop/amlume_shop/notification/service/SlackClient.java
 package me.amlu.shop.amlume_shop.notification.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;

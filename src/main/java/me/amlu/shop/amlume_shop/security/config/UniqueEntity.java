@@ -19,14 +19,14 @@ import java.lang.annotation.*;
 Usage example:
 
 @Entity
-@UniqueEntity(fields = {"name", "email"}, message = "User with this name and email already exists")
+@UniqueEntity(fields = {"name", "userEmail"}, message = "User with this name and userEmail already exists")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String name;
-    private String email;
+    private String userEmail;
     // other fields...
 }
 
@@ -34,23 +34,23 @@ Alternative Approaches :
 
 // Using @Column unique constraint
 @Column(unique = true)
-private String email;
+private String userEmail;
 
 // Or using @Table unique constraint
 @Table(uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"name", "email"})
+    @UniqueConstraint(columnNames = {"name", "userEmail"})
 })
 
 Database-Level Constraints (SQL) :
 
 ALTER TABLE users
-ADD CONSTRAINT uk_name_email UNIQUE (name, email);
+ADD CONSTRAINT uk_name_email UNIQUE (name, userEmail);
 
 Spring Data JPA Query Methods(Java) :
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    boolean existsByNameAndEmail(String name, String email);
+    boolean existsByNameAndEmail(String name, String userEmail);
 }
 
 Recommendations:
@@ -69,10 +69,10 @@ Example with all approaches combined:
 
 @Entity
 @Table(uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"name", "email"})
+    @UniqueConstraint(columnNames = {"name", "userEmail"})
 })
-@UniqueEntity(fields = {"name", "email"},
-    message = "User with this name and email already exists")
+@UniqueEntity(fields = {"name", "userEmail"},
+    message = "User with this name and userEmail already exists")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -82,15 +82,15 @@ public class User {
     private String name;
 
     @Column(nullable = false, unique = true)
-    private String email;
+    private String userEmail;
 
     // getters and setters
 }
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
-    boolean existsByEmail(String email);
-    boolean existsByNameAndEmail(String name, String email);
+    boolean existsByEmail(String userEmail);
+    boolean existsByNameAndEmail(String name, String userEmail);
 }
 
 @Service

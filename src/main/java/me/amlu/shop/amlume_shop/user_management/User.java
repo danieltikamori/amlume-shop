@@ -56,8 +56,8 @@ public class User extends BaseEntity implements UserDetails {
     // Override the column name for the 'userEmail' field within ContactInfo
     @AttributeOverrides({
             @AttributeOverride(name = "userEmail.userEmail", column = @Column(name = "user_email", nullable = false, unique = true)), // Assuming UserEmail VO has 'userEmail' field
-            @AttributeOverride(name = "firstName", column = @Column(name = "first_name", nullable = false, length = 127)),
-            @AttributeOverride(name = "lastName", column = @Column(name = "last_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "givenName", column = @Column(name = "given_name", nullable = false, length = 127)),
+            @AttributeOverride(name = "surname", column = @Column(name = "surname", nullable = false, length = 127)),
             @AttributeOverride(name = "emailVerified", column = @Column(name = "email_verified", nullable = false)),
             // Phone number is handled by ContactInfo and stored as a string in E.164 format
             // Add overrides for other ContactInfo fields if needed
@@ -77,13 +77,14 @@ public class User extends BaseEntity implements UserDetails {
     @Embedded
     private AccountStatus accountStatus; // Set via constructor/builder
 
-    @AttributeOverrides({
-            @AttributeOverride(name = "deviceFingerprintingEnabled", column = @Column(name = "device_fingerprinting_enabled", nullable = false)),
-            @AttributeOverride(name = "deviceFingerprintingMethod", column = @Column(name = "device_fingerprinting_method")),
-//            @AttributeOverride(name = "deviceFingerprintingData.deviceFingerprintingData", column = @Column(name = "device_fingerprinting_data"))
-    })
-    @Embedded
-    private DeviceFingerprintingInfo deviceFingerprintingInfo; // Set via constructor/builder
+    // REMOVED - Authserver concern
+//    @AttributeOverrides({
+//            @AttributeOverride(name = "deviceFingerprintingEnabled", column = @Column(name = "device_fingerprinting_enabled", nullable = false)),
+//            @AttributeOverride(name = "deviceFingerprintingMethod", column = @Column(name = "device_fingerprinting_method")),
+    /// /            @AttributeOverride(name = "deviceFingerprintingData.deviceFingerprintingData", column = @Column(name = "device_fingerprinting_data"))
+//    })
+//    @Embedded
+//    private DeviceFingerprintingInfo deviceFingerprintingInfo; // Set via constructor/builder
 
     @AttributeOverrides({
             @AttributeOverride(name = "department", column = @Column(name = "department")),
@@ -100,13 +101,14 @@ public class User extends BaseEntity implements UserDetails {
     private Set<UserRole> roles = new HashSet<>();
 //    private Set<UserRole.roleName> roles = new HashSet<>(); // Store roleName enum directly
 
-    @OneToMany(
-            mappedBy = "user", // Matches the 'user' field in PasskeyCredential
-            cascade = CascadeType.ALL, // Persist/merge/remove Passkeys with User
-            fetch = FetchType.LAZY,    // Load Passkeys only when needed
-            orphanRemoval = true       // Delete Passkeys if removed from this list
-    )
-    private List<PasskeyCredential> passkeyCredentials = new ArrayList<>();
+    // REMOVED - Authserver concern
+//    @OneToMany(
+//            mappedBy = "user", // Matches the 'user' field in PasskeyCredential
+//            cascade = CascadeType.ALL, // Persist/merge/remove Passkeys with User
+//            fetch = FetchType.LAZY,    // Load Passkeys only when needed
+//            orphanRemoval = true       // Delete Passkeys if removed from this list
+//    )
+//    private List<PasskeyCredential> passkeyCredentials = new ArrayList<>();
 
     // Initialized collection - JPA will replace this instance upon load
     @OneToMany(mappedBy = "user", cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY, orphanRemoval = true)
@@ -146,7 +148,7 @@ public class User extends BaseEntity implements UserDetails {
         this.authServerSubjectId = b.authServerSubjectId;
         this.contactInfo = b.contactInfo;
         this.accountStatus = b.accountStatus;
-        this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
+//        this.deviceFingerprintingInfo = b.deviceFingerprintingInfo;
         this.locationInfo = b.locationInfo;
         // For collections, initialize even if builder provides null, though builder should ideally provide empty collections
         this.roles = Optional.ofNullable(b.roles).orElseGet(HashSet::new);
@@ -154,7 +156,7 @@ public class User extends BaseEntity implements UserDetails {
         this.categories = Optional.ofNullable(b.categories).orElseGet(ArrayList::new);
         this.products = Optional.ofNullable(b.products).orElseGet(HashSet::new);
         this.refreshTokens = Optional.ofNullable(b.refreshTokens).orElseGet(ArrayList::new);
-        this.passkeyCredentials = Optional.ofNullable(b.passkeyCredentials).orElseGet(ArrayList::new);
+//        this.passkeyCredentials = Optional.ofNullable(b.passkeyCredentials).orElseGet(ArrayList::new);
     }
 
     // Static factory method for the builder
@@ -250,9 +252,9 @@ public class User extends BaseEntity implements UserDetails {
         return this.accountStatus;
     }
 
-    public DeviceFingerprintingInfo getDeviceFingerprintingInfo() {
-        return this.deviceFingerprintingInfo;
-    }
+//    public DeviceFingerprintingInfo getDeviceFingerprintingInfo() {
+//        return this.deviceFingerprintingInfo;
+//    }
 
     public LocationInfo getLocationInfo() {
         return this.locationInfo;
@@ -281,9 +283,9 @@ public class User extends BaseEntity implements UserDetails {
         return this.refreshTokens; // Return JPA-managed collection
     }
 
-    public List<PasskeyCredential> getPasskeyCredentials() {
-        return this.passkeyCredentials; // Return JPA-managed collection
-    }
+//    public List<PasskeyCredential> getPasskeyCredentials() {
+//        return this.passkeyCredentials; // Return JPA-managed collection
+//    }
 
     // --- End Getters ---
 
@@ -330,14 +332,14 @@ public class User extends BaseEntity implements UserDetails {
                 ", authServerSubjectId=" + (this.authServerSubjectId != null ? "present" : "null") +
                 ", contactInfo=" + (this.contactInfo != null ? "present" : "null") +
                 ", accountStatus=" + (this.accountStatus != null ? "present" : "null") +
-                ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
+//                ", deviceFingerprintingInfo=" + (this.deviceFingerprintingInfo != null ? "present" : "null") +
                 ", locationInfo=" + (this.locationInfo != null ? "present" : "null") +
                 ", rolesSize=" + (this.roles != null ? this.roles.size() : 0) + // Indicate size
                 ", addressesSize=" + (this.addresses != null ? this.addresses.size() : 0) +
                 ", categoriesSize=" + (this.categories != null ? this.categories.size() : 0) +
                 ", productsSize=" + (this.products != null ? this.products.size() : 0) +
                 ", refreshTokensSize=" + (this.refreshTokens != null ? this.refreshTokens.size() : 0) +
-                ", passkeyCredentialsSize=" + (this.passkeyCredentials != null ? this.passkeyCredentials.size() : 0) +
+//                ", passkeyCredentialsSize=" + (this.passkeyCredentials != null ? this.passkeyCredentials.size() : 0) +
                 ')';
     }
 
@@ -438,23 +440,23 @@ public class User extends BaseEntity implements UserDetails {
         }
     }
 
-    public void addPasskeyCredential(PasskeyCredential credential) {
-        if (this.passkeyCredentials == null) { // Paranoid check
-            this.passkeyCredentials = new ArrayList<>();
-        }
-        if (credential != null && !this.passkeyCredentials.contains(credential)) {
-            this.passkeyCredentials.add(credential);
-            // Ensure bidirectional relationship is set
-            credential.setUser(this);
-        }
-    }
-
-    public void removePasskeyCredential(PasskeyCredential credential) {
-        if (this.passkeyCredentials != null && credential != null && this.passkeyCredentials.remove(credential)) {
-            // Clear bidirectional relationship
-            credential.setUser(null);
-        }
-    }
+//    public void addPasskeyCredential(PasskeyCredential credential) {
+//        if (this.passkeyCredentials == null) { // Paranoid check
+//            this.passkeyCredentials = new ArrayList<>();
+//        }
+//        if (credential != null && !this.passkeyCredentials.contains(credential)) {
+//            this.passkeyCredentials.add(credential);
+//            // Ensure bidirectional relationship is set
+//            credential.setUser(this);
+//        }
+//    }
+//
+//    public void removePasskeyCredential(PasskeyCredential credential) {
+//        if (this.passkeyCredentials != null && credential != null && this.passkeyCredentials.remove(credential)) {
+//            // Clear bidirectional relationship
+//            credential.setUser(null);
+//        }
+//    }
 
     // --- Methods to update embedded objects ---
     public void updateAuthentication(AuthenticationInfo newAuthInfo) {
@@ -470,9 +472,9 @@ public class User extends BaseEntity implements UserDetails {
     }
 
 
-    public void updateDeviceFingerprintingInfo(DeviceFingerprintingInfo newDeviceFingerprintingInfo) {
-        this.deviceFingerprintingInfo = newDeviceFingerprintingInfo;
-    }
+//    public void updateDeviceFingerprintingInfo(DeviceFingerprintingInfo newDeviceFingerprintingInfo) {
+//        this.deviceFingerprintingInfo = newDeviceFingerprintingInfo;
+//    }
 
     public void updateLocationInfo(LocationInfo newLocationInfo) {
         this.locationInfo = newLocationInfo;
@@ -543,10 +545,10 @@ public class User extends BaseEntity implements UserDetails {
         return roles != null && roles.contains(role);
     }
 
-    // Check device fingerprinting status
-    public boolean isDeviceFingerprintingEnabled() {
-        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
-    }
+//    // Check device fingerprinting status
+//    public boolean isDeviceFingerprintingEnabled() {
+//        return deviceFingerprintingInfo != null && deviceFingerprintingInfo.isDeviceFingerprintingEnabled();
+//    }
 
     // Account status getters
     public int getFailedLoginAttempts() {
@@ -566,14 +568,14 @@ public class User extends BaseEntity implements UserDetails {
         private String authServerSubjectId;
         private ContactInfo contactInfo;
         private AccountStatus accountStatus;
-        private DeviceFingerprintingInfo deviceFingerprintingInfo;
+        //        private DeviceFingerprintingInfo deviceFingerprintingInfo;
         private LocationInfo locationInfo;
         private Set<UserRole> roles; // Builder can take the initial set/list
         private List<Address> addresses;
         private List<Category> categories;
         private Set<Product> products;
         private List<RefreshToken> refreshTokens;
-        private List<PasskeyCredential> passkeyCredentials;
+//        private List<PasskeyCredential> passkeyCredentials;
 
 
         // Builder methods (Keep as is - these set values *on the builder*)
@@ -597,10 +599,10 @@ public class User extends BaseEntity implements UserDetails {
             return self();
         }
 
-        public B deviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
-            this.deviceFingerprintingInfo = deviceFingerprintingInfo;
-            return self();
-        }
+//        public B deviceFingerprintingInfo(DeviceFingerprintingInfo deviceFingerprintingInfo) {
+//            this.deviceFingerprintingInfo = deviceFingerprintingInfo;
+//            return self();
+//        }
 
         public B locationInfo(LocationInfo locationInfo) {
             this.locationInfo = locationInfo;
@@ -637,10 +639,10 @@ public class User extends BaseEntity implements UserDetails {
             return self();
         }
 
-        public B passkeyCredentials(List<PasskeyCredential> passkeyCredentials) {
-            this.passkeyCredentials = passkeyCredentials;
-            return self();
-        }
+//        public B passkeyCredentials(List<PasskeyCredential> passkeyCredentials) {
+//            this.passkeyCredentials = passkeyCredentials;
+//            return self();
+//        }
 
         protected abstract B self();
 
@@ -653,11 +655,12 @@ public class User extends BaseEntity implements UserDetails {
                     ", userId=" + this.userId + "," +
                     " authServerSubjectId=" + this.authServerSubjectId +
                     ", contactInfo=" + this.contactInfo + ", accountStatus=" + this.accountStatus +
-                    ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
+//                    ", deviceFingerprintingInfo=" + this.deviceFingerprintingInfo +
                     ", locationInfo=" + this.locationInfo + ", roles=" + this.roles +
                     ", addresses=" + this.addresses + ", categories=" + this.categories +
                     ", products=" + this.products + ", refreshTokens=" + this.refreshTokens +
-                    ", passkeyCredentials=" + this.passkeyCredentials + ")";
+//                    ", passkeyCredentials=" + this.passkeyCredentials +
+                    ")";
         }
     }
 

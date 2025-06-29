@@ -10,6 +10,8 @@
 
 package me.amlu.shop.amlume_shop.enums;
 
+import java.util.Locale;
+
 public enum Environment {
     LOCAL,
     DEVELOPMENT,
@@ -20,7 +22,7 @@ public enum Environment {
     private static Environment currentEnvironment;
 
     static {
-        String env = System.getProperty("spring.profiles.active", "LOCAL").toUpperCase();
+        String env = System.getProperty("spring.profiles.active", "LOCAL").toUpperCase(Locale.ROOT);
         try {
             currentEnvironment = Environment.valueOf(env);
         } catch (IllegalArgumentException e) {
@@ -30,7 +32,7 @@ public enum Environment {
 
     public static Environment getCurrentEnvironment() {
         if (currentEnvironment == null) {
-            String springProfile = System.getProperty("spring.profiles.active", "LOCAL").toUpperCase();
+            String springProfile = System.getProperty("spring.profiles.active", "LOCAL").toUpperCase(Locale.ROOT);
             try {
                 currentEnvironment = Environment.valueOf(springProfile);
             } catch (IllegalArgumentException e) {

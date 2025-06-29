@@ -14,7 +14,8 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import me.amlu.shop.amlume_shop.exceptions.IpValidationException;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.springframework.stereotype.Service;
 
@@ -44,9 +45,9 @@ public class IpValidationService {
                 .expireAfterWrite(1, TimeUnit.HOURS)
                 .recordStats()
                 .build(new CacheLoader<>() {
-                    @NotNull
+                    @NullMarked
                     @Override
-                    public Boolean load(String ip) {
+                    public Boolean load(@NonNull String ip) {
                         return performIpValidation(ip);
                     }
                 });

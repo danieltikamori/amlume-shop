@@ -25,7 +25,7 @@ public class AuthenticationHealthIndicator implements HealthIndicator {
         // Retrieve the specific circuit breaker by name from the registry
         // *** IMPORTANT: Replace "vaultService" with the actual name of the
         //     circuit breaker this indicator should monitor if it's different! ***
-        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("vaultService");
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker("${resilience4j.circuitbreaker.instances.authserverRegistration}");
     }
 
     @Override

@@ -36,13 +36,13 @@ public class ContactInfo implements Serializable {
     private static final PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
 
 
-    @Column(name = "first_name")
-    @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters")
-    private String firstName;
+    @Column(name = "given_name")
+    @Size(min = 1, max = 127, message = "Given name must be between 1 and 127 characters")
+    private String givenName;
 
-    @Column(name = "last_name")
+    @Column(name = "surname")
     @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters")
-    private String lastName;
+    private String surname;
 
     @Column(name = "nickname", unique = true)
     @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters")
@@ -67,9 +67,9 @@ public class ContactInfo implements Serializable {
     } // Required by JPA
 
     // Constructor updated to accept Phonenumber.PhoneNumber
-    public ContactInfo(String firstName, String lastName, String nickname, UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
-        this.firstName = firstName;
-        this.lastName = lastName;
+    public ContactInfo(String givenName, String surname, String nickname, UserEmail userEmail, boolean emailVerified, Phonenumber.PhoneNumber phoneNumber) {
+        this.givenName = givenName;
+        this.surname = surname;
         this.nickname = nickname;
         this.userEmail = userEmail;
         this.emailVerified = emailVerified;
@@ -99,20 +99,20 @@ public class ContactInfo implements Serializable {
         return userEmail;
     }
 
-    public ContactInfo withFirstName(String firstName) {
-        return new ContactInfo(firstName, this.lastName, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
+    public ContactInfo withGivenName(String givenName) {
+        return new ContactInfo(givenName, this.surname, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
     }
 
-    public ContactInfo withLastName(String lastName) {
-        return new ContactInfo(this.firstName, lastName, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
+    public ContactInfo withSurname(String surname) {
+        return new ContactInfo(this.givenName, surname, this.nickname, this.userEmail, this.emailVerified, this.phoneNumber);
     }
 
-    public @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String getFirstName() {
-        return this.firstName;
+    public @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String getGivenName() {
+        return this.givenName;
     }
 
-    public @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String getLastName() {
-        return this.lastName;
+    public @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String getSurname() {
+        return this.surname;
     }
 
     public @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters") String getNickname() {
@@ -204,12 +204,12 @@ public class ContactInfo implements Serializable {
         if (o == this) return true;
         if (!(o instanceof ContactInfo other)) return false;
         if (!other.canEqual(this)) return false;
-        final Object this$firstName = this.getFirstName();
-        final Object other$firstName = other.getFirstName();
-        if (!Objects.equals(this$firstName, other$firstName)) return false;
-        final Object this$lastName = this.getLastName();
-        final Object other$lastName = other.getLastName();
-        if (!Objects.equals(this$lastName, other$lastName)) return false;
+        final Object this$givenName = this.getGivenName();
+        final Object other$givenName = other.getGivenName();
+        if (!Objects.equals(this$givenName, other$givenName)) return false;
+        final Object this$surname = this.getSurname();
+        final Object other$surname = other.getSurname();
+        if (!Objects.equals(this$surname, other$surname)) return false;
         final Object this$nickname = this.getNickname();
         final Object other$nickname = other.getNickname();
         if (!Objects.equals(this$nickname, other$nickname)) return false;
@@ -230,10 +230,10 @@ public class ContactInfo implements Serializable {
     public int hashCode() {
         final int PRIME = 59;
         int result = 1;
-        final Object $firstName = this.getFirstName();
+        final Object $firstName = this.getGivenName();
         result = result * PRIME + ($firstName == null ? 43 : $firstName.hashCode());
-        final Object $lastName = this.getLastName();
-        result = result * PRIME + ($lastName == null ? 43 : $lastName.hashCode());
+        final Object $surname = this.getSurname();
+        result = result * PRIME + ($surname == null ? 43 : $surname.hashCode());
         final Object $nickname = this.getNickname();
         result = result * PRIME + ($nickname == null ? 43 : $nickname.hashCode());
         final Object $userEmail = this.userEmail;
@@ -247,8 +247,8 @@ public class ContactInfo implements Serializable {
     @Override
     public String toString() {
         return "ContactInfo(" +
-                "firstName=" + this.getFirstName() +
-                ", lastName=" + this.getLastName() +
+                "givenName=" + this.getGivenName() +
+                ", surname=" + this.getSurname() +
                 ", nickname=" + this.getNickname() +
                 ", userEmail=" + this.userEmail + // Relies on UserEmail's toString
                 ", emailVerified=" + this.isEmailVerified() +
@@ -257,8 +257,8 @@ public class ContactInfo implements Serializable {
     }
 
     public static class ContactInfoBuilder {
-        private @Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String firstName;
-        private @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String lastName;
+        private @Size(min = 1, max = 127, message = "Given name must be between 1 and 127 characters") String givenName;
+        private @Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String surname;
         private @Size(min = 1, max = 127, message = "Nickname must be between 1 and 127 characters") String nickname;
         private UserEmail userEmail;
         private boolean emailVerified$value;
@@ -268,13 +268,13 @@ public class ContactInfo implements Serializable {
         ContactInfoBuilder() {
         }
 
-        public ContactInfoBuilder firstName(@Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String firstName) {
-            this.firstName = firstName;
+        public ContactInfoBuilder givenName(@Size(min = 1, max = 127, message = "First name must be between 1 and 127 characters") String givenName) {
+            this.givenName = givenName;
             return this;
         }
 
-        public ContactInfoBuilder lastName(@Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String lastName) {
-            this.lastName = lastName;
+        public ContactInfoBuilder surname(@Size(min = 1, max = 127, message = "Last name must be between 1 and 127 characters") String surname) {
+            this.surname = surname;
             return this;
         }
 
@@ -320,13 +320,13 @@ public class ContactInfo implements Serializable {
 
         public ContactInfo build() {
             boolean emailVerifiedValue = this.emailVerified$set ? this.emailVerified$value : ContactInfo.$default$emailVerified();
-            return new ContactInfo(this.firstName, this.lastName, this.nickname, this.userEmail, emailVerifiedValue, this.phoneNumber);
+            return new ContactInfo(this.givenName, this.surname, this.nickname, this.userEmail, emailVerifiedValue, this.phoneNumber);
         }
 
         @Override
         public String toString() {
-            return "ContactInfo.ContactInfoBuilder(firstName=" + this.firstName +
-                    ", lastName=" + this.lastName +
+            return "ContactInfo.ContactInfoBuilder(givenName=" + this.givenName +
+                    ", surname=" + this.surname +
                     ", nickname=" + this.nickname +
                     ", userEmail=" + this.userEmail +
                     ", emailVerified$value=" + this.emailVerified$value +

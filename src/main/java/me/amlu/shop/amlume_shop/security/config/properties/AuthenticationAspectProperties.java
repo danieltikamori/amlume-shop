@@ -12,6 +12,7 @@ package me.amlu.shop.amlume_shop.security.config.properties;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;
@@ -22,13 +23,13 @@ import java.time.Duration;
 @ConfigurationProperties(prefix = "auth.aspect")
 @Validated
 public class AuthenticationAspectProperties {
-    @NotNull
+    @NonNull
     private Duration cacheTimeout = Duration.ofHours(1);
     
     @Min(1)
     private int maxRetryAttempts = 3;
-    
-    @NotNull
+
+    @NonNull
     private Duration retryInterval = Duration.ofSeconds(1);
     
     // getters and setters

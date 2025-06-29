@@ -1,0 +1,6 @@
+{
+  "origins": [
+    "https://localhost:9000"
+  ],
+  "use_url_for_app_id": true
+}

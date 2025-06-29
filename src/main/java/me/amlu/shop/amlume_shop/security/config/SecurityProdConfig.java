@@ -89,10 +89,10 @@ public class SecurityProdConfig {
                         .requestMatchers("/notifications", "/contact",
                                 // Authentication endpoints
                                 "/register",
-                                "/api/auth/v1/register",
-                                "/api/auth/v1/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
+                                "/api/auth/register",
+                                "/api/auth/login", // Endpoint handled by CustomAuthenticationFilter. The path is in Constants.java
 //                                "/api/auth/login", // Fallback?
-                                "/api/auth/v1/qrcode", // Needs authentication
+                                "/api/auth/qrcode", // Needs authentication
                                 "/api/auth/logout", // Needs authentication (to revoke token)
 
                                 // Public assets and error pages

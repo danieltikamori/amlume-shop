@@ -12,6 +12,8 @@ package me.amlu.shop.amlume_shop.service;
 
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
+
 @Component
 public class EnvironmentServiceImpl implements EnvironmentService {
     private final org.springframework.core.env.Environment springEnvironment;
@@ -24,9 +26,9 @@ public class EnvironmentServiceImpl implements EnvironmentService {
     public String getCurrentEnvironment() {
         String[] activeProfiles = springEnvironment.getActiveProfiles();
         if (activeProfiles.length > 0) {
-            return activeProfiles[0].toUpperCase();
+            return activeProfiles[0].toUpperCase(Locale.ROOT);
         }
-        return springEnvironment.getProperty("spring.profiles.active", "LOCAL").toUpperCase();
+        return springEnvironment.getProperty("spring.profiles.active", "LOCAL").toUpperCase(Locale.ROOT);
     }
 
     public boolean isProduction() {

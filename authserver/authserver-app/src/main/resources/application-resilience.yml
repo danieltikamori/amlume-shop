@@ -1,0 +1,73 @@
+resilience4j:
+  circuitbreaker:
+    instances:
+      userService:
+        registerHealthIndicator: true
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        eventConsumerBufferSize: 10
+        recordExceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+      externalService:
+        registerHealthIndicator: true
+        slidingWindowSize: 100
+        permittedNumberOfCallsInHalfOpenState: 10
+        waitDurationInOpenState: 60s
+        failureRateThreshold: 60
+        eventConsumerBufferSize: 10
+
+  retry:
+    instances:
+      userService:
+        maxAttempts: 3
+        waitDuration: 1s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.dao.DataAccessException
+          - java.util.concurrent.TimeoutException
+          - java.io.IOException
+        ignoreExceptions:
+          - me.amlu.authserver.exceptions.PasswordMismatchException
+          - jakarta.persistence.EntityNotFoundException
+
+  bulkhead:
+    instances:
+      userService:
+        maxConcurrentCalls: 20
+        maxWaitDuration: 500ms
+
+  thread-pool-bulkhead:
+    instances:
+      userService:
+        maxThreadPoolSize: 10
+        coreThreadPoolSize: 5
+        queueCapacity: 100
+        keepAliveDuration: 20ms
+
+  timelimiter:
+    instances:
+      userService:
+        timeoutDuration: 5s
+        cancelRunningFuture: true
+      externalService:
+        timeoutDuration: 3s
+        cancelRunningFuture: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true

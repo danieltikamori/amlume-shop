@@ -23,7 +23,7 @@ import me.amlu.shop.amlume_shop.commons.Constants;
 import me.amlu.shop.amlume_shop.exceptions.*;
 import me.amlu.shop.amlume_shop.security.dto.GetRecaptchaResponse;
 import me.amlu.shop.amlume_shop.resilience.ratelimiter.RateLimiter;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;

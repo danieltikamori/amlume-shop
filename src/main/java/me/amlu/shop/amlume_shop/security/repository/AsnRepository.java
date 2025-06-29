@@ -17,7 +17,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,10 +25,21 @@ import java.util.Optional;
 public interface AsnRepository extends JpaRepository<AsnEntry, String> {
     Optional<AsnEntry> findByIp(String ip);
 
-    @Query("SELECT a FROM AsnEntry a WHERE a.lastUpdated < :timestamp")
-    List<AsnEntry> findStaleEntries(@Param("timestamp") LocalDateTime timestamp);
+    /**
+     * Finds stale entries based on their last modification date.
+     *
+     * @param timestamp The cutoff timestamp. Entries last modified before this will be returned.
+     * @return A list of stale AsnEntry entities.
+     */
+    @Query("SELECT a FROM AsnEntry a WHERE a.lastModifiedDate < :timestamp")
+    List<AsnEntry> findStaleEntries(@Param("timestamp") Instant timestamp);
 
+    /**
+     * Deletes stale entries based on their last modification date.
+     *
+     * @param timestamp The cutoff timestamp. Entries last modified before this will be deleted.
+     */
     @Modifying
-    @Query("DELETE FROM AsnEntry a WHERE a.lastUpdated < :timestamp")
-    void deleteStaleEntries(@Param("timestamp") LocalDateTime timestamp);
+    @Query("DELETE FROM AsnEntry a WHERE a.lastModifiedDate < :timestamp")
+    void deleteStaleEntries(@Param("timestamp") Instant timestamp);
 }

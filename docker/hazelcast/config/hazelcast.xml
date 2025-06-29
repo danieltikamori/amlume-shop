@@ -1,0 +1,74 @@
+<!--
+  ~ Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+  ~
+  ~ This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+  ~
+  ~ Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+  ~
+  ~ Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+  -->
+
+<hazelcast xmlns="http://www.hazelcast.com/schema/config"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://www.hazelcast.com/schema/config
+                               http://www.hazelcast.com/schema/config/hazelcast-config-5.5.xsd">
+
+    <cluster-name>dev</cluster-name>
+
+    <user-code-deployment enabled="true">
+        <class-cache-mode>ETERNAL</class-cache-mode>
+        <provider-mode>LOCAL_AND_CACHED_CLASSES</provider-mode>
+    </user-code-deployment>
+
+    <network>
+        <join>
+            <multicast enabled="false"/>
+            <tcp-ip enabled="true">
+                <member-list>
+                    <!-- For a single node dev setup, it can discover itself or you can specify it. -->
+                    <!-- If your Hazelcast container is named 'hazelcast' on the Docker network: -->
+                    <member>hazelcast</member>
+                    <!-- Or use 127.0.0.1 if appropriate for your Docker network setup -->
+                    <!-- <member>127.0.0.1</member> -->
+                </member-list>
+            </tcp-ip>
+        </join>
+        <!-- You might need to configure public-address if running in complex Docker networks or exposing externally -->
+        <public-address>hazelcast</public-address>
+        <!-- <public-address>your-host-ip-or-docker-service-name</public-address> -->
+    </network>
+
+    <!-- Default map configuration for Spring Session Hazelcast -->
+    <!-- Match with application's map name -->
+    <map name="spring:session:authserver:sessions">
+        <!-- Time to live for sessions, must match sessionTimeout of the application -->
+        <!-- Time to live for sessions (e.g., 7200 seconds = 2 hours) -->
+        <time-to-live-seconds>7200</time-to-live-seconds>
+
+        <!-- Eviction policy for when the map reaches its max size -->
+        <eviction
+                size="100000"
+                max-size-policy="PER_NODE"
+                eviction-policy="LRU"/>
+
+        <!--
+          CRITICAL: Add attribute and index for Principal Name.
+          This is required by HazelcastIndexedSessionRepository to find sessions by principal.
+        -->
+        <attributes>
+            <attribute extractor-class-name="org.springframework.session.hazelcast.PrincipalNameExtractor">
+                principalName
+            </attribute>
+        </attributes>
+
+        <indexes>
+            <index type="HASH">
+                <attributes>
+                    <attribute>principalName</attribute>
+                </attributes>
+            </index>
+        </indexes>
+    </map>
+
+    <!-- Add other configurations as needed -->
+</hazelcast>

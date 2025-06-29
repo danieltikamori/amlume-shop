@@ -15,7 +15,8 @@ import me.amlu.shop.amlume_shop.exceptions.UserScopeMissingException;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserRepository;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
@@ -49,7 +50,7 @@ public class TokenUtilServiceImpl implements me.amlu.shop.amlume_shop.security.p
     }
 
 
-    @NotNull
+    @NullMarked
     @Override
     public User getUserByUserId(String userId) {
         Optional<User> userOptional = userRepository.findById(Long.parseLong(userId)); // import java.util.Optional

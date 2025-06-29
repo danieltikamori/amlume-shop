@@ -10,35 +10,42 @@
   -->
 
 <configuration>
-    <include resource="org/springframework/boot/logging/logback/base.xml"/>
 
-    <!-- Appender for Security Audit Logs (JSON format) -->
-    <appender name="SECURITY_AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/security-audit.json</file>
+    <!-- Include Spring Boot's default configurations -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- Define properties for application name and log file path -->
+    <springProperty scope="context" name="springAppName" source="spring.application.name"/>
+    <property name="LOG_FILE" value="${LOG_FILE:-${LOG_PATH:-${LOG_TEMP:-${java.io.tmpdir:-/tmp}}}/spring.log}"/>
+
+    <!--
+     Console Appender with JSON layout using LogstashLogbackEncoder.
+     This is the primary appender for containerized environments.
+     Log shipping agents (like Promtail, Fluentd) will collect logs from stdout.
+    -->
+    <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
         <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-            <includeContext>false</includeContext>
-            <includeCallerData>false</includeCallerData>
-            <!-- Add custom fields that apply to all audit logs -->
-            <customFields>{"application":"authserver", "log_type":"security_audit"}</customFields>
+            <jsonGeneratorDecorator class="net.logstash.logback.decorate.PrettyPrintingJsonGeneratorDecorator"/>
+            <fieldNames>
+                <!-- Standardize field names for better compatibility with Grafana Loki -->
+                <timestamp>time</timestamp>
+                <version>[ignore]</version> <!-- Don't include the logback version -->
+                <level>level</level>
+                <thread>thread</thread>
+                <logger>logger</logger>
+                <message>message</message>
+                <context>context</context>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+            <!-- Add custom fields that are useful for filtering and context in Grafana -->
+            <customFields>{"app_name":"${springAppName:-authserver}"}</customFields>
         </encoder>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/security-audit.%d{yyyy-MM-dd}.json.gz</fileNamePattern>
-            <maxHistory>30</maxHistory> <!-- Retain 30 days of audit logs -->
-            <totalSizeCap>1GB</totalSizeCap> <!-- Cap total size -->
-        </rollingPolicy>
     </appender>
 
-    <!-- Logger for SECURITY_AUDIT events -->
-    <logger name="SECURITY_AUDIT" level="INFO" additivity="false">
-        <appender-ref ref="SECURITY_AUDIT_FILE"/>
-        <!-- Optionally, add another appender to send to a SIEM or Kafka -->
-        <!-- <appender-ref ref="SIEM_KAFKA_APPENDER"/> -->
-    </logger>
-
-    <!-- Root logger configuration (for general application logs) -->
+    <!-- Root logger configuration -->
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <!-- In a container environment, logging to the console is preferred. -->
+        <appender-ref ref="CONSOLE_JSON"/>
     </root>
 
 </configuration>

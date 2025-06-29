@@ -18,7 +18,7 @@ public class EmailSendingFailedException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     public EmailSendingFailedException(Exception e) {
-        super("Failed to send email", e);
+        super("Failed to send userEmail", e);
     }
 
     public EmailSendingFailedException(String message) {
@@ -30,7 +30,7 @@ public class EmailSendingFailedException extends RuntimeException {
     }
 
     public EmailSendingFailedException() {
-        super("Failed to send email");
+        super("Failed to send userEmail");
     }
 
     public EmailSendingFailedException(Exception e, String message) {

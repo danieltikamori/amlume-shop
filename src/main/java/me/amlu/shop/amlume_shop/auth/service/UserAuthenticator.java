@@ -25,7 +25,6 @@ import me.amlu.shop.amlume_shop.security.repository.UserDeviceFingerprintReposit
 import me.amlu.shop.amlume_shop.security.service.CaptchaService;
 import me.amlu.shop.amlume_shop.security.service.DeviceFingerprintService;
 import me.amlu.shop.amlume_shop.security.service.SecurityAuditService;
-import me.amlu.shop.amlume_shop.security.service.SecurityNotificationService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
 import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
@@ -34,7 +33,6 @@ import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -61,7 +59,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
     private final UserDeviceFingerprintRepository userDeviceFingerprintRepository; // For local device fingerprinting storage
     private final HttpServletRequest httpServletRequest; // For request details (IP, User-Agent)
     private final SecurityAuditService auditService; // For local audit logging
-    private final SecurityNotificationService notificationService; // For local notifications (e.g., account locked - though this moves to authserver)
     private final UserService userService; // For accessing local User entity (linked by authserver ID)
 
     // REMOVE dependencies related to old local auth/token flow
@@ -86,7 +83,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
                              UserDeviceFingerprintRepository userDeviceFingerprintRepository,
                              HttpServletRequest httpServletRequest,
                              SecurityAuditService auditService,
-                             SecurityNotificationService notificationService,
                              UserService userService, // Keep for local user access
                              WebClient authServerWebClient // Inject WebClient
                              // Remove old dependencies: UserRepository, PasswordEncoder, PasetoTokenService, TokenRevocationService
@@ -99,7 +95,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         this.userDeviceFingerprintRepository = userDeviceFingerprintRepository;
         this.httpServletRequest = httpServletRequest;
         this.auditService = auditService;
-        this.notificationService = notificationService;
         this.userService = userService; // Assign local UserService
         this.authServerWebClient = authServerWebClient; // Assign WebClient
     }
@@ -131,8 +126,8 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
 
         // 1. Map amlume-shop DTO to authserver DTO
         AuthServerRegistrationRequest authServerRequest = new AuthServerRegistrationRequest(
-                request.firstName() != null ? request.firstName() : null,
-                request.lastName() != null ? request.lastName() : null,
+                request.givenName() != null ? request.givenName() : null,
+                request.surname() != null ? request.surname() : null,
                 request.nickname() != null ? request.nickname() : null,
                 request.userEmail() != null ? request.userEmail() : null,
                 request.password() != null ? request.password() : null,
@@ -237,6 +232,97 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         }
     }
 
+    // --- Admin Registration ---
+
+    /**
+     * Registers an admin user.
+     *
+     * @param request   The admin user registration details.
+     * @param ipAddress The IP address of the registration request.
+     * @throws TooManyAttemptsException   If admin registration attempts does exceed the limits (local check).
+     * @throws InvalidCaptchaException    If captcha validation fails (local check).
+     * @throws UserAlreadyExistsException If the username or userEmail is already taken (reported by authserver).
+     * @throws UserRegistrationException  If an internal error occurs during registration (local or authserver).
+     * @throws IllegalArgumentException   If the request is invalid (reported by authserver).
+     */
+    // Apply Resilience4j annotations
+    @Retry(name = "authserverAdminRegistration")
+    @CircuitBreaker(name = "authserverAdminRegistration", fallbackMethod = "registerAdminFallback")
+    @Override
+    @Transactional
+    @Timed(value = "shopapp.auth.register.admin.call", description = "Time taken for shop-app to call authserver admin registration")
+    public void registerAdmin(@Valid UserRegistrationRequest request, String ipAddress)
+            throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
+
+        String emailForLogging = request.userEmail() != null ? request.userEmail() : "[email_not_provided_in_request]";
+        log.info("Attempting to register admin user via authserver admin API: userEmail={}", emailForLogging);
+
+        performPreFlightChecks(emailForLogging, ipAddress, "AdminRegistration", request.captchaResponse());
+
+        // Map amlume-shop DTO to authserver DTO (authserver needs to accept roles)
+        // You'll need a DTO in authserver like AuthServerAdminRegistrationRequest
+        // that includes fields for roles (e.g., Set<String> roles)
+        AuthServerRegistrationRequest authServerAdminRequest = new AuthServerRegistrationRequest(
+                request.givenName(),
+                request.surname(),
+                request.nickname(),
+                request.userEmail(),
+                request.password(),
+                request.mobileNumber(),
+                null // defaultRegion
+        );
+        // Add roles to the request for authserver
+        // This assumes authserver's admin API accepts a list of roles to assign.
+        // For example, if authServerAdminRequest had a `roles` field:
+        // authServerAdminRequest.setRoles(Set.of("ROLE_ADMIN", "ROLE_USER")); // Or whatever roles are appropriate for admin
+
+        authServerWebClient.post()
+                .uri("/api/admin/register") // New endpoint on authserver for admin registration
+                .bodyValue(authServerAdminRequest) // Pass the DTO including roles
+                .retrieve()
+                .onStatus(HttpStatusCode::is2xxSuccessful, clientResponse -> {
+                    log.info("Authserver admin registration successful for userEmail: {}", emailForLogging);
+                    return Mono.empty();
+                })
+                .onStatus(HttpStatus.CONFLICT::equals, clientResponse -> {
+                    log.warn("Authserver reported admin user already exists for userEmail: {}", emailForLogging);
+                    return Mono.error(new UserAlreadyExistsException("Admin user with this email already exists."));
+                })
+                .onStatus(HttpStatus.BAD_REQUEST::equals, clientResponse -> clientResponse.bodyToMono(String.class)
+                        .flatMap(errorMessage -> {
+                            log.warn("Authserver 400 error details for admin registration: {}", errorMessage);
+                            return Mono.error(new IllegalArgumentException("Invalid admin registration data: " + errorMessage));
+                        }))
+                .onStatus(HttpStatusCode::isError, clientResponse -> clientResponse.bodyToMono(String.class)
+                        .flatMap(errorMessage -> {
+                            log.error("Authserver returned error status {} for admin registration of userEmail: {}. Details: {}", clientResponse.statusCode(), emailForLogging, errorMessage);
+                            return Mono.error(new UserRegistrationException("Authserver admin registration failed: " + errorMessage));
+                        }))
+                .bodyToMono(Void.class)
+                .block(); // Block to make the method synchronous
+
+        auditService.logSuccessfulRegistration(null, emailForLogging, ipAddress);
+        log.info("Admin registration process completed successfully for user: {}", emailForLogging);
+    }
+
+    public void registerAdminFallback(@Valid UserRegistrationRequest request, String ipAddress, Throwable t)
+            throws TooManyAttemptsException, InvalidCaptchaException, UserAlreadyExistsException, UserRegistrationException, IllegalArgumentException {
+        String userEmail = request.userEmail() != null ? request.userEmail() : "unknown_email_for_fallback";
+        log.error("Fallback for registerAdmin method triggered for user [{}], IP [{}]. Cause: {}", userEmail, ipAddress, t.getMessage());
+        auditService.logFailedRegistration(userEmail, ipAddress, "Authserver admin registration fallback triggered: " + t.getMessage());
+
+        if (t instanceof TooManyAttemptsException) throw (TooManyAttemptsException) t;
+        if (t instanceof InvalidCaptchaException) throw (InvalidCaptchaException) t;
+        if (t instanceof UserAlreadyExistsException) throw (UserAlreadyExistsException) t;
+        if (t instanceof IllegalArgumentException) throw (IllegalArgumentException) t;
+
+        if (t instanceof CallNotPermittedException) {
+            throw new UserRegistrationException("Admin registration service is temporarily unavailable (circuit breaker open). Please try again later.", t);
+        } else {
+            throw new UserRegistrationException("Admin registration failed due to an issue communicating with the authentication server. Please try again later.", t);
+        }
+    }
+
     // --- Logout ---
     @Transactional
     @Override
@@ -321,47 +407,6 @@ public class UserAuthenticator implements AuthenticationInterface { // Keep inte
         }
 
         log.trace("Local pre-flight checks passed for identifier [{}], action [{}]", identifier, actionType);
-    }
-
-    // This method is part of the old PASETO flow and should be removed later.
-    @Deprecated(since = "2025-05-15", forRemoval = true)
-    private void checkAccountLockStatus(User user, String ipAddress) throws LockedException {
-        log.warn("checkAccountLockStatus method is deprecated and should not be used.");
-        // Implementation removed
-    }
-
-    /**
-     * Associates device fingerprint with tokens, checking device limits for new devices.
-     * This method is part of the old PASETO flow. If amlume-shop still needs device tracking,
-     * this logic needs to be adapted to the OAuth2/OIDC flow (e.g., triggered after OAuth2 login success).
-     *
-     * @param user              The user.
-     * @param accessToken       The access token.
-     * @param refreshToken      The refresh token.
-     * @param deviceFingerprint The generated device fingerprint.
-     * @param trustOnCreate     Whether to mark the device as trusted if it's being created (e.g., during registration).
-     * @throws MaxDevicesExceededException if adding a new device would exceed the limit.
-     */
-    // This method is part of the old PASETO flow. Needs adaptation if local device tracking is kept.
-    private void associateFingerprintWithTokens(User user, String accessToken, String refreshToken, String deviceFingerprint, boolean trustOnCreate) throws MaxDevicesExceededException {
-        log.warn("associateFingerprintWithTokens method is part of the old PASETO flow. Needs adaptation if local device tracking is kept.");
-        // Implementation removed or adapted elsewhere
-    }
-
-    @Override
-    public String generateAndHandleFingerprint(String userAgent, String screenWidth, String screenHeight) {
-        // This method can remain if amlume-shop needs its own device fingerprinting for shop-specific logic
-        // (distinct from authserver's passkey/WebAuthn device handling).
-        // Its usage would be triggered after successful OAuth2 login.
-        log.debug("Generating and handling device fingerprint locally.");
-        String deviceFingerprint = deviceFingerprintService.generateDeviceFingerprint(userAgent, screenWidth, screenHeight, httpServletRequest);
-
-        if (deviceFingerprint == null) {
-            log.warn("Local device fingerprint could not be generated.");
-            return null;
-        }
-        log.trace("Generated local device fingerprint: {}", deviceFingerprint);
-        return deviceFingerprint;
     }
 
     @Override

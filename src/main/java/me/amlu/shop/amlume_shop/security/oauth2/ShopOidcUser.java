@@ -74,8 +74,8 @@ public class ShopOidcUser implements OidcUser, UserDetails {
     @Override
     public String getUsername() {
         // This should be the primary identifier used within amlume-shop's security context.
-        // It should be the email from the amlume-shop.User entity.
-        // Ensure amlume-shop.User.getUsername() returns the email.
+        // It should be the userEmail from the amlume-shop.User entity.
+        // Ensure amlume-shop.User.getUsername() returns the userEmail.
         return this.shopUser.getUsername();
     }
 
@@ -105,7 +105,7 @@ public class ShopOidcUser implements OidcUser, UserDetails {
     @Override
     public String getName() {
         // The 'name' from OidcUser is typically the 'sub' (subject) claim from the ID token.
-        // In the authserver, 'sub' is the user's email.
+        // In the authserver, 'sub' is the user's userEmail.
         // The 'user_id_numeric' claim is what we use for stable linking.
         return this.oidcUserDelegate.getName();
     }

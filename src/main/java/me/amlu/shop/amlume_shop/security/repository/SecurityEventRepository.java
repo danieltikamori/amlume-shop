@@ -33,7 +33,7 @@ public interface SecurityEventRepository extends JpaRepository<SecurityEvent, Lo
     List<SecurityEvent> findByUsername(String username);
     Page<SecurityEvent> findByUsername(String username, Pageable pageable);
 
-    List<SecurityEvent> findByUserId(String userId);
+    List<SecurityEvent> findByUserId(Long userId);
 
     Page<SecurityEvent> findByIpAddress(String ipAddress, Pageable pageable);
 

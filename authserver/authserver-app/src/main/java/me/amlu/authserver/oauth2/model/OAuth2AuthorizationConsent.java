@@ -1,0 +1,55 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.authserver.oauth2.model;
+
+import jakarta.persistence.*;
+import me.amlu.authserver.user.model.vo.OAuth2AuthorizationConsentId;
+
+@Entity
+@Table(name = "oauth2_authorization_consent", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"registered_client_id", "principal_name"})},
+        indexes = {
+                @Index(name = "idx_registered_client_id", columnList = "registered_client_id"),
+                @Index(name = "idx_principal_name", columnList = "principal_name"),
+        }) // Table name used by Spring Authorization Server JDBC schema
+public class OAuth2AuthorizationConsent {
+
+    @EmbeddedId
+    private OAuth2AuthorizationConsentId id;
+
+    @Lob
+    @Column(columnDefinition = "TEXT", nullable = false) // VARCHAR(1000) in default schema
+    private String authorities; // Space-delimited set of scopes/roles
+
+    public OAuth2AuthorizationConsent(String registeredClientId, String principalName, String authorities) {
+        this.id = new OAuth2AuthorizationConsentId(registeredClientId, principalName);
+        this.authorities = authorities;
+    }
+
+    public OAuth2AuthorizationConsent() {
+    }
+
+    public OAuth2AuthorizationConsentId getId() {
+        return this.id;
+    }
+
+    public void setId(OAuth2AuthorizationConsentId id) {
+        this.id = id;
+    }
+
+    public String getAuthorities() {
+        return this.authorities;
+    }
+
+    public void setAuthorities(String authorities) {
+        this.authorities = authorities;
+    }
+}

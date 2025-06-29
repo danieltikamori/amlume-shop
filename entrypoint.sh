@@ -194,6 +194,10 @@ add_pair "valkey.host" "${VALKEY_HOST}"
 add_pair "valkey.port" "${VALKEY_PORT}"
 # Add valkey.pool.* properties if needed
 
+# Vault properties
+add_pair "vault.docker.uri" "${VAULT_DOCKER_URI}"
+add_pair "vault.hcp.uri" "${VAULT_HCP_URI}"
+
 # Whois properties (match WhoisProperties bean or @Value keys)
 add_pair "web.whois.server" "${WHOIS_SERVER}" # Check exact property name used by Spring
 add_pair "web.whois.port" "${WHOIS_PORT}"     # Check exact property name used by Spring

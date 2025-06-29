@@ -1,0 +1,249 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.authserver.passkey.repository;
+
+import me.amlu.authserver.passkey.model.PasskeyCredential;
+import me.amlu.authserver.user.model.User;
+import me.amlu.authserver.user.repository.UserRepository;
+import org.slf4j.Logger;
+import org.springframework.security.web.webauthn.api.*;
+import org.springframework.security.web.webauthn.management.UserCredentialRepository;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Component // Ensure this is a Spring managed bean
+public class DbUserCredentialRepository implements UserCredentialRepository {
+
+    /**
+     * Logger for this class.
+     */
+    private static final Logger log = org.slf4j.LoggerFactory.getLogger(DbUserCredentialRepository.class);
+
+    private final PasskeyCredentialRepository credentialRepository;
+    private final UserRepository userRepository;
+
+    public DbUserCredentialRepository(PasskeyCredentialRepository credentialRepository, UserRepository userRepository) {
+        this.credentialRepository = credentialRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Converts a {@link PasskeyCredential} entity to a {@link CredentialRecord} API object.
+     *
+     * @param credential The {@link PasskeyCredential} entity to convert.
+     * @param userHandle The user handle associated with the credential.
+     * @return The converted {@link CredentialRecord}.
+     */
+    private static CredentialRecord toCredentialRecord(PasskeyCredential credential, Bytes userHandle) {
+        // log.info("toCredentialRecord: credentialId={}, userHandle={}", credential.getCredentialId(), userHandle.toBase64UrlString());
+        ImmutableCredentialRecord.ImmutableCredentialRecordBuilder
+                builder = ImmutableCredentialRecord.builder()
+                .userEntityUserId(userHandle) // This is the User.externalId
+                .label(credential.getFriendlyName()) // Map from friendlyName
+                .credentialType(PublicKeyCredentialType.valueOf(credential.getCredentialType()))
+                // credential.getCredentialId() is a Base64URL string, Bytes.fromBase64 handles this
+                .credentialId(Bytes.fromBase64(credential.getCredentialId()))
+                // credential.getPublicKeyCose() is byte[], use new ImmutablePublicKeyCose(byte[])
+                .publicKey(new ImmutablePublicKeyCose(credential.getPublicKeyCose()))
+                .signatureCount(credential.getSignatureCount())
+                .uvInitialized(credential.getUvInitialized() != null && credential.getUvInitialized())
+                .transports(asTransportSet(credential.getTransports()))
+                .backupEligible(credential.getBackupEligible() != null && credential.getBackupEligible())
+                .backupState(credential.getBackupState() != null && credential.getBackupState());
+
+        if (credential.getAttestationObject() != null) {
+            // credential.getAttestationObject() is byte[], use new Bytes()
+            builder.attestationObject(new Bytes(credential.getAttestationObject()));
+        }
+        if (credential.getLastUsedAt() != null) {
+            builder.lastUsed(credential.getLastUsedAt());
+        }
+        if (credential.getCreatedAt() != null) {
+            builder.created(credential.getCreatedAt());
+        }
+        return builder.build();
+    }
+
+    /**
+     * Converts a comma-separated string of transports to a {@link Set} of {@link AuthenticatorTransport}.
+     *
+     * @param transports The comma-separated string of transports.
+     * @return A {@link Set} of {@link AuthenticatorTransport}.
+     */
+    private static Set<AuthenticatorTransport> asTransportSet(String transports) {
+        if (transports == null || transports.isEmpty()) {
+            return Collections.emptySet(); // Return empty set, not Set.of() which is for non-empty
+        }
+        return Arrays.stream(transports.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .map(AuthenticatorTransport::valueOf)
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Deletes a {@link CredentialRecord} by its credential ID.
+     * This method is transactional.
+     *
+     * @param credentialId The ID of the credential to delete.
+     */
+    @Override
+    @Transactional
+    public void delete(Bytes credentialId) {
+        log.info("delete PasskeyCredential by credentialId: {}", credentialId.toBase64UrlString());
+        credentialRepository.findByCredentialId(credentialId.toBase64UrlString())
+                .ifPresent(credentialRepository::delete);
+    }
+
+    /**
+     * Saves a {@link CredentialRecord}. If a credential with the same ID exists, it is updated; otherwise, a new one is created.
+     * This method is transactional.
+     *
+     * @param credentialRecord The {@link CredentialRecord} to save.
+     */
+    @Override
+    @Transactional
+    public void save(CredentialRecord credentialRecord) {
+        log.info("Attempting to save CredentialRecord for userHandle: {}, credentialId: {}",
+                credentialRecord.getUserEntityUserId().toBase64UrlString(),
+                credentialRecord.getCredentialId().toBase64UrlString());
+
+        userRepository.findByExternalIdAndDeletedAtIsNull(credentialRecord.getUserEntityUserId().toBase64UrlString())
+                .ifPresentOrElse(user -> {
+                    PasskeyCredential passkeyToSave = credentialRepository.findByCredentialId(credentialRecord.getCredentialId().toBase64UrlString())
+                            .map(existingCredential -> {
+                                log.debug("Updating existing PasskeyCredential with id: {}", existingCredential.getId());
+                                return updatePasskeyCredential(existingCredential, credentialRecord);
+                            })
+                            .orElseGet(() -> {
+                                log.debug("Creating new PasskeyCredential for user: {}", user.getId());
+                                return newPasskeyCredential(credentialRecord, user);
+                            });
+
+                    credentialRepository.save(passkeyToSave);
+                    log.info("Saved PasskeyCredential: userGivenName={}, externalId={}, passkeyFriendlyName={}",
+                            user.getGivenName(), user.getExternalId(), passkeyToSave.getFriendlyName());
+                }, () -> log.warn("User not found with externalId: {}. Cannot save PasskeyCredential.",
+                        credentialRecord.getUserEntityUserId().toBase64UrlString()));
+    }
+
+    /**
+     * Finds a {@link CredentialRecord} by its credential ID.
+     * This method is transactional and read-only.
+     *
+     * @param credentialId The ID of the credential to find.
+     * @return The found {@link CredentialRecord}, or {@code null} if not found or if the associated user is invalid.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public CredentialRecord findByCredentialId(Bytes credentialId) {
+        log.info("findByCredentialId: id={}", credentialId.toBase64UrlString());
+
+        return credentialRepository.findByCredentialIdWithUser(credentialId.toBase64UrlString())
+                .map(cred -> {
+                    User user = cred.getUser(); // 'user' is now fully initialized
+                    if (user == null || !StringUtils.hasText(user.getExternalId())) { // Check if user or externalId is null/empty
+                        log.error("PasskeyCredential with id {} is missing a valid associated user or user externalId.", cred.getId());
+                        return null;
+                    }
+                    return toCredentialRecord(cred, Bytes.fromBase64(user.getExternalId()));
+                })
+                .orElse(null);
+    }
+
+    /**
+     * Finds all {@link CredentialRecord}s associated with a given user handle.
+     * This method is transactional and read-only.
+     *
+     * @param userHandle The user handle to search for.
+     * @return A {@link List} of {@link CredentialRecord}s associated with the user, or an empty list if the user is not found.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<CredentialRecord> findByUserId(Bytes userHandle) {
+        // ... (this method remains the same, but ensure it's also transactional)
+        log.info("findByUserId (userHandle): {}", userHandle.toBase64UrlString());
+
+        return userRepository.findByExternalIdAndDeletedAtIsNull(userHandle.toBase64UrlString())
+                .map(user -> credentialRepository.findByUserId(user.getId()) // Use User's internal ID
+                        .stream()
+                        // User.externalId is a Base64URL string, Bytes.fromBase64 handles this
+                        .map(cred -> toCredentialRecord(cred, Bytes.fromBase64(user.getExternalId())))
+                        .collect(Collectors.toList()))
+                .orElseGet(List::of);
+    }
+
+    /**
+     * Updates an existing {@link PasskeyCredential} entity with data from a {@link CredentialRecord}.
+     *
+     * @param credential       The existing {@link PasskeyCredential} entity.
+     * @param credentialRecord The {@link CredentialRecord} containing the updated data.
+     * @return The updated {@link PasskeyCredential} entity.
+     */
+    private PasskeyCredential updatePasskeyCredential(PasskeyCredential credential, CredentialRecord credentialRecord) {
+        // User should already be set and correct for an existing credential
+        // credential.setUser(user); // Not AggregateReference for JPA
+        credential.setFriendlyName(credentialRecord.getLabel());
+        credential.setCredentialType(credentialRecord.getCredentialType().getValue());
+        setCredentialPasskeyAndRecord(credential, credentialRecord);
+        return credential;
+    }
+
+    /**
+     * Creates a new {@link PasskeyCredential} entity from a {@link CredentialRecord} and a {@link User}.
+     *
+     * @param credentialRecord The {@link CredentialRecord} containing the data for the new credential.
+     * @param user             The {@link User} associated with the new credential.
+     * @return The newly created {@link PasskeyCredential} entity.
+     */
+    private PasskeyCredential newPasskeyCredential(CredentialRecord credentialRecord, User user) {
+        PasskeyCredential credential = new PasskeyCredential();
+        credential.setUser(user); // Set the JPA User entity
+        credential.setUserHandle(user.getExternalId()); // Store the user handle used during registration
+        credential.setFriendlyName(credentialRecord.getLabel());
+        credential.setCredentialType(credentialRecord.getCredentialType().getValue());
+        // credentialRecord.getCredentialId() is Bytes, use its instance method toBase64UrlString()
+        credential.setCredentialId(credentialRecord.getCredentialId().toBase64UrlString());
+        // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
+        setCredentialPasskeyAndRecord(credential, credentialRecord);
+        // CreatedAt will be set by @CreationTimestamp
+        return credential;
+    }
+
+    /**
+     * Sets the common fields of a {@link PasskeyCredential} entity from a {@link CredentialRecord}.
+     *
+     * @param credential       The {@link PasskeyCredential} entity to update.
+     * @param credentialRecord The {@link CredentialRecord} containing the data.
+     */
+    private static void setCredentialPasskeyAndRecord(PasskeyCredential credential, CredentialRecord credentialRecord) {
+        // credentialRecord.getPublicKey() is PublicKeyCose, use its instance method getBytes()
+        credential.setPublicKeyCose(credentialRecord.getPublicKey().getBytes());
+        credential.setSignatureCount(credentialRecord.getSignatureCount());
+        credential.setUvInitialized(credentialRecord.isUvInitialized());
+        credential.setTransports(credentialRecord.getTransports().stream().map(AuthenticatorTransport::getValue).collect(Collectors.joining(",")));
+        credential.setBackupEligible(credentialRecord.isBackupEligible());
+        credential.setBackupState(credentialRecord.isBackupState());
+        if (credentialRecord.getAttestationObject() != null) {
+            // credentialRecord.getAttestationObject() is Bytes, use its instance method getBytes()
+            credential.setAttestationObject(credentialRecord.getAttestationObject().getBytes());
+        }
+        credential.setLastUsedAt(credentialRecord.getLastUsed());
+        // Created date should not change for an existing credential
+    }
+}

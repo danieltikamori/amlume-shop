@@ -14,10 +14,12 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.constraints.NotNull;
 import me.amlu.shop.amlume_shop.exceptions.TokenValidationFailureException;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoClaims;
 import me.amlu.shop.amlume_shop.security.paseto.PasetoTokenService;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
@@ -46,7 +48,7 @@ import static me.amlu.shop.amlume_shop.commons.Constants.BEARER_TOKEN_PREFIX;
  * •Creates UsernamePasswordAuthenticationToken and sets context: Standard practice.
  * •Error Handling: Catches TokenValidationFailureException and SignatureException, sets status 401, clears context.
  */
-
+@NullMarked
 @Component
 public class PasetoAuthenticationFilter extends OncePerRequestFilter {
 
@@ -67,9 +69,9 @@ public class PasetoAuthenticationFilter extends OncePerRequestFilter {
      * @throws IOException thrown by doFilter
      */
     @Override
-    protected void doFilterInternal(@NotNull HttpServletRequest request,
-                                    @NotNull HttpServletResponse response,
-                                    @NotNull FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain) throws ServletException, IOException {
         try {
             String token = extractTokenFromRequest(request);
 

@@ -13,6 +13,7 @@ package me.amlu.shop.amlume_shop.cache_management.config.properties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.core.io.Resource;
@@ -95,7 +96,7 @@ public class ValkeyConfigProperties implements RedisConfigPropertiesInterface { 
         this.port = port;
     }
 
-    public void setPassword(@NotNull String password) {
+    public void setPassword(@NonNull String password) {
         this.password = password;
     }
 

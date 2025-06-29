@@ -13,12 +13,9 @@ package me.amlu.shop.amlume_shop.user_management;
 import io.micrometer.core.annotation.Timed;
 import jakarta.validation.Valid;
 import me.amlu.shop.amlume_shop.cache_management.service.CacheService;
-import me.amlu.shop.amlume_shop.exceptions.RoleNotFoundException;
 import me.amlu.shop.amlume_shop.exceptions.UnauthorizedException;
-import me.amlu.shop.amlume_shop.exceptions.UserAlreadyExistsException;
 import me.amlu.shop.amlume_shop.exceptions.UserNotFoundException;
 import me.amlu.shop.amlume_shop.user_management.dto.UserProfileUpdateRequest;
-import me.amlu.shop.amlume_shop.user_management.dto.UserRegistrationRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
@@ -38,8 +35,7 @@ import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.time.Instant;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Objects;
 
 import static me.amlu.shop.amlume_shop.commons.Constants.*;
 
@@ -77,142 +73,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
 
     // --- Registration ---
 
-
-    @Override
-    @Transactional // Keep transaction if local pre-checks or post-processing are needed
-    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, allEntries = true) // Evict user caches
-    public User registerAdminUser(@Valid UserRegistrationRequest request) throws UserAlreadyExistsException, RoleNotFoundException {
-        Assert.notNull(request, "Registration request cannot be null");
-
-        String emailString = request.userEmail();
-        log.info("Attempting to register new admin user via authserver admin API: userEmail={}", emailString);
-
-        // --- Delegation to Authserver Admin API ---
-        // This requires authserver to have an endpoint like POST /api/admin/users
-        // that is secured for admins and accepts a DTO like AuthServerAdminRegistrationRequest
-        // and assigns the ADMIN role.
-
-        // You'll need a DTO matching authserver's admin registration request
-        // public record AuthServerAdminRegistrationRequest(String firstName, String lastName, String userEmail, String password, Set<String> roles) {}
-        // And configure a WebClient that can authenticate to authserver's admin API
-
-        // Example (assuming AuthServerAdminRegistrationRequest DTO exists and authServerAdminWebClient is configured):
-        /*
-        AuthServerAdminRegistrationRequest adminRequest = new AuthServerAdminRegistrationRequest(
-            request.firstName() != null ? request.firstName().getFirstName() : null,
-            request.lastName() != null ? request.lastName().getLastName() : null,
-            emailString,
-            request.password() != null ? request.password().getPassword() : null,
-            Set.of("ADMIN") // Explicitly request ADMIN role
-        );
-
-        try {
-            // Call authserver's admin API
-            authServerAdminWebClient.post()
-                .uri("/api/admin/users") // Example admin endpoint
-                .bodyValue(adminRequest)
-                .retrieve()
-                // Handle success (e.g., 201 Created) - authserver creates the user
-                .onStatus(HttpStatus::is2xxSuccessful, clientResponse -> {
-                    log.info("Authserver admin registration successful for userEmail: {}", emailString);
-                    return Mono.empty(); // Indicate success
-                })
-                // Handle conflicts (e.g., 409 User Exists)
-                 .onStatus(HttpStatus.CONFLICT::equals, clientResponse -> {
-                    log.warn("Authserver reported admin user already exists for userEmail: {}", emailString);
-                    return Mono.error(new UserAlreadyExistsException("Admin user with this userEmail already exists."));
-                })
-                // Handle bad requests (e.g., validation errors)
-                 .onStatus(HttpStatus.BAD_REQUEST::equals, clientResponse -> {
-                    log.warn("Authserver reported bad request for admin registration of userEmail: {}", emailString);
-                    return clientResponse.bodyToMono(String.class)
-                            .flatMap(errorMessage -> Mono.error(new IllegalArgumentException("Invalid admin registration data: " + errorMessage)));
-                })
-                // Handle other errors
-                .onStatus(HttpStatus::isError, clientResponse -> {
-                    log.error("Authserver returned error status {} for admin registration of userEmail: {}", clientResponse.statusCode(), emailString);
-                     return clientResponse.bodyToMono(String.class)
-                            .flatMap(errorMessage -> Mono.error(new UserRegistrationException("Authserver admin registration failed: " + errorMessage)));
-                })
-                .bodyToMono(Void.class) // Assuming no response body on success
-                .block(); // Block for synchronous behavior
-
-            // If successful, the user is created in authserver.
-            // The local amlume-shop User entity for this admin will be provisioned
-            // on their first login via the OAuth2 flow, linked by authServerSubjectId.
-            // We don't return a local User entity here as it doesn't exist yet.
-            // Consider returning a success DTO instead of User.
-
-            log.info("Admin registration request successfully processed for userEmail: {}", emailString);
-            // You might return a simple success response DTO here
-            // return new GetRegisterResponse(null, null); // Example success response DTO
-
-            // If you MUST return a User entity here, you'd need to fetch it from authserver
-            // after creation, or wait for the first login. This is complex.
-            // It's better to just confirm the success of the authserver call.
-             throw new UnsupportedOperationException("Admin registration now delegates to authserver. This method should return a confirmation DTO, not a User entity.");
-
-
-        } catch (UserAlreadyExistsException | IllegalArgumentException e) {
-             throw e; // Re-throw mapped exceptions
-        } catch (Exception e) {
-            log.error("Unexpected error during admin registration API call to authserver for userEmail [{}]: {}", emailString, e.getMessage(), e);
-            throw new UserRegistrationException("Admin registration failed due to an internal error communicating with the authentication server.", e);
-        }
-        */
-
-        // --- Keeping the old local implementation for now, but marking for refactoring ---
-        log.warn("registerAdminUser still creates user locally. This should be refactored to call authserver admin API.");
-        // Keep the existing local implementation for now, but understand its limitations
-        // (local password, local status, not linked by authServerSubjectId initially).
-        // You will need to manually link these local admins to authserver users after their first login.
-
-        // Existing local implementation (needs adjustment in case AuthenticationInfo/Username/UserPassword are removed)
-        // If AuthenticationInfo/Username/UserPassword are removed from amlume-shop.User:
-        // This method CANNOT create a user with a password or username locally anymore.
-        // It MUST delegate to authserver.
-        // If you keep AuthenticationInfo/Username/UserPassword temporarily:
-        // Adjust the code below to use request.userEmail().getEmail() instead of request.getUsername()
-        // and potentially remove password hashing if the password field is removed from local User.
-
-        // Assuming AuthenticationInfo/Username/UserPassword are still temporarily present in amlume-shop.User
-        // Check if user already exists by userEmail (primary identifier)
-        if (userRepository.existsByContactInfoUserEmailEmail(emailString)) {
-            throw new UserAlreadyExistsException("Email '" + emailString + "' already registered");
-        }
-
-        // Hash password (if the local User still has a password field)
-        UserPassword encodedPassword = new UserPassword(passwordEncoder.encode(request.password()));
-
-        // Create a new user entity (local amlume-shop representation)
-        User user = User.builder()
-                .contactInfo(ContactInfo.builder()
-                        .userEmail(new UserEmail(emailString))
-                        .firstName(request.firstName() != null ? request.firstName() : null)
-                        .lastName(request.lastName() != null ? request.lastName() : null)
-                        // Add other contact fields if available in request
-                        .build())
-                // If DeviceFingerprintingInfo is removed, remove this block
-                .deviceFingerprintingInfo(DeviceFingerprintingInfo.builder()
-                        .deviceFingerprintingEnabled(false) // Default for admin? Or configurable?
-                        .build())
-//                 Add authServerSubjectId field here if it exists in amlume-shop.User
-                .authServerSubjectId(null) // Will be set on first login
-                .build();
-
-        // --- Assign ADMIN Roles (Local Roles) ---
-        Set<UserRole> roles = new HashSet<>();
-        roles.add(new UserRole(AppRole.ROLE_ADMIN));
-        roles.add(new UserRole(AppRole.ROLE_USER)); // Admins are also users
-        user.createRoleSet(roles);
-        // --- End Role Assignment ---
-
-        User savedUser = userRepository.save(user);
-        // Log using userEmail as the primary identifier
-        log.info("Registered new local ADMIN user: {} (ID: {})", savedUser.getContactInfo().getEmail(), savedUser.getUserId());
-        return savedUser;
-    }
-
+    // Admin registration is delegated to authserver admin API
 
     // --- User Retrieval ---
 
@@ -385,7 +246,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     public Long getCurrentUserId() {
         // Delegates to getCurrentUser() which handles authentication checks
         // This method is fine as is, assuming getCurrentUser is correctly implemented
-        return this.getCurrentUser().getUserId();
+        return Objects.requireNonNull(this.getCurrentUser()).getUserId();
     }
 
     // --- User Details for Caching (Example using CacheService) ---
@@ -436,21 +297,22 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         // --- Map *only* profile-related fields from DTO to entity ---
         // Example: Assuming UserProfileUpdateRequest has relevant fields
         // Use the 'with...' methods assuming ContactInfo is immutable or provides them
+        assert userToUpdate != null;
         ContactInfo updatedContactInfo = userToUpdate.getContactInfo(); // Get current embedded
 
         boolean changed = false;
 
-        if (profileRequest.getFirstName() != null) {
-            // Assuming ContactInfo has a withFirstName method
-            ContactInfo newContactInfo = updatedContactInfo.withFirstName(profileRequest.getFirstName());
+        if (profileRequest.getGivenName() != null) {
+            // Assuming ContactInfo has a withGivenName method
+            ContactInfo newContactInfo = updatedContactInfo.withGivenName(profileRequest.getGivenName());
             if (!newContactInfo.equals(updatedContactInfo)) { // Check if change occurred
                 updatedContactInfo = newContactInfo;
                 changed = true;
             }
         }
-        if (profileRequest.getLastName() != null) {
-            // Assuming ContactInfo has a withLastName method
-            ContactInfo newContactInfo = updatedContactInfo.withLastName(profileRequest.getLastName());
+        if (profileRequest.getSurname() != null) {
+            // Assuming ContactInfo has a withSurname method
+            ContactInfo newContactInfo = updatedContactInfo.withSurname(profileRequest.getSurname());
             if (!newContactInfo.equals(updatedContactInfo)) { // Check if change occurred
                 updatedContactInfo = newContactInfo;
                 changed = true;
@@ -510,6 +372,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
         User userToDelete = self.getUserById(userId);
         // Assuming deleteById triggers the @SoftDelete mechanism via AuditingEntityListener/Hibernate interceptor
         // If not, need a custom repository method: userRepository.softDelete(userToDelete);
+        assert userToDelete != null;
         userRepository.delete(userToDelete); // Use delete(entity) which works well with @SoftDelete
         log.info("Soft deleted user with ID: {}", userId);
     }
@@ -555,118 +418,6 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     }
 
     // --- Account Status Management ---
-
-    //    @Transactional // Ensures atomicity of read, increment, check, and potential lock
-//    @Override
-//    @Deprecated(since = "2025-05-16", forRemoval = true)
-//    // No cache eviction here, as only the count changes. Lock operation handles eviction.
-//    public void incrementFailedLogins(String username) {
-////        // Fetch fresh user state within the transaction to get the current attempt count
-////        // Note: findUserByEmail might hit cache, but subsequent DB update will be correct.
-////        // Consider if fetching directly from DB is needed for absolute guarantee on count before update.
-////        // For now, assuming cache consistency or accepting minor race condition risk.
-////        User user = this.findUserByEmail(username);
-////        int newAttemptCount = user.getAccountStatus().getFailedLoginAttempts() + 1;
-////
-////        // Use targeted repository update for efficiency
-////        userRepository.updateFailedLoginAttempts(user.getUserId(), newAttemptCount);
-////        log.debug("Incremented failed login attempts for user '{}' to {}", username, newAttemptCount);
-////
-////        // Check if lock threshold is reached
-////        if (newAttemptCount >= MAX_FAILED_ATTEMPTS) {
-////            // Call internal method directly using 'this' (will participate in the current transaction)
-////            this.lockUserAccount(user.getUserId()); // Pass ID for consistency
-////        }
-//        throw new UnsupportedOperationException("Local failed login tracking is deprecated.");
-//    }
-
-    /**
-     * Locks a user account by setting the lock status and timestamp.
-     * Evicts relevant caches. Uses a targeted repository update.
-     *
-     * @param userId The ID of the user to lock.
-     */
-//    @Transactional
-//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict user details cache
-//    @Override
-//    @Deprecated(since = "2025-05-16", forRemoval = true)
-//    public void lockUserAccount(Long userId) {
-////        Instant lockTime = Instant.now();
-////        // Use targeted repository update
-////        userRepository.updateAccountLockStatus(userId, false, lockTime); // false means locked
-////        log.warn("Locked account for user ID: {} at {}", userId, lockTime);
-//        throw new UnsupportedOperationException("Local account locking is deprecated.");
-//    }
-
-    /**
-     * Unlocks a user account if the lock duration has expired.
-     * Resets failed login attempts upon successful unlock.
-     * Evicts relevant caches. Uses targeted repository updates.
-     *
-     * @param userId The ID of the user to check and potentially unlock.
-     * @return true if the account was unlocked, false otherwise.
-     * @throws UserNotFoundException If the user is not found.
-     */
-//    @Transactional
-//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict on potential unlock
-//    @Override
-//    @Deprecated(since = "2025-05-16", forRemoval = true)
-//    public boolean unlockAccountIfExpired(Long userId) {
-//        User user = this.getUserById(userId); // Fetch fresh state (uses cache if available)
-////        AccountStatus status = user.getAccountStatus();
-////
-////        // Check if already unlocked (accountNonLocked is true)
-////        if (status.isAccountNonLocked()) {
-////            log.trace("Account for user ID {} is already unlocked.", userId);
-////
-////            throw new UnsupportedOperationException("Local account unlocking is deprecated.");
-////        }
-////
-////        // Account is locked, check lock timestamp
-////        Instant lockTime = status.getLockTime();
-////        if (lockTime != null) {
-////            long lockTimeMillis = lockTime.toEpochMilli();
-////            long currentTimeMillis = System.currentTimeMillis(); // Use System.currentTimeMillis for efficiency
-////
-////            // Check if lock duration has passed
-////            if (currentTimeMillis - lockTimeMillis >= LOCK_TIME_DURATION) {
-////                // Use targeted repository update to unlock (set accountNonLocked to true) and clear lock timestamp
-////                userRepository.updateAccountLockStatus(userId, true, null);
-////                // Also reset failed attempts upon successful unlock
-////                this.resetFailedLoginAttempts(userId); // Call the existing method (already transactional and evicts cache)
-////                log.info("Unlocked account for user ID: {} due to lock expiration.", userId);
-////                throw new UnsupportedOperationException("Local account unlocking is deprecated.");
-////            } else {
-////                log.trace("Lock duration not yet expired for user ID {}.", userId);
-////            }
-////        } else {
-////            // Handle inconsistency: account is locked but has no lock timestamp
-////            log.warn("User ID {} is locked but has no lock timestamp recorded. Unlocking as a safety measure.", userId);
-////            // For safety, let's unlock if lockTime is null, but the account is locked
-////            userRepository.updateAccountLockStatus(userId, true, null);
-////            this.resetFailedLoginAttempts(userId);
-////            log.info("Unlocked account for user ID: {} due to missing lock timestamp.", userId);
-////            throw new UnsupportedOperationException("Local account unlocking is deprecated.");
-////        }
-//        throw new UnsupportedOperationException("Local account unlocking is deprecated.");
-//    }
-
-    /**
-     * Resets the failed login attempt count for a user to zero.
-     * Evicts relevant caches. Uses a targeted repository update.
-     *
-     * @param userId The ID of the user.
-     */
-//    @Transactional
-//    @CacheEvict(value = {USERS_CACHE, CURRENT_USER_CACHE}, key = "#userId") // Evict cache as status changed
-//    @Override
-//    @Deprecated(since = "2025-05-16", forRemoval = true)
-//    public void resetFailedLoginAttempts(Long userId) {
-////        // Use targeted repository update
-////        userRepository.updateFailedLoginAttempts(userId, 0);
-////        log.debug("Reset failed login attempts for user ID: {}", userId);
-//        throw new UnsupportedOperationException("Local failed login attempt reset is deprecated.");
-//    }
 
     /**
      * Updates the last login timestamp for a user to the current time.

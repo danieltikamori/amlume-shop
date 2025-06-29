@@ -1,0 +1,211 @@
+# docker-compose.override.yml (Local Development Overrides)
+# Overrides base config for local development.
+# Now includes auth-server running inside Docker.
+
+# Usage:
+# To run locally:
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml up -d vault mysql-auth mysql-shop valkey-cache auth-server vault-seeder
+#  (If shop-app still runs outside Docker, it's not listed here. If it also moves into Docker, add it.)
+
+# To stop locally:
+#  docker compose -f docker-compose.yaml -f docker-compose.override.yml down --volumes --remove-orphans
+
+services:
+  # --- Vault Dev Configuration ---
+  vault:
+    container_name: vault-dev # Specific dev name
+    ports:
+      - "8200:8200" # Expose for local app connection
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "token" # Dev token
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      # VAULT_ADDR already set in base
+      VAULT_API_ADDR: "http://vault:8200" # For CLI inside container
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - vault_logs:/vault/logs # Persist logs locally if desired
+      # - ./certificates/vault:/vault/certs:ro # If using TLS locally
+    healthcheck:
+      test: [ "CMD", "vault", "status", "-address=http://127.0.0.1:8200" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Auth Database (Local Dev) ---
+  # Define the mysql-auth service for local development
+  mysql-auth:
+    container_name: mysql-auth-dev # Specific dev name
+    # Inherits image from base docker-compose.yaml
+    ports:
+      # Expose auth DB on its specific local port from .env
+      - "${AUTH_DB_PORT_LOCAL:-3407}:3306"
+    environment:
+      # --- Bitnami Vars using AUTH_DB_* from .env ---
+      MYSQL_DATABASE: ${AUTH_DB_NAME}
+      MYSQL_USER: ${AUTH_DB_USER}
+      MYSQL_PASSWORD: ${AUTH_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      # Optional: Use a separate init script directory for the auth DB
+      - ./docker/mysql/initdb-auth:/docker-entrypoint-initdb.d:ro
+      - mysql-auth-data:/var/lib/mysql # Use specific volume name
+      - mysql-auth-logs:/var/log/mysql # Use specific volume name
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Shop Database (Local Dev) ---
+  mysql-shop:
+    container_name: mysql-shop-dev # Specific dev name
+    ports:
+      # Expose shop DB on its specific local port from .env
+      - "${SHOP_DB_PORT_LOCAL:-3406}:3306"
+    environment:
+      # --- Bitnami Vars using SHOP_DB_* from .env ---
+      MYSQL_DATABASE: ${SHOP_DB_NAME}
+      MYSQL_USER: ${SHOP_DB_USER}
+      MYSQL_PASSWORD: ${SHOP_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      # Optional: Use a separate init script directory for the shop DB
+      # - ./docker/mysql/initdb-shop:/docker-entrypoint-initdb.d:ro
+      - mysql-shop-data:/var/lib/mysql # Use specific volume name
+      - mysql-shop-logs:/var/log/mysql # Use specific volume name
+      - mysql-backups:/backups
+    healthcheck:
+      test: [ 'CMD', '/opt/bitnami/scripts/mysql/healthcheck.sh' ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+  # --- Valkey Cache Dev Configuration ---
+  valkey-cache:
+    command: [ "valkey-server", "/etc/valkey/valkey.conf" ] # Use config file
+    volumes:
+      - ./docker/valkey/config/valkey.conf:/etc/valkey/valkey.conf:ro
+      - ./certificates/valkey:/certs:ro # Mount certs for TLS
+      - valkey_data:/data # Persist data locally if needed
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-h", "localhost", "-p", "6379", "--tls", "--insecure", "-a", "${VALKEY_PASSWORD}", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Authorization Server (Local Dev - Running IN Docker) ---
+  auth-server:
+    container_name: auth-server-dev
+    build:
+      context: . # Assuming a Dockerfile for auth-server is in the project root or a module
+      # If auth-server is a module (e.g., ./authserver), you might use:
+      # context: ./authserver
+      dockerfile: auth-server.Dockerfile # Replace with your actual Dockerfile name/path
+      # e.g., Dockerfile or ./authserver/Dockerfile
+      # Example for Spring Boot with build args if your Dockerfile supports it:
+      # args:
+      #   JAR_FILE: authserver/target/authserver-*.jar # Adjust path to your auth server JAR
+    ports:
+      # Expose auth server on its specific local port from .env or default 9000
+      - "${AUTH_SERVER_PORT_LOCAL:-9000}:9000" # Assuming auth server runs on port 9000 internally
+    environment:
+      SPRING_PROFILES_ACTIVE: local # Or your local development profile
+      # Vault Configuration (adjust based on your Spring Cloud Vault setup)
+      SPRING_CONFIG_IMPORT: "vault://secret/amlume-shop/local" # Or specific path for auth-server
+      SPRING_CLOUD_VAULT_TOKEN: "token" # Dev token for Spring Cloud Vault
+      SPRING_CLOUD_VAULT_URI: "http://vault:8200" # Connect to 'vault' service name
+
+      # Auth Database Connection (Connects to 'mysql-auth' service)
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql-auth:3306/${AUTH_DB_NAME}?sslMode=DISABLED&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8" # Example, adjust SSL as needed
+      SPRING_DATASOURCE_USERNAME: ${AUTH_DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+
+      # Valkey Cache Connection (if used by auth-server)
+      SPRING_DATA_VALKEY_HOST: valkey-cache # Connect to 'valkey-cache' service name
+      SPRING_DATA_VALKEY_PORT: 6379
+      SPRING_DATA_VALKEY_PASSWORD: ${VALKEY_PASSWORD}
+      SPRING_DATA_VALKEY_SSL_ENABLED: "true" # Match your Valkey config
+      # Add truststore/keystore paths if Valkey SSL requires client certs or specific CA
+
+      # OAuth2 Authorization Server Issuer URI
+      # If accessed from host (e.g. browser for login page), use localhost and mapped port
+      SPRING_SECURITY_OAUTH2_AUTHORIZATIONSERVER_ISSUER_URI: "http://localhost:${AUTH_SERVER_PORT_LOCAL:-9000}"
+      # Or, if only accessed by other containers: "http://auth-server-dev:9000" (using container_name)
+      # Or, if only accessed by other containers: "http://auth-server:9000" (using service key)
+
+      # Other necessary environment variables for the auth server
+      # E.g., logging levels, specific feature flags for local dev
+      # JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005" # For remote debugging
+
+    volumes:
+      # Optional: Mount source code for hot reloading if your Dockerfile/entrypoint supports it
+      # This is highly dependent on your Spring Boot setup (e.g., using devtools and a specific run command)
+      # Example if auth-server is a module:
+      # - ./authserver/src/main/java:/app/src/main/java
+      # - ./authserver/src/main/resources:/app/src/main/resources
+      # - ./authserver/target/classes:/app/target/classes # If devtools reloads from classes
+      - auth-server-logs:/app/logs # Example: if your app logs to /app/logs inside the container
+    networks: # Ensure it's on the same network as its dependencies
+      - amlume-shop-network # Assuming this network is defined in the base docker-compose.yaml
+    depends_on:
+      mysql-auth:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      valkey-cache: # Add if auth-server directly uses Valkey
+        condition: service_healthy
+    healthcheck: # Optional: Add a basic healthcheck for your Spring Boot app
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/actuator/health" ] # Adjust port and path if needed
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s # Give time for Spring Boot to start up
+
+  # --- Vault Seeder (Dev Only) ---
+  vault-seeder:
+    build:
+      context: .
+      dockerfile: vault-seeder.Dockerfile
+    container_name: vault-seeder-job
+    environment:
+      VAULT_TOKEN: "token" # Use the dev token
+      VAULT_PATH: "secret/amlume-shop/local" # Target path in Vault
+      ENV_FILE_PATH: "/app/.env"
+      VAULT_ADDR: http://vault:8200 # Connect to 'vault' service name
+      CURL_INSECURE: "true" # If Vault uses self-signed certs locally
+    volumes:
+      - ./.env:/app/.env:ro
+    depends_on:
+      vault:
+        condition: service_healthy
+      # Optional: If seeder needs auth-server to be up (e.g., to register a client)
+      # auth-server:
+      #   condition: service_healthy
+    restart: 'no' # Run once
+
+  # --- Disable Shop App Service for Local Development (if it still runs outside Docker) ---
+  shop-app:
+    image: none # Prevents Docker Compose from trying to build/pull/run it
+
+# --- Volumes Definition (Ensure all used volumes are defined) ---
+volumes:
+  vault_logs: { }
+  mysql-auth-data: { }
+  mysql-auth-logs: { }
+  mysql-shop-data: { }
+  mysql-shop-logs: { }
+  mysql-backups: { }
+  valkey_data: { }
+  auth-server-logs: { } # Added for auth-server log persistence example
+  # Add vault_config and vault_data if needed by prod but not base
+  vault_config: { }
+  vault_data: { }
+
+# --- Network Definition (if not in base, or to ensure it's referenced) ---
+# networks:
+#   amlume-shop-network:
+#     # If defined in base, this isn't strictly needed here unless overriding
+#     # If not in base, define it:
+#     name: amlume-shop-network

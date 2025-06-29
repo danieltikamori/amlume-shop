@@ -32,16 +32,16 @@ public class DeviceFingerprintController {
         this.userService = userService;
     }
 
-    @PostMapping("/v1/disable")
+    @PostMapping("/disable")
     public ResponseEntity<Void> disableDeviceFingerprinting(@AuthenticationPrincipal UserDetails userDetails) {
-        User user = userService.findUserByUsername(userDetails.getUsername());
+        User user = userService.findUserByEmail(userDetails.getUsername());
         deviceFingerprintService.disableDeviceFingerprinting(user);
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/v1/enable")
+    @PostMapping("/enable")
     public ResponseEntity<Void> enableDeviceFingerprinting(@AuthenticationPrincipal UserDetails userDetails) {
-        User user = userService.findUserByUsername(userDetails.getUsername());
+        User user = userService.findUserByEmail(userDetails.getUsername());
         deviceFingerprintService.enableDeviceFingerprinting(user);
         return ResponseEntity.ok().build();
     }

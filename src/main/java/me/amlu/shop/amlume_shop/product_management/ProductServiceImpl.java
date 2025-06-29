@@ -22,7 +22,8 @@ import me.amlu.shop.amlume_shop.resilience.ExponentialBackoffRateLimiter;
 import me.amlu.shop.amlume_shop.file.service.FileService;
 import me.amlu.shop.amlume_shop.user_management.User;
 import me.amlu.shop.amlume_shop.user_management.UserService;
-import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.NullMarked;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -153,7 +154,7 @@ public class ProductServiceImpl implements ProductService {
         }
     }
 
-    @NotNull
+    @NullMarked
     private static Product getProduct(CreateProductRequest productDTO, Category category, User currentSeller) {
         ProductName productName = new ProductName(productDTO.productName());
         ProductDescription productDescription = new ProductDescription(productDTO.productDescription());

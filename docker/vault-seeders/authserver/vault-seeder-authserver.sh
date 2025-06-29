@@ -112,9 +112,28 @@ add_pair() {
 add_pair "spring.initial-root-user.email" "${ROOT_USER_EMAIL}"
 add_pair "spring.initial-root-user.password" "${ROOT_USER_PASSWORD}"
 
+# Spring Security credentials
+add_pair "spring.security.user.name" "${SECURITY_USER_NAME}"
+add_pair "spring.security.user.password" "${SECURITY_USER_PASSWORD}"
+
+# Spring Boot Admin credentials
+add_pair "spring.boot.admin.client.username" "${ADMIN_USER_NAME}"
+add_pair "spring.boot.admin.client.password" "${ADMIN_USER_PASSWORD}"
+add_pair "spring.boot.admin.client.instance.metadata.user.name" "${ADMIN_INSTANCE_NAME}"
+add_pair "spring.boot.admin.client.instance.metadata.user.password" "${ADMIN_INSTANCE_NAME}"
+
+add_pair "cors.allowed-origins" "${CORS_ALLOWED_ORIGINS}"
+
 # Database credentials for authserver
 add_pair "spring.datasource.username" "${AUTH_DB_USER}"
 add_pair "spring.datasource.password" "${AUTH_DB_PASSWORD}"
+
+# MongoDB credentials for authserver
+add_pair "spring.data.mongodb.host" "${MONGODB_SESSION_DB_HOST}"
+add_pair "spring.data.mongodb.port" "${MONGODB_SESSION_DB_PORT_PROD}"
+add_pair "spring.data.mongodb.database" "${MONGODB_SESSION_DB_NAME}"
+add_pair "spring.data.mongodb.username" "${MONGODB_SESSION_DB_USERNAME}"
+add_pair "spring.data.mongodb.password" "${MONGODB_SESSION_DB_PASSWORD}"
 
 # OAuth2 client credentials for Google/GitHub (used by authserver to log its users in)
 add_pair "spring.security.oauth2.client.registration.google.client-id" "${GOOGLE_CLIENT_ID_FOR_AUTHSERVER}"
@@ -129,11 +148,59 @@ add_pair "spring.security.rememberme.key" "${AUTHSERVER_REMEMBER_ME_KEY}"
 # These keys match the @Value annotations in authserver's LocalSecurityConfig
 add_pair "oauth2.clients.amlumeapi.secret" "${OAUTH2_CLIENT_AMLUMEAPI_SECRET_AS}"
 add_pair "oauth2.clients.amlumeintrospect.secret" "${OAUTH2_CLIENT_AMLUMEINTROSPECT_SECRET_AS}"
-add_pair "oauth2.clients.shopClient.secret" "${OAUTH2_CLIENT_SHOPCLIENT_SECRET_AS}" # For amlume-shop client
-add_pair "oauth2.clients.postmanClient.secret" "${OAUTH2_CLIENT_POSTMANCLIENT_SECRET_AS}" # For postman client
+# For amlume-shop client
+add_pair "oauth2.clients.shopClient.secret" "${OAUTH2_CLIENT_SHOPCLIENT_SECRET_AS}"
 
-# (Optional) Authserver Truststore Password
-# add_pair "app.ssl.trust-store.password" "${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}"
+# For postman client
+add_pair "oauth2.clients.postmanClient.secret" "${OAUTH2_CLIENT_POSTMANCLIENT_SECRET_AS}"
+
+# Optional Authserver Truststore Password
+add_pair "app.ssl.trust-store.password" "${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.pkcs12.redis-client-mtls-bundle.truststore.password" "${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.jks.redis-client-mtls-bundle.truststore.password" "${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.redis-client-mtls-bundle.truststore.password" "${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.pkcs12.redis-client-mtls-bundle.keystore.password" "${AUTHSERVER_VALKEY_CLIENT_KEYSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.jks.redis-client-mtls-bundle.keystore.password" "${AUTHSERVER_VALKEY_CLIENT_KEYSTORE_PASSWORD}"
+add_pair "spring.ssl.bundle.redis-client-mtls-bundle.keystore.password" "${AUTHSERVER_VALKEY_CLIENT_KEYSTORE_PASSWORD}"
+add_pair "server.ssl.key-store-password" "${AUTHSERVER_SERVER_KEYSTORE_PASSWORD}"
+
+# reCAPTCHA properties (match RecaptchaProperties bean or @Value keys)
+add_pair "recaptcha.secret" "${RECAPTCHA_SECRET_KEY}" # Check exact property name used by Spring
+add_pair "recaptcha.site-key" "${RECAPTCHA_SITE_KEY}" # Check exact property name used by Spring
+
+# Slack properties (match SlackProperties bean or @Value keys)
+add_pair "slack.bot-token" "${SLACK_BOT_TOKEN}"
+add_pair "slack.channel" "${SLACK_CHANNEL}"
+add_pair "slack.channel-name" "${SLACK_CHANNEL_NAME}"
+add_pair "slack.api-token" "${SLACK_API_TOKEN}"
+add_pair "slack.webhook-url" "${SLACK_WEBHOOK_URL}"
+# Add other slack.* properties if needed
+
+# Valkey Redis (Original)
+add_pair "spring.data.redis.host" "${VALKEY_HOST_LOCAL}"
+add_pair "spring.data.redis.port" "${VALKEY_PORT_LOCAL}"
+add_pair "spring.data.redis.password" "${VALKEY_PASSWORD}"
+
+# Valkey properties (match ValkeyConfigProperties bean)
+add_pair "valkey.password" "${VALKEY_PASSWORD}"
+add_pair "valkey.host" "${VALKEY_HOST}"
+add_pair "valkey.port" "${VALKEY_PORT}"
+# Add valkey.pool.* properties if needed
+
+# Vault properties
+add_pair "vault.docker.uri" "${VAULT_DOCKER_URI}"
+add_pair "vault.hcp.uri" "${VAULT_HCP_URI}" # <-- ADD THIS LINE
+
+# Whois properties (match WhoisProperties bean or @Value keys)
+add_pair "web.whois.server" "${WHOIS_SERVER}" # Check exact property name used by Spring
+add_pair "web.whois.port" "${WHOIS_PORT}"     # Check exact property name used by Spring
+add_pair "web.whois.timeout" "${WHOIS_TIMEOUT}" # Check exact property name used by Spring
+
+# --- Encryption keys ---
+# Passkey encryption key
+add_pair "app.security.encryption.passkey-data-key" "${APP_PASSKEY_ENCRYPTION_KEY}"
+
+#
 
 JSON_PAYLOAD="{\"data\":{$JSON_DATA_PAIRS}}"
 # +++ DEBUG PAYLOAD +++

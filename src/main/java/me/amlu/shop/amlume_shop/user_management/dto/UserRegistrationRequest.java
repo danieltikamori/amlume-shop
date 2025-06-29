@@ -13,8 +13,8 @@ package me.amlu.shop.amlume_shop.user_management.dto;
 import me.amlu.shop.amlume_shop.user_management.UserRole;
 
 public record UserRegistrationRequest(
-        String firstName,
-        String lastName,
+        String givenName,
+        String surname,
         String nickname,
         String password,
         String userEmail,
@@ -28,8 +28,8 @@ public record UserRegistrationRequest(
 
 
     public static class UserRegistrationRequestBuilder {
-        private String firstName;
-        private String lastName;
+        private String givenName;
+        private String surname;
         private String nickname;
         private String password;
         private String userEmail;
@@ -40,13 +40,13 @@ public record UserRegistrationRequest(
         UserRegistrationRequestBuilder() {
         }
 
-        public UserRegistrationRequestBuilder firstName(String firstName) {
-            this.firstName = firstName;
+        public UserRegistrationRequestBuilder givenName(String givenName) {
+            this.givenName = givenName;
             return this;
         }
 
-        public UserRegistrationRequestBuilder lastName(String lastName) {
-            this.lastName = lastName;
+        public UserRegistrationRequestBuilder surname(String surname) {
+            this.surname = surname;
             return this;
         }
 
@@ -82,13 +82,13 @@ public record UserRegistrationRequest(
         }
 
         public UserRegistrationRequest build() {
-            return new UserRegistrationRequest(this.firstName, this.lastName, this.nickname, this.password, this.userEmail, this.mobileNumber, this.roles, this.captchaResponse);
+            return new UserRegistrationRequest(this.givenName, this.surname, this.nickname, this.password, this.userEmail, this.mobileNumber, this.roles, this.captchaResponse);
         }
 
         public String toString() {
             return "UserRegistrationRequest.UserRegistrationRequestBuilder(" +
-                    "firstName=" + this.firstName + "," +
-                    " lastName=" + this.lastName + "," +
+                    "givenName=" + this.givenName + "," +
+                    " surname=" + this.surname + "," +
                     " nickname=" + this.nickname + "," +
                     " password=" + this.password + "," +
                     " userEmail=" + this.userEmail + "," +

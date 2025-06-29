@@ -62,8 +62,8 @@ public class CustomOidcUserService extends OidcUserService {
             throw new OAuth2AuthenticationException("Email claim is required for provisioning user.");
         }
 
-        String firstName = oidcUser.getGivenName(); // Standard OIDC claim
-        String lastName = oidcUser.getFamilyName(); // Standard OIDC claim
+        String givenName = oidcUser.getGivenName(); // Standard OIDC claim
+        String surname = oidcUser.getFamilyName(); // Standard OIDC claim
         String nickname = oidcUser.getNickName(); // Standard OIDC claim (or preferred_username)
         // We also have 'full_name' claim, which could be used if given_name/family_name are not standardly populated by all IdPs
         // String fullNameFromToken = (String) attributes.get("full_name");
@@ -81,10 +81,10 @@ public class CustomOidcUserService extends OidcUserService {
             // User already linked to this authServerSubjectId. Update their details.
             shopUser = userBySubjectIdOptional.get();
             log.debug("Found existing local user '{}' by authServerSubjectId '{}'. Updating details.", shopUser.getUsername(), authServerSubjectId);
-            shopUser = updateExistingShopUser(shopUser, emailFromToken, firstName, lastName, nickname, rolesFromToken);
+            shopUser = updateExistingShopUser(shopUser, emailFromToken, givenName, surname, nickname, rolesFromToken);
         } else {
             // No user found for this authServerSubjectId. This is a new IdP login for amlume-shop.
-            // Now, check if the email from the token is ALREADY IN USE by another local account.
+            // Now, check if the userEmail from the token is ALREADY IN USE by another local account.
             Optional<User> userByEmailOptional = userRepository.findByContactInfoUserEmailEmail(emailFromToken);
 
             if (userByEmailOptional.isPresent()) {
@@ -97,21 +97,21 @@ public class CustomOidcUserService extends OidcUserService {
                     log.info("Email {} (from token for new authSubId {}) found in local user (ID: {}) without an authSubId. Linking accounts.",
                             emailFromToken, authServerSubjectId, existingUserWithEmail.getUserId());
                     existingUserWithEmail.updateAuthServerSubjectId(authServerSubjectId); // Ensure User entity has this method
-                    shopUser = updateExistingShopUser(existingUserWithEmail, emailFromToken, firstName, lastName, nickname, rolesFromToken); // Update other details
+                    shopUser = updateExistingShopUser(existingUserWithEmail, emailFromToken, givenName, surname, nickname, rolesFromToken); // Update other details
                 } else {
                     // Scenario: Email exists locally AND IS ALREADY LINKED to a DIFFERENT authServerSubjectId.
-                    // This is a more serious conflict. The email from the token is claimed by another IdP-linked user.
+                    // This is a more serious conflict. The userEmail from the token is claimed by another IdP-linked user.
                     log.error("CRITICAL CONFLICT: Email {} (from token for new authSubId {}) is already linked to a different local user (ID: {}, existingAuthSubId: {}).",
                             emailFromToken, authServerSubjectId, existingUserWithEmail.getUserId(), existingUserWithEmail.getAuthServerSubjectId());
-                    // Policy: Deny login. This is the safest approach, prevents one IdP user from "taking over" an email linked to another or unintended linking.
+                    // Policy: Deny login. This is the safest approach, prevents one IdP user from "taking over" an userEmail linked to another or unintended linking.
                     throw new OAuth2AuthenticationException(
                             String.format("Email '%s' is already associated with another authenticated account. Please contact support.", emailFromToken)
                     );
                 }
             } else {
                 // Email is not in use locally by any account. Provision a brand new user.
-                log.info("User with authServerSubjectId '{}' (email: {}) not found locally. Provisioning new user.", authServerSubjectId, emailFromToken);
-                shopUser = createNewShopUser(authServerSubjectId, emailFromToken, firstName, lastName, nickname, rolesFromToken);
+                log.info("User with authServerSubjectId '{}' (userEmail: {}) not found locally. Provisioning new user.", authServerSubjectId, emailFromToken);
+                shopUser = createNewShopUser(authServerSubjectId, emailFromToken, givenName, surname, nickname, rolesFromToken);
             }
         }
 
@@ -123,22 +123,22 @@ public class CustomOidcUserService extends OidcUserService {
         return new ShopOidcUser(shopUser, oidcUser);
     }
 
-    private User createNewShopUser(String authServerSubjectId, String email, String firstName,
-                                   String lastName, String nickname, Collection<String> rolesFromToken) {
+    private User createNewShopUser(String authServerSubjectId, String email, String givenName,
+                                   String surname, String nickname, Collection<String> rolesFromToken) {
         if (!StringUtils.hasText(email)) {
             log.error("Email claim is missing or empty for new user with authServerSubjectId: {}. Cannot provision.", authServerSubjectId);
-            // Decide how to handle this: throw exception, or create user with a placeholder email?
+            // Decide how to handle this: throw exception, or create user with a placeholder userEmail?
             // Throwing an exception is safer to ensure data integrity.
             throw new OAuth2AuthenticationException("Email claim is required for provisioning new user.");
         }
 
-        // Check if email already exists for a *different* authServerSubjectId (unlikely but good check)
+        // Check if userEmail already exists for a *different* authServerSubjectId (unlikely but good check)
         if (userRepository.existsByContactInfoUserEmailEmail(email)) {
             log.warn("Email {} already exists for a different local user. Potential conflict for authServerSubjectId {}. " +
                     "This might happen if a user re-registers with the IdP after deleting their local shop account, " +
-                    "or if email changes are not synced properly.", email, authServerSubjectId);
+                    "or if userEmail changes are not synced properly.", email, authServerSubjectId);
             // Consider how to handle this:
-            // 1. Throw an error: Prevents linking if email is already tied to another authServerSubjectId.
+            // 1. Throw an error: Prevents linking if userEmail is already tied to another authServerSubjectId.
             // 2. Attempt to link: If business logic allows, but risky.
             // 3. Log and proceed: Relies on authServerSubjectId being the ultimate unique link.
             // For now, log and proceed, as findByAuthServerSubjectId is the primary lookup.
@@ -148,10 +148,10 @@ public class CustomOidcUserService extends OidcUserService {
                 .authServerSubjectId(authServerSubjectId) // Link to authserver
                 .contactInfo(ContactInfo.builder()
                         .userEmail(new UserEmail(email))
-                        .firstName(firstName)
-                        .lastName(lastName)
+                        .givenName(givenName)
+                        .surname(surname)
                         .nickname(nickname) // Assuming ContactInfo builder handles null nickname
-                        .emailVerified(true) // Assume email from IdP is verified
+                        .emailVerified(true) // Assume userEmail from IdP is verified
                         // phoneNumber will be null by default from builder
                         .build())
                 .accountStatus(AccountStatus.builder() // Initial account status
@@ -181,14 +181,14 @@ public class CustomOidcUserService extends OidcUserService {
         return userRepository.save(newUser);
     }
 
-    private User updateExistingShopUser(User existingUser, String emailFromToken, String firstNameFromToken,
-                                        String lastNameFromToken, String nicknameFromToken, Collection<String> rolesFromToken) {
+    private User updateExistingShopUser(User existingUser, String emailFromToken, String givenNameFromToken,
+                                        String surnameFromToken, String nicknameFromToken, Collection<String> rolesFromToken) {
         boolean overallUpdated = false;
 
         ContactInfo currentContactInfo = existingUser.getContactInfo();
         ContactInfo.ContactInfoBuilder contactInfoBuilder = ContactInfo.builder() // Start with a fresh builder
-                .firstName(currentContactInfo.getFirstName())
-                .lastName(currentContactInfo.getLastName())
+                .givenName(currentContactInfo.getGivenName())
+                .surname(currentContactInfo.getSurname())
                 .nickname(currentContactInfo.getNickname())
                 .userEmail(currentContactInfo.getUserEmailObject())
                 .emailVerified(currentContactInfo.isEmailVerified())
@@ -197,14 +197,14 @@ public class CustomOidcUserService extends OidcUserService {
 
         // --- Email Update Logic ---
         if (StringUtils.hasText(emailFromToken) && !emailFromToken.equals(currentContactInfo.getEmail())) {
-            // Email from token is different. Check if this new email is already used by ANOTHER user.
+            // Email from token is different. Check if this new userEmail is already used by ANOTHER user.
             Optional<User> otherUserWithNewEmail = userRepository.findByContactInfoUserEmailEmail(emailFromToken);
             if (otherUserWithNewEmail.isPresent() && !Objects.equals(otherUserWithNewEmail.get().getAuthServerSubjectId(), existingUser.getAuthServerSubjectId())) {
-                // The new email is taken by a different user. Log and DO NOT update email.
-                log.warn("User (authSubId: {}) attempted to update email to '{}', but it's already in use by another user (authSubId: {}). Email update skipped.",
+                // The new userEmail is taken by a different user. Log and DO NOT update userEmail.
+                log.warn("User (authSubId: {}) attempted to update userEmail to '{}', but it's already in use by another user (authSubId: {}). Email update skipped.",
                         existingUser.getAuthServerSubjectId(), emailFromToken, otherUserWithNewEmail.get().getAuthServerSubjectId());
             } else {
-                // New email is not taken by another user, or it's the same user (e.g., case change)
+                // New userEmail is not taken by another user, or it's the same user (e.g., case change)
                 contactInfoBuilder.userEmail(new UserEmail(emailFromToken));
                 contactInfoBuilder.emailVerified(true); // Email from IdP is considered verified
                 overallUpdated = true;
@@ -212,12 +212,12 @@ public class CustomOidcUserService extends OidcUserService {
         }
         // --- End Email Update Logic ---
 
-        if (StringUtils.hasText(firstNameFromToken) && !Objects.equals(firstNameFromToken, currentContactInfo.getFirstName())) {
-            contactInfoBuilder.firstName(firstNameFromToken);
+        if (StringUtils.hasText(givenNameFromToken) && !Objects.equals(givenNameFromToken, currentContactInfo.getGivenName())) {
+            contactInfoBuilder.givenName(givenNameFromToken);
             overallUpdated = true;
         }
-        if (lastNameFromToken != null && !Objects.equals(lastNameFromToken, currentContactInfo.getLastName())) {
-            contactInfoBuilder.lastName(lastNameFromToken);
+        if (surnameFromToken != null && !Objects.equals(surnameFromToken, currentContactInfo.getSurname())) {
+            contactInfoBuilder.surname(surnameFromToken);
             overallUpdated = true;
         }
         if (nicknameFromToken != null && !Objects.equals(nicknameFromToken, currentContactInfo.getNickname())) {
@@ -252,7 +252,7 @@ public class CustomOidcUserService extends OidcUserService {
                     try {
                         // authserver token has roles like "ADMIN", "USER" (no "ROLE_" prefix)
                         // amlume-shop AppRole enum has "ROLE_ADMIN", "ROLE_USER"
-                        return AppRole.valueOf("ROLE_" + roleStringFromToken.toUpperCase());
+                        return AppRole.valueOf("ROLE_" + roleStringFromToken.toUpperCase(Locale.ROOT));
                     } catch (IllegalArgumentException e) {
                         log.warn("Unknown role string '{}' from token. Ignoring.", roleStringFromToken);
                         return null;

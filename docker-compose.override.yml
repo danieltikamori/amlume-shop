@@ -12,6 +12,25 @@
 
 services:
 
+  # New Relic Agent Infrastructure
+  agent:
+    container_name: newrelic-infra
+    build:
+      context: ./docker/newrelic-infra
+      dockerfile: newrelic-infra.dockerfile
+    environment:
+      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
+    cap_add:
+      - SYS_PTRACE
+    pid: host
+    privileged: true
+    volumes:
+      - "/:/host:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    restart: unless-stopped
+    networks:
+      - amlume-shop-network
+
   # --- Hashicorp Consul
   consul:
     container_name: consul-dev
@@ -21,7 +40,6 @@ services:
     restart: always
     networks:
       - amlume-shop-network
-
 
   # --- Vault Dev Configuration ---
   vault:
@@ -82,102 +100,6 @@ services:
       - "8888:8888"
     networks:
       - amlume-shop-network
-
-  # MongoDB for session storage
-  #  mongodb:
-  #    image: mongo:8.0.10-noble
-  #    container_name: amlume-mongodb
-  #    environment:
-  #      MONGO_INITDB_DATABASE: ${MONGODB_SESSION_DB_NAME}
-  #      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_SESSION_DB_USERNAME}
-  #      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_SESSION_DB_PASSWORD}
-  #    volumes:
-  #      - mongodb_data:/data/db
-  #      - mongodb_log:/var/log/mongodb/
-  #    ports:
-  #      - "27017:27017"
-  #    healthcheck:
-  #      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-  #      interval: 10s
-  #      timeout: 5s
-  #      retries: 5
-  #      start_period: 10s
-  #    networks:
-  #      - amlume-shop-network
-  #
-  #  mongo-express:
-  #    image: mongo-express:latest
-  #    container_name: mongo-express
-  #    restart: always
-  #    environment:
-  #      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGODB_SESSION_DB_USERNAME}
-  #      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGODB_SESSION_DB_PASSWORD}
-  #      ME_CONFIG_MONGODB_PORT: 27017
-  #      ME_CONFIG_MONGODB_SERVER: 'mongodb'
-  #      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USERNAME}
-  #      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD}
-  #    ports:
-  #      - "8081:8081"
-  #    networks:
-  #      - amlume-shop-network
-  #    depends_on:
-  #      - mongodb
-
-  # Hazelcast for session storage
-  hazelcast:
-    image: hazelcast/hazelcast:5.5.0-jdk21 # Use a specific Hazelcast version
-    container_name: hazelcast
-    ports:
-      - "5701:5701" # Default Hazelcast port
-    environment:
-      #      HZ_CLUSTERNAME: "auth-dev" # Optional: if you want to name your dev cluster. Already defined in hazelcast.xml
-      # JAVA_OPTS: "-Xmx1g -Xms1g" # Optional: configure JVM options
-      HZ_NETWORK_JOIN_MULTICAST_ENABLED: "false" # Disable multicast for simple setup
-      HZ_NETWORK_TCPIP_ENABLED: "true" # Enable TCP/IP join
-      # For a single node dev setup, it will discover itself.
-      # For a multi-node cluster, you'd list members:
-      # HZ_NETWORK_TCPIP_MEMBERS: "hazelcast" # Points to itself for single node. Already in hazelcast.xml
-      HZ_CONFIG_FILE: "/opt/hazelcast/config/hazelcast.xml" # Path to Hazelcast config file
-      HZ_USERCODEDEPLOYMENT_ENABLED: "true" # Explicitly enable user code deployment
-    volumes:
-      - ./docker/hazelcast/config/hazelcast.xml:/opt/hazelcast/config/hazelcast.xml:ro # Mount Hazelcast config file
-      - hazelcast_data:/data/hazelcast # Optional: for persistence if needed, usually not for sessions
-      # Mount the spring-session-hazelcast JAR
-      # Adjust the path to your local Maven repository and the correct version (3.5.0)
-      - ~/.m2/repository/org/springframework/session/spring-session-hazelcast/3.5.0/spring-session-hazelcast-3.5.0.jar:/opt/hazelcast/bin/user-lib/spring-session-hazelcast.jar:ro
-      # Mount the spring-session-core JAR
-      - ~/.m2/repository/org/springframework/session/spring-session-core/3.5.0/spring-session-core-3.5.0.jar:/opt/hazelcast/bin/user-lib/spring-session-core.jar:ro
-      # Spring Security JARs
-      - ~/.m2/repository/org/springframework/security/spring-security-core/6.5.0/spring-security-core-6.5.0.jar:/opt/hazelcast/bin/user-lib/spring-security-core.jar:ro
-      - ~/.m2/repository/org/springframework/security/spring-security-web/6.5.0/spring-security-web-6.5.0.jar:/opt/hazelcast/bin/user-lib/spring-security-web.jar:ro
-      # Jakarta Servlet API JAR
-      - ~/.m2/repository/jakarta/servlet/jakarta.servlet-api/6.0.0/jakarta.servlet-api-6.0.0.jar:/opt/hazelcast/bin/user-lib/jakarta.servlet-api.jar:ro
-        # --- REPLACE THE AUTHSERVER FAT JAR WITH THE THIN SHARED JAR ---
-      # Ensure the source path points to your built authserver-hazelcast-shareable JAR
-      - .authserver/authserver-hazelcast-shareable/target/authserver-hazelcast-shareable-0.0.1-SNAPSHOT.jar:/opt/hazelcast/bin/user-lib/authserver-shared.jar:ro
-      # -----------------------------------------------------------------
-    networks:
-      - amlume-shop-network
-    healthcheck:
-      test: [ "CMD", "/opt/hazelcast/bin/hz-health-check" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # Optional: Hazelcast Management Center for monitoring and debugging
-  management-center:
-    image: hazelcast/management-center:5.8.0
-    container_name: hazelcast-management-center
-    ports:
-      - "8080:8080"
-    environment:
-      - MC_DEFAULT_CLUSTER=dev
-      - MC_DEFAULT_CLUSTER_MEMBERS=hazelcast
-    networks:
-      - amlume-shop-network
-    depends_on:
-      - hazelcast # Ensure Management Center starts after Hazelcast
-
 
   # --- Auth Database (Local Dev) ---
   #  mysql-auth:
@@ -356,6 +278,27 @@ services:
   #        condition: service_healthy # Wait for valkey-cache to be healthy
   auth-server:
     image: none # Prevents Docker Compose from trying to build/pull/run it
+  #    container_name: auth-server-dev
+  #    build:
+  #      context: ./authserver/authserver-app # Path to the Dockerfile
+  #      dockerfile: Dockerfile
+  #    ports:
+  #      - "9000:9000" # Expose the app's port
+  #    environment:
+  #      # Pass secrets from your .env file to the container
+  #      - SPRING_PROFILES_ACTIVE=local
+  #      - VAULT_ADDR=http://vault:8200
+  #      - VAULT_TOKEN=token
+  #      # This license key is used by both the APM agent and the Micrometer registry
+  #      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
+  #    depends_on:
+  #      vault:
+  #        condition: service_healthy
+  #      postgres:
+  #        condition: service_healthy
+  #    networks:
+  #      - amlume-shop-network
+
 
   shop-app:
     image: none # Prevents Docker Compose from trying to build/pull/run it
@@ -372,10 +315,7 @@ volumes:
   mysql-backups: {}
   valkey_data: {}
   postgres_data: { }
-  mongodb_data: { }
-  mongodb_log: { }
   redisinsight_data: { }
-  hazelcast_data: { }
 
 # Ensure the network is defined in the override if not relying solely on the base file
 # (though it should inherit from the base docker-compose.yaml if named the same)

@@ -11,6 +11,7 @@
 package me.amlu.shop.amlume_shop.commons;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 public class PostalCodeUtils {
     private static final Map<String, String> POSTAL_CODE_REGEX_MAP = new HashMap<>();
@@ -35,7 +36,7 @@ public class PostalCodeUtils {
         // ... add more countries and their regex patterns ...
     }
     public static String getPostalCodeRegex(String countryCode) {
-        return POSTAL_CODE_REGEX_MAP.getOrDefault(countryCode.toUpperCase(), ".+"); // Default to allow any if not found
+        return POSTAL_CODE_REGEX_MAP.getOrDefault(countryCode.toUpperCase(Locale.ROOT), ".+"); // Default to allow any if not found
     }
 
     private PostalCodeUtils() {

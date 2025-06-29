@@ -1,0 +1,902 @@
+# ===================================================================
+# LOCAL PROFILE CONFIGURATION for Auth-Server
+# ===================================================================
+# This file is activated when the 'local' Spring profile is active.
+# It configures the application to connect to the local services
+# defined in your docker-compose.override.yml file.
+
+app:
+  security:
+    encryption:
+      # Generate a strong, random Base64 encoded key (16, 24, or 32 bytes decoded)
+      # Example for AES-256 (32 bytes = 256 bits):
+      # Generate with: openssl rand -base64 32
+      passkey-data-key: ${APP_PASSKEY_ENCRYPTION_KEY} # Load from .env, which is seeded to Vault
+  ssl:
+    trust-store:
+      # Use 'file:' for filesystem or 'classpath:' if packaged in JAR
+      path: classpath:config/central-truststore.jks
+      #      path: file:./config/central-truststore.jks
+      # LOAD SECURELY! Use environment variable for the password.
+      # Password for the truststore, to be loaded from Vault if sensitive
+      # For now, assuming AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD is an env var Spring Boot picks up
+      # or you can map it from Vault: ${authserver.security.truststore.password}
+      password: ${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}
+
+# --- ASN Lookup & Reputation ---
+asn:
+  stale-threshold: 30d # days for DB cleanup
+  cleanup-schedule: "0 0 3 * * *" # Cron expression for daily cleanup
+  reputation:
+    decay:
+      schedule: "0 1 4 * * *" # Schedule for the decay task
+
+# --- GeoIP / GeoIP2 ---
+geoip2:
+  download-path: /tmp/geoip-updates # Or another suitable writable directory
+  license:
+    account-id: ${GEOIP2_ACCOUNT_ID} # LOAD SECURELY
+    license-key: ${GEOIP2_LICENSE_KEY} # LOAD SECURELY
+    # --- GeoIP2 Databases ---
+    # Note: These paths should be writable by the application
+    # or use a shared volume if running in Docker
+  database-directory: C:/dev/geoip-databases # Or another suitable writable directory
+  #  database-directory: /opt/geoip-databases # Or another suitable writable directory
+  city-database:
+    path: ${geoip2.database-directory}/GeoLite2-City.mmdb
+  asn-database:
+    path: ${geoip2.database-directory}/GeoLite2-ASN.mmdb
+  country-database:
+    path: ${geoip2.database-directory}/GeoLite2-Country.mmdb
+
+    # Note: Use classpath: if you want to package the databases with your app
+    # Ensure the databases are included in your build process (e.g., Maven/Gradle)
+#  city-database:
+#    path: classpath:/project/geoip2/GeoLite2-City.mmdb
+#  asn-database:
+#    path: classpath:/project/geoip2/GeoLite2-ASN.mmdb
+#  country-database:
+#    path: classpath:/project/geoip2/GeoLite2-Country.mmdb
+
+# JTE - server-side rendering
+gg:
+  jte:
+    developmentMode: true
+
+# --- JTI Bloom Filter ---
+jti:
+  bloomfilter:
+    expected-insertions: 1000000
+    false-positive-probability: 0.01
+  cleanup:
+    rate-ms: 300000 # Cleanup every 5 minutes
+
+# Spring Actuator - metrics
+management:
+  endpoint:
+    health:
+      show-details: ALWAYS # Always show health details
+    prometheus:
+      # Enable the Prometheus endpoint
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics # Expose prometheus and metrics
+      #        include: "*" # Expose all for dev/admin; be selective in prod
+      path-mapping:
+        health: healthcheck # Map /health to /healthcheck
+        prometheus: metrics # Map /prometheus to /metrics
+      base-path: /actuator # Base path for all endpoints
+  info:
+    env:
+      enabled: true # Disabled by default, so we need to explicitly enable it
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  security:
+    #    enabled: false # disable security for local dev
+    # Secured actuator endpoint
+    enabled: true
+    roles: "ADMIN" # Or a custom role for your monitoring system
+  newrelic:
+    metrics:
+      export:
+        enabled: true
+        api-key: ${NEW_RELIC_LICENSE_KEY}
+        account-id: ${NEW_RELIC_ACCOUNT_ID}
+        user-key: ${NEW_RELIC_USER)KEY}
+        uri: https://metric-api.newrelic.com/metric/v1
+
+# --- Notifications (Secrets should be loaded securely) ---
+notification:
+  email:
+    from: ${NOTIFICATION_EMAIL_FROM:${spring.mail.username}} # Default to spring.mail.username
+    to: ${NOTIFICATION_EMAIL_TO} # LOAD SECURELY
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL} # LOAD SECURELY
+    channel: ${SLACK_CHANNEL} # LOAD SECURELY
+    channel-id: ${SLACK_CHANNEL_ID} # LOAD SECURELY
+    token: ${SLACK_API_TOKEN} # LOAD SECURELY
+  slack-token: ${SLACK_API_TOKEN} # LOAD SECURELY
+  slack-channel: ${SLACK_CHANNEL} # Or '#alerts'
+  smtp-email-from: "not-reply@amlu.me"
+
+oauth2:
+  clients:
+    shopClient:
+      # This is the callback URL for your amlume-shop application.
+      # Spring Security's default callback pattern is /login/oauth2/code/{registrationId}
+      redirect-uri: "http://localhost:8080/login/oauth2/code/shopClient"
+      # Define the client secret here as well, as it's likely needed by the same configuration class.
+      # Ensure this matches the secret you plan to use in the amlume-shop application's configuration.
+      secret: ${oauth2.clients.shopClient.secret} # This is the key Spring Boot resolves     # type: JKS # Optional: Specify type if not JKS
+#      secret: "shop-secret"
+# --- Project Paths ---
+project:
+  image:
+    path: /project/images
+  file:
+    path: /project/files
+  geoip:
+    path: /project/geoip
+
+# --- reCAPTCHA (Secret should be loaded securely) ---
+recaptcha:
+  secret: ${RECAPTCHA_SECRET} # LOAD SECURELY
+  site-key: ${RECAPTCHA_SITE_KEY} # Site key is often public
+
+# --- Resilience ---
+resilience4j:
+  retry:
+    instances:
+      notificationSender:
+        max-attempts: 3
+        wait-duration: 500ms # Wait 0.5s between retries
+        retry-exceptions:
+          - java.lang.RuntimeException # Retry on our wrapped exceptions
+          - java.io.IOException
+          - org.springframework.mail.MailException
+  bulkhead:
+    instances:
+      default:
+        max-concurrent-calls: 100
+        max-wait-duration: 300ms # Use duration format
+      valkeyService: # Renamed from valkeyService for consistency
+        max-concurrent-calls: 100
+  circuitbreaker:
+    instances:
+      default:
+        failureRateThreshold: 50
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 2s # Use duration format
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 20s # Use duration format
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+      asnDnsLookup:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      asnWhoisLookup:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      # Configuration for the circuit breaker around the authserver registration call
+      authserverRegistration: # Name used in @CircuitBreaker annotation
+        failureRateThreshold: 50 # Percentage of failed calls to trip the circuit
+        waitDurationInOpenState: 30s # Time the circuit stays open
+        permittedNumberOfCallsInHalfOpenState: 5 # Calls allowed in half-open state
+        slidingWindowSize: 20 # Number of calls in the sliding window
+        minimumNumberOfCalls: 10 # Minimum calls before calculating failure rate
+        # Record exceptions that should count towards failure rate (transient errors, server errors)
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.reactive.function.client.WebClientRequestException # Network/connection errors
+          - org.springframework.web.reactive.function.client.WebClientResponseException.InternalServerError # 500
+          - org.springframework.web.reactive.function.client.WebClientResponseException.ServiceUnavailable # 503
+          - org.springframework.web.reactive.function.client.WebClientResponseException.GatewayTimeout # 504
+          # Do NOT record expected business errors or client errors (these are handled by onStatus)
+        ignoreExceptions:
+          - me.amlu.authserver.exceptions.UserAlreadyExistsException # Expected conflict (409)
+          - java.lang.IllegalArgumentException # Expected bad request mapping (400)
+          - org.springframework.web.reactive.function.client.WebClientResponseException.Conflict # 409 Conflict
+          - org.springframework.web.reactive.function.client.WebClientResponseException.BadRequest # 400 Bad Request
+          - me.amlu.authserver.exceptions.UserRegistrationException # Treat authserver internal errors as non-retryable business errors
+
+      captchaValidation:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 30s
+      rateLimiterRedis:
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        waitDurationInOpenState: 20s
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+      valkeyService: # Renamed from valkeyService
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        slidingWindowType: COUNT_BASED
+      vaultService:
+        failureRateThreshold: 50
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 10s
+        recordExceptions:
+          - org.springframework.vault.VaultException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+        ignoreExceptions:
+          - me.amlu.authserver.exceptions.RateLimitExceededException
+  executor:
+    instances:
+      default:
+        core-pool-size: 4
+        max-pool-size: 10
+        queue-capacity: 100
+        keep-alive-time: 60s
+        max-wait-time: 30s
+        # max-concurrent-calls: 100 # This seems like a bulkhead property, not executor
+  exponential-backoff: # Used by ResilienceConfig
+    instances:
+      default:
+        initial-interval-millis: 200
+        max-interval-millis: 86400000 # 24h
+        eb-multiplier: 1.5
+        randomization-factor: 0.36
+  timelimiter:
+    instances:
+      valkeyService: # Renamed from valkeyService
+        timeoutDuration: 1s
+      default:
+        timeoutDuration: 5s # Use duration format
+
+# --- Custom Security Settings ---
+security: # Used by various security services/configs
+  max-devices-per-user: 5
+  max-concurrent-sessions: 2
+  device-fingerprint:
+    hash-algorithm: ${HASH_ALGORITHM:SHA-256} # Provide default if sensible
+    hash-encoding: ${HASH_ENCODING:Base64} # Provide default if sensible
+    fingerprint-salt: ${DEVICE_FINGERPRINT_SALT} # LOAD SECURELY
+    block-unknown: true
+    excluded-uris: "/api/auth/**,/public/**,/error,/actuator/**"
+    verification-timeout-seconds: 300
+    storage:
+      type: database
+    trusted-device:
+      expiration-days: 30
+  geo:
+    suspicious-distance-km: 200.0
+    time-window-hours: 24 # Used by ValkeyCacheConfig
+    known-vpn-asns: # Used by EnhancedVpnDetectorServiceImpl
+      - "AS15169" # Example
+      # Add others
+    vpn-reputation-threshold: 0.25 # Override the default 0.3
+    high-risk-countries:
+      - "IR"
+      - "KP"
+    known-vpn-ip-ranges: ${KNOWN_VPN_IP_RANGES:} # Load from Env Var, empty default
+    known-datacenter-ranges: ${KNOWN_DATACENTER_RANGES:} # Load from Env Var, empty default
+  ip: # Used?
+    suspicious-requests-threshold: 5
+    block-threshold: 10
+  token: # Used?
+    revoked-cache:
+      max-size: 10000
+  user: # Used?
+    rate-limit:
+      max-attempts: 5
+      window-seconds: 300
+      lockout-duration-minutes: 30
+    password:
+      min-length: 12
+      max-length: 127
+      strength:
+        min-score: 3
+        min-entropy: 30
+        min-uppercase: 1
+        min-lowercase: 1
+        min-digits: 1
+        min-special: 1
+  vpn: # Used by EnhancedVpnDetectorServiceImpl
+    min-suspicious-factors: 2
+  password: min-length=12
+    require-uppercase=true
+    require-digit=true
+    require-special-char=true
+    uppercase-regex=.*[A-Z].*
+
+
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+      - org.springframework.boot.autoconfigure.session.SessionAutoConfiguration
+
+  application:
+    name: ${AS_NAME:authserver}
+  #  config:
+  #    import: application_prod.yml
+  #  profiles:
+  #    active: default
+
+  # Spring Boot Admin Server configuration
+  boot:
+    admin:
+      context-path: /admin # This is the path for the Spring Boot Admin UI
+      ui:
+        public-url: https://localhost:9000/admin
+      client:
+        enabled: false # Disable client registration to avoid SSL issues
+        url: https://localhost:9000/admin
+        username: ${ADMIN_USER_NAME}
+        password: ${ADMIN_USER_PASSWORD}
+      discovery:
+        ignored-services: consul
+      routes:
+        endpoints: env,metrics,trace,jolokia,info,configprops
+        #        endpoints: env, metrics, health, info, prometheus, jte, beans, conditions, configprops, httptrace, threaddump, logfile, loggers, scheduledtasks, liquibase, flyway, database, integrationgraph, sessions, mappings, sessions, session, session-expired, cache, cache-statistics, scheduledtasks, aop, autoconfig, beans, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, databasemetrics, trace, jolokia, info, configprops
+
+        # ui: # Optional UI configurations
+        # public-url: https://your-authserver-domain.com/admin # If behind a reverse proxy
+        # title: "AuthServer Admin" # Custom title for the UI
+      # brand: "<img src=\"/custom-logo.png\"> AuthServer" # Custom brand HTML
+      #      ui:
+      #        cache:
+      #          no-cache: true
+      #        template-location: file:../../spring-boot-admin-server-ui/target/dist/
+      #        resource-locations: file:../../spring-boot-admin-server-ui/target/dist/
+      #        cache-templates: false
+
+      # If your authserver is also a client to ANOTHER Spring Boot Admin server,
+      # you would configure these properties. But based on the error, authserver IS the admin server.
+      # client:
+      #   url: http://another-admin-server:port # URL of the Spring Boot Admin server to register with
+      #   instance:
+      #     name: "AuthServer Instance"
+      #     # health-url: ${management.endpoints.web.base-path}/health # Default
+      #     # management-url: ${management.endpoints.web.base-path} # Default
+      #     # service-url: ${server.servlet.context-path} # Default
+
+      server:
+        # Optional: context-path for the admin UI
+        context-path: /admin
+      # Optional: UI title
+      # ui:
+      #   title: "AuthServer Admin"
+      #   brand: "<img src=\"/your-logo.png\"><span>AuthServer Admin</span>"
+      # Optional: Configure discovery if you have multiple discovery clients
+      # By default, if Spring Cloud Discovery is on classpath, it will use it.
+      # instance-discovery:
+      #   enabled: true # Default is true if spring-cloud-starter-consul-discovery is present
+  # If your admin server itself is secured, you'd configure security here.
+  # For local dev, often left open or with basic auth.
+  # Example for securing admin server (add spring-boot-starter-security if not present):
+  # security:
+  #   user:
+  #     name: admin-ui-user
+  #     password: your-strong-password-here
+
+
+  cache:
+    type: redis
+
+  cloud:
+    config:
+      #      enabled: false
+      #      import-check:
+      #        enabled: false
+      fail-fast: false # Set to false for local dev if Vault isn't always up when starting authserver
+      retry:
+        max-attempts: 10
+        max-interval: 15000
+        multiplier: 1.2
+        initial-interval: 1100
+
+    # --- Consul for Discovery ---
+    consul:
+      host: localhost
+      port: 8500
+      discovery:
+        service-name: ${spring.application.name} # How this service registers in Consul
+        instance-id: ${spring.application.name}:${spring.profiles.active[0]}:${random.value} # Unique instance ID
+        prefer-ip-address: true # Register with IP address
+        health-check-path: /actuator/health # Actuator health endpoint for Consul checks
+        health-check-interval: 15s
+        metadata:
+          management-context-path: /actuator
+          health-path: /health
+          user-name: ${spring.security.user.name}
+          user-password: ${spring.security.user.password}
+      config:
+        enabled: false # If you only wanted discovery and not config from Consul, you'd set false
+        #        enabled: true
+        import-check:
+          enabled: false
+        prefix: config # Base folder in Consul KV store
+        default-context: application # Corresponds to config/application in Consul
+        profile-separator: '::' # Corresponds to config/authserver::local in Consul
+        format: YAML # Or PROPERTIES, JSON, etc.
+        # Watch for config changes (optional)
+        watch:
+          enabled: true
+          delay: 1000 # In milliseconds
+
+    # --- Spring Cloud Vault Configuration ---
+    vault:
+      enabled: true
+      fail-fast: true # Set to false for local dev if Vault isn't always up when starting authserver
+      uri: http://localhost:8200 # Your local Vault address
+      connection-timeout: 5000
+      read-timeout: 15000
+      # --- Authentication: TOKEN for local dev, AppRole for prod ---
+      authentication: TOKEN
+      token: ${VAULT_TOKEN}   # Read from environment variable VAULT_TOKEN (set this in your .env)
+
+      kv:
+        enabled: true
+        backend: secret    # Default KV v2 mount path
+        # Spring Cloud Vault will automatically try paths like:
+        # secret/data/authserver/        (for common app secrets)
+        # secret/data/authserver,local/  (for profile-specific secrets if spring.profiles.active=local)
+        # secret/data/application/       (for global application secrets)
+        # We will put secrets in secret/data/authserver/local/ for this example.
+        # default-context: "authserver" # This would make it look in secret/data/authserver/
+        # profile-separator: "/" # Default is comma, but slash is common for path-like profiles
+
+  # --- Import Vault Secrets ---
+  # This tells Spring to load configuration from Vault.
+  # Properties from Vault will override those in this file if names match.
+  config:
+    # This tells Spring Boot to load configuration from Consul.
+    # It will look for:
+    # 1. config/authserver,local/ (if profile-separator is /) or config/authserver::local/ (if ::)
+    # 2. config/authserver/
+    # 3. config/application,local/ or config/application::local/
+    # 4. config/application/
+    import:
+      - "optional:consul:" # 'optional:' makes it not fail if Consul config isn't found initially
+      #      - "optional:configserver:https://localhost:9000"
+      #      - "optional:configserver:"
+      #      - "optional:vault://" # General import, Spring Cloud Vault uses default paths
+      # You can be more specific if needed:
+      - "optional:vault://secret/authserver/local"
+      - application-resilience.yml
+
+  data:
+    redis:
+      # For local development, authserver runs on host, Valkey in Docker
+      host: ${VALKEY_HOST_LOCAL:localhost}
+      port: ${VALKEY_PORT_LOCAL:6379} # The port mapped in docker-compose.override.yml
+      password: ${VALKEY_PASSWORD}    # Ensure this is in authserver's .env or Vault
+      ssl:
+        enabled: true # Assuming your Valkey is configured for TLS as per docker-compose healthcheck
+        #        bundle: central-truststore-for-redis # Reference the SSL bundle defined in ssl
+        bundle: redis-client-mtls-bundle # for tls-auth-clients yes in valkey.conf
+      # Configure Redis connection pool
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
+      # Configure Redis client options
+      client-type: lettuce
+      connect-timeout: 5000ms
+      timeout: 10000ms
+
+    mongodb:
+      # Construct the URI with all necessary details, including authSource
+      # Ensure your .env file correctly provides MONGODB_SESSION_DB_USERNAME, MONGODB_SESSION_DB_PASSWORD, etc.
+      uri: mongodb://${MONGODB_SESSION_DB_USERNAME}:${MONGODB_SESSION_DB_PASSWORD}@${MONGODB_SESSION_DB_HOST:localhost}:${MONGODB_SESSION_DB_PORT_LOCAL:27017}/${MONGODB_SESSION_DB_NAME:sessions_auth_db}?authSource=admin
+
+      # Comment out or remove the individual properties if they are all in the URI
+      # host: ${MONGODB_SESSION_DB_HOST:localhost}
+      # port: ${MONGODB_SESSION_DB_PORT_LOCAL:27017}
+      # database: ${MONGODB_SESSION_DB_NAME:sessions_auth_db}
+      # username: ${MONGODB_SESSION_DB_USERNAME:sessions_user}
+      # password: ${MONGODB_SESSION_DB_PASSWORD}
+      # authentication-database: admin # This is now part of the URI via authSource=admin
+
+      auto-index-creation: true # Keep this, as Spring Session relies on it
+
+  # --- PostgreSQL Configuration for User Data and Role Hierarchies ---
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_AUTH_DB_HOST:localhost}:${POSTGRES_AUTH_DB_PORT_LOCAL:54321}/${POSTGRES_AUTH_DB_NAME:amlume_auth_db}
+    username: ${AUTH_DB_USER:auth_server_user}
+    password: ${AUTH_DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  # MySQL
+  #  datasource:
+  #    # Credentials will be overridden by Vault if keys like 'spring.datasource.username' and
+  #    # 'spring.datasource.password' exist in secret/data/authserver/local (or secret/data/authserver)
+  #    # If the file path changed, adapt accordingly
+  #    #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS&trustCertificateKeyStorePassword=${APP_CENTRAL_TRUSTSTORE_PASSWORD} # <-- Corrected and password added
+  #    #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=VERIFY_CA&trustCertificateKeyStoreUrl=file:./config/central-truststore.jks&trustCertificateKeyStoreType=JKS
+  #    #    url: jdbc:mysql://localhost:3406/amlume_db?sslMode=DISABLED
+  #    url: jdbc:mysql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT_LOCAL:3407}/${AUTH_DB_NAME:amlume_auth_db}?sslMode=DISABLED&allowPublicKeyRetrieval=true
+  #    #    url: jdbc:mysql://${AUTH_DB_HOST:localhost}:${AUTH_DB_PORT_LOCAL:3306}/${AUTH_DB_NAME:amlume_auth_db}
+  #    username: ${spring.datasource.username}
+  #    password: ${spring.datasource.password}
+  #    driverClassName: com.mysql.cj.jdbc.Driver
+
+  docker:
+    compose:
+      enabled: false # Disable Spring Boot's automatic Docker Compose management for local profile
+
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    enabled: true
+    repair-on-migrate: true
+    clean-disabled: false # Enable clean operation (disabled by default)
+    #    clean-on-validation-error: true # Clean and rebuild on validation errors
+    clean-on-migrate: true # Avoid true in production as it will drop and recreate all tables if there's a validation error.
+  #    validate-on-migrate: true
+
+  hazelcast:
+    client:
+      cluster-name: dev # dev - Default Hazelcast cluster name, or match HZ_CLUSTERNAME if set in Docker
+      network:
+        cluster-members:
+          - "localhost:5701" # Address of the Hazelcast container from the host's perspective
+        # smart-routing: true # Default
+        # connection-timeout: 5000 # Default
+
+  initial-root-user:
+    email: ${ROOT_USER_EMAIL}
+    password: ${ROOT_USER_PASSWORD}
+
+  jackson:
+    default-property-inclusion: non_null
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-empty-string-as-null-object: true
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    mapper:
+      accept-case-insensitive-properties: true
+    property-naming-strategy: SNAKE_CASE
+    time-zone: UTC
+  # --- JPA / Hibernate ---
+  # Disable open-in-view for performance
+  jpa:
+    open-in-view: false
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    #    database-platform: org.hibernate.dialect.MySQLDialect
+    show-sql: true
+    hibernate:
+      ddl-auto: validate # Use "update" for dev, "create-drop" if schema changes, "validate" or "none" for prod / Flyway migrations are stable
+    #      show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          lob:
+            non_contextual_creation: true
+          time_zone: UTC
+
+  mail:
+    host: smtp-relay.brevo.com
+    port: 587
+    username: your_brevo_email@example.com
+    smtp:
+      email:
+        from: notification@amlu.me
+    password: your_brevo_smtp_password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  main:
+    web-application-type: servlet # or reactive
+    allow-bean-definition-overriding: true
+
+  messages:
+    basename: i18n/domain-messages,i18n/application-messages
+    encoding: UTF-8
+    fallback-to-system-locale: false
+
+  #  mvc:
+  #    pathmatch:
+  #      matching-strategy: ant_path_matcher
+
+  security:
+    user:
+      name: ${SECURITY_USER_NAME}
+      password: ${SECURITY_USER_PASSWORD}
+      # These are the credentials Grafana Cloud will use to scrape metrics.
+      # Use environment variables or Vault for these in production.
+      #      name: ${METRICS_USER:prometheus}
+      #      password: ${METRICS_PASSWORD:your_strong_password_here}
+      roles: "ADMIN"
+    oauth2:
+      #      authorizationserver:
+      #        client:
+      #          public-client:
+      #            registration:
+      #              client-id: "public-client"
+      #              client-authentication-methods:
+      #                - "none"
+      #              authorization-grant-types:
+      #                - "authorization_code"
+      #              redirect-uris:
+      #                - "http://127.0.0.1:8080"
+      #              scopes:
+      #                - "openid"
+      #                - "profile"
+      #            require-authorization-consent: true
+      #            # require-proof-key setting is important to prevent PKCE downgrade attacks
+      #            require-proof-key: true
+
+      client:
+        registration:
+          google:
+            # client-id and client-secret will be overridden by Vault if keys like
+            # 'spring.security.oauth2.client.registration.google.client-id' and
+            # 'spring.security.oauth2.client.registration.google.client-secret'
+            # exist in secret/data/authserver/local (or secret/data/authserver)
+            client-id: ${spring.security.oauth2.client.registration.google.client-id} # Matches key in Vault
+            client-secret: ${spring.security.oauth2.client.registration.google.client-secret} # Matches key in Vault
+            scope: openid, profile, email
+            #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            redirect-uri: "https://localhost:9000/login/oauth2/code/{registrationId}" # Default pattern
+          github:
+            client-id: ${spring.security.oauth2.client.registration.github.client-id} # Matches key in Vault
+            client-secret: ${spring.security.oauth2.client.registration.github.client-secret} # Matches key in Vault
+            scope: read:user, user:email # Ensure 'user:email' for primary email
+            #            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}" # Default pattern
+            redirect-uri: "https://localhost:9000/login/oauth2/code/{registrationId}" # Default pattern
+        # provider: # Often auto-discovered for OIDC, or common providers are pre-configured
+        #   google:
+        #     issuer-uri: https://accounts.google.com
+    rememberme:
+      key: ${spring.security.rememberme.key} # Matches key in Vault
+    webauthn:
+      rpName: "Amlume Passkeys"
+      # Replace it with the domain name of the application
+      rpId: localhost
+      allowedOrigins:
+        - "http://localhost:8080" # amlume-shop
+        #        - "http://localhost:9000" # authserver itself if its UI uses WebAuthn
+        - "https://localhost:9000" # authserver itself if its UI uses WebAuthn
+        # Replace with the URL of the application. Notice: this _MUST_ be an HTTPS URL with a valid certificate
+
+  #    client:
+  #      registration:
+  #        amlumeclient:
+  #          client-id: amlumeclient
+  #          client-secret: Qw3rTy6UjMnB9zXcV2pL0sKjHn5TxQqB
+  #          authorization-grant-type: authorization_code
+  #          redirect-uri: "{baseUrl}/login/oauth2/code/amlumeclient"
+  #          scope: openid,profile,email
+  #      provider:
+  #        amlumeauth:
+  #          issuer-uri: http://localhost:9000
+
+  # --- Spring Session Configuration ---
+  session:
+    authserver: sessions
+    cookie:
+      name: AMLUAUTHJSESSIONID
+      http-only: true
+      secure: true
+      same-site: ${SESSION_COOKIE_SAME_SITE:Lax}
+      max-age: 7200s # 2 hours
+      domain: ${SESSION_COOKIE_DOMAIN:localhost}
+    store-type: jdbc # Set the store type here
+    jdbc:
+      # For local dev, automatically create the session tables on startup
+      initialize-schema: always
+    #    hazelcast:
+    #      map-name: "spring:session:authserver:sessions" # Name of the Hazelcast map for sessions
+    #      flush-mode: ON_SAVE # ON_SAVE or IMMEDIATE
+    #      save-mode: ALWAYS # Default is ALWAYS - HA and data integrity. ON_SESSION_END is more performant, but may lose session data. NEVER is as it implies.
+    #    timeout: 2h # Example: server.servlet.session.timeout
+    #    store-type: redis
+    #    store-type: mongodb
+    #    mongodb:
+    #      collection-name: auth_sessions
+    #    timeout: 7200s  # 2-hour
+
+    #    redis:
+    #      # Namespace to keep authserver sessions separate if sharing Redis instance
+    #      namespace: "authserver:session:amlume"
+    #      #      namespace: "amlume:authserver:session"
+    #      #      repository-type: default # default or indexed, uses RedisIndexedSessionRepository. Or use annotation-based SessionRepository
+    #      # flush-mode: ON_SAVE # Default, saves on every change
+    #      # save-mode: ON_SET_ATTRIBUTE # Default is ON_SET_ATTRIBUTE. ALWAYS ensures session attributes are persisted. ON_GET_ATTRIBUTE is less performant, as it saves on every request.
+    #      # time-to-live: 30m # Default
+    #      configure-action: none # Disable auto-configuration to use our custom config
+    # Configure session cookie
+    secure-cookie: true # Set to false for local HTTP development if needed
+
+
+  ssl: # This is where bundles are defined
+    bundle:
+      jks: # pkcs12 Or jks if your central-truststore is directly usable as a JKS bundle for Redis
+        redis-client-mtls-bundle:
+          key.alias: authservervalkeyclient                                  # Alias used when creating the client keystore
+          keystore:
+            location: classpath:config/authserver-valkey-client-keystore.p12 # Path to your NEW client keystore
+            #            password: your_central_truststore_password
+            password: ${AUTHSERVER_VALKEY_CLIENT_KEYSTORE_PASSWORD}         # Password for this new client keystore
+            type: PKCS12 # PKCS12 Or JKS, etc.
+          truststore: # This is to trust Valkey's SERVER certificate
+            location: classpath:config/authserver-valkey-truststore.p12
+            #          location: ${app.ssl.trust-store.path} # e.g., classpath:config/central-truststore.jks
+            #            password: your_central_truststore_password
+            password: ${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}
+            type: PKCS12 # PKCS12 if your truststore is .p12. or JKS
+
+  #         authserver-https-bundle:
+  #           keystore:
+  #             location: classpath:config/authserver-server-keystore.p12
+  #             password: your_central_truststore_password # Or placeholder
+  #             alias: authserverhttps
+  #             type: PKCS12
+
+  # --- Virtual Threads ---
+  threads:
+    virtual:
+      enabled: true
+
+  # --- Security Configuration ---
+
+server:
+  port: ${AS_SERVER_PORT:9000}
+  #  connection-timeout: 30s
+  #  context-path: /authserver
+  error:
+    whitelabel:
+      enabled: true # For production, disable Spring Boot's default error page
+    path: /user-error
+    include-exception: true
+  #    include-stacktrace: always
+  #    include-message: always
+
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,application/javascript,text/css,image/svg+xml
+    min-response-size: 1024 # Compress responses larger than 1KB
+    # For Brotli (if your server setup supports it and you prefer it over Gzip)
+  #    brotli:
+  #      enabled: true
+
+  max-http-request-header-size: 16KB # Default is 8KB, which is too small for some headers
+  tomcat:
+    max-swallow-size: 2MB # The maximum size of a request body. Default is 1MB
+    max-http-form-post-size: 2MB # The maximum size of the whole post-request.
+    accesslog:
+      enabled: true
+      pattern: "%h %l %t %r %s %b %D %S"
+      #      directory: /logs # User must have write access
+      directory: ./target/tomcat-access-logs # or an absolute path user have write access
+      file-date-format: yyyy-MM-dd
+      prefix: access_log
+      suffix: .log
+
+  servlet:
+    session:
+      cookie:
+        name: AMLUAUTHJSESSIONID # Custom session cookie name for authserver
+        http-only: true
+        secure: true # True because you are using HTTPS
+        same-site: ${SESSION_COOKIE_SAME_SITE:Lax} # Good default for security and usability
+        domain: ${SESSION_COOKIE_DOMAIN:localhost} # Add domain to ensure cookies are properly shared
+      timeout: 7200s # 2-hour, matching spring.session.timeout
+      # max-age: 1800s # Optional: aligns with spring.session.timeout if needed
+      tracking-modes: cookie
+  #      cookie:
+  #        secure: true # true when used over SSL
+
+  forward-headers-strategy: framework
+
+  ssl:
+    enabled: true
+    #     bundle: authserver-https-bundle # This bundle would also be defined under spring.ssl.bundle.jks
+    key-store: classpath:config/authserver-server-keystore.p12 # Path to your keystore
+    #    key-store-password: your_central_truststore_password
+    key-store-password: ${AUTHSERVER_SERVER_KEYSTORE_PASSWORD} # modify the vault-seeder accordingly
+    key-alias: authserverhttps # Alias used during P12 creation
+    key-store-type: PKCS12 # Or JKS, etc.
+    protocols: TLSv1.2,TLSv1.3 #Or just TLS
+
+tsid:
+  node:
+    count:
+
+logging:
+  level:
+    io.netty: DEBUG # Or TRACE for even more detail
+    javax.net.ssl: DEBUG # For JVM-level SSL debugging
+    org:
+      springframework:
+        boot.autoconfigure.ssl: DEBUG # or TRACE
+        boot.ssl: DEBUG # or TRACE
+        #        security: ${SPRING_SECURITY_LOG_LEVEL:TRACE}
+        security: TRACE
+        security.web.util.matcher: TRACE
+        security.web.webauthn: TRACE
+        security.web.webauthn.client: TRACE
+        security.web.webauthn.client.registration: TRACE
+        security.web.webauthn.client.registration.oauth2: TRACE
+        session: DEBUG # Add this to see Spring Session details
+        data.redis: DEBUG # Add this to see Redis operations
+
+        web: DEBUG
+        cache: TRACE # Set to TRACE to see cache hits/misses logged by Spring
+        #        security: ${SPRING_SECURITY_LOG_LEVEL:INFO} # Reduce default to INFO
+        cloud.vault: DEBUG # Keep vault logging at DEBUG for setup
+        vault.core: DEBUG
+    #    root: DEBUG
+    com.webauthn4j: TRACE
+    io.lettuce.core.protocol.ConnectionWatchdog: TRACE
+    me.amlu.authserver: DEBUG
+    me.amlu.authserver.config.LocalSecurityConfig: TRACE
+    me.amlu.authserver.security.WebAuthnPrincipalSettingSuccessHandler: DEBUG
+  #    me.amlu.shop.amlume_shop: DEBUG
+  #    me.amlu.shop.amlume_shop.config: DEBUG # Ensure config loading is visible
+  #    me.amlu.shop.amlume_shop.service: DEBUG
+  #    me.amlu.shop.amlume_shop.controller: DEBUG
+  #    me.amlu.shop.amlume_shop.repository: DEBUG
+  #    me.amlu.shop.amlume_shop.util: DEBUG
+  #    me.amlu.shop.amlume_shop.exception: DEBUG
+  #    me.amlu.shop.amlume_shop.model: DEBUG
+  #    me.amlu.shop.amlume_shop.security: DEBUG
+  #    me.amlu.shop.amlume_shop.security.oauth2: DEBUG
+  pattern:
+    console: ${LOGPATTERN_CONSOLE:%green(%d{HH:mm:ss.SSS}) %blue(%-5level) %red([%thread]) %yellow(%logger{15}) - %msg%n}
+
+    # --- Define properties for OAuth2 client secrets to be loaded from Vault for seeding ---
+    # These will be injected into LocalSecurityConfig using @Value
+    # Spring Cloud Vault will populate these if keys like 'oauth2.clients.amlumeapi.secret'
+    # are found in secret/data/authserver/local (or secret/data/authserver)
+    oauth2:
+      clients:
+        amlumeapi:
+          secret: ${oauth2.clients.amlumeapi.secret} # Matches key in Vault
+        amlumeintrospect:
+          secret: ${oauth2.clients.amlumeintrospect.secret} # Matches key in Vault
+        shopClient:
+          secret: ${oauth2.clients.shopClient.secret} # Matches key in Vault
+        postmanClient:
+          secret: ${oauth2.clients.postmanClient.secret} # Matches key in Vault
+
+# --- Web Settings ---
+web:
+  # cors: # Configure via Spring Security or WebMvcConfigurer
+  whois: # Used by CoreAsnLookupServiceImpl
+    server: ${WHOIS_SERVER:whois.cymru.com} # Provide default
+    port: ${WHOIS_PORT:43} # Provide default
+    timeout: ${WHOIS_TIMEOUT:5000} # Provide default (ms)
