@@ -1,0 +1,42 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.security.auth;
+
+import org.springframework.cglib.core.internal.LoadingCache;
+import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class LoginAttemptService {
+    private final LoadingCache<String, Integer> attemptsCache;
+    private final int MAX_ATTEMPTS = 5;
+
+    public LoginAttemptService() {
+        attemptsCache = CacheBuilder.newBuilder()
+            .expireAfterWrite(1, TimeUnit.HOURS)
+            .build(new CacheLoader<>() {
+                @Override
+                public Integer load(String key) {
+                    return 0;
+                }
+            });
+    }
+
+    public void loginFailed(String username) {
+        int attempts = attemptsCache.getUnchecked(username) + 1;
+        attemptsCache.put(username, attempts);
+    }
+
+    public boolean isBlocked(String username) {
+        return attemptsCache.getUnchecked(username) >= MAX_ATTEMPTS;
+    }
+}

@@ -154,7 +154,14 @@ add_pair "mfaEncryptionPassword" "${MFA_ENCRYPTION_PASSWORD}" # Check exact prop
 add_pair "mfa.mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact property name in MfaProperties
 add_pair "mfaEncryptionSalt" "${MFA_ENCRYPTION_SALT}"         # Check exact property name in MfaProperties
 
+# --- Observability ---
+#Grafana Loki
 add_pair "observability.loki-url" "${LOKI_URL}" # Assuming property name matches
+
+# New Relic
+add_pair "management.newrelic.metrics.export.account-id" "${NEW_RELIC_ACCOUNT_ID}"
+add_pair "management.newrelic.metrics.export.api-key" "${NEW_RELIC_LICENSE_KEY}"
+add_pair "management.newrelic.metrics.export.user-key" "${NEW_RELIC_USER_KEY}"
 
 # PASETO properties (match PasetoProperties bean structure)
 add_pair "paseto.pub.access.private-key" "${PASETO_PUBLIC_ACCESS_PRIVATE_KEY}"

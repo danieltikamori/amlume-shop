@@ -1,0 +1,158 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.resilience.service;
+
+import com.hazelcast.core.HazelcastInstance;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.resilience.AbstractRateLimiter;
+import me.amlu.shop.amlume_shop.resilience.MfaRateLimitInfo;
+import me.amlu.shop.amlume_shop.resilience.MfaRateLimitProperties;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+@Service
+@Slf4j
+public class MfaRateLimiterImpl extends AbstractRateLimiter implements MfaRateLimiter {
+    private final MfaRateLimitProperties properties;
+
+    public MfaRateLimiterImpl(HazelcastInstance hazelcastInstance,
+                              MfaRateLimitProperties properties) {
+        super(hazelcastInstance, "mfa-rate-limits");
+        this.properties = properties;
+    }
+
+    @Override
+    protected BucketConfiguration getBucketConfiguration() {
+        return Bucket4j.configurationBuilder()
+                .addLimit(Bandwidth.builder()
+                        .capacity(properties.getMaxAttempts())
+                        .refillGreedy(properties.getMaxAttempts(),
+                                Duration.ofMinutes(properties.getTimeWindowMinutes().toMinutes())))
+                .build();
+    }
+
+    @Override
+    protected long getMaxAttempts() {
+        return properties.getMaxAttempts();
+    }
+
+    @Override
+    protected Duration getTimeWindowMinutes() {
+        return properties.getTimeWindowMinutes();
+    }
+
+//    @Override
+//    public boolean checkMfaAttempt(String userId) {
+//        String key = createKey("mfa", userId);
+//        try {
+//            checkRateLimit(key);
+//            return true;
+//        } catch (RateLimitExceededException e) {
+//            log.warn("MFA rate limit exceeded for user: {}", userId);
+//            return false;
+//        }
+//    }
+//
+//    @Override
+//    public void recordMfaSuccess(String userId) {
+//        resetLimit(createKey("mfa", userId));
+//    }
+
+    @Override
+    public boolean checkMfaAttempt(String userId) {
+        String key = createKey("mfa", userId);
+        try {
+            if (isRateLimited(key)) {
+                Duration remainingTime = getTimeToResetInSeconds(key);
+                long remainingAttempts = getRemainingAttempts(key);
+                log.warn("MFA rate limit exceeded for user: {}. Remaining attempts: {}, Time to reset: {} seconds",
+                        userId, remainingAttempts, remainingTime);
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("Error checking MFA rate limit for user: {}", userId, e);
+            return true; // Fail open for MFA checks
+        }
+    }
+
+    @Override
+    public void recordMfaSuccess(String userId) {
+        String key = createKey("mfa", userId);
+        try {
+            resetLimit(key);
+            log.info("MFA successful for user: {}. Rate limit reset.", userId);
+        } catch (Exception e) {
+            log.error("Error resetting MFA rate limit for user: {}", userId, e);
+        }
+    }
+
+    @Override
+    public void recordMfaFailure(String userId) {
+        String key = createKey("mfa", userId);
+        try {
+            ConsumptionProbe probe = consumeToken(key);
+            if (!probe.isConsumed()) {
+                long timeToReset = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+                log.warn("MFA attempt failed for user: {}. Account locked for {} seconds",
+                        userId, timeToReset);
+            } else {
+                long remainingAttempts = probe.getRemainingTokens();
+                log.warn("MFA attempt failed for user: {}. Remaining attempts: {}",
+                        userId, remainingAttempts);
+            }
+        } catch (Exception e) {
+            log.error("Error recording MFA failure for user: {}", userId, e);
+        }
+    }
+
+    @Override
+    public MfaRateLimitInfo getMfaLimitInfo(String userId) {
+        String key = createKey("mfa", userId);
+        try {
+            return MfaRateLimitInfo.builder()
+                    .userId(userId)
+                    .remainingAttempts(getRemainingAttempts(key))
+                    .timeToResetSeconds(getTimeToResetInSeconds(key))
+                    .maxAttempts(getMaxAttempts())
+                    .timeWindowMinutes(getTimeWindowMinutes())
+                    .isLimited(isRateLimited(key))
+                    .build();
+        } catch (Exception e) {
+            log.error("Error getting MFA limit info for user: {}", userId, e);
+            return MfaRateLimitInfo.builder()
+                    .userId(userId)
+                    .remainingAttempts(getMaxAttempts())
+                    .timeToResetSeconds(Duration.ofSeconds(0L))
+                    .maxAttempts(getMaxAttempts())
+                    .timeWindowMinutes(getTimeWindowMinutes())
+                    .isLimited(false)
+                    .build();
+        }
+    }
+
+    @Override
+    public void clearMfaLimits(String userId) {
+        String key = createKey("mfa", userId);
+        try {
+            resetLimit(key);
+            log.info("MFA rate limits cleared for user: {}", userId);
+        } catch (Exception e) {
+            log.error("Error clearing MFA rate limits for user: {}", userId, e);
+        }
+    }
+
+}

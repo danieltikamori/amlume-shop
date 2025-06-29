@@ -1,0 +1,51 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.service;
+
+import me.amlu.shop.amlume_shop.exceptions.UsernameAlreadyExistsException;
+import me.amlu.shop.amlume_shop.model.User;
+import me.amlu.shop.amlume_shop.repositories.UserRepository;
+import me.amlu.shop.amlume_shop.security.paseto.PasswordService;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@Transactional
+public class UserService {
+    
+    private final UserRepository userRepository;
+    private final PasswordService passwordService;
+    
+    public UserService(UserRepository userRepository, PasswordService passwordService) {
+        this.userRepository = userRepository;
+        this.passwordService = passwordService;
+    }
+    
+    public User registerUser(UserRegistrationRequest request) {
+        // Check if userName already exists
+        if (userRepository.existsByUsername(request.getUsername())) {
+            throw new UsernameAlreadyExistsException("Username already taken");
+        }
+        
+        // Create new user with hashed password
+        User user = new User();
+        user.setUserName(request.getUsername());
+        user.setPassword(passwordService.hashPassword(request.getPassword()));
+        
+        return userRepository.save(user);
+    }
+    
+    public boolean authenticateUser(String username, String password) {
+        return userRepository.findByUsername(username)
+            .map(user -> passwordService.verifyPassword(password, user.getPassword()))
+            .orElse(false);
+    }
+}

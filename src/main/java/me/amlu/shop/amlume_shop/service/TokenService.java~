@@ -1,0 +1,69 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.security;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.extern.log4j.Log4j2;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Optional;
+
+@Log4j2
+@Service
+public class TokenService {
+
+    private final PasetoTokenService pasetoService;
+    private final ObjectMapper objectMapper;
+
+    public TokenService(PasetoTokenService pasetoService) {
+        this.pasetoService = pasetoService;
+        this.objectMapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
+    }
+
+    public String createToken(String subject, Map<String, Object> claims, Duration validity) {
+        TokenPayload payload = new TokenPayload();
+        payload.setSubject(subject);
+        payload.setIssuedAt(Instant.now());
+        payload.setExpiresAt(Instant.now().plus(validity));
+        payload.setClaims(claims);
+
+        try {
+            String jsonPayload = objectMapper.writeValueAsString(payload);
+            return pasetoService.generateToken(jsonPayload);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to create token", e);
+        }
+    }
+
+    public Optional<TokenPayload> validateToken(String token) {
+        try {
+            String jsonPayload = pasetoService.validateAndDecryptToken(token);
+            TokenPayload payload = objectMapper.readValue(jsonPayload, TokenPayload.class);
+
+            if (payload.isExpired()) {
+                return Optional.empty();
+            }
+
+            return Optional.of(payload);
+        } catch (Exception e) {
+            log.error("Token validation failed", e);
+            return Optional.empty();
+        }
+    }
+}

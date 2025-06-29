@@ -8,8 +8,18 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-package me.amlu.authserver.notification.service;
+package me.amlu.shop.amlume_shop.resilience;
 
-public interface NotificationService {
-    void sendNotification(String title, String message);
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class MfaRateLimitInfo {
+    private String userId;
+    private long remainingAttempts;
+    private long timeToResetSeconds;
+    private long maxAttempts;
+    private long timeWindowMinutes;
+    private boolean isLimited;
 }

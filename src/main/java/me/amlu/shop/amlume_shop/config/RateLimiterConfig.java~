@@ -1,0 +1,104 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.config;
+
+import com.hazelcast.config.Config;
+import com.hazelcast.config.JoinConfig;
+import com.hazelcast.config.NetworkConfig;
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
+import io.github.resilience4j.spring6.fallback.FallbackExecutor;
+import io.github.resilience4j.spring6.ratelimiter.configure.RateLimiterAspect;
+import io.github.resilience4j.spring6.ratelimiter.configure.RateLimiterAspectExt;
+import io.github.resilience4j.spring6.ratelimiter.configure.RateLimiterConfigurationProperties;
+import io.github.resilience4j.spring6.spelresolver.SpelResolver;
+import io.github.resilience4j.spring6.utils.AspectJOnClasspathCondition;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.context.annotation.Configuration;
+
+import java.time.Duration;
+import java.util.Collections;
+import java.util.List;
+
+@Configuration
+public class RateLimiterConfig {
+
+    @Bean
+    public RateLimiterRegistry rateLimiterRegistry() {
+        return RateLimiterRegistry.ofDefaults();
+    }
+
+    @Bean
+    public RateLimiter rateLimiter(RateLimiterRegistry rateLimiterRegistry) {
+        io.github.resilience4j.ratelimiter.RateLimiterConfig config = io.github.resilience4j.ratelimiter.RateLimiterConfig.custom()
+                .limitRefreshPeriod(Duration.ofSeconds(1))
+                .limitForPeriod(5)
+                .timeoutDuration(Duration.ofMillis(200))
+                .writableStackTraceEnabled(true)
+                .build();
+
+        return rateLimiterRegistry.rateLimiter("defaultRateLimiter", config);
+    }
+
+    @Bean
+    public IntervalFunction intervalWithExponentialBackoff() {
+        return IntervalFunction.ofExponentialBackoff(
+                Duration.ofMillis(1000),  // initial interval
+                2,                        // multiplier
+                Duration.ofMinutes(1)     // max interval
+        );
+    }
+
+    @Bean
+    @Conditional(AspectJOnClasspathCondition.class)
+    public RateLimiterAspect rateLimiterAspect(
+            RateLimiterConfigurationProperties rateLimiterProperties,
+            RateLimiterRegistry rateLimiterRegistry,
+            @Autowired(required = false) List<RateLimiterAspectExt> rateLimiterAspectExtList,
+            FallbackExecutor fallbackExecutor,
+            SpelResolver spelResolver) {
+
+        return new RateLimiterAspect(
+                rateLimiterRegistry,
+                rateLimiterProperties,
+                rateLimiterAspectExtList != null ? rateLimiterAspectExtList : Collections.emptyList(),
+                fallbackExecutor,
+                spelResolver
+        );
+    }
+
+    @Bean
+    public Config hazelcastConfig() {
+        Config config = new Config();
+        config.setClusterName("rate-limit-cluster");
+
+        NetworkConfig networkConfig = config.getNetworkConfig();
+        JoinConfig joinConfig = networkConfig.getJoin();
+        joinConfig.getMulticastConfig().setEnabled(false);
+        joinConfig.getKubernetesConfig()
+                .setEnabled(true)
+                .setProperty("namespace", "your-namespace")
+                .setProperty("service-name", "your-service-name");
+
+        return config;
+    }
+
+    @Bean
+    public HazelcastInstance hazelcastInstance(Config config) {
+        return Hazelcast.newHazelcastInstance(config);
+    }
+
+}

@@ -15,7 +15,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.0</version>
+        <version>3.5.3</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>me.amlume.shop</groupId>
@@ -55,7 +55,7 @@
         <hibernate-enhance-maven-plugin.version>6.6.15.Final</hibernate-enhance-maven-plugin.version>
         <native.maven.plugin.version>0.10.6</native.maven.plugin.version>
         <spring-modulith.version>1.2.4</spring-modulith.version>
-        <spring-cloud.version>2024.0.0</spring-cloud.version>
+        <spring-cloud.version>2025.0.0</spring-cloud.version>
         <org.mapstruct.version>1.6.0</org.mapstruct.version>
         <org.mapstruct.processor.version>1.6.0</org.mapstruct.processor.version>
         <lombok.version>1.18.38</lombok.version>
@@ -770,7 +770,6 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>
-            <version>6.2.6</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.security</groupId>
@@ -783,10 +782,10 @@
             <version>${google-api-client.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.mongodb</groupId>
-            <artifactId>bson</artifactId>
-        </dependency>
+        <!--        <dependency>-->
+        <!--            <groupId>org.mongodb</groupId>-->
+        <!--            <artifactId>bson</artifactId>-->
+        <!--        </dependency>-->
 
         <!--        <dependency>-->
         <!--            <groupId>org.springframework.cloud</groupId>-->
@@ -864,10 +863,10 @@
             <groupId>org.springframework.session</groupId>
             <artifactId>spring-session-jdbc</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.session</groupId>
-            <artifactId>spring-session-data-redis</artifactId>
-        </dependency>
+        <!--        <dependency>-->
+        <!--            <groupId>org.springframework.session</groupId>-->
+        <!--            <artifactId>spring-session-data-redis</artifactId>-->
+        <!--        </dependency>-->
 
 
         <!--        <dependency>-->

@@ -1,0 +1,353 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.resilience;
+
+import com.codahale.metrics.MetricRegistry;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import io.github.bucket4j.Bucket;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import io.github.bucket4j.grid.hazelcast.Bucket4jHazelcast;
+import io.github.bucket4j.grid.hazelcast.Hazelcast;
+import io.github.bucket4j.grid.hazelcast.HazelcastProxyManager;
+import io.github.resilience4j.micrometer.Timer;
+import jakarta.annotation.PreDestroy;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitException;
+import me.amlu.shop.amlume_shop.resilience.service.RateLimiter;
+import org.checkerframework.checker.units.qual.K;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.time.Duration.ofMinutes;
+
+@Slf4j
+@Component
+public abstract class AbstractRateLimiter implements RateLimiter {
+    final HazelcastInstance hazelcastInstance;
+    final IMap<String, BucketConfiguration> rateLimit;
+    static IMap<K, byte[]> map;
+    private final ProxyManager<String> buckets;
+    final String mapName;
+    private RateLimitProperties properties = new RateLimitProperties();
+    private final MetricRegistry metrics;
+
+    protected static final String METRIC_PREFIX = "rate_limiter";
+protected AbstractRateLimiter(
+        HazelcastInstance hazelcastInstance, IMap<K, byte[]> map, ProxyManager<String> buckets,
+        String mapName,
+        RateLimitProperties properties,
+        MetricRegistry metrics) {
+    this.hazelcastInstance = Objects.requireNonNull(hazelcastInstance, "hazelcastInstance cannot be null");
+    AbstractRateLimiter.map = map;
+    IMap<K,byte[]> bucketStateMap = hazelcastInstance.getMap(mapName);
+    this.buckets = buckets;
+    this.mapName = Objects.requireNonNull(mapName, "mapName cannot be null");
+    this.properties = Objects.requireNonNull(properties, "properties cannot be null");
+    this.metrics = Objects.requireNonNull(metrics, "metrics cannot be null");
+
+    validateConfiguration();
+
+    this.rateLimit = hazelcastInstance.getMap(mapName);
+
+
+    initializeMetrics();
+}
+
+    private static final HazelcastProxyManager<K> proxyManager = Bucket4jHazelcast
+            .entryProcessorBasedBuilder(map)
+            // setup optional parameters if necessary
+            .build();
+
+    BucketConfiguration configuration = BucketConfiguration.builder()
+            .addLimit(limit -> limit.capacity(properties.getCapacity()).refillGreedy(properties.getCapacity(), ofMinutes(1)))
+            .build();
+
+
+    private void validateConfiguration() {
+
+    }
+
+    @Override
+    public boolean isRateLimited(String key) {
+        String sanitizedKey = sanitizeKey(key);
+        Timer.Context timerContext = (Timer.Context) metrics.timer(METRIC_PREFIX + ".check_duration").time();
+
+        try {
+            Bucket bucket = resolveBucket(sanitizedKey);
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+            metrics.counter(METRIC_PREFIX + ".requests").inc();
+
+            if (!probe.isConsumed()) {
+                metrics.counter(METRIC_PREFIX + ".exceeded").inc();
+                logRateLimitExceeded(sanitizedKey, probe);
+                return true;
+            }
+
+            bucket.addTokens(1);
+            return false;
+        } catch (IllegalStateException e) {
+            handleBucketConfigurationError(sanitizedKey, e);
+            return properties.isFailOpen();
+        } catch (Exception e) {
+            handleUnexpectedError(sanitizedKey, e);
+            return properties.isFailOpen();
+        } finally {
+            timerContext.onFailure(new Throwable("Internal error during rate limit check."));
+        }
+    }
+
+    private boolean isExpired(BucketConfiguration config, long currentTime, Duration timeWindow) {
+        if (config == null) {
+            return true;
+        }
+
+        // Get the last access time from the configuration
+        long lastAccessTime = this.getLastAccessTime();
+        return (currentTime - lastAccessTime) > timeWindow.toMillis();
+    }
+
+    // Add this field to BucketConfiguration
+    @Getter
+    @Setter
+    private long lastAccessTime = System.currentTimeMillis();
+
+    @PreDestroy
+    public void destroy() {
+        try {
+            log.info("[{}] Cleaning up rate limiter resources", mapName);
+            if (rateLimit != null) {
+                rateLimit.destroy();
+            }
+        } catch (Exception e) {
+            log.error("[{}] Error destroying rate limit resources", mapName, e);
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${rate.limit.cleanup.interval:3600000}")
+    protected void cleanupExpiredRateLimits() {
+        Timer.Context timerContext = (Timer.Context) metrics.timer(METRIC_PREFIX + ".cleanup_duration").time();
+
+        try {
+            Duration timeWindowMinutes = properties.getTimeWindowMinutes();
+            long now = System.currentTimeMillis();
+            AtomicInteger removedEntries = new AtomicInteger(0);
+
+            // Batch processing
+            Set<String> keysToRemove = new HashSet<>();
+            rateLimit.forEach((key, value) -> {
+                if (isExpired(value, now, timeWindowMinutes)) {
+                    keysToRemove.add(key);
+                }
+            });
+
+            // Bulk remove
+            if (!keysToRemove.isEmpty()) {
+                rateLimit.executeOnKeys(keysToRemove, entry -> {
+                    removedEntries.incrementAndGet();
+                    return null;
+                });
+            }
+
+            metrics.counter(METRIC_PREFIX + ".cleanup.removed").inc(removedEntries.get());
+            log.info("[{}] Cleaned up {} expired rate limits", mapName, removedEntries.get());
+        } catch (Exception e) {
+            metrics.counter(METRIC_PREFIX + ".cleanup.errors").inc();
+            log.error("[{}] Error during rate limit cleanup", mapName, e);
+        } finally {
+            timerContext.onFailure(new Throwable("Internal error during rate limit cleanup."));
+        }
+    }
+
+    @Override
+    public long getRemainingAttempts(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            return bucket.getAvailableTokens();
+        } catch (Exception e) {
+            log.error("[{}] Error getting remaining attempts for key: {}", mapName, key, e);
+            return getMaxAttempts(); // Return max attempts in case of errors
+        }
+    }
+
+    @Override
+    public Duration getTimeToResetInSeconds(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+            if (!probe.isConsumed()) {
+                return Duration.ofNanos(probe.getNanosToWaitForRefill());
+            }
+
+            // If consumption was successful, reset the token
+            bucket.addTokens(1);
+            return Duration.ZERO;
+        } catch (Exception e) {
+            log.error("[{}] Error getting time to reset for key: {}", mapName, key, e);
+            return Duration.ZERO;
+        }
+    }
+
+    @Override
+    public void resetLimit(String key) {
+        try {
+            rateLimit.remove(key);
+            log.info("[{}] Rate limit reset for key: {}", mapName, key);
+        } catch (Exception e) {
+            log.error("[{}] Error resetting rate limit for key: {}", mapName, key, e);
+        }
+    }
+
+    protected Bucket resolveBucket(String key) {
+        try {
+            return buckets.builder()
+                    .build(key, this::getBucketConfiguration);
+        } catch (Exception e) {
+            log.error("[{}] Failed to resolve bucket for key: {}", mapName, key, e);
+            metrics.counter(METRIC_PREFIX + ".bucket.resolution.errors").inc();
+            throw new RateLimitException("Failed to resolve rate limit bucket", e);
+        }
+    }
+
+    /**
+     * Get bucket configuration specific to the rate limiter type
+     * @return BucketConfiguration for the specific rate limiter
+     */
+    protected BucketConfiguration getBucketConfiguration() {
+        return BucketConfiguration.builder()
+                .addLimit(limit -> limit
+                        .capacity(properties.getCapacity())
+                        .refillGreedy(properties.getCapacity(), properties.getRefillPeriod()))
+                .build();
+    }
+
+    /**
+     * Get the maximum number of attempts allowed
+     * @return maximum attempts configured for this rate limiter
+     */
+    protected abstract long getMaxAttempts();
+
+    /**
+     * Cleanup expired rate limits
+     */
+
+
+    /**
+     * Get the time window in minutes for this rate limiter
+     *
+     * @return time window in minutes
+     */
+    protected abstract Duration getTimeWindowMinutes();
+
+    /**
+     * Consume a token from the bucket
+     * @param key the key to consume token for
+     * @return ConsumptionProbe containing consumption result
+     */
+    protected ConsumptionProbe consumeToken(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            return bucket.tryConsumeAndReturnRemaining(1);
+        } catch (Exception e) {
+            log.error("[{}] Error consuming token for key: {}", mapName, key, e);
+            throw new RateLimitException("Error consuming rate limit token", e);
+        }
+    }
+
+    /**
+     * Check if the rate limit is exceeded and throw exception if it is
+     * @param key the key to check
+     * @throws RateLimitExceededException if rate limit is exceeded
+     */
+    protected void checkRateLimit(String key) {
+        ConsumptionProbe probe = consumeToken(key);
+        if (!probe.isConsumed()) {
+            long timeToReset = TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+            throw new RateLimitExceededException(
+                    String.format("Rate limit exceeded. Try again in %d seconds. Remaining attempts: %d",
+                            timeToReset, probe.getRemainingTokens())
+            );
+        }
+    }
+
+    private void initializeMetrics() {
+        metrics.timer(METRIC_PREFIX + ".cleanup_duration");
+        metrics.counter(METRIC_PREFIX + ".cleanup.removed");
+        metrics.counter(METRIC_PREFIX + ".errors.configuration");
+        metrics.counter(METRIC_PREFIX + ".errors.unexpected");
+        metrics.timer(METRIC_PREFIX + ".check_duration");
+        metrics.counter(METRIC_PREFIX + ".requests");
+        metrics.counter(METRIC_PREFIX + ".exceeded");
+    }
+
+    /**
+     * Create a composite key with prefix
+     * @param prefix the prefix to use
+     * @param key the key
+     * @return composite key
+     */
+    protected String createKey(String prefix, String key) {
+        return String.format("%s:%s:%s", mapName, prefix, key);
+    }
+
+    protected String sanitizeKey(String key) {
+        Objects.requireNonNull(key, "Rate limit key cannot be null");
+
+        // Remove potentially dangerous characters
+        String sanitized = key.replaceAll("[^a-zA-Z0-9_:-]", "_");
+
+        // Ensure key length is reasonable
+        if (sanitized.length() > 100) {
+            sanitized = sanitized.substring(0, 100);
+        }
+
+        return sanitized;
+    }
+
+    private void handleBucketConfigurationError(String key, IllegalStateException e) {
+        log.error("[{}] Bucket configuration error for key: {}. Error: {}",
+                mapName, key, e.getMessage(), e);
+        metrics.counter(METRIC_PREFIX + ".errors.configuration").inc();
+
+        if (!properties.isFailOpen()) {
+            throw new RateLimitException("Rate limit configuration error", e);
+        }
+    }
+
+    private void logRateLimitExceeded(String key, ConsumptionProbe probe) {
+        log.warn("[{}] Rate limit exceeded for key: {}. Remaining tokens: {}, Time to refill: {}ms",
+                mapName,
+                key,
+                probe.getRemainingTokens(),
+                TimeUnit.NANOSECONDS.toMillis(probe.getNanosToWaitForRefill())
+        );
+    }
+
+    private void handleUnexpectedError(String key, Exception e) {
+        log.error("[{}] Unexpected error for key: {}. Error: {}", mapName, key, e.getMessage(), e);
+        metrics.counter(METRIC_PREFIX + ".errors.unexpected").inc();
+    }
+
+}

@@ -1,0 +1,155 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at fuiwzchps@mozmail.com for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.security;
+
+import lombok.extern.log4j.Log4j2;
+import org.bouncycastle.crypto.engines.AESEngine;
+import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
+import org.bouncycastle.crypto.modes.GCMBlockCipher;
+import org.bouncycastle.crypto.params.AEADParameters;
+import org.bouncycastle.crypto.params.Argon2Parameters;
+import org.bouncycastle.crypto.params.KeyParameter;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.util.Base64;
+
+
+@Service
+@Log4j2
+public class PasetoTokenService {
+
+    @Value("${PASETO_KEY}")
+    private String secretKey;
+
+    private static final String HEADER = "v4.local.";
+    private static final int NONCE_SIZE = 32;
+    private static final int MAC_SIZE = 128;
+    private static final int KEY_SIZE = 32;
+
+    // Argon2id parameters
+    private static final int MEMORY = 1 << 14;    // 16MB
+    private static final int ITERATIONS = 2;
+    private static final int PARALLELISM = 1;
+    private static final int HASH_LENGTH = 32;
+
+    static {
+        Security.addProvider(new BouncyCastleProvider());
+    }
+
+    public String generateToken(String payload) {
+        try {
+            byte[] nonce = generateNonce();
+
+            // Derive encryption key using Argon2id
+            byte[] encryptionKey = deriveKeyWithArgon2id("paseto-encryption-key", nonce);
+            byte[] nonceForEncryption = deriveKeyWithArgon2id("paseto-nonce", nonce);
+
+            byte[] ciphertext = encrypt(payload.getBytes(StandardCharsets.UTF_8),
+                    encryptionKey,
+                    nonceForEncryption);
+
+            byte[] message = new byte[nonce.length + ciphertext.length];
+            System.arraycopy(nonce, 0, message, 0, nonce.length);
+            System.arraycopy(ciphertext, 0, message, nonce.length, ciphertext.length);
+
+            return HEADER + Base64.getUrlEncoder().withoutPadding().encodeToString(message);
+
+        } catch (Exception e) {
+            log.error("Token generation failed", e);
+            throw new RuntimeException("Failed to generate token", e);
+        }
+    }
+
+    private byte[] deriveKeyWithArgon2id(String purpose, byte[] nonce) {
+        try {
+            byte[] purposeBytes = purpose.getBytes(StandardCharsets.UTF_8);
+
+            Argon2Parameters.Builder builder = new Argon2Parameters.Builder(Argon2Parameters.ARGON2_id)
+                    .withMemoryAsKB(MEMORY)
+                    .withIterations(ITERATIONS)
+                    .withParallelism(PARALLELISM)
+                    .withSalt(nonce);
+
+            Argon2BytesGenerator generator = new Argon2BytesGenerator();
+            generator.init(builder.build());
+
+            byte[] result = new byte[HASH_LENGTH];
+            generator.generateBytes(purposeBytes, result);
+
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("Key derivation failed", e);
+        }
+    }
+
+    public String validateAndDecryptToken(String token) {
+        try {
+            if (!token.startsWith(HEADER)) {
+                throw new IllegalArgumentException("Invalid token header");
+            }
+
+            byte[] message = Base64.getUrlDecoder().decode(token.substring(HEADER.length()));
+
+            byte[] nonce = new byte[NONCE_SIZE];
+            byte[] ciphertext = new byte[message.length - NONCE_SIZE];
+
+            System.arraycopy(message, 0, nonce, 0, NONCE_SIZE);
+            System.arraycopy(message, NONCE_SIZE, ciphertext, 0, ciphertext.length);
+
+            byte[] encryptionKey = deriveKeyWithArgon2id("paseto-encryption-key", nonce);
+            byte[] nonceForEncryption = deriveKeyWithArgon2id("paseto-nonce", nonce);
+
+            byte[] plaintext = decrypt(ciphertext, encryptionKey, nonceForEncryption);
+            return new String(plaintext, StandardCharsets.UTF_8);
+
+        } catch (Exception e) {
+            log.error("Token validation failed", e);
+            throw new RuntimeException("Invalid token", e);
+        }
+    }
+
+    private byte[] generateNonce() {
+        byte[] nonce = new byte[NONCE_SIZE];
+        new SecureRandom().nextBytes(nonce);
+        return nonce;
+    }
+
+    private byte[] encrypt(byte[] plaintext, byte[] key, byte[] nonce) throws Exception {
+        GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+        AEADParameters params = new AEADParameters(new KeyParameter(key), MAC_SIZE, nonce);
+
+        cipher.init(true, params);
+
+        byte[] output = new byte[cipher.getOutputSize(plaintext.length)];
+        int processed = cipher.processBytes(plaintext, 0, plaintext.length, output, 0);
+        cipher.doFinal(output, processed);
+
+        return output;
+    }
+
+    private byte[] decrypt(byte[] ciphertext, byte[] key, byte[] nonce) throws Exception {
+        GCMBlockCipher cipher = new GCMBlockCipher(new AESEngine());
+        AEADParameters params = new AEADParameters(new KeyParameter(key), MAC_SIZE, nonce);
+
+        cipher.init(false, params);
+
+        byte[] output = new byte[cipher.getOutputSize(ciphertext.length)];
+        int processed = cipher.processBytes(ciphertext, 0, ciphertext.length, output, 0);
+        cipher.doFinal(output, processed);
+
+        return output;
+    }
+}

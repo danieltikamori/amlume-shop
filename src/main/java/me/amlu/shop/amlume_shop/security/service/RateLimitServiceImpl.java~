@@ -1,0 +1,189 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.security.service;
+
+import com.hazelcast.core.Hazelcast;
+import com.hazelcast.core.HazelcastInstance;
+import com.hazelcast.map.IMap;
+import io.github.bucket4j.*;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import io.github.bucket4j.local.SynchronizationStrategy;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.resilience.MfaRateLimitProperties;
+import me.amlu.shop.amlume_shop.resilience.RateLimitProperties;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import javax.cache.CacheManager;
+import javax.cache.Caching;
+import javax.cache.configuration.MutableConfiguration;
+import javax.cache.spi.CachingProvider;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+import java.util.concurrent.TimeUnit;
+
+@Slf4j
+@Service
+public class RateLimitServiceImpl implements RateLimitService {
+
+    private final HazelcastInstance hazelcastInstance;
+    private final RateLimitProperties properties;
+    private final IMap<String, Long> rateLimit;
+    private final ProxyManager<String> buckets;
+    private final MfaRateLimitProperties mfaRateLimitProperties; // Inject configuration
+
+    public RateLimitServiceImpl(HazelcastInstance hazelcastInstance, RateLimitProperties properties, MfaRateLimitProperties mfaRateLimitProperties, IMap<String, Long> rateLimit, ProxyManager<String> buckets) {
+        this.hazelcastInstance = hazelcastInstance; // Removed Bucket parameter
+        this.properties = properties;
+        this.mfaRateLimitProperties = mfaRateLimitProperties;
+        this.rateLimit = hazelcastInstance.getMap("rateLimits");
+        this.buckets = Bucket4j.extension(Hazelcast.class).proxyManagerForMap(rateLimit);;
+    }
+
+    @Override
+    public boolean tryConsume(String key) {
+        Bucket bucket = resolveBucket(key);
+        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+        return probe.isConsumed();
+    }
+
+    @Override
+    public ConsumptionProbe tryConsumeAndReturnRemaining(String key) {
+        Bucket bucket = resolveBucket(key);
+        return bucket.tryConsumeAndReturnRemaining(1);
+    }
+
+    @Override
+    public long getRemainingTokens(String key) {
+        Bucket bucket = resolveBucket(key);
+        return bucket.getAvailableTokens();
+    }
+
+
+    private Bucket resolveBucket(String key) {
+        return buckets.getProxy(key, this::newBucketConfiguration);
+    }
+
+    private BucketConfiguration newBucketConfiguration() {
+        return Bucket4j.configurationBuilder()
+                .addLimit(Bandwidth.builder()
+                        .capacity(properties.getCapacity())
+                        .refillGreedy(properties.getCapacity(),
+                                Duration.of(properties.getDuration(),
+                                        toChronoUnit(properties.getTimeUnit()))))
+                .build();
+    }
+
+    private ChronoUnit toChronoUnit(TimeUnit timeUnit) {
+        switch (timeUnit) {
+            case SECONDS:
+                return ChronoUnit.SECONDS;
+            case MINUTES:
+                return ChronoUnit.MINUTES;
+            case HOURS:
+                return ChronoUnit.HOURS;
+            default:
+                throw new IllegalArgumentException("Unsupported time unit: " + timeUnit);
+        }
+    }
+
+    @Override
+    public boolean isRateLimited(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+            if (!probe.isConsumed()) {
+                log.warn("Rate limit exceeded for key: {}. Available tokens: {}",
+                        key, probe.getRemainingTokens());
+                return true;
+            }
+
+            return false;
+        } catch (Exception e) {
+            log.error("Error checking rate limit for key: {}", key, e);
+            return false; // Fail open in case of errors
+        }
+    }
+
+    @Override
+    public long getRemainingAttempts(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            return bucket.getAvailableTokens();
+        } catch (Exception e) {
+            log.error("Error getting remaining attempts for key: {}", key, e);
+            return mfaRateLimitProperties.getMaxAttempts(); // Return max attempts in case of errors
+        }
+    }
+
+    @Override
+    public long getTimeToResetInSeconds(String key) {
+        try {
+            Bucket bucket = resolveBucket(key);
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+
+            if (!probe.isConsumed()) {
+                return TimeUnit.NANOSECONDS.toSeconds(probe.getNanosToWaitForRefill());
+            }
+
+            // If consumption was successful, reset the token
+            bucket.addTokens(1);
+            return 0;
+        } catch (Exception e) {
+            log.error("Error getting time to reset for key: {}", key, e);
+            return 0;
+        }
+    }
+
+    @Override
+    public void resetLimit(String key) {
+        try {
+            rateLimit.remove(key);
+            log.info("Rate limit reset for key: {}", key);
+        } catch (Exception e) {
+            log.error("Error resetting rate limit for key: {}", key, e);
+        }
+    }
+
+    private Bucket resolveBucket(String key) {
+        return buckets.getProxy(key, this::newBucketConfiguration);
+    }
+
+    private BucketConfiguration newBucketConfiguration() {
+        return Bucket4j.configurationBuilder()
+                .addLimit(Bandwidth.builder()
+                        .capacity(mfaProperties.getMaxAttempts())
+                        .refillGreedy(mfaProperties.getMaxAttempts(),
+                                Duration.ofMinutes(mfaProperties.getTimeWindowMinutes())))
+                .build();
+    }
+
+    /**
+     * Cleanup method to remove expired rate limits
+     * Can be scheduled to run periodically
+     */
+    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.HOURS)
+    public void cleanupExpiredRateLimits() {
+        try {
+            long timeWindowMillis = TimeUnit.MINUTES.toMillis(mfaProperties.getTimeWindowMinutes());
+            long now = System.currentTimeMillis();
+
+            rateLimit.entrySet().removeIf(entry ->
+                    (now - entry.getValue()) > timeWindowMillis);
+
+            log.info("Completed cleanup of expired rate limits");
+        } catch (Exception e) {
+            log.error("Error during rate limit cleanup", e);
+        }
+    }
+
+}

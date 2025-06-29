@@ -1,0 +1,66 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.resilience.service;
+
+import com.hazelcast.core.HazelcastInstance;
+import io.github.bucket4j.Bandwidth;
+import io.github.bucket4j.BucketConfiguration;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.resilience.AbstractRateLimiter;
+import me.amlu.shop.amlume_shop.resilience.LoginRateLimitProperties;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+@Service
+@Slf4j
+public class LoginRateLimiterImpl extends AbstractRateLimiter implements LoginRateLimiter {
+    private final LoginRateLimitProperties properties;
+
+    public LoginRateLimiterImpl(HazelcastInstance hazelcastInstance,
+                                LoginRateLimitProperties properties) {
+        super(hazelcastInstance, "login-rate-limits");
+        this.properties = properties;
+    }
+
+    @Override
+    protected BucketConfiguration getBucketConfiguration() {
+        return Bucket4j.configurationBuilder()
+                .addLimit(Bandwidth.builder()
+                        .capacity(properties.getMaxAttempts())
+                        .refillGreedy(properties.getMaxAttempts(),
+                                properties.getTimeWindowMinutes()))
+                .build();
+    }
+
+    @Override
+    protected long getMaxAttempts() {
+        return properties.getMaxAttempts();
+    }
+
+    @Override
+    protected Duration getTimeWindowMinutes() {
+        return properties.getTimeWindowMinutes();
+    }
+
+    @Override
+    public boolean checkLoginAttempt(String username) {
+        return !isRateLimited("login:" + username);
+    }
+
+    @Override
+    public void recordFailedAttempt(String username) {
+        // TODO:Additional logic for failed attempts
+        log.warn("Failed login attempt for user: {}", username);
+    }
+}

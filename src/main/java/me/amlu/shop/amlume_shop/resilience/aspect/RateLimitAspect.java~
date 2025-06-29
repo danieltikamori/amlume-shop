@@ -1,0 +1,129 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.resilience.aspect;
+
+import io.github.bucket4j.ConsumptionProbe;
+import lombok.extern.slf4j.Slf4j;
+import me.amlu.shop.amlume_shop.exceptions.RateLimitExceededException;
+import me.amlu.shop.amlume_shop.resilience.service.LoginRateLimiter;
+import me.amlu.shop.amlume_shop.resilience.service.MfaRateLimiter;
+import me.amlu.shop.amlume_shop.resilience.service.OrderRateLimiter;
+import me.amlu.shop.amlume_shop.resilience.service.RateLimiter;
+import me.amlu.shop.amlume_shop.security.service.RateLimitService;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.expression.Expression;
+import org.springframework.expression.ExpressionParser;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.springframework.stereotype.Component;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
+
+@Aspect
+@Component
+@Slf4j
+public class RateLimitAspect {
+    private final Map<RateLimitType, RateLimiter> rateLimiters;
+
+    @Autowired
+    public RateLimitAspect(List<RateLimiter> limiters) {
+        rateLimiters = new EnumMap<>(RateLimitType.class);
+
+        // Map each rate limiter to its type
+        for (RateLimiter limiter : limiters) {
+            if (limiter instanceof LoginRateLimiter) {
+                rateLimiters.put(RateLimitType.LOGIN, limiter);
+            } else if (limiter instanceof MfaRateLimiter) {
+                rateLimiters.put(RateLimitType.MFA, limiter);
+            } else if (limiter instanceof OrderRateLimiter) {
+                rateLimiters.put(RateLimitType.ORDER, limiter);
+            } else if (limiter instanceof ProductRateLimiter) {
+                rateLimiters.put(RateLimitType.PRODUCT, limiter);
+            }
+        }
+
+        // Validate that all required rate limiters are present
+        validateRateLimiters();
+    }
+
+    private void validateRateLimiters() {
+        for (RateLimitType type : RateLimitType.values()) {
+            if (!rateLimiters.containsKey(type)) {
+                log.warn("No rate limiter found for type: {}", type);
+            }
+        }
+    }
+
+    @Around("@annotation(rateLimit)")
+    public Object rateLimit(ProceedingJoinPoint joinPoint, RateLimit rateLimit) throws Throwable {
+        RateLimiter limiter = rateLimiters.get(rateLimit.type());
+        if (limiter == null) {
+            log.error("No rate limiter found for type: {}", rateLimit.type());
+            return joinPoint.proceed(); // Fail open if no rate limiter is configured
+        }
+
+        String key = resolveKey(joinPoint, rateLimit);
+        if (limiter.isRateLimited(key)) {
+            long timeToReset = limiter.getTimeToResetInSeconds(key);
+            long remainingAttempts = limiter.getRemainingAttempts(key);
+
+            throw new RateLimitExceededException(
+                    String.format("Rate limit exceeded. Try again in %d seconds. Remaining attempts: %d",
+                            timeToReset, remainingAttempts)
+            );
+        }
+
+        return joinPoint.proceed();
+    }
+
+    private String resolveKey(ProceedingJoinPoint joinPoint, RateLimit rateLimit) {
+        String key = rateLimit.key();
+        if (key.isEmpty()) {
+            // Default to method name if key not specified
+            key = joinPoint.getSignature().toShortString();
+        }
+
+        // If the key contains SpEL expression, evaluate it
+        if (key.contains("#")) {
+            key = evaluateSpelExpression(key, joinPoint);
+        }
+
+        return key;
+    }
+
+    private String evaluateSpelExpression(String key, ProceedingJoinPoint joinPoint) {
+        try {
+            ExpressionParser parser = new SpelExpressionParser();
+            StandardEvaluationContext context = new StandardEvaluationContext();
+
+            // Add method parameters to the context
+            MethodSignature signature = (MethodSignature) joinPoint.getSignature();
+            String[] parameterNames = signature.getParameterNames();
+            Object[] args = joinPoint.getArgs();
+
+            for (int i = 0; i < parameterNames.length; i++) {
+                context.setVariable(parameterNames[i], args[i]);
+            }
+
+            Expression expression = parser.parseExpression(key);
+            return expression.getValue(context, String.class);
+        } catch (Exception e) {
+            log.error("Error evaluating SpEL expression: {}", key, e);
+            return key; // Return original key if expression evaluation fails
+        }
+    }
+}

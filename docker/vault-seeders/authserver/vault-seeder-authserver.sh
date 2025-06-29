@@ -154,6 +154,11 @@ add_pair "oauth2.clients.shopClient.secret" "${OAUTH2_CLIENT_SHOPCLIENT_SECRET_A
 # For postman client
 add_pair "oauth2.clients.postmanClient.secret" "${OAUTH2_CLIENT_POSTMANCLIENT_SECRET_AS}"
 
+# New Relic - Observability
+add_pair "management.newrelic.metrics.export.account-id" "${NEW_RELIC_ACCOUNT_ID}"
+add_pair "management.newrelic.metrics.export.api-key" "${NEW_RELIC_LICENSE_KEY}"
+add_pair "management.newrelic.metrics.export.user-key" "${NEW_RELIC_USER_KEY}"
+
 # Optional Authserver Truststore Password
 add_pair "app.ssl.trust-store.password" "${AUTHSERVER_APP_CENTRAL_TRUSTSTORE_PASSWORD}"
 add_pair "spring.ssl.bundle.pkcs12.redis-client-mtls-bundle.truststore.password" "${AUTHSERVER_VALKEY_TRUSTSTORE_PASSWORD}"

@@ -105,7 +105,7 @@ management:
         enabled: true
         api-key: ${NEW_RELIC_LICENSE_KEY}
         account-id: ${NEW_RELIC_ACCOUNT_ID}
-        user-key: ${NEW_RELIC_USER)KEY}
+        user-key: ${NEW_RELIC_USER_KEY}
         uri: https://metric-api.newrelic.com/metric/v1
 
 # --- Notifications (Secrets should be loaded securely) ---
@@ -359,7 +359,6 @@ spring:
         ignored-services: consul
       routes:
         endpoints: env,metrics,trace,jolokia,info,configprops
-        #        endpoints: env, metrics, health, info, prometheus, jte, beans, conditions, configprops, httptrace, threaddump, logfile, loggers, scheduledtasks, liquibase, flyway, database, integrationgraph, sessions, mappings, sessions, session, session-expired, cache, cache-statistics, scheduledtasks, aop, autoconfig, beans, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, database, beans, conditions, configprops, env, flyway, health, info, jte, loggers, mappings, metrics, prometheus, scheduledtasks, sessions, shutdown, threaddump, httptrace, integrationgraph, liquibase, logfile, databasemetrics, trace, jolokia, info, configprops
 
         # ui: # Optional UI configurations
         # public-url: https://your-authserver-domain.com/admin # If behind a reverse proxy
@@ -550,6 +549,7 @@ spring:
       enabled: false # Disable Spring Boot's automatic Docker Compose management for local profile
 
   flyway:
+    #    repair: true # For a local development environment, the easiest fix is to tell Flyway to "repair" its history table by updating the checksum to match the modified file.
     baseline-on-migrate: true
     baseline-version: 0
     locations: classpath:db/migration
@@ -603,6 +603,14 @@ spring:
             non_contextual_creation: true
           time_zone: UTC
 
+  # JTE Templating Configuration
+  jte:
+    # By default, the prefix is 'classpath:/jte/'.
+    # Your templates are at the root of the classpath (e.g., /pages/login.jte),
+    # so we change the prefix to the classpath root.
+    template-location: "classpath:/"
+
+  # ... other properties
   mail:
     host: smtp-relay.brevo.com
     port: 587
@@ -717,7 +725,7 @@ spring:
     store-type: jdbc # Set the store type here
     jdbc:
       # For local dev, automatically create the session tables on startup
-      initialize-schema: always
+      initialize-schema: never
     #    hazelcast:
     #      map-name: "spring:session:authserver:sessions" # Name of the Hazelcast map for sessions
     #      flush-mode: ON_SAVE # ON_SAVE or IMMEDIATE

@@ -18,8 +18,8 @@ services:
     build:
       context: ./docker/newrelic-infra
       dockerfile: newrelic-infra.dockerfile
-    environment:
-      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
+    #    environment:
+    #      - NEW_RELIC_LICENSE_KEY=${NEW_RELIC_LICENSE_KEY}
     cap_add:
       - SYS_PTRACE
     pid: host
@@ -32,14 +32,14 @@ services:
       - amlume-shop-network
 
   # --- Hashicorp Consul
-  consul:
-    container_name: consul-dev
-    image: hashicorp/consul:1.21.1
-    ports:
-      - "8500:8500"
-    restart: always
-    networks:
-      - amlume-shop-network
+  #  consul:
+  #    container_name: consul-dev
+  #    image: hashicorp/consul:1.21.1
+  #    ports:
+  #      - "8500:8500"
+  #    restart: always
+  #    networks:
+  #      - amlume-shop-network
 
   # --- Vault Dev Configuration ---
   vault:

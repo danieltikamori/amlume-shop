@@ -1,0 +1,179 @@
+/*
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
+ *
+ * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
+ *
+ * Permission to use, copy, modify, and distribute this software is strictly prohibited without prior written authorization from the copyright holder.
+ *
+ * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
+ */
+
+package me.amlu.shop.amlume_shop.filter;
+
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+@Order(Ordered.HIGHEST_PRECEDENCE)
+@Component
+public class RateLimitingFilter extends OncePerRequestFilter {
+    private static final Logger logger = LoggerFactory.getLogger(RateLimitingFilter.class);
+    private final RedisTemplate<String, Integer> redisTemplate;
+
+    private static final int MAX_GENERAL_REQUESTS = 100;
+    private static final Duration GENERAL_WINDOW = Duration.ofHours(1);
+
+    private static final int MAX_LOGIN_ATTEMPTS = 5;
+    private static final Duration LOGIN_WINDOW = Duration.ofHours(1);
+
+    private final CircuitBreaker circuitBreaker;
+
+    public RateLimitingFilter(RedisTemplate<String, Integer> redisTemplate, CircuitBreaker circuitBreaker) {
+        this.redisTemplate = redisTemplate;
+        this.circuitBreaker = circuitBreaker;
+    }
+
+    @Override
+    protected void doFilterInternal(@NotNull HttpServletRequest request,
+                                    @NotNull HttpServletResponse response,
+                                    @NotNull FilterChain filterChain) throws ServletException, IOException {
+
+        String clientId = getClientIdentifier(request);
+        String prefix;
+        int maxRequests;
+        Duration timeWindow;
+
+        if (isAuthenticationEndpoint(request)) {
+            prefix = "login:";
+            maxRequests = MAX_LOGIN_ATTEMPTS;
+            timeWindow = LOGIN_WINDOW;
+        } else {
+            prefix = "general:";
+            maxRequests = MAX_GENERAL_REQUESTS;
+            timeWindow = GENERAL_WINDOW;
+        }
+
+        try {
+            boolean allowRequest = circuitBreaker.executeCheckedSupplier(() -> {
+                // Rate limiting logic INSIDE the circuit breaker
+                if (isRateLimited(clientId, prefix, maxRequests, timeWindow)) {
+                    logger.warn("{} rate limit exceeded for client: {}", prefix, clientId);
+                    sendTooManyRequestsResponse(response, "Too many requests. Please try again later.");
+                    throw new RateLimitExceededException("Rate limit exceeded");
+                }
+                return true; //Allow if not rate limited
+            });
+
+            if (allowRequest) {
+                filterChain.doFilter(request, response);
+            }
+
+        } catch (Throwable e) {
+            if (!(e instanceof RateLimitExceededException)) { //Unexpected error during rate limiting
+                if (e instanceof io.github.resilience4j.circuitbreaker.CallNotPermittedException) {
+                    // Circuit breaker open, use fallback logic
+                    boolean allowRequest = fallbackMethod(clientId, prefix, maxRequests, timeWindow, e); //Call fallback method for CircuitBreaker
+                    if (allowRequest) {
+                        filterChain.doFilter(request, response);
+                    } else {
+                        sendFallbackResponse(response, "Service temporarily unavailable"); //Custom response for the user
+                    }
+                } else {
+                    logger.error("Unexpected error during rate limiting:", e); // Log unexpected errors
+                    response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value()); // Generic error response
+                    response.getWriter().write("{\"message\": \"Internal Server Error\"}");
+                }
+
+            } // RateLimitExceededException already handled by sendTooManyRequestsResponse()
+
+        }
+    }
+
+    private void sendFallbackResponse(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
+        response.setContentType("application/json");
+        response.getWriter().write("{\"message\": \"" + message + "\"}");
+    }
+
+    private boolean fallbackMethod(String clientId, String prefix, int maxRequests, Duration timeWindow, Throwable t) {
+        logger.warn("Circuit Breaker Open: Rate Limiting is unavailable, allowing request for {} : {}.", prefix, clientId);
+        // Here you can implement alternative behavior.  If you don't want to allow requests, return true
+        return false; // Allow the request by default when Redis is down. Change to 'true' to block
+
+    }
+
+    private boolean isRateLimited(String clientId, String prefix, int maxRequests, Duration timeWindow) {
+        String key = prefix + clientId;
+        try {
+            return Boolean.TRUE.equals(redisTemplate.execute((RedisCallback<Boolean>) redis -> {
+                Integer requestCount = redisTemplate.opsForValue().get(key);
+                if (requestCount == null) {
+                    redisTemplate.opsForValue().set(key, 1, timeWindow.toSeconds(), TimeUnit.SECONDS);
+                    return false;
+                } else if (requestCount >= maxRequests) {
+                    return true;
+                } else {
+                    Long newValue = redisTemplate.opsForValue().increment(key);
+                    return newValue != null && newValue >= maxRequests;
+                }
+            }));
+        } catch (RuntimeException e) {
+            logger.error("Error checking rate limit for {} : {}", key, e.getMessage(), e);
+            return true; // Fail-safe: assume rate-limited on error
+        }
+    }
+
+    private String getClientIdentifier(HttpServletRequest request) {
+        String ipAddress = getClientIP(request);
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            return ipAddress + ":" + auth.getName();
+        }
+        return ipAddress;
+    }
+
+    private String getClientIP(HttpServletRequest request) {
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        if (xfHeader == null || xfHeader.isEmpty()) {
+            return request.getRemoteAddr();
+        }
+        return xfHeader.split(",")[0];
+    }
+
+    private boolean isAuthenticationEndpoint(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri.contains("/auth/login") ||
+                uri.contains("/auth/token") ||
+                uri.contains("/login");
+    }
+
+    private void sendTooManyRequestsResponse(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
+        response.setContentType("application/json");
+        response.getWriter().write("{\"error\": \"" + message + "\"}");
+    }
+
+    private static class RateLimitExceededException extends RuntimeException {
+        public RateLimitExceededException(String message) {
+            super(message);
+        }
+    }
+}

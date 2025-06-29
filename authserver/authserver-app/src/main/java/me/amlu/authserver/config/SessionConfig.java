@@ -31,7 +31,7 @@ import org.springframework.session.web.http.DefaultCookieSerializer;
  * </p>
  *
  * @see JacksonConfig
- * @see MongoSessionConfig
+// * @see MongoSessionConfig
  */
 //@Configuration
 //@EnableHazelcastHttpSession // Enable Hazelcast-backed HTTP sessions

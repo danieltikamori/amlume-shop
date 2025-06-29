@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved. 
+ * Copyright (c) 2025 Daniel Itiro Tikamori. All rights reserved.
  *
  * This software is proprietary, not intended for public distribution, open source, or commercial use. All rights are reserved. No part of this software may be reproduced, distributed, or transmitted in any form or by any means, electronic or mechanical, including photocopying, recording, or by any information storage or retrieval system, without the prior written permission of the copyright holder.
  *
@@ -8,34 +8,25 @@
  * Please contact the copyright holder at echo ZnVpd3pjaHBzQG1vem1haWwuY29t | base64 -d && echo for any inquiries or requests for authorization to use the software.
  */
 
-// package me.amlu.shop.amlume_shop.config.properties;
-package me.amlu.authserver.security.failedlogin;
+package me.amlu.shop.amlume_shop.resilience;
 
-import jakarta.validation.constraints.Min;
-import lombok.Data;
-import org.jspecify.annotations.NonNull;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.validation.annotation.Validated;
 
 import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 
+@Getter
+@Setter
 @Configuration
-@ConfigurationProperties(prefix = "security.failed-login")
-@Validated
-@Data
-public class FailedLoginProperties {
+@ConfigurationProperties(prefix = "security.login.rate-limit")
+public class MfaRateLimitProperties {
+    private int maxAttempts = 5;
+    private Duration timeWindowMinutes = Duration.ofMinutes(30);
+    private int capacity = 100;
+    private int duration = 1;
+    private TimeUnit timeUnit = TimeUnit.MINUTES;
 
-    @Min(1)
-    private int maxAttempts = 5; // Max attempts before blocking
-
-    @NonNull
-    private Duration counterWindow = Duration.ofMinutes(15); // How long to keep the failure count
-
-    // Optional: Add lockout duration if implementing timed lockouts
-    // @NotNull
-    // private Duration lockoutDuration = Duration.ofHours(1);
-
-    @NonNull
-    private String redisKeyPrefix = "failedlogin:attempts:";
 }
